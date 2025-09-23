@@ -1,0 +1,143 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { Child } from '../types';
+import  axios  from 'axios';
+import config from '../config';
+
+axios.defaults.baseURL = config.backendUrl;
+
+
+interface AddChildForm {
+  full_name: string;
+  age: number;
+  grade: string;
+}
+
+export const AddChild: React.FC = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const { register, handleSubmit, formState: { errors } } = useForm<AddChildForm>();
+
+  const grades = [
+    '5th Grade',
+    '6th Grade',
+    '7th Grade',
+    '8th Grade',
+    '9th Grade',
+    '10th Grade',
+    '11th Grade',
+    '12th Grade'
+  ];
+
+  const onSubmit = async (data: AddChildForm) => {
+    setLoading(true);
+    try {
+      const response = await axios.post('/api/v1/users/me/students', {
+        'name': data.full_name,
+        'age': data.age,
+        'grade_level': data.grade
+      });
+
+      const newChild = response.data; // Assuming the backend returns the created user object
+      // Store child data (in a real app, this would be sent to the API)
+      const existingChildren = JSON.parse(localStorage.getItem('children') || '[]');
+      existingChildren.push(newChild);
+      localStorage.setItem('children', JSON.stringify(existingChildren));
+      localStorage.setItem('currentChild', JSON.stringify(newChild));
+
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('Failed to create child profile:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full">
+        <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+              Tell us about your child
+            </h2>
+            <p className="text-gray-600">
+              Let's get them started on their learning adventure.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <div>
+              <input
+                {...register('full_name', {
+                  required: 'Full name is required',
+                  minLength: {
+                    value: 2,
+                    message: 'Name must be at least 2 characters'
+                  }
+                })}
+                type="text"
+                placeholder="Full Name"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+              />
+              {errors.full_name && (
+                <p className="mt-1 text-sm text-red-600">{errors.full_name.message}</p>
+              )}
+            </div>
+
+            <div>
+              <input
+                {...register('age', {
+                  required: 'Age is required',
+                  min: {
+                    value: 5,
+                    message: 'Age must be at least 5'
+                  },
+                  max: {
+                    value: 18,
+                    message: 'Age must be 18 or under'
+                  }
+                })}
+                type="number"
+                placeholder="Age"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+              />
+              {errors.age && (
+                <p className="mt-1 text-sm text-red-600">{errors.age.message}</p>
+              )}
+            </div>
+
+            <div>
+              <select
+                {...register('grade', {
+                  required: 'Grade selection is required'
+                })}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
+                defaultValue=""
+              >
+                <option value="" disabled>Select grade</option>
+                {grades.map((grade) => (
+                  <option key={grade} value={grade}>
+                    {grade}
+                  </option>
+                ))}
+              </select>
+              {errors.grade && (
+                <p className="mt-1 text-sm text-red-600">{errors.grade.message}</p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Creating Profile...' : 'Continue'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
