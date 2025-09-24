@@ -33,8 +33,9 @@ export interface ChatMessage {
 
 export interface AuthContextType {
   user: User | null;
-  signUp: (email: string, password: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signUpParent: (email: string, password: string) => Promise<void>;
+  signInParent: (email: string, password: string) => Promise<void>;
+  signInStudent: (username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   loading: boolean;
 }

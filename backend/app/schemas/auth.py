@@ -9,8 +9,9 @@ class UserCreate(BaseModel):
     role: str = "parent"
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    identifier: str
     password: str
+    role: str  # 'parent' or 'student'
 
 class Token(BaseModel):
     access_token: str

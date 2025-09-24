@@ -12,18 +12,22 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'landing' }) => {
   const { user, signOut } = useAuth();
   const location = useLocation();
 
-  const navItems = variant === 'dashboard'
-    ? [
-        { name: 'Home', path: '/dashboard' },
-        { name: 'Study Plan', path: '/study-plan' },
-        { name: 'Progress', path: '/progress' },
-        { name: 'AI Tutor', path: '/ai-tutor' },
-      ]
-    : [
-        { name: 'Home', path: '/' },
-        { name: 'About Us', path: '/about' },
-        { name: 'Contact', path: '/contact' },
-      ];
+  // Decide navItems based on role
+  const navItems =
+    variant === 'dashboard' && user?.role === 'student'
+      ? [
+          { name: 'Home', path: '/child-dashboard' },
+          { name: 'Study Plan', path: '/study-plan' },
+          { name: 'Progress', path: '/progress' },
+          { name: 'AI Tutor', path: '/ai-tutor' },
+        ]
+      : variant === 'dashboard' && user?.role === 'parent'
+      ? [] // parent: no nav items
+      : [
+          { name: 'Home', path: '/' },
+          { name: 'About Us', path: '/about' },
+          { name: 'Contact', path: '/contact' },
+        ];
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -40,27 +44,32 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'landing' }) => {
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex space-x-8">
-            {navItems.map((item) => (
-              <Link
-                key={item.name}
-                to={item.path}
-                className={`text-sm font-medium transition-colors duration-200 ${
-                  isActive(item.path)
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-700 hover:text-blue-600'
-                }`}
-              >
-                {item.name}
-              </Link>
-            ))}
-          </nav>
+          {user?.role === 'student' && (
+            <nav className="hidden md:flex space-x-8">
+              {navItems.map((item) => (
+                <Link
+                  key={item.name}
+                  to={item.path}
+                  className={`text-sm font-medium transition-colors duration-200 ${
+                    isActive(item.path)
+                      ? 'text-blue-600 border-b-2 border-blue-600'
+                      : 'text-gray-700 hover:text-blue-600'
+                  }`}
+                >
+                  {item.name}
+                </Link>
+              ))}
+            </nav>
+          )}
 
-          {/* Desktop Auth */}
+          {/* Desktop Auth / Profile */}
           <div className="hidden md:flex items-center space-x-4">
             {user ? (
               <div className="flex items-center space-x-4">
-                <Bell className="w-5 h-5 text-gray-600 cursor-pointer hover:text-blue-600 transition-colors" />
+                {/* Notifications only for students */}
+                {user.role === 'student' && (
+                  <Bell className="w-5 h-5 text-gray-600 cursor-pointer hover:text-blue-600 transition-colors" />
+                )}
                 <div className="flex items-center space-x-2">
                   <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                     <User className="w-4 h-4 text-blue-600" />
@@ -76,10 +85,16 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'landing' }) => {
             ) : (
               <>
                 <Link
-                  to="/login"
+                  to="/student-login"
                   className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium transition-colors"
                 >
-                  Login
+                  Student Login
+                </Link>
+                <Link
+                  to="/parent-login"
+                  className="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                >
+                  Parent Login
                 </Link>
                 <Link
                   to="/signup"
@@ -105,20 +120,23 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'landing' }) => {
       {isMenuOpen && (
         <div className="md:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1 bg-white border-t">
-            {navItems.map((item) => (
-              <Link
-                key={item.name}
-                to={item.path}
-                onClick={() => setIsMenuOpen(false)}
-                className={`block px-3 py-2 rounded-md text-base font-medium transition-colors ${
-                  isActive(item.path)
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
-                }`}
-              >
-                {item.name}
-              </Link>
-            ))}
+            {/* Show nav only if student */}
+            {user?.role === 'student' &&
+              navItems.map((item) => (
+                <Link
+                  key={item.name}
+                  to={item.path}
+                  onClick={() => setIsMenuOpen(false)}
+                  className={`block px-3 py-2 rounded-md text-base font-medium transition-colors ${
+                    isActive(item.path)
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {item.name}
+                </Link>
+              ))}
+
             {user ? (
               <button
                 onClick={() => {
@@ -132,11 +150,18 @@ export const Header: React.FC<HeaderProps> = ({ variant = 'landing' }) => {
             ) : (
               <div className="px-3 py-2 space-y-2">
                 <Link
-                  to="/login"
+                  to="/student-login"
                   onClick={() => setIsMenuOpen(false)}
                   className="block w-full text-center px-4 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-blue-600 border border-gray-300 hover:border-blue-600 transition-colors"
                 >
-                  Login
+                  Student Login
+                </Link>
+                <Link
+                  to="/parent-login"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block w-full text-center px-4 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-blue-600 border border-gray-300 hover:border-blue-600 transition-colors"
+                >
+                  Parent Login
                 </Link>
                 <Link
                   to="/signup"

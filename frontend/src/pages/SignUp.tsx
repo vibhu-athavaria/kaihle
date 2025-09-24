@@ -131,7 +131,7 @@ export const SignUp: React.FC = () => {
 
           <div className="mt-6 text-center">
             <Link
-              to="/login"
+              to="/parent-login"
               className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
             >
               Already have an account? Log in

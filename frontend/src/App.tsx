@@ -6,7 +6,8 @@ import { Footer } from './components/Layout/Footer';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Home } from './pages/Home';
 import { SignUp } from './pages/SignUp';
-import { Login } from './pages/Login';
+import { ParentLogin } from './pages/ParentLogin';
+import { StudentLogin } from './pages/StudentLogin';
 import { AddChild } from './pages/AddChild';
 import { Dashboard } from './pages/Dashboard';
 import { ChildDashboard } from './pages/ChildDashboard';
@@ -18,19 +19,29 @@ import { StudentProgress } from './pages/StudentProgress';
 const AppContent: React.FC = () => {
   const { user } = useAuth();
 
+  // ✅ Decide where to redirect based on role
+  const getDefaultDashboard = () => {
+    if (!user) return '/';
+    return user.role === 'parent' ? '/dashboard' : '/child-dashboard';
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Header variant={user ? 'dashboard' : 'landing'} />
       <main className="flex-1">
         <Routes>
-          <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Home />} />
-          <Route path="/signup" element={user ? <Navigate to="/dashboard" /> : <SignUp />} />
-          <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
+          {/* Public Routes */}
+          <Route path="/" element={user ? <Navigate to={getDefaultDashboard()} /> : <Home />} />
+          <Route path="/signup" element={user ? <Navigate to={getDefaultDashboard()} /> : <SignUp />} />
+          <Route path="/parent-login" element={user ? <Navigate to={getDefaultDashboard()} /> : <ParentLogin />} />
+          <Route path="/student-login" element={user ? <Navigate to={getDefaultDashboard()} /> : <StudentLogin />} />
+
+          {/* Parent-only Routes */}
           <Route
             path="/add-child"
             element={
               <ProtectedRoute>
-                <AddChild />
+                {user?.role === 'parent' ? <AddChild /> : <Navigate to="/child-dashboard" />}
               </ProtectedRoute>
             }
           />
@@ -38,15 +49,17 @@ const AppContent: React.FC = () => {
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                {user?.role === 'parent' ? <Dashboard /> : <Navigate to="/child-dashboard" />}
               </ProtectedRoute>
             }
           />
+
+          {/* Student-only Routes */}
           <Route
             path="/child-dashboard"
             element={
               <ProtectedRoute>
-                <ChildDashboard />
+                {user?.role === 'student' ? <ChildDashboard /> : <Navigate to="/dashboard" />}
               </ProtectedRoute>
             }
           />
@@ -54,7 +67,7 @@ const AppContent: React.FC = () => {
             path="/ai-tutor"
             element={
               <ProtectedRoute>
-                <AITutor />
+                {user?.role === 'student' ? <AITutor /> : <Navigate to="/dashboard" />}
               </ProtectedRoute>
             }
           />
@@ -62,7 +75,7 @@ const AppContent: React.FC = () => {
             path="/lesson/:lessonId"
             element={
               <ProtectedRoute>
-                <Lesson />
+                {user?.role === 'student' ? <Lesson /> : <Navigate to="/dashboard" />}
               </ProtectedRoute>
             }
           />
@@ -70,33 +83,42 @@ const AppContent: React.FC = () => {
             path="/study-plan"
             element={
               <ProtectedRoute>
-                <StudyPlan />
+                {user?.role === 'student' ? <StudyPlan /> : <Navigate to="/dashboard" />}
               </ProtectedRoute>
             }
           />
-          <Route path="/progress"
-          element={
+          <Route
+            path="/progress"
+            element={
               <ProtectedRoute>
-                <StudentProgress />
+                {user?.role === 'student' ? <StudentProgress /> : <Navigate to="/dashboard" />}
               </ProtectedRoute>
             }
           />
-          <Route path="/about" element={
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-              <div className="text-center">
-                <h1 className="text-2xl font-bold text-gray-900 mb-4">About Us</h1>
-                <p className="text-gray-600">Coming soon!</p>
+
+          {/* Static Pages */}
+          <Route
+            path="/about"
+            element={
+              <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                  <h1 className="text-2xl font-bold text-gray-900 mb-4">About Us</h1>
+                  <p className="text-gray-600">Coming soon!</p>
+                </div>
               </div>
-            </div>
-          } />
-          <Route path="/contact" element={
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-              <div className="text-center">
-                <h1 className="text-2xl font-bold text-gray-900 mb-4">Contact</h1>
-                <p className="text-gray-600">Coming soon!</p>
+            }
+          />
+          <Route
+            path="/contact"
+            element={
+              <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                  <h1 className="text-2xl font-bold text-gray-900 mb-4">Contact</h1>
+                  <p className="text-gray-600">Coming soon!</p>
+                </div>
               </div>
-            </div>
-          } />
+            }
+          />
         </Routes>
       </main>
       <Footer />

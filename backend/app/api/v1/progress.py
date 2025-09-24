@@ -36,7 +36,7 @@ def get_student_progress_summary(
             )
     elif current_user.role == "student":
         student = get_student(db, student_id)
-        if not student or student.user_id != current_user.id:
+        if not student or student.id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to view this student's progress"
@@ -46,14 +46,14 @@ def get_student_progress_summary(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
         )
-    
+
     # Get progress data
     total_points = get_student_total_points(db, student_id)
     current_streak = get_student_current_streak(db, student_id)
     total_lessons = get_student_total_lessons(db, student_id)
     badges = get_student_badges(db, student_id)
     weekly_progress = get_student_progress_history(db, student_id)
-    
+
     return ProgressSummary(
         total_points=total_points,
         current_streak=current_streak,
@@ -73,7 +73,7 @@ def update_student_progress(
     # Verify access permissions (only admins and the student themselves can update progress)
     if current_user.role == "student":
         student = get_student(db, student_id)
-        if not student or student.user_id != current_user.id:
+        if not student or student.id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to update this student's progress"
@@ -83,16 +83,16 @@ def update_student_progress(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
         )
-    
+
     # Get current week start (Monday)
     now = datetime.now()
     days_since_monday = now.weekday()
     week_start = now - timedelta(days=days_since_monday)
     week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-    
+
     # Get or create progress record for this week
     existing_progress = get_progress_by_student_and_week(db, student_id, week_start)
-    
+
     if existing_progress:
         updated_progress = update_progress(db, existing_progress.id, progress_update)
     else:
@@ -102,10 +102,10 @@ def update_student_progress(
             **progress_update.dict(exclude_unset=True)
         )
         updated_progress = create_progress(db, progress_data)
-    
+
     # Check and award badges
     check_and_award_badges(db, student_id)
-    
+
     return updated_progress
 
 @router.get("/{student_id}/history", response_model=List[Progress])
@@ -126,7 +126,7 @@ def get_student_progress_history_endpoint(
             )
     elif current_user.role == "student":
         student = get_student(db, student_id)
-        if not student or student.user_id != current_user.id:
+        if not student or student.id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to view this student's progress"
@@ -136,7 +136,7 @@ def get_student_progress_history_endpoint(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
         )
-    
+
     return get_student_progress_history(db, student_id, limit)
 
 # Badge management endpoints

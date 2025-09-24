@@ -20,7 +20,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate checking for existing session
     const checkSession = async () => {
       const token = localStorage.getItem('access_token');
       const tokenType = localStorage.getItem('token_type');
@@ -37,54 +36,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     };
 
-    // Add a small delay to ensure proper loading state
     setTimeout(checkSession, 100);
   }, []);
 
-  const signUp = async (email: string, password: string) => {
+  // ---------- SIGNUP (Parents only for now) ----------
+  // ---------- SIGNUP (Parents only for now) ----------
+  const signUpParent = async (email: string, password: string) => {
     setLoading(true);
     try {
-      const response = await axios.post('/api/v1/auth/signup', {
-        'email': email,
-        'username': email,
-        'password': password,
-        'full_name': email,
-        'role': 'parent'
+      // 1. Check if email already exists
+      const check = await axios.get(`/api/v1/users/check-email`, {
+        params: { email }
       });
 
-      const newUser = response.data; // Assuming the backend returns the created user object
+      if (check.data.exists) {
+        throw new Error('This email is already registered. Please log in instead.');
+      }
+
+      // 2. Proceed with signup if not exists
+      const response = await axios.post('/api/v1/auth/signup', {
+        email: email,
+        username: email,      // using email as username for parents
+        password: password,
+        full_name: email,     // you might replace this with an actual form field
+        role: 'parent'
+      });
+
+      const newUser = response.data;
       setUser(newUser);
       localStorage.setItem('user', JSON.stringify(newUser));
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 'Failed to create account';
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to create account';
       throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const signIn = async (email: string, password: string) => {
+
+  // ---------- LOGIN (Parent) ----------
+  const signInParent = async (email: string, password: string) => {
+    return signInCommon(email, password, 'parent');
+  };
+
+  // ---------- LOGIN (Student) ----------
+  const signInStudent = async (username: string, password: string) => {
+    return signInCommon(username, password, 'student');
+  };
+
+  // ---------- COMMON LOGIN HANDLER ----------
+  const signInCommon = async (identifier: string, password: string, role: 'parent' | 'student') => {
     setLoading(true);
     try {
       const response = await axios.post('/api/v1/auth/login', {
-        'email': email,
-        'password': password
+        'identifier': identifier,
+        'password': password,
+        'role': role
       });
       const { access_token, token_type } = response.data;
-      // Store the token in localStorage for future API calls
+
       localStorage.setItem('access_token', access_token);
       localStorage.setItem('token_type', token_type);
 
-      // Optionally, set the token in axios headers for authenticated requests
       axios.defaults.headers.common['Authorization'] = `${token_type} ${access_token}`;
 
-      // Set the user state (if needed, you can fetch user details using the token)
-      // ✅ Fetch current user from backend
       const me = await axios.get('/api/v1/users/me');
       setUser(me.data);
 
-    // Store user in localStorage for reloads
-    localStorage.setItem('user', JSON.stringify(me.data));
+      localStorage.setItem('user', JSON.stringify(me.data));
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Failed to sign in';
       throw new Error(errorMessage);
@@ -93,13 +112,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // ---------- LOGOUT ----------
   const signOut = async () => {
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('token_type');
   };
 
   return (
-    <AuthContext.Provider value={{ user, signUp, signIn, signOut, loading }}>
+    <AuthContext.Provider
+      value={{ user, signUpParent, signInParent, signInStudent, signOut, loading }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -3,7 +3,6 @@ import React from 'react';
 export const StudentProgress: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white">My Progress</h1>
@@ -103,7 +102,6 @@ export const StudentProgress: React.FC = () => {
             </div>
           </div>
         </div>
-      </main>
     </div>
   );
 };

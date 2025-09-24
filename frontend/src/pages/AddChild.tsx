@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { Child } from '../types';
-import  axios  from 'axios';
+import axios from 'axios';
 import config from '../config';
 
 axios.defaults.baseURL = config.backendUrl;
-
 
 interface AddChildForm {
   full_name: string;
   age: number;
   grade: string;
+  username: string;
+  password: string;
 }
 
 export const AddChild: React.FC = () => {
@@ -33,14 +33,27 @@ export const AddChild: React.FC = () => {
   const onSubmit = async (data: AddChildForm) => {
     setLoading(true);
     try {
-      const response = await axios.post('/api/v1/users/me/students', {
-        'name': data.full_name,
-        'age': data.age,
-        'grade_level': data.grade
+      // 1. Check if username already exists
+      const check = await axios.get('/api/v1/users/check-username', {
+        params: { username: data.username }
       });
 
-      const newChild = response.data; // Assuming the backend returns the created user object
-      // Store child data (in a real app, this would be sent to the API)
+      if (check.data.exists) {
+        alert('This username is already taken. Please choose another one.');
+        setLoading(false);
+        return;
+      }
+
+      // 2. Proceed with creating child if username available
+      const response = await axios.post('/api/v1/users/me/students', {
+        name: data.full_name,
+        age: data.age,
+        grade_level: data.grade,
+        username: data.username,
+        password: data.password,
+      });
+
+      const newChild = response.data;
       const existingChildren = JSON.parse(localStorage.getItem('children') || '[]');
       existingChildren.push(newChild);
       localStorage.setItem('children', JSON.stringify(existingChildren));
@@ -49,10 +62,12 @@ export const AddChild: React.FC = () => {
       navigate('/dashboard');
     } catch (err) {
       console.error('Failed to create child profile:', err);
+      alert('Failed to create child profile. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -68,6 +83,7 @@ export const AddChild: React.FC = () => {
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {/* Full Name */}
             <div>
               <input
                 {...register('full_name', {
@@ -86,18 +102,51 @@ export const AddChild: React.FC = () => {
               )}
             </div>
 
+            {/* Username */}
+            <div>
+              <input
+                {...register('username', {
+                  required: 'Username is required',
+                  minLength: {
+                    value: 3,
+                    message: 'Username must be at least 3 characters'
+                  }
+                })}
+                type="text"
+                placeholder="Username"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+              />
+              {errors.username && (
+                <p className="mt-1 text-sm text-red-600">{errors.username.message}</p>
+              )}
+            </div>
+
+            {/* Password */}
+            <div>
+              <input
+                {...register('password', {
+                  required: 'Password is required',
+                  minLength: {
+                    value: 6,
+                    message: 'Password must be at least 6 characters'
+                  }
+                })}
+                type="password"
+                placeholder="Password"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+              />
+              {errors.password && (
+                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
+              )}
+            </div>
+
+            {/* Age */}
             <div>
               <input
                 {...register('age', {
                   required: 'Age is required',
-                  min: {
-                    value: 5,
-                    message: 'Age must be at least 5'
-                  },
-                  max: {
-                    value: 18,
-                    message: 'Age must be 18 or under'
-                  }
+                  min: { value: 5, message: 'Age must be at least 5' },
+                  max: { value: 18, message: 'Age must be 18 or under' }
                 })}
                 type="number"
                 placeholder="Age"
@@ -108,19 +157,16 @@ export const AddChild: React.FC = () => {
               )}
             </div>
 
+            {/* Grade */}
             <div>
               <select
-                {...register('grade', {
-                  required: 'Grade selection is required'
-                })}
+                {...register('grade', { required: 'Grade selection is required' })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
                 defaultValue=""
               >
                 <option value="" disabled>Select grade</option>
                 {grades.map((grade) => (
-                  <option key={grade} value={grade}>
-                    {grade}
-                  </option>
+                  <option key={grade} value={grade}>{grade}</option>
                 ))}
               </select>
               {errors.grade && (
@@ -128,6 +174,7 @@ export const AddChild: React.FC = () => {
               )}
             </div>
 
+            {/* Submit */}
             <button
               type="submit"
               disabled={loading}

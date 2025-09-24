@@ -24,7 +24,7 @@ export const Dashboard: React.FC = () => {
         const token = localStorage.getItem("access_token")
         if (!token) {
           console.error("No token found, redirecting to login")
-          window.location.href = "/login"
+          window.location.href = "/parent-login"
           return
         }
 

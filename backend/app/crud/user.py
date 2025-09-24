@@ -39,21 +39,24 @@ def update_user(db: Session, user_id: int, user_update: UserUpdate) -> Optional[
     db_user = get_user(db, user_id)
     if not db_user:
         return None
-    
+
     update_data = user_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_user, field, value)
-    
+
     db.commit()
     db.refresh(db_user)
     return db_user
 
 def create_student(db: Session, student: StudentCreate, parent_id: int) -> Student:
+    hashed_password = get_password_hash(student.password)
     db_student = Student(
         name=student.name,
         age=student.age,
         grade_level=student.grade_level,
-        parent_id=parent_id
+        parent_id=parent_id,
+        username=student.username,
+        password=hashed_password
     )
     db.add(db_student)
     db.commit()

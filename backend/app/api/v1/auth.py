@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.core.security import create_access_token
 from app.core.config import settings
 from app.crud.user import authenticate_user, create_user, get_user_by_email, get_user_by_username
+from app.crud.student import authenticate_student
 from app.schemas.auth import Token, UserCreate, UserResponse, UserLogin
 from app.models.user import UserRole
 
@@ -38,7 +39,18 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 def login(request:UserLogin, db: Session = Depends(get_db)):
-    user = authenticate_user(db, request.email, request.password)
+    if request.role not in [role.value for role in UserRole]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid role"
+        )
+
+    user = None
+    if request.role == UserRole.PARENT.value:
+        user = authenticate_user(db, request.identifier, request.password)
+    elif request.role == UserRole.STUDENT.value:
+        user = authenticate_student(db, request.identifier, request.password)
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
