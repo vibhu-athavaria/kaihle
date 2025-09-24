@@ -9,36 +9,40 @@ class UserRole(str, enum.Enum):
     STUDENT = "student"
     ADMIN = "admin"
 
+
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=True)   # required for parents/admins, optional for students
+    username = Column(String, unique=True, index=True, nullable=True) # required for students, optional for others
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=False)
-    role = Column(Enum(UserRole), nullable=False, default=UserRole.PARENT)
+    role = Column(Enum(UserRole), nullable=False)
     is_active = Column(Boolean, default=True)
+    parent_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    children = relationship("Student", back_populates="parent", foreign_keys="Student.parent_id")
+    student_profile = relationship("StudentProfile", uselist=False, back_populates="user")
+    children = relationship("User", back_populates="parent", foreign_keys="User.parent_id")
+    parent = relationship("User", back_populates="children", remote_side=[id])
 
-class Student(Base):
-    __tablename__ = "students"
+class StudentProfile(Base):
+    __tablename__ = "student_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
-    parent_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # Parent who manages this student
-    name = Column(String, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
     age = Column(Integer, nullable=True)
     grade_level = Column(String, nullable=True)
-    username = Column(String, unique=True, nullable=False)
-    hashed_password = Column(String, nullable=False)  # ideally hashed
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Example: storing checkpoints per subject later
+    math_checkpoint = Column(Integer, nullable=True)
+    science_checkpoint = Column(Integer, nullable=True)
+    english_checkpoint = Column(Integer, nullable=True)
 
     # Relationships
-    parent = relationship("User", back_populates="children", foreign_keys=[parent_id])
+    user = relationship("User", back_populates="student_profile")
     progress_records = relationship("Progress", back_populates="student")
     study_plans = relationship("StudyPlan", back_populates="student")

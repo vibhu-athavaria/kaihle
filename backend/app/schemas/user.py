@@ -1,49 +1,96 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, validator
 from typing import Optional
 from datetime import datetime
+from app.models.user import UserRole
 
+
+# -------------------
+# USER SCHEMAS
+# -------------------
 class UserBase(BaseModel):
-    email: EmailStr
-    username: str
+    email: Optional[EmailStr] = None
+    username: Optional[str] = None
     full_name: str
     role: str
 
+
 class UserCreate(UserBase):
     password: str
+    parent_id: Optional[int] = None
+    student_profile: Optional["StudentProfileCreate"] = None  # forward reference
+
+    # Role-based validation
+    @validator("email", always=True)
+    def validate_email(cls, v, values):
+        role = values.get("role")
+        if role in [UserRole.ADMIN.value, UserRole.PARENT.value] and not v:
+            raise ValueError("Email is required for parents and admins")
+        return v
+
+    @validator("username", always=True)
+    def validate_username(cls, v, values):
+        role = values.get("role")
+        if role == UserRole.STUDENT.value and not v:
+            raise ValueError("Username is required for students")
+        return v
+
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = None
     full_name: Optional[str] = None
 
+
 class User(UserBase):
     id: int
     is_active: bool
     created_at: datetime
+    student_profile: Optional["StudentProfileResponse"] = None
 
     class Config:
         from_attributes = True
 
-class StudentCreate(BaseModel):
-    name: str
-    age: int
-    grade_level: str
-    username: str
+
+# -------------------
+# STUDENT PROFILE SCHEMAS
+# -------------------
+class StudentProfileCreate(BaseModel):
+    age: Optional[int]
+    grade_level: Optional[str]
+    checkpoints: Optional[dict] = None   # JSON field
+
+
+class StudentProfileUpdate(BaseModel):
+    age: Optional[int] = None
+    grade_level: Optional[str] = None
+    checkpoints: Optional[dict] = None
+
+
+class StudentProfileResponse(BaseModel):
+    age: Optional[int] = None
+    grade_level: Optional[str] = None
+    checkpoints: Optional[dict] = None
+
+    class Config:
+        from_attributes = True
+
+
+# -------------------
+# LOGIN + TOKEN
+# -------------------
+class UserLogin(BaseModel):
+    identifier: str  # email or username
     password: str
+    role: str
 
-class StudentUpdate(BaseModel):
-    name: Optional[str] = None
-    age: Optional[int] = None
-    grade_level: Optional[str] = None
+    @validator("identifier")
+    def validate_identifier(cls, v, values):
+        role = values.get("role")
+        if role == UserRole.STUDENT.value and "@" in v:
+            raise ValueError("Students must log in with username, not email")
+        return v
 
-class Student(BaseModel):
-    id: int
-    name: str
-    age: Optional[int] = None
-    grade_level: Optional[str] = None
-    parent_id: int
-    username: str
-    created_at: datetime
 
-    class Config:
-        from_attributes = True
+class Token(BaseModel):
+    access_token: str
+    token_type: str
