@@ -15,7 +15,8 @@ import { AITutor } from './pages/AITutor';
 import { Lesson } from './pages/Lesson';
 import { StudyPlan } from './pages/StudyPlan';
 import { StudentProgress } from './pages/StudentProgress';
-import  TakeAssessment  from './pages/TakeAssessment';
+import AssessmentPage from './pages/AssessmentPage';
+
 
 const AppContent: React.FC = () => {
   const { user } = useAuth();
@@ -27,7 +28,7 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-blue-50">
       <Header variant={user ? 'dashboard' : 'landing'} />
       <main className="flex-1">
         <Routes>
@@ -68,7 +69,7 @@ const AppContent: React.FC = () => {
             path="/take-assessment"
             element={
               <ProtectedRoute>
-                {user?.role === 'student' ? <TakeAssessment /> : <Navigate to="/dashboard" />}
+                {user?.role === 'student' ? <AssessmentPage /> : <Navigate to="/dashboard" />}
               </ProtectedRoute>
             }
           />
@@ -109,7 +110,7 @@ const AppContent: React.FC = () => {
           <Route
             path="/about"
             element={
-              <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+              <div className="min-h-screen bg-blue-50 flex items-center justify-center">
                 <div className="text-center">
                   <h1 className="text-2xl font-bold text-gray-900 mb-4">About Us</h1>
                   <p className="text-gray-600">Coming soon!</p>
@@ -120,7 +121,7 @@ const AppContent: React.FC = () => {
           <Route
             path="/contact"
             element={
-              <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+              <div className="min-h-screen bg-blue-50 flex items-center justify-center">
                 <div className="text-center">
                   <h1 className="text-2xl font-bold text-gray-900 mb-4">Contact</h1>
                   <p className="text-gray-600">Coming soon!</p>

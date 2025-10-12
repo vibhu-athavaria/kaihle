@@ -32,7 +32,7 @@ export const AITutor: React.FC = () => {
     setTimeout(() => {
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: `Great question about "${inputValue}"! Let me help you understand this concept better. 
+        content: `Great question about "${inputValue}"! Let me help you understand this concept better.
 
 This is a simulated AI tutor response. In a real implementation, this would connect to OpenAI's API or Claude to provide intelligent, curriculum-specific answers to your questions.
 
@@ -68,7 +68,7 @@ Would you like me to dive deeper into any specific aspect?`,
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-blue-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="text-center mb-8">
@@ -79,7 +79,7 @@ Would you like me to dive deeper into any specific aspect?`,
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Tutor</h1>
           <p className="text-gray-600 max-w-2xl mx-auto">
-            Ask me anything! I can explain concepts, provide resources, or even help you with your 
+            Ask me anything! I can explain concepts, provide resources, or even help you with your
             math homework.
           </p>
         </div>

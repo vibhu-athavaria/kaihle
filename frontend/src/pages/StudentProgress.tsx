@@ -2,7 +2,7 @@ import React from 'react';
 
 export const StudentProgress: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-blue-50 dark:bg-gray-900">
         <div className="mx-auto max-w-5xl">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white">My Progress</h1>

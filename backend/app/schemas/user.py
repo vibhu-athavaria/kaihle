@@ -63,7 +63,7 @@ class StudentProfileCreate(BaseModel):
 
     # Profile fields
     age: Optional[int] = None
-    grade_level: Optional[str] = None
+    grade_level: Optional[int] = None
     checkpoints: Optional[Dict[str, str]] = None   # {"math": "A", "science": "B", ...}
 
 
@@ -76,7 +76,7 @@ class StudentProfileUpdate(BaseModel):
 
     # Profile fields
     age: Optional[int] = None
-    grade_level: Optional[str] = None
+    grade_level: Optional[int] = None
     checkpoints: Optional[Dict[str, str]] = None
 
 
@@ -84,7 +84,7 @@ class StudentProfileResponse(BaseModel):
     id: int
     parent_id: int
     age: Optional[int] = None
-    grade_level: Optional[str] = None
+    grade_level: Optional[int] = None
     checkpoints: Optional[Dict[str, str]] = None
 
     user: UserBase  # 👈 include relationship instead of flattening

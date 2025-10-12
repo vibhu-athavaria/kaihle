@@ -17,7 +17,19 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:5173"]
 
+    # LLM-related fields
+    LLM_PROVIDER: str = "gemini"  # "openai", "gemini", "ollama", "mock"
+    OPENAI_API_KEY: str | None = None
+    GEMINI_API_KEY: str | None = None
+    OLLAMA_URL: str | None = None
+    MOONSHOT_API_KEY: str | None = None
+    MOONSHOT_API_URL: str | None = None
+    # Assessment settings
+    MAX_QUESTIONS_PER_ASSESSMENT: int = 32
+
+
     class Config:
         env_file = ".env"
 
 settings = Settings()
+

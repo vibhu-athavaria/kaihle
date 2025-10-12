@@ -146,7 +146,7 @@ export const Lesson: React.FC = () => {
               />
             ))}
           </div>
-          
+
           {/* Play button */}
           <button
             onClick={() => setIsVideoPlaying(!isVideoPlaying)}
@@ -156,7 +156,7 @@ export const Lesson: React.FC = () => {
           </button>
         </div>
       </div>
-      
+
       <div className="prose prose-gray max-w-none">
         <p className="text-gray-600 leading-relaxed">
           {currentSectionData.content}
@@ -173,7 +173,7 @@ export const Lesson: React.FC = () => {
             <Brain className="w-6 h-6 text-blue-600 mr-2" />
             {lessonData.keyComponents.title}
           </h3>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {lessonData.keyComponents.items.map((item, index) => (
               <div key={index} className="text-center">
@@ -187,7 +187,7 @@ export const Lesson: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       <div className="prose prose-gray max-w-none">
         <p className="text-gray-600 leading-relaxed">
           {currentSectionData.content}
@@ -203,12 +203,12 @@ export const Lesson: React.FC = () => {
           <CheckCircle className="w-6 h-6 text-blue-600 mr-2" />
           Quiz
         </h3>
-        
+
         <div className="space-y-6">
           <p className="text-lg text-gray-800 font-medium">
             {currentSectionData.quiz?.question}
           </p>
-          
+
           {currentSectionData.quiz?.options ? (
             <div className="space-y-3">
               {currentSectionData.quiz.options.map((option, index) => (
@@ -248,7 +248,7 @@ export const Lesson: React.FC = () => {
               rows={4}
             />
           )}
-          
+
           {!showFeedback && (
             <button
               onClick={handleQuizSubmit}
@@ -258,7 +258,7 @@ export const Lesson: React.FC = () => {
               Submit
             </button>
           )}
-          
+
           {showFeedback && (
             <div className={`p-4 rounded-xl ${
               quizAnswer === currentSectionData.quiz?.correctAnswer
@@ -283,7 +283,7 @@ export const Lesson: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-blue-50">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
         <nav className="flex items-center space-x-2 text-sm text-gray-600 mb-8">
@@ -302,7 +302,7 @@ export const Lesson: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-4">
             {lessonData.title}
           </h1>
-          
+
           {/* Progress Bar */}
           <div className="mb-6">
             <div className="flex justify-between items-center mb-2">

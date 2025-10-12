@@ -7,6 +7,7 @@ import math, random
 
 llm = LLMService()
 
+
 # helper to get or create KnowledgeArea (normalized match)
 def get_or_create_knowledge_area(db: Session, subject: str, topic: str, subtopic: str, grade_level: str) -> KnowledgeArea:
     q = db.query(KnowledgeArea).filter(
@@ -62,8 +63,8 @@ def pick_next_topic_and_difficulty(db: Session, student_id: int, subject: str):
     # fallback default
     return {"topic": None, "subtopic": None, "difficulty": 0.5}
 
-def create_question(db: Session, assessment: Assessment, topic: str, subtopic: str, difficulty: float, order: int) -> AssessmentQuestion:
-    payload = llm.generate_question(assessment.subject, assessment.grade_level, topic, difficulty)
+async def create_question(db: Session, assessment: Assessment, topic: str, subtopic: str, difficulty: float, order: int) -> AssessmentQuestion:
+    payload = await llm.generate_question(assessment.subject, assessment.grade_level, topic, difficulty)
     # Normalize and ensure required fields
     q_topic = payload.get("topic") or topic or "General"
     q_subtopic = payload.get("subtopic")
@@ -84,3 +85,19 @@ def create_question(db: Session, assessment: Assessment, topic: str, subtopic: s
     db.commit()
     db.refresh(aq)
     return aq
+
+def choose_grade_by_age(student_age:int) -> int:
+    # simple mapping (tweak to match your locale)
+    if student_age <= 5: return 0
+    if student_age <= 6: return 1
+    if student_age <= 7: return 2
+    if student_age <= 8: return 3
+    if student_age <= 9: return 4
+    if student_age <= 10: return 5
+    if student_age <= 11: return 6
+    if student_age <= 12: return 7
+    if student_age <= 13: return 8
+    if student_age <= 14: return 9
+    if student_age <= 15: return 10
+    if student_age <= 16: return 11
+    return 12

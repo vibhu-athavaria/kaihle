@@ -43,8 +43,8 @@ class AssessmentQuestionOut(BaseModel):
 
 class AssessmentCreate(BaseModel):
     student_id: int
+    student_age: Optional[int] = None
     subject: str
-    grade_level: str
     assessment_type: str = "diagnostic"
 
 class AssessmentOut(BaseModel):

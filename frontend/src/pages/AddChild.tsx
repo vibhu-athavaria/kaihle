@@ -9,7 +9,7 @@ axios.defaults.baseURL = config.backendUrl;
 interface AddChildForm {
   full_name: string;
   age: number;
-  grade: string;
+  grade: number;
   username: string;
   password: string;
 }
@@ -19,15 +19,16 @@ export const AddChild: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm<AddChildForm>();
 
+  // Map numeric grade levels for backend
   const grades = [
-    '5th Grade',
-    '6th Grade',
-    '7th Grade',
-    '8th Grade',
-    '9th Grade',
-    '10th Grade',
-    '11th Grade',
-    '12th Grade'
+    { label: '5th Grade', value: 5 },
+    { label: '6th Grade', value: 6 },
+    { label: '7th Grade', value: 7 },
+    { label: '8th Grade', value: 8 },
+    { label: '9th Grade', value: 9 },
+    { label: '10th Grade', value: 10 },
+    { label: '11th Grade', value: 11 },
+    { label: '12th Grade', value: 12 },
   ];
 
   const onSubmit = async (data: AddChildForm) => {
@@ -60,7 +61,7 @@ export const AddChild: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
@@ -156,7 +157,7 @@ export const AddChild: React.FC = () => {
               >
                 <option value="" disabled>Select grade</option>
                 {grades.map((grade) => (
-                  <option key={grade} value={grade}>{grade}</option>
+                  <option key={grade.value} value={grade.value}>{grade.label}</option>
                 ))}
               </select>
               {errors.grade && (
