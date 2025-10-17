@@ -1,18 +1,24 @@
 // src/components/Assessment/AssessmentPage.tsx
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import axios from "axios";
 import config from "../config";
 
 axios.defaults.baseURL = config.backendUrl;
+type QuestionBank = {
+  id: number;
+  question_text: string;
+  question_type: string;
+  options?: string[] | null;
+  correct_answer?: string;
+  difficulty_level?: string;
+  learning_objectives: string
+};
 
 type Question = {
   id: number;
   question_number: number;
-  question_text: string;
-  question_type: string;
-  options?: string[] | null;
-  difficulty_level?: string;
+  question_bank: QuestionBank;
 };
 
 type AnswerResponse = {
@@ -25,7 +31,7 @@ type AnswerResponse = {
 
 const AssessmentPage: React.FC = () => {
   const navigate = useNavigate();
-  const { assessmentId } = useParams<{ assessmentId: string }>();
+  const location = useLocation();
 
   const [assessment, setAssessment] = useState<any>(null);
   const [question, setQuestion] = useState<Question | null>(null);
@@ -33,12 +39,20 @@ const AssessmentPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [subject, setSubject] = useState<string | null>(null);
+
+  // ✅ Extract subject from query string
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const subjectParam = params.get("subject");
+    setSubject(subjectParam); // fallback if none passed
+  }, [location.search]);
 
   // ✅ Start or resume assessment
   useEffect(() => {
-    startOrResume();
+    if (subject) startOrResume();
     // eslint-disable-next-line
-  }, []);
+  }, [subject]);
 
   const startOrResume = async () => {
     setLoading(true);
@@ -53,13 +67,12 @@ const AssessmentPage: React.FC = () => {
         return;
       }
 
+      // ✅ subject is now dynamic
       const resp = await axios.post(
         "/api/v1/assessments/",
         {
           student_id: child.id,
-          student_age: child.age,
-          subject: "Adaptive",
-          assessment_type: "diagnostic_adaptive",
+          subject: subject,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -68,8 +81,7 @@ const AssessmentPage: React.FC = () => {
 
       const body = resp.data;
       setAssessment(body);
-      console.log("Assessment response:", body);
-      console.log("Questions:", body.questions);
+      console.log(`Assessment for ${subject}:`, body);
 
       const nextUnanswered =
         body.questions?.find((q: any) => !q.student_answer) || null;
@@ -77,9 +89,14 @@ const AssessmentPage: React.FC = () => {
       if (nextUnanswered) {
         setQuestion(stripServerFields(nextUnanswered));
       } else {
-        const qResp = await axios.get(`/api/v1/assessments/${body.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const qResp = await axios.post(
+          `/api/v1/assessments/${body.id}/questions`,
+          {
+          },
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
         const nq = qResp.data.questions?.find((q: any) => !q.student_answer) || null;
         setQuestion(nq ? stripServerFields(nq) : null);
       }
@@ -139,7 +156,7 @@ const AssessmentPage: React.FC = () => {
 
   // ✅ Render states
   if (loading && !question) {
-    return <div className="p-6">Loading...</div>;
+    return <div className="p-6">Loading {subject} Assessment...</div>;
   }
 
   if (error) {
@@ -159,7 +176,7 @@ const AssessmentPage: React.FC = () => {
   if (report) {
     return (
       <div className="max-w-3xl mx-auto p-6">
-        <h2 className="text-2xl font-bold">Assessment Report</h2>
+        <h2 className="text-2xl font-bold">{subject} Assessment Report</h2>
         <pre className="bg-white p-4 rounded mt-4">
           {JSON.stringify(report.recommendations || report, null, 2)}
         </pre>
@@ -177,13 +194,16 @@ const AssessmentPage: React.FC = () => {
     <div className="min-h-screen p-6 bg-gray-50">
       <div className="max-w-3xl mx-auto bg-white p-6 rounded-xl shadow">
         <div className="text-sm text-gray-500">
-          Question {question.question_number} • {question.difficulty_level}
+          {subject} • Question {question.question_number} • {question.question_bank.difficulty_label}
         </div>
-        <h3 className="text-xl font-semibold mt-2">{question.question_text}</h3>
+        <h3 className="text-xl font-semibold mt-2">
+          {question.question_number}.{" "}
+          {question.question_bank.question_text}
+          </h3>
 
-        {question.options && question.options.length ? (
+        {question.question_bank.options && question.question_bank.options.length ? (
           <div className="mt-4 space-y-2">
-            {question.options.map((opt, i) => (
+            {question.question_bank.options.map((opt, i) => (
               <label
                 key={i}
                 className={`block p-3 rounded border cursor-pointer ${

@@ -17,7 +17,7 @@ class Progress(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    student = relationship("StudentProfile", back_populates="progress_records")  # FIXED
+    # student = relationship("StudentProfile", back_populates="progress_records")  # FIXED
 
 
 class Badge(Base):
@@ -40,5 +40,5 @@ class StudentBadge(Base):
     earned_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    student = relationship("StudentProfile")  # FIXED
-    badge = relationship("Badge")
+    # student = relationship("StudentProfile")  # FIXED
+    # badge = relationship("Badge")

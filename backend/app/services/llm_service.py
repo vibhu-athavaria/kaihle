@@ -1,6 +1,7 @@
 # app/services/llm_service.py
 import os
 import json
+import re
 import random
 import logging
 from typing import Dict, Any, Optional
@@ -17,40 +18,83 @@ class LLMService:
         self.openai_api_key = settings.OPENAI_API_KEY
         self.gemini_api_key = settings.GEMINI_API_KEY
 
+
+    def _safe_parse_gemini_response(self, raw_text: str):
+        """
+        Cleans and safely parses Gemini responses that are meant to be JSON.
+        Returns a Python dict if successful, or None otherwise.
+        """
+        try:
+            # Trim code block markers or markdown formatting
+            cleaned = raw_text.strip().strip("```").strip("json").strip()
+
+            # Try direct JSON parsing
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            # Try to repair common issues (like stray commas or garbage text)
+            try:
+                # Remove junk after the final closing brace
+                cleaned = re.sub(r'}[^}]*$', '}', cleaned)
+                return json.loads(cleaned)
+            except Exception as e:
+                print("⚠️ Could not parse Gemini JSON directly. Raw text:")
+                print(raw_text)
+                print(f"Parser error: {e}")
+                return None
+
     # ---------------------
     # Question generation
     # ---------------------
     async def generate_question(
-        self, subject: str, grade_level: str, topic: Optional[str], difficulty: float
+        self, subject: str, grade_level: str, topic: Optional[str], difficulty_level: str
     ) -> Dict[str, Any]:
         """
         Returns validated dict keys:
-        - question_text, question_type, options (optional), correct_answer, topic, subtopic, difficulty_level
+        - question_text, question_type, options (optional), correct_answer, subject, subtopic, difficulty_level, learning_objectives, description, prerequisites
         """
-        difficulty_level = (
-            "easy" if difficulty < 0.4 else "medium" if difficulty < 0.75 else "hard"
-        )
 
         if self.provider == "mock":
             choices = ["A", "B", "C", "D"]
             correct = random.choice(choices)
             return {
-                "question_text": f"Mock: {subject} ({topic or 'General'}) - difficulty {difficulty_level}",
+                "question_text": f"Mock: {subject} ({topic}) - difficulty {difficulty_level}",
                 "question_type": "multiple_choice",
                 "options": choices,
                 "correct_answer": correct,
-                "topic": topic or "General",
-                "subtopic": None,
+                "subject": subject,
+                "topic": None,
                 "difficulty_level": difficulty_level,
             }
 
-        prompt = (
-            f"Generate one {grade_level} {subject} question. "
-            f"Topic: {topic or 'general concepts'}. "
-            f"Difficulty: {difficulty_level}. "
-            f"Output ONLY valid JSON matching schema: "
-            '{"question_text":"", "question_type":"", "options":[], "correct_answer":"", "topic":"", "subtopic":"", "difficulty_level":""}'
-        )
+        prompt = {
+            "prompt_template": "Generate 1 {subject} question in JSON format for Grades {grade_level} with difficulty '{difficulty_level}'. Output ONLY valid JSON matching schema: {\"question_text\":\"\", \"question_type\":\"\", \"options\":[], \"correct_answer\":\"\", \"subject\":\"\", \"sub_topic\":\"\", \"difficulty_level\":\"\", \"learning_objectives\":\"\", \"description\":\"\", \"prerequisites\":\"\"}",
+            "variables": {
+                "subject": subject,
+                "grade_level": grade_level,
+                "difficulty_level": difficulty_level
+            },
+            "generation_constraints": {
+                "output_format": "JSON",
+                "must_match_schema": {
+                    "question_text": "string",
+                    "question_type": "string",
+                    "options": "array",
+                    "correct_answer": "string",
+                    "subject": "string",
+                    "sub_topic": "string",
+                    "difficulty_level": "string",
+                    "learning_objectives": "array",
+                    "description": "string",
+                    "prerequisites": "array"
+                }
+            },
+            "validation_filters": [
+                "Multiple Choice (MCQ) distinct options: Ensure all values in the `options` array for a multiple-choice question are unique.",
+                "True/False (T/F) format: Ensure T/F questions begin with a complete, verifiable, factual statement.",
+                "Short Answer format: Ensure short answer questions require a single-line, real-world fact as the answer (non-open-ended, not an essay)."
+            ]
+        }
+
         logger.debug("LLM Question Prompt: %s", prompt)
         if self.provider == "openai":
             try:
@@ -77,7 +121,7 @@ class LLMService:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_api_key}"
                 headers = {"Content-Type": "application/json"}
                 payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
+                    "contents": [{"parts": [{"text": json.dumps(prompt)}]}],
                 }
 
                 async with httpx.AsyncClient(timeout=60) as client:
@@ -94,14 +138,10 @@ class LLMService:
                     .strip()
                 )
                 # --- Clean up Markdown code fences ---
-                if "```" in text:
-                    if "```json" in text:
-                        text = text.split("```json")[-1].split("```")[0].strip()
-                    else:
-                        text = text.split("```")[1].strip()
 
                 try:
-                    return json.loads(text)
+                    logger.debug("LLM Question Prompt: %s", text)
+                    return self._safe_parse_gemini_response(text)
                 except json.JSONDecodeError:
                     logger.warning("⚠️ Could not parse Gemini JSON directly. Raw text:\n%s", text)
                     # Fallback: wrap raw text in a basic dict

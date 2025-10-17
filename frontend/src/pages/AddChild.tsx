@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import axios from 'axios';
 import config from '../config';
+import { GRADES }  from '../lib/utils';
 
 axios.defaults.baseURL = config.backendUrl;
 
@@ -19,17 +20,6 @@ export const AddChild: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm<AddChildForm>();
 
-  // Map numeric grade levels for backend
-  const grades = [
-    { label: '5th Grade', value: 5 },
-    { label: '6th Grade', value: 6 },
-    { label: '7th Grade', value: 7 },
-    { label: '8th Grade', value: 8 },
-    { label: '9th Grade', value: 9 },
-    { label: '10th Grade', value: 10 },
-    { label: '11th Grade', value: 11 },
-    { label: '12th Grade', value: 12 },
-  ];
 
   const onSubmit = async (data: AddChildForm) => {
     setLoading(true);
@@ -156,7 +146,7 @@ export const AddChild: React.FC = () => {
                 defaultValue=""
               >
                 <option value="" disabled>Select grade</option>
-                {grades.map((grade) => (
+                {GRADES.map((grade) => (
                   <option key={grade.value} value={grade.value}>{grade.label}</option>
                 ))}
               </select>

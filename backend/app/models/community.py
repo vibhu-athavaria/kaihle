@@ -16,8 +16,8 @@ class Post(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    author = relationship("User", back_populates="posts")  # ✅ add reverse relation
-    comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
+    # author = relationship("User", back_populates="posts")  # ✅ add reverse relation
+    # comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
 
 
 class Comment(Base):
@@ -32,8 +32,8 @@ class Comment(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    post = relationship("Post", back_populates="comments")
-    author = relationship("User", back_populates="comments")  # ✅ add reverse relation
+    # post = relationship("Post", back_populates="comments")
+    # author = relationship("User", back_populates="comments")  # ✅ add reverse relation
 
 
 class Notification(Base):
@@ -47,4 +47,4 @@ class Notification(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    user = relationship("User", back_populates="notifications")  # ✅ add reverse relation
+    # user = relationship("User", back_populates="notifications")  # ✅ add reverse relation

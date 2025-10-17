@@ -16,7 +16,7 @@ class TutorSession(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    student = relationship("StudentProfile", back_populates="tutor_sessions")
+    # student = relationship("StudentProfile", back_populates="tutor_sessions")
     lesson = relationship("Lesson")
     interactions = relationship("TutorInteraction", back_populates="session", cascade="all, delete-orphan")
 
@@ -51,5 +51,5 @@ class StudentAnswer(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    student = relationship("StudentProfile", back_populates="answers")
+    # student = relationship("StudentProfile", back_populates="answers")
     lesson = relationship("Lesson")

@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import config from "../config";
+import { GRADES, SUBJECTS }  from '../lib/utils';
 
 axios.defaults.baseURL = config.backendUrl;
 
@@ -63,9 +64,9 @@ const TakeAssessment: React.FC = () => {
               onChange={(e) => setSubject(e.target.value)}
               className="w-full p-2 border rounded"
             >
-              <option value="Math">Math</option>
-              <option value="Science">Science</option>
-              <option value="English">English</option>
+              {SUBJECTS.map((subject) => (
+                <option key={subject} value={subject}>{subject}</option>
+              ))}
             </select>
           </div>
 
@@ -76,9 +77,10 @@ const TakeAssessment: React.FC = () => {
               onChange={(e) => setGradeLevel(e.target.value)}
               className="w-full p-2 border rounded"
             >
-              <option value="Grade 6">Grade 6</option>
-              <option value="Grade 7">Grade 7</option>
-              <option value="Grade 8">Grade 8</option>
+              <option value="" disabled>Select grade</option>
+              {GRADES.map((grade) => (
+                <option key={grade.value} value={grade.value}>{grade.label}</option>
+              ))}
             </select>
           </div>
 

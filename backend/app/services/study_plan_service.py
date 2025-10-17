@@ -30,7 +30,7 @@ def persist_study_plan_from_llm(db: Session, assessment: models.Assessment, mast
         ka_id = None
         topic = l.get("topic")
         if topic:
-            ka = db.query(models.KnowledgeArea).filter_by(subject=assessment.subject, topic=topic, grade_level=assessment.grade_level).first()
+            ka = db.query(models.QuestionBank).filter_by(subject=assessment.subject, topic=topic, grade_level=assessment.grade_level).first()
             if ka:
                 ka_id = ka.id
         spl = models.StudyPlanLesson(

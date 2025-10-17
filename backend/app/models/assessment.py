@@ -13,7 +13,7 @@ class Assessment(Base):
     subject = Column(String, nullable=False)  # Math, Science, English, History
     grade_level = Column(String, nullable=False)
     assessment_type = Column(String, nullable=False)  # "diagnostic", "progress", "final"
-    difficulty_level = Column(String, default="adaptive")  # "beginner", "intermediate", "advanced", "adaptive"
+    difficulty_level = Column(String, default="medium")  # "easy", "medium", "hard"
     status = Column(String, default="started")  # "started", "in_progress", "completed", "abandoned"
     total_questions = Column(Integer, default=0)
     questions_answered = Column(Integer, default=0)
@@ -36,13 +36,8 @@ class AssessmentQuestion(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     assessment_id = Column(Integer, ForeignKey("assessments.id"), nullable=False)
-    knowledge_area_id = Column(Integer, ForeignKey("knowledge_areas.id"), nullable=False)  # NEW: Direct link to curriculum
+    question_bank_id = Column(Integer, ForeignKey("question_bank.id"), nullable=False)
     question_number = Column(Integer, nullable=False)
-    difficulty_level = Column(String, nullable=False)  # "easy", "medium", "hard"
-    question_text = Column(Text, nullable=False)
-    question_type = Column(String, nullable=False)  # "multiple_choice", "short_answer", "true_false"
-    options = Column(JSON, nullable=True)  # For multiple choice questions
-    correct_answer = Column(Text, nullable=False)
     student_answer = Column(Text, nullable=True)
     is_correct = Column(Boolean, nullable=True)
     score = Column(Float, nullable=True)  # 0-1, can be partial for complex questions
@@ -54,34 +49,36 @@ class AssessmentQuestion(Base):
 
     # Relationships
     assessment = relationship("Assessment", back_populates="questions")
-    knowledge_area = relationship("KnowledgeArea", back_populates="assessment_questions")  # NEW
+    question_bank = relationship("QuestionBank", back_populates="assessment_questions")  # NEW
 
 
-class KnowledgeArea(Base):
-    __tablename__ = "knowledge_areas"
+class QuestionBank(Base):
+    __tablename__ = "question_bank"
 
     id = Column(Integer, primary_key=True, index=True)
     subject = Column(String, nullable=False)
-    topic = Column(String, nullable=False)
     subtopic = Column(String, nullable=True)
     grade_level = Column(String, nullable=False)
-    difficulty_order = Column(Integer, default=1)  # 1=easiest, higher=harder
-    prerequisites = Column(JSON, nullable=True)  # Array of prerequisite knowledge_area ids
+    prerequisites = Column(JSON, nullable=True)  # Array of prerequisite
     description = Column(Text, nullable=True)
     learning_objectives = Column(JSON, nullable=True)
+    question_text = Column(Text, nullable=False)
+    question_type = Column(String, nullable=False)  # "multiple_choice", "short_answer", "true_false", etc.
+    options = Column(JSON, nullable=True)  # For multiple choice questions
+    correct_answer = Column(Text, nullable=False)
+    difficulty_level = Column(Float, default=0.5)  # 0.0-1.0 scale
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    lessons = relationship("Lesson", back_populates="knowledge_area")
-    study_plan_lessons = relationship("StudyPlanLesson", back_populates="knowledge_area")
-    assessment_questions = relationship("AssessmentQuestion", back_populates="knowledge_area")  # NEW
+    assessment_questions = relationship("AssessmentQuestion", back_populates="question_bank")  # NEW
+
 
 class StudentKnowledgeProfile(Base):
     __tablename__ = "student_knowledge_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("student_profiles.id"), nullable=False)
-    knowledge_area_id = Column(Integer, ForeignKey("knowledge_areas.id"), nullable=False)
+    # knowledge_area_id = Column(Integer, ForeignKey("knowledge_areas.id"), nullable=False)
     mastery_level = Column(Float, default=0.0)  # 0.0-1.0, where 1.0 is complete mastery
     confidence_score = Column(Float, default=0.5)  # AI confidence in the mastery assessment
     last_assessed = Column(DateTime(timezone=True), nullable=True)
@@ -90,5 +87,5 @@ class StudentKnowledgeProfile(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    student = relationship("StudentProfile", back_populates="knowledge_profile")
-    knowledge_area = relationship("KnowledgeArea")
+    # student = relationship("StudentProfile", back_populates="knowledge_profile")
+    # knowledge_area = relationship("QuestionBank")

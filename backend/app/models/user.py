@@ -42,13 +42,13 @@ class User(Base):
     )
 
     # Posts
-    posts = relationship("Post", back_populates="author", cascade="all, delete-orphan")
+    # posts = relationship("Post", back_populates="author", cascade="all, delete-orphan")
 
     # Comments
-    comments = relationship("Comment", back_populates="author", cascade="all, delete-orphan")
+    # comments = relationship("Comment", back_populates="author", cascade="all, delete-orphan")
 
     # Notifications
-    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+    # notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
 
 
 class StudentProfile(Base):
@@ -76,14 +76,13 @@ class StudentProfile(Base):
     )
 
     # Progress tracking
-    progress_records = relationship("Progress", back_populates="student")
+    # progress_records = relationship("Progress", back_populates="student")
 
     # Study Plans
-    study_plans = relationship("StudyPlan", back_populates="student", cascade="all, delete-orphan")
+    # study_plans = relationship("StudyPlan", back_populates="student", cascade="all, delete-orphan")
 
     # Assessments
     assessments = relationship("Assessment", back_populates="student", cascade="all, delete-orphan")
-    knowledge_profile = relationship("StudentKnowledgeProfile", back_populates="student", cascade="all, delete-orphan")
 
-    tutor_sessions = relationship("TutorSession", back_populates="student", cascade="all, delete-orphan")
-    answers = relationship("StudentAnswer", back_populates="student", cascade="all, delete-orphan")
+    # tutor_sessions = relationship("TutorSession", back_populates="student", cascade="all, delete-orphan")
+    # answers = relationship("StudentAnswer", back_populates="student", cascade="all, delete-orphan")

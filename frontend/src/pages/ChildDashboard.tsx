@@ -1,165 +1,167 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { BookOpen, Beaker, Scroll, Edit3, Paintbrush, Music } from "lucide-react"
-import { Child, Lesson } from "../types"
+import { BookOpen, Beaker, Edit3, Globe2 } from "lucide-react"
+import { Child } from "../types"
+import { SUBJECTS } from "../lib/utils"
 
 const subjectIcons = {
   Math: BookOpen,
   Science: Beaker,
-  History: Scroll,
   English: Edit3,
-  Art: Paintbrush,
-  Music: Music,
+  Humanities: Globe2,
+}
+
+type Subject = "Math" | "Science" | "English" | "Humanities"
+
+interface StudyPlanItem {
+  id: string
+  title: string
+  description: string
+  difficulty: string
 }
 
 export const ChildDashboard: React.FC = () => {
   const [child, setChild] = useState<Child | null>(null)
-  const [todaysTasks, setTodaysTasks] = useState<Lesson[]>([])
-  const [upcomingLessons, setUpcomingLessons] = useState<Lesson[]>([])
+  const [activeSubject, setActiveSubject] = useState<Subject>(SUBJECTS[0] as Subject)
+  const [completedAssessments, setCompletedAssessments] = useState<Record<Subject, boolean>>({
+    Math: false,
+    Science: false,
+    English: false,
+    Humanities: false,
+  })
+
+  const [studyPlans, setStudyPlans] = useState<Record<Subject, StudyPlanItem[]>>({
+    Math: [],
+    Science: [],
+    English: [],
+    Humanities: [],
+  })
 
   useEffect(() => {
-    // Load child data from localStorage
-    const currentChild = localStorage.getItem("currentChild")
-    if (currentChild) {
-      setChild(JSON.parse(currentChild))
+    const storedChild = localStorage.getItem("currentChild")
+    if (storedChild) {
+      const parsed = JSON.parse(storedChild)
+      setChild(parsed)
+
+      // mock: assume the backend will return which subjects have assessments done
+      setCompletedAssessments({
+        Math: parsed.user.assessments?.Math || false,
+        Science: parsed.user.assessments?.Science || false,
+        English: parsed.user.assessments?.English || false,
+        Humanities: parsed.user.assessments?.Humanities || false,
+      })
     }
 
-    // Mock data for lessons (after assessment)
-    setTodaysTasks([
-      { id: "1", title: "Algebra Basics", subject: "Math", icon: "BookOpen", type: "today", child_id: "1" },
-      { id: "2", title: "The Solar System", subject: "Science", icon: "Beaker", type: "today", child_id: "1" },
-      { id: "3", title: "Ancient Civilizations", subject: "History", icon: "Scroll", type: "today", child_id: "1" },
-    ])
-
-    setUpcomingLessons([
-      { id: "4", title: "Creative Writing", subject: "English", icon: "Edit3", type: "upcoming", schedule: "Tomorrow", child_id: "1" },
-      { id: "5", title: "Drawing Fundamentals", subject: "Art", icon: "Paintbrush", type: "upcoming", schedule: "In 2 days", child_id: "1" },
-      { id: "6", title: "Music Theory", subject: "Music", icon: "Music", type: "upcoming", schedule: "In 3 days", child_id: "1" },
-    ])
+    // mock data for study plans
+    setStudyPlans({
+      Math: [
+        { id: "m1", title: "Mastering Fractions", description: "Deep dive into operations with fractions.", difficulty: "Intermediate" },
+        { id: "m2", title: "Geometry Basics", description: "Shapes, angles, and area calculation.", difficulty: "Beginner" },
+      ],
+      Science: [
+        { id: "s1", title: "Forces & Motion", description: "Understand Newton’s laws and motion.", difficulty: "Intermediate" },
+        { id: "s2", title: "Cells and Microorganisms", description: "Explore the building blocks of life.", difficulty: "Beginner" },
+      ],
+      English: [
+        { id: "e1", title: "Creative Writing", description: "Build your storytelling and writing style.", difficulty: "Intermediate" },
+        { id: "e2", title: "Reading Comprehension", description: "Learn to analyze complex passages.", difficulty: "Beginner" },
+      ],
+      Humanities: [
+        { id: "h1", title: "Ancient Civilizations", description: "Discover the roots of human culture.", difficulty: "Intermediate" },
+        { id: "h2", title: "World Geography", description: "Explore continents, cultures, and history.", difficulty: "Beginner" },
+      ],
+    })
   }, [])
 
-  const handleStartLesson = (lessonId: string) => {
-    window.location.href = `/lesson/${lessonId}`
+  const handleStartAssessment = (subject: Subject) => {
+    window.location.href = `/take-assessment?subject=${subject}`
   }
 
-  const handleTakeAssessment = () => {
-    window.location.href = "/take-assessment"
-  }
+  if (!child) return null
 
-  if (!child) return null // nothing renders until child is loaded
-
-  // Show assessment first if not completed
-  if (!child.user.has_completed_assessment) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-blue-50">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            Welcome, {child.user?.full_name}!
-          </h1>
-          <p className="text-gray-600 mb-6">
-            Please take the assessment test to generate your personalized learning plan.
-          </p>
-          <button
-            onClick={handleTakeAssessment}
-            className="bg-blue-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-blue-700 transition-all duration-200"
-          >
-            Take Assessment
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // Child dashboard after assessment
   return (
     <div className="min-h-screen bg-blue-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
+        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Welcome back, {child.user?.full_name}!
           </h1>
-          <p className="text-gray-600 flex items-center">
-            Let's continue your learning journey and crush those goals! ✨
+          <p className="text-gray-600">
+            Choose a subject to continue your learning journey.
           </p>
         </div>
 
-        {/* Tabs */}
+        {/* Subject Tabs */}
         <div className="mb-8">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8">
-              <button className="border-b-2 border-blue-600 py-2 px-1 text-blue-600 font-medium text-sm">
-                My Plan
+          <div className="border-b border-gray-200 flex space-x-6 overflow-x-auto">
+            {(SUBJECTS).map((subject) => (
+              <button
+                key={subject}
+                onClick={() => setActiveSubject(subject as Subject)}
+                className={`py-2 px-1 font-medium text-sm border-b-2 transition-all ${
+                  activeSubject === subject
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {subject}
               </button>
-              <button className="border-transparent py-2 px-1 text-gray-500 hover:text-gray-700 font-medium text-sm">
-                My Progress
-              </button>
-            </nav>
+            ))}
           </div>
         </div>
 
-        {/* Today's Tasks */}
-        <div className="mb-12">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Today's Tasks</h2>
-          <div className="space-y-4">
-            {todaysTasks.map((task) => {
-              const IconComponent = subjectIcons[task.subject as keyof typeof subjectIcons] || BookOpen
-              return (
-                <div
-                  key={task.id}
-                  className="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between group"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                      <IconComponent className="w-8 h-8 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">{task.title}</h3>
-                      <p className="text-gray-600">{task.subject}</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleStartLesson(task.id)}
-                    className="bg-blue-600 text-white hover:bg-blue-700 px-6 py-3 rounded-lg font-medium transition-colors"
-                  >
-                    Start Lesson
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Upcoming Lessons */}
+        {/* Active Tab Content */}
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Upcoming Lessons</h2>
-          <div className="space-y-4">
-            {upcomingLessons.map((lesson) => {
-              const IconComponent = subjectIcons[lesson.subject as keyof typeof subjectIcons] || BookOpen
-              return (
-                <div
-                  key={lesson.id}
-                  className="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-between group"
+          {!completedAssessments[activeSubject] ? (
+            <div className="text-center py-16 bg-white rounded-xl shadow-sm">
+              <div className="flex flex-col items-center space-y-4">
+                {React.createElement(subjectIcons[activeSubject], { className: "w-12 h-12 text-blue-600" })}
+                <h2 className="text-2xl font-semibold text-gray-900">
+                  {activeSubject} Assessment
+                </h2>
+                <p className="text-gray-600 max-w-md">
+                  Take the assessment to find your current level and unlock a personalized study plan for {activeSubject}.
+                </p>
+                <button
+                  onClick={() => handleStartAssessment(activeSubject)}
+                  className="bg-blue-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-blue-700 transition-all duration-200"
                 >
-                  <div className="flex items-center space-x-4">
-                    <div className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center group-hover:bg-gray-200 transition-colors">
-                      <IconComponent className="w-8 h-8 text-gray-600" />
-                    </div>
+                  Start {activeSubject} Assessment
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                {activeSubject} Study Plan
+              </h2>
+              <div className="space-y-4">
+                {studyPlans[activeSubject].map((item) => (
+                  <div
+                    key={item.id}
+                    className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-start justify-between group"
+                  >
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">{lesson.title}</h3>
-                      <p className="text-gray-600">{lesson.subject}</p>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">{item.title}</h3>
+                      <p className="text-gray-600 text-sm">{item.description}</p>
+                      <p className="mt-2 text-sm font-medium text-blue-600">
+                        Difficulty: {item.difficulty}
+                      </p>
                     </div>
+                    <button className="bg-blue-600 text-white hover:bg-blue-700 px-5 py-2 rounded-lg font-medium transition-colors">
+                      Start Course
+                    </button>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">{lesson.schedule}</p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
+
+export default ChildDashboard

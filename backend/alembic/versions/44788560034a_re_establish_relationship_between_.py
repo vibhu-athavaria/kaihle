@@ -1,4 +1,4 @@
-"""Re-establish relationship between assessments and knowledgearea
+"""Re-establish relationship between assessments and QuestionBank
 
 Revision ID: 44788560034a
 Revises: cfaeb960aa08
