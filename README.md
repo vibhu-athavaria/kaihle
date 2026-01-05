@@ -65,3 +65,67 @@ Kaihle handles structure and personalization.
 
 ## High-Level Architecture
 
+Frontend (React + Vite)
+|
+Backend API (FastAPI)
+|
+AI Layer (LLM + rules)
+|
+Database (PostgreSQL / Supabase)
+
+
+
+## Technology Stack
+
+### Frontend
+- React
+- TypeScript
+- Vite
+
+### Backend
+- Python
+- FastAPI
+- REST + streaming APIs
+
+### AI Layer
+- LLMs (local or hosted via Ollama)
+- Prompt templates + structured prompting
+- Validation and deterministic logic on top of LLM output
+
+### Database & Auth
+- PostgreSQL
+- Supabase (auth, storage, database)
+
+---
+
+## Key Modules
+
+- **Curriculum Engine** – maps standards to concepts and learning units  
+- **Adaptive Learning Engine** – adjusts pacing and difficulty per student  
+- **Assessment System** – diagnostic and formative assessments  
+- **Mentor Dashboard** – progress insights and intervention tools  
+- **Parent View** – simple, outcome-focused progress tracking  
+
+---
+
+## What Kaihle Is Not
+
+- ❌ Not a content marketplace  
+- ❌ Not a traditional LMS  
+- ❌ Not a teacher-replacement system  
+
+Kaihle is **infrastructure**, not a shortcut.
+
+---
+
+## Status
+
+- Actively under development
+- Architecture-first approach
+- Open to contributors interested in education, AI systems, and human-centered design
+
+---
+
+## Vision
+
+Kaihle aims to become the **default learning engine behind modern schools** — quietly improving learning while keeping humans at the center.
