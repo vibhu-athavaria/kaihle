@@ -38,27 +38,37 @@ alembic/                 # Database migration files
 
 ## Setup Instructions
 
-1. **Install Dependencies**
+1. **Create Virtual Environment**
+   \`\`\`bash
+   python3 -m venv venv
+   \`\`\`
+
+2. **Activate Virtual Environment**
+   \`\`\`bash
+   source venv/bin/activate
+   \`\`\`
+
+3. **Install Dependencies**
    \`\`\`bash
    pip install -r requirements.txt
    \`\`\`
 
-2. **Configure Database**
+4. **Configure Database**
    - Update `DATABASE_URL` in `app/core/config.py`
    - Or set environment variables in `.env` file
 
-3. **Run Database Migrations**
+5. **Run Database Migrations**
    \`\`\`bash
    python scripts/create_initial_migration.py
    python scripts/run_migrations.py
    \`\`\`
 
-4. **Seed Initial Data**
+6. **Seed Initial Data**
    \`\`\`bash
    python scripts/seed_initial_data.py
    \`\`\`
 
-5. **Start the Server**
+7. **Start the Server**
    \`\`\`bash
    uvicorn app.main:app --reload
    \`\`\`

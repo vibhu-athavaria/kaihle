@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, X, User, Bell, BookOpen, Home, TrendingUp, MessageCircle, Sparkles } from 'lucide-react';
+import { Menu, X, User, Bell, BookOpen, Home, TrendingUp, MessageCircle, Sparkles, Settings, CreditCard, Users } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface HeaderProps {
@@ -26,6 +26,12 @@ const { user, signOut } = useAuth();
           { name: 'About Us', path: '/about', icon: Sparkles },
           { name: 'Contact', path: '/contact', icon: MessageCircle },
         ];
+
+  // Parent dropdown menu items
+  const parentDropdownItems = [
+    { name: 'Parent Settings', path: '/parent-settings', icon: Settings },
+
+  ];
 
   const isActive = (path: string) => window.location.pathname === path;
 
@@ -100,14 +106,45 @@ const { user, signOut } = useAuth();
                     <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
                   </button>
                 )}
-                <div className="flex items-center gap-3 bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 hover:bg-white/30 transition-all duration-200">
+                <div className="flex items-center gap-3 bg-white/20 backdrop-blur-sm rounded-lg px-4 py-2 hover:bg-white/30 transition-all duration-200 relative">
                   <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-md">
                     <User className="w-4 h-4 text-white" />
                   </div>
                   <div className="text-left">
-                    <div className="text-sm font-semibold text-white">{user.full_name || 'Student'}</div>
-                    <div className="text-xs text-blue-100">{'Grade ' + (user.student_profile?.grade_level)}</div>
+                    <div className="text-sm font-semibold text-white">{user.full_name || 'Parent'}</div>
+                    {user.role === 'student' && (
+                      <div className="text-xs text-blue-100">{'Grade ' + (user.student_profile?.grade_level)}</div>
+                    )}
                   </div>
+                  {/* Dropdown menu button for parents */}
+                  {user.role === 'parent' && (
+                    <button
+                      onClick={() => setIsMenuOpen(!isMenuOpen)}
+                      className="p-1 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-all duration-200"
+                    >
+                      <Menu className="w-4 h-4 text-white" />
+                    </button>
+                  )}
+                  {/* Parent dropdown menu */}
+                  {user.role === 'parent' && isMenuOpen && (
+                    <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 z-50">
+                      {parentDropdownItems.map((item) => {
+                        const Icon = item.icon;
+                        const active = isActive(item.path);
+                        return (
+                          <a
+                            key={item.name}
+                            href={item.path}
+                            onClick={() => setIsMenuOpen(false)}
+                            className={`flex items-center gap-3 px-4 py-2 text-sm font-medium transition-all hover:bg-blue-50 ${active ? 'text-blue-600' : 'text-gray-700'}`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            <span>{item.name}</span>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={signOut}
@@ -140,45 +177,68 @@ const { user, signOut } = useAuth();
             )}
           </div>
 
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-all"
-          >
-            {isMenuOpen ? (
-              <X className="w-6 h-6 text-white" />
-            ) : (
-              <Menu className="w-6 h-6 text-white" />
-            )}
-          </button>
+          {/* Mobile Menu Button - only show for students */}
+          {user?.role === 'student' && (
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="md:hidden p-2 rounded-lg bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-all"
+            >
+              {isMenuOpen ? (
+                <X className="w-6 h-6 text-white" />
+              ) : (
+                <Menu className="w-6 h-6 text-white" />
+              )}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Mobile Menu */}
-      {isMenuOpen && (
-        <div className="md:hidden bg-white/10 backdrop-blur-lg border-t border-white/20">
-          <div className="px-4 py-4 space-y-2">
-            {/* Show nav only if student */}
-            {user?.role === 'student' &&
-              navItems.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.path);
-                return (
-                  <a
-                    key={item.name}
-                    href={item.path}
-                    onClick={() => setIsMenuOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${
-                      active
-                        ? 'bg-white text-blue-600 shadow-md'
-                        : 'text-white hover:bg-white/20'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span>{item.name}</span>
-                  </a>
-                );
-              })}
+  {isMenuOpen && (
+    <div className="md:hidden bg-white/10 backdrop-blur-lg border-t border-white/20">
+      <div className="px-4 py-4 space-y-2">
+        {/* Show nav only if student */}
+        {user?.role === 'student' &&
+          navItems.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.path);
+            return (
+              <a
+                key={item.name}
+                href={item.path}
+                onClick={() => setIsMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${
+                  active
+                    ? 'bg-white text-blue-600 shadow-md'
+                    : 'text-white hover:bg-white/20'
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                <span>{item.name}</span>
+              </a>
+            );
+          })}
+        {/* Show parent dropdown items in mobile menu */}
+        {user?.role === 'parent' &&
+          parentDropdownItems.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.path);
+            return (
+              <a
+                key={item.name}
+                href={item.path}
+                onClick={() => setIsMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${
+                  active
+                    ? 'bg-white text-blue-600 shadow-md'
+                    : 'text-white hover:bg-white/20'
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                <span>{item.name}</span>
+              </a>
+            );
+          })}
 
             {/* Landing nav items */}
             {variant === 'landing' &&

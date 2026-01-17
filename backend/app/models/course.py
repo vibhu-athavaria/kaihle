@@ -4,17 +4,18 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+from app.crud.mixin import SerializerMixin
 
-class MicroCourse(Base):
+class MicroCourse(Base, SerializerMixin):
     __tablename__ = "micro_courses"
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
 
     subject_id = Column(Integer, ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False)
-    grade_id = Column(Integer, ForeignKey("grades.id", ondelete="CASCADE"), nullable=False)
-    topic_id = Column(Integer, ForeignKey("topics.id", ondelete="SET NULL"))
-    subtopic_id = Column(Integer, ForeignKey("subtopics.id", ondelete="SET NULL"))
+    # grade_id = Column(Integer, ForeignKey("grades.id", ondelete="CASCADE"), nullable=False)
+    # topic_id = Column(Integer, ForeignKey("topics.id", ondelete="SET NULL"))
+    # subtopic_id = Column(Integer, ForeignKey("subtopics.id", ondelete="SET NULL"))
 
     learning_objectives = Column(JSON)
     duration_minutes = Column(Integer, server_default="15")
@@ -23,6 +24,7 @@ class MicroCourse(Base):
     updated_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
     # Relationships
+    subject = relationship("Subject", back_populates="micro_courses")
     sections = relationship("MicroCourseSection", back_populates="micro_course", cascade="all, delete")
     questions = relationship("MicroCourseQuestionLink", back_populates="micro_course", cascade="all, delete")
 

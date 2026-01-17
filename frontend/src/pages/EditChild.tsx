@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import axios from "axios";
+import { http } from "@/lib/http";
 import config from "../config";
 import { GRADES } from "../lib/utils";
-
-axios.defaults.baseURL = config.backendUrl;
 
 interface EditChildForm {
   full_name: string;
@@ -51,7 +49,7 @@ export const EditChild: React.FC = () => {
 
     setLoading(true);
     try {
-      const response = await axios.put(`/api/v1/students/${id}`, {
+      const response = await http.put(`/api/v1/students/${id}`, {
         full_name: data.full_name,
         age: data.age,
         grade_level: data.grade,

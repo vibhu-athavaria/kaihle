@@ -1,11 +1,10 @@
 // src/components/Assessment/AssessmentPage.tsx
 import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import axios from "axios";
+import { http } from "@/lib/http";
 import config from "../config";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 
-axios.defaults.baseURL = config.backendUrl;
 type QuestionBank = {
   id: number;
   question_text: string;
@@ -85,14 +84,11 @@ const AssessmentPage: React.FC = () => {
       }
 
       //  create or get assessment
-      const resp = await axios.post(
+      const resp = await http.post(
         "/api/v1/assessments/",
         {
           student_id: parsedUser.student_profile.id,
           subject: subject,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
@@ -106,14 +102,7 @@ const AssessmentPage: React.FC = () => {
       if (nextUnanswered) {
         setQuestion(stripServerFields(nextUnanswered));
       } else {
-        const qResp = await axios.post(
-          `/api/v1/assessments/${body.id}/questions`,
-          {
-          },
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        const qResp = await http.post(`/api/v1/assessments/${body.id}/questions`);
         const nq = qResp.data.questions?.find((q: any) => !q.student_answer) || null;
         setQuestion(nq ? stripServerFields(nq) : null);
       }
@@ -137,15 +126,12 @@ const AssessmentPage: React.FC = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("access_token");
-      const resp = await axios.post<AnswerResponse>(
+      const resp = await http.post<AnswerResponse>(
         `/api/v1/assessments/${assessment.id}/questions/${question.id}/answer`,
         {
           answer_text: answer,
           time_taken: timeTaken,
           hints_used: hintsUsed,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
@@ -157,9 +143,7 @@ const AssessmentPage: React.FC = () => {
         setAnswer("");
       } else if (body.status === "completed") {
         // Finished — show report
-        const r = await axios.get(`/api/v1/assessments/${assessment.id}/completed`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const r = await http.get(`/api/v1/assessments/${assessment.id}/completed`);
         setReport(r.data);
         setTimeout(() => navigate("/child-dashboard"), 2500);
       }
@@ -210,7 +194,7 @@ const AssessmentPage: React.FC = () => {
   return (
     <div className="min-h-screen p-6 bg-gray-50">
       <div className="max-w-3xl mx-auto bg-white p-6 rounded-xl shadow">
-        <Breadcrumb role="child" items={[{ label: `${subject} Assessment` }]} />
+        <Breadcrumb role="student" items={[{ label: `${subject} Assessment` }]} />
         <div className="text-sm text-gray-500">
           {subject} • Question {question.question_number} • {question.question_bank.difficulty_label}
         </div>

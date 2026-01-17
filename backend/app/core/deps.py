@@ -18,16 +18,16 @@ def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     token = credentials.credentials
     user_id = verify_token(token)
     if user_id is None:
         raise credentials_exception
-    
+
     user = get_user(db, user_id=int(user_id))
     if user is None:
         raise credentials_exception
-    
+
     return user
 
 def get_current_active_user(
@@ -35,6 +35,7 @@ def get_current_active_user(
 ) -> User:
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+
     return current_user
 
 def get_current_admin_user(

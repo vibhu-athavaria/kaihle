@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, AuthContextType } from "../types";
-import axios from "axios";
-import config from "../config";
-
-axios.defaults.baseURL = config.backendUrl;
+import { http } from "@/lib/http";
+import { setAuthToken, clearAuthToken } from "@/lib/authToken";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -28,15 +26,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // 1️⃣ If token exists, restore Authorization header immediately
     if (token && tokenType) {
-      axios.defaults.headers.common["Authorization"] = `${tokenType} ${token}`;
+      setAuthToken(token);
     }
 
-    // 2️⃣ If user exists in localStorage, restore it immediately (prevents logout flicker)
+    // If user exists in localStorage, restore it immediately (prevents logout flicker)
     if (savedUser) {
       setUser(JSON.parse(savedUser));
     }
 
-    // 3️⃣ Verify session with backend, but DO NOT log out on minor errors
+    // Verify session with backend, but DO NOT log out on minor errors
     const verifySession = async () => {
       if (!token || !tokenType) {
         setLoading(false);
@@ -44,7 +42,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       try {
-        const me = await axios.get("/api/v1/users/me");
+        const me = await http.get("/api/v1/users/me");
         setUser(me.data);
         localStorage.setItem("user", JSON.stringify(me.data));
       } catch (err: any) {
@@ -73,7 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   ) => {
     setLoading(true);
     try {
-      const response = await axios.post("/api/v1/auth/signup", {
+      const response = await http.post("/api/v1/auth/signup", {
         email: email,
         username: email, // using email as username for parents
         password: password,
@@ -113,7 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   ) => {
     setLoading(true);
     try {
-      const response = await axios.post("/api/v1/auth/login", {
+      const response = await http.post("/api/v1/auth/login", {
         identifier: identifier,
         password: password,
         role: role,
@@ -123,11 +121,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       localStorage.setItem("access_token", access_token);
       localStorage.setItem("token_type", token_type);
 
-      axios.defaults.headers.common[
-        "Authorization"
-      ] = `${token_type} ${access_token}`;
+      setAuthToken(access_token);
 
-      const me = await axios.get("/api/v1/users/me");
+      const me = await http.get("/api/v1/users/me");
       setUser(me.data);
 
       localStorage.setItem("user", JSON.stringify(me.data));
@@ -142,9 +138,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // ---------- LOGOUT ----------
   const signOut = async () => {
     setUser(null);
-    localStorage.removeItem("user");
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("token_type");
+    localStorage.clear();
+    clearAuthToken();
   };
 
   return (

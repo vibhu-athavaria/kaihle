@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import { http } from "@/lib/http";
 import {
   BookOpen,
   TrendingUp,
@@ -92,12 +92,7 @@ const AssessmentDiagnosticSummary: React.FC = () => {
     }
     const fetchAssessment = async () => {
       try {
-        const res = await axios.get(
-          `/api/v1/assessments/${assessmentId}/report`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
+        const res = await http.get(`/api/v1/assessments/${assessmentId}/report`);
 
         const data = await res.data;
         console.log("Assessment Report Data:", data);
@@ -193,7 +188,7 @@ const AssessmentDiagnosticSummary: React.FC = () => {
   return (
     <div className="min-h-screen bg-blue-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Breadcrumb role="child" items={[{ label: "Assessment Report" }]} />
+        <Breadcrumb role="student" items={[{ label: "Assessment Report" }]} />
         <div className="space-y-6">
           {/* Overall Performance Hero Card */}
           {assessmentReport && (

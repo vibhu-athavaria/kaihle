@@ -1,7 +1,13 @@
+export type UserRole = "parent" | "student" | "teacher" | "admin";
+
 export interface User {
   id: string;
   email: string;
+  username: string;
+  full_name: string;
+  role: UserRole;
   created_at: string;
+  has_completed_assessment?: boolean;
 }
 
 export interface Child {
@@ -13,7 +19,7 @@ export interface Child {
     full_name: string
     username: string
     email: string | null
-    role: string
+    role: UserRole
     has_completed_assessment: boolean
   }
 }
@@ -45,4 +51,4 @@ export interface AuthContextType {
   loading: boolean;
 }
 
-export type UserRole = "parent" | "child" | "teacher";
+

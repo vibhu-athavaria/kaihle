@@ -167,7 +167,7 @@ export default function MicroCoursePage({
     <div className="min-h-screen bg-blue-50">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
-        <Breadcrumb role="child" items={[{ label: "Course" }]} />
+        <Breadcrumb role="student" items={[{ label: "Course" }]} />
         {/* Hero Header with Progress */}
         <div className="bg-gradient-to-br from-blue-600 to-purple-600 text-white rounded-xl shadow-lg p-6 mb-8">
           <div className="flex items-start justify-between mb-4">

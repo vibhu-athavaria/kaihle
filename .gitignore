@@ -31,3 +31,7 @@ __pycache__/*
 .env
 venv
 .bolt
+.kilocode
+.env.local
+plans
+PROJECT_DESCRIPTION.md
