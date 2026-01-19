@@ -1,62 +1,151 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Check, X, ArrowRight, CreditCard, Clock, Users, BookOpen, BarChart2 } from 'lucide-react';
+import { getPricingOptions } from '../services/billingService';
 
 export const Pricing: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [selectedPlan, setSelectedPlan] = useState<'basic' | 'standard' | 'premium'>('standard');
+  const [pricingData, setPricingData] = useState<PricingOptionsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<'basic' | 'premium'>('basic');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
+  // Fetch pricing data from backend
+  useEffect(() => {
+    const fetchPricingData = async () => {
+      try {
+        const data = await getPricingOptions();
+        setPricingData(data);
+      } catch (err) {
+        console.error('Failed to fetch pricing data:', err);
+        setError('Failed to load pricing information. Using fallback data.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPricingData();
+  }, []);
+
+  // Fallback to hardcoded data if API fails or while loading
+  const getPricingOptionsData = () => {
+    if (loading) {
+      return {
+        pricing_options: [
+          {
+            plan_id: 1,
+            name: 'Basic',
+            description: 'Perfect for one student and one subject',
+            plan_type: 'basic',
+            trial_days: 15,
+            monthly_price: 25.00,
+            yearly_price: 270.00,
+            currency: 'USD',
+            features: [
+              { name: '1 student profile', description: 'Access for one student' },
+              { name: '1 subject access', description: 'Choose one subject' },
+              { name: 'Basic progress tracking', description: 'Track learning progress' },
+              { name: 'Standard assessments', description: 'Regular assessments' },
+              { name: 'Email support', description: 'Customer support via email' }
+            ]
+          },
+          {
+            plan_id: 2,
+            name: 'Premium',
+            description: 'Best value for families with multiple children',
+            plan_type: 'premium',
+            trial_days: 15,
+            monthly_price: 80.00,
+            yearly_price: 864.00,
+            currency: 'USD',
+            features: [
+              { name: 'All subjects access', description: 'Access to all available subjects' },
+              { name: 'Advanced progress tracking', description: 'Detailed progress analytics' },
+              { name: 'Personalized learning paths', description: 'AI-powered learning paths' },
+              { name: 'Priority support', description: '24/7 priority customer support' },
+              { name: 'Detailed assessment reports', description: 'Comprehensive assessment analytics' },
+              { name: 'Parent coaching sessions', description: 'Regular coaching sessions for parents' }
+            ]
+          }
+        ],
+        free_trial_days: 15,
+        available_billing_cycles: ['monthly', 'yearly'],
+        total_subjects_available: 4
+      };
+    }
+
+    if (error || !pricingData) {
+      return {
+        pricing_options: [
+          {
+            plan_id: 1,
+            name: 'Basic',
+            description: 'Perfect for one student and one subject',
+            plan_type: 'basic',
+            trial_days: 15,
+            monthly_price: 25.00,
+            yearly_price: 270.00,
+            currency: 'USD',
+            features: [
+              { name: '1 student profile', description: 'Access for one student' },
+              { name: '1 subject access', description: 'Choose one subject' },
+              { name: 'Basic progress tracking', description: 'Track learning progress' },
+              { name: 'Standard assessments', description: 'Regular assessments' },
+              { name: 'Email support', description: 'Customer support via email' }
+            ]
+          },
+          {
+            plan_id: 2,
+            name: 'Premium',
+            description: 'Best value for families with multiple children',
+            plan_type: 'premium',
+            trial_days: 15,
+            monthly_price: 80.00,
+            yearly_price: 864.00,
+            currency: 'USD',
+            features: [
+              { name: 'All subjects access', description: 'Access to all available subjects' },
+              { name: 'Advanced progress tracking', description: 'Detailed progress analytics' },
+              { name: 'Personalized learning paths', description: 'AI-powered learning paths' },
+              { name: 'Priority support', description: '24/7 priority customer support' },
+              { name: 'Detailed assessment reports', description: 'Comprehensive assessment analytics' },
+              { name: 'Parent coaching sessions', description: 'Regular coaching sessions for parents' }
+            ]
+          }
+        ],
+        free_trial_days: 15,
+        available_billing_cycles: ['monthly', 'yearly'],
+        total_subjects_available: 4
+      };
+    }
+
+    return pricingData;
+  };
+
+  const pricingOptionsData = getPricingOptionsData();
+
+  // Map plan data to the format expected by the UI
   const pricingOptions = {
     basic: {
-      name: 'Basic',
-      description: 'Perfect for one student and one subject',
-      price: billingCycle === 'monthly' ? 25 : 22.50,
-      students: 1,
-      subjects: 1,
-      features: [
-        '1 student profile',
-        '1 subject access',
-        'Basic progress tracking',
-        'Standard assessments',
-        'Email support'
-      ],
+      name: pricingOptionsData.pricing_options[0].name,
+      description: pricingOptionsData.pricing_options[0].description,
+      price: billingCycle === 'monthly' ? pricingOptionsData.pricing_options[0].monthly_price : pricingOptionsData.pricing_options[0].yearly_price / 12,
+      students: pricingOptionsData.pricing_options[0].plan_type === 'basic' ? 1 : 'Unlimited',
+      subjects: pricingOptionsData.pricing_options[0].plan_type === 'basic' ? 1 : 'All',
+      features: pricingOptionsData.pricing_options[0].features.map(f => f.name),
       popular: false
-    },
-    standard: {
-      name: 'Standard',
-      description: 'Great for one student with multiple subjects',
-      price: billingCycle === 'monthly' ? 75 : 67.50,
-      students: 1,
-      subjects: 3,
-      features: [
-        '1 student profile',
-        '3 subjects access',
-        'Advanced progress tracking',
-        'Personalized learning paths',
-        'Priority email support',
-        'Assessment analytics'
-      ],
-      popular: true
     },
     premium: {
-      name: 'Premium',
-      description: 'Best value for families with multiple children',
-      price: billingCycle === 'monthly' ? 150 : 135,
-      students: 2,
-      subjects: 'Unlimited',
-      features: [
-        '2 student profiles',
-        'Unlimited subjects',
-        'Full progress tracking',
-        'AI-powered learning paths',
-        '24/7 priority support',
-        'Detailed assessment reports',
-        'Parent coaching sessions'
-      ],
-      popular: false
+      name: pricingOptionsData.pricing_options[1].name,
+      description: pricingOptionsData.pricing_options[1].description,
+      price: billingCycle === 'monthly' ? pricingOptionsData.pricing_options[1].monthly_price : pricingOptionsData.pricing_options[1].yearly_price / 12,
+      students: 'Unlimited',
+      subjects: 'All',
+      features: pricingOptionsData.pricing_options[1].features.map(f => f.name),
+      popular: true
     }
   };
 

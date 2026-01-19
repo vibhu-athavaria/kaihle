@@ -157,3 +157,88 @@ class PaymentMethodResponse(BaseModel):
     card_brand: Optional[str] = None
     card_expiry: Optional[str] = None
     is_default: bool = False
+
+# Subscription Plan Schemas
+class SubscriptionPlanBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    base_price: float
+    discount_percentage: float = 0.00
+    currency: str = "USD"
+    trial_days: int = 15
+    yearly_discount: float = 10.00
+    is_active: bool = True
+    sort_order: int = 0
+    plan_type: str  # "basic" or "premium"
+
+class SubscriptionPlanCreate(SubscriptionPlanBase):
+    pass
+
+class SubscriptionPlanUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    base_price: Optional[float] = None
+    discount_percentage: Optional[float] = None
+    currency: Optional[str] = None
+    trial_days: Optional[int] = None
+    yearly_discount: Optional[float] = None
+    is_active: Optional[bool] = None
+    sort_order: Optional[int] = None
+    plan_type: Optional[str] = None
+
+class SubscriptionPlanResponse(SubscriptionPlanBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class PlanFeatureBase(BaseModel):
+    plan_id: int
+    feature_name: str
+    feature_description: Optional[str] = None
+    is_included: bool = True
+
+class PlanFeatureCreate(PlanFeatureBase):
+    pass
+
+class PlanFeatureUpdate(BaseModel):
+    feature_name: Optional[str] = None
+    feature_description: Optional[str] = None
+    is_included: Optional[bool] = None
+
+class PlanFeatureResponse(PlanFeatureBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class PlanSubjectBase(BaseModel):
+    plan_id: int
+    subject_id: int
+
+class PlanSubjectCreate(PlanSubjectBase):
+    pass
+
+class PlanSubjectResponse(PlanSubjectBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class PricingCalculationResponse(BaseModel):
+    plan_id: int
+    plan_name: str
+    plan_type: str
+    num_subjects: int
+    billing_cycle: str
+    price: float
+    currency: str
+    base_price: float
+    discount_percentage: float
+    yearly_discount: float

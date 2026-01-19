@@ -1,10 +1,12 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
-from app.models.billing import Subscription, Payment, BillingInfo, Invoice
+from app.models.billing import Subscription, Payment, BillingInfo, Invoice, SubscriptionPlan, PlanFeature, PlanSubject
 from app.schemas.billing import (
     SubscriptionCreate, SubscriptionUpdate, PaymentCreate, PaymentUpdate,
-    BillingInfoCreate, BillingInfoUpdate, InvoiceCreate, InvoiceUpdate
+    BillingInfoCreate, BillingInfoUpdate, InvoiceCreate, InvoiceUpdate,
+    SubscriptionPlanCreate, SubscriptionPlanUpdate, PlanFeatureCreate, PlanFeatureUpdate,
+    PlanSubjectCreate
 )
 from app.models.user import User
 
@@ -277,6 +279,184 @@ def delete_billing_info(db: Session, billing_id: int) -> bool:
     db.delete(db_billing)
     db.commit()
     return True
+
+# Subscription Plan CRUD operations
+
+def create_subscription_plan(db: Session, plan: SubscriptionPlanCreate) -> SubscriptionPlan:
+    """Create a new subscription plan"""
+    db_plan = SubscriptionPlan(
+        name=plan.name,
+        description=plan.description,
+        base_price=plan.base_price,
+        discount_percentage=plan.discount_percentage,
+        currency=plan.currency,
+        trial_days=plan.trial_days,
+        yearly_discount=plan.yearly_discount,
+        is_active=plan.is_active,
+        sort_order=plan.sort_order,
+        plan_type=plan.plan_type
+    )
+
+    db.add(db_plan)
+    db.commit()
+    db.refresh(db_plan)
+    return db_plan
+
+def get_subscription_plan(db: Session, plan_id: int) -> Optional[SubscriptionPlan]:
+    """Get a subscription plan by ID"""
+    return db.query(SubscriptionPlan).filter(SubscriptionPlan.id == plan_id).first()
+
+def get_subscription_plan_by_name(db: Session, name: str) -> Optional[SubscriptionPlan]:
+    """Get a subscription plan by name"""
+    return db.query(SubscriptionPlan).filter(SubscriptionPlan.name == name).first()
+
+def get_all_subscription_plans(db: Session) -> List[SubscriptionPlan]:
+    """Get all subscription plans"""
+    return db.query(SubscriptionPlan).filter(SubscriptionPlan.is_active == True).order_by(SubscriptionPlan.sort_order).all()
+
+def get_active_subscription_plans(db: Session) -> List[SubscriptionPlan]:
+    """Get all active subscription plans"""
+    return db.query(SubscriptionPlan).filter(SubscriptionPlan.is_active == True).order_by(SubscriptionPlan.sort_order).all()
+
+def update_subscription_plan(db: Session, plan_id: int, plan_update: SubscriptionPlanUpdate) -> Optional[SubscriptionPlan]:
+    """Update a subscription plan"""
+    db_plan = get_subscription_plan(db, plan_id)
+    if not db_plan:
+        return None
+
+    for key, value in plan_update.dict(exclude_unset=True).items():
+        setattr(db_plan, key, value)
+
+    db.commit()
+    db.refresh(db_plan)
+    return db_plan
+
+def delete_subscription_plan(db: Session, plan_id: int) -> bool:
+    """Delete a subscription plan"""
+    db_plan = get_subscription_plan(db, plan_id)
+    if not db_plan:
+        return False
+
+    db.delete(db_plan)
+    db.commit()
+    return True
+
+# Plan Feature CRUD operations
+
+def create_plan_feature(db: Session, feature: PlanFeatureCreate) -> PlanFeature:
+    """Create a new plan feature"""
+    db_feature = PlanFeature(
+        plan_id=feature.plan_id,
+        feature_name=feature.feature_name,
+        feature_description=feature.feature_description,
+        is_included=feature.is_included
+    )
+
+    db.add(db_feature)
+    db.commit()
+    db.refresh(db_feature)
+    return db_feature
+
+def get_plan_feature(db: Session, feature_id: int) -> Optional[PlanFeature]:
+    """Get a plan feature by ID"""
+    return db.query(PlanFeature).filter(PlanFeature.id == feature_id).first()
+
+def get_plan_features_by_plan(db: Session, plan_id: int) -> List[PlanFeature]:
+    """Get all features for a specific plan"""
+    return db.query(PlanFeature).filter(PlanFeature.plan_id == plan_id).all()
+
+def update_plan_feature(db: Session, feature_id: int, feature_update: PlanFeatureUpdate) -> Optional[PlanFeature]:
+    """Update a plan feature"""
+    db_feature = get_plan_feature(db, feature_id)
+    if not db_feature:
+        return None
+
+    for key, value in feature_update.dict(exclude_unset=True).items():
+        setattr(db_feature, key, value)
+
+    db.commit()
+    db.refresh(db_feature)
+    return db_feature
+
+def delete_plan_feature(db: Session, feature_id: int) -> bool:
+    """Delete a plan feature"""
+    db_feature = get_plan_feature(db, feature_id)
+    if not db_feature:
+        return False
+
+    db.delete(db_feature)
+    db.commit()
+    return True
+
+# Plan Subject CRUD operations
+
+def create_plan_subject(db: Session, plan_subject: PlanSubjectCreate) -> PlanSubject:
+    """Create a new plan subject association"""
+    db_plan_subject = PlanSubject(
+        plan_id=plan_subject.plan_id,
+        subject_id=plan_subject.subject_id
+    )
+
+    db.add(db_plan_subject)
+    db.commit()
+    db.refresh(db_plan_subject)
+    return db_plan_subject
+
+def get_plan_subject(db: Session, plan_subject_id: int) -> Optional[PlanSubject]:
+    """Get a plan subject by ID"""
+    return db.query(PlanSubject).filter(PlanSubject.id == plan_subject_id).first()
+
+def get_plan_subjects_by_plan(db: Session, plan_id: int) -> List[PlanSubject]:
+    """Get all subjects for a specific plan"""
+    return db.query(PlanSubject).filter(PlanSubject.plan_id == plan_id).all()
+
+def get_plan_subjects_by_subject(db: Session, subject_id: int) -> List[PlanSubject]:
+    """Get all plans that include a specific subject"""
+    return db.query(PlanSubject).filter(PlanSubject.subject_id == subject_id).all()
+
+def delete_plan_subject(db: Session, plan_subject_id: int) -> bool:
+    """Delete a plan subject association"""
+    db_plan_subject = get_plan_subject(db, plan_subject_id)
+    if not db_plan_subject:
+        return False
+
+    db.delete(db_plan_subject)
+    db.commit()
+    return True
+
+# Pricing calculation functions
+
+def calculate_subscription_price(db: Session, plan_id: int, num_subjects: int = 1, billing_cycle: str = "monthly") -> float:
+    """Calculate subscription price based on plan and billing cycle"""
+    plan = get_subscription_plan(db, plan_id)
+    if not plan:
+        return 0.0
+
+    if plan.plan_type == "basic":
+        # Basic plan: fixed price per subject
+        base_price = float(plan.base_price) * num_subjects
+    else:  # premium
+        # Premium plan: calculate total basic price for all subjects, then apply discount
+        # Get total number of available subjects from database
+        from app.models.subject import Subject
+        total_subjects = db.query(Subject).count()
+        total_basic_price = float(plan.base_price) * total_subjects
+        discounted_price = total_basic_price * (1 - (float(plan.discount_percentage) / 100))
+        base_price = discounted_price
+
+    # Apply yearly discount if applicable
+    if billing_cycle == "yearly":
+        yearly_discount_factor = 1 - (float(plan.yearly_discount) / 100)
+        final_price = base_price * yearly_discount_factor
+    else:
+        final_price = base_price
+
+    return round(final_price, 2)
+
+def get_total_subjects_count(db: Session) -> int:
+    """Get total number of available subjects"""
+    from app.models.subject import Subject
+    return db.query(Subject).count()
 
 # Invoice CRUD operations
 

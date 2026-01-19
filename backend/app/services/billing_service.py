@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from app.crud.billing import (
     create_subscription, get_subscriptions_by_parent, is_in_free_trial,
     start_free_trial, create_payment, mark_payment_as_paid,
-    get_billing_info_by_user, get_default_billing_info
+    get_billing_info_by_user, get_default_billing_info,
+    get_subscription_plan, get_active_subscription_plans, calculate_subscription_price,
+    get_plan_features_by_plan, get_total_subjects_count
 )
 from app.crud.user import get_user
 from app.models.user import User
@@ -34,47 +36,55 @@ class BillingService:
         return subscription
 
     def calculate_subscription_cost(
-        self, num_students: int, num_subjects: int, is_trial: bool = False
+        self, db: Session, plan_id: int, num_subjects: int = 1,
+        billing_cycle: str = "monthly", is_trial: bool = False
     ) -> float:
-        """Calculate the monthly subscription cost"""
+        """Calculate the subscription cost based on plan and billing cycle"""
         if is_trial:
             return 0.0
 
-        return num_students * num_subjects * self.PRICE_PER_STUDENT_PER_SUBJECT
+        # Use the new pricing calculation from CRUD
+        return calculate_subscription_price(db, plan_id, num_subjects, billing_cycle)
 
     def create_monthly_subscription(
         self, db: Session, parent_id: int, student_ids: List[int],
-        subject_ids: List[int], payment_method: str = "credit_card"
+        plan_id: int, billing_cycle: str = "monthly", payment_method: str = "credit_card"
     ) -> List[Any]:
-        """Create monthly subscriptions for students and subjects"""
+        """Create subscriptions based on selected plan"""
+        from app.crud.billing import get_subscription_plan
+
+        # Get the plan details
+        plan = get_subscription_plan(db, plan_id)
+        if not plan:
+            raise ValueError("Invalid subscription plan")
+
         subscriptions = []
 
         for student_id in student_ids:
-            for subject_id in subject_ids:
-                # Check if subscription already exists
-                existing_subs = get_subscriptions_by_parent(db, parent_id)
-                existing_sub = next((sub for sub in existing_subs
-                                   if sub.student_id == student_id and sub.subject_id == subject_id), None)
+            # Calculate price based on plan
+            price = calculate_subscription_price(db, plan_id, 1, billing_cycle)
 
-                if existing_sub and existing_sub.status in ["active", "trial"]:
-                    continue
-
-                # Calculate end date (1 month from now)
-                start_date = datetime.now()
+            # Calculate end date based on billing cycle
+            start_date = datetime.now()
+            if billing_cycle == "monthly":
                 end_date = start_date + timedelta(days=30)
+            else:  # yearly
+                end_date = start_date + timedelta(days=365)
 
-                subscription_data = SubscriptionCreate(
-                    parent_id=parent_id,
-                    student_id=student_id,
-                    subject_id=subject_id,
-                    status="active",
-                    price=self.PRICE_PER_STUDENT_PER_SUBJECT,
-                    payment_method=payment_method,
-                    end_date=end_date
-                )
+            subscription_data = SubscriptionCreate(
+                parent_id=parent_id,
+                student_id=student_id,
+                subject_id=None,  # Subject selection handled by plan
+                plan_id=plan_id,
+                billing_cycle=billing_cycle,
+                status="active",
+                price=price,
+                payment_method=payment_method,
+                end_date=end_date
+            )
 
-                subscription = create_subscription(db, subscription_data, parent_id)
-                subscriptions.append(subscription)
+            subscription = create_subscription(db, subscription_data, parent_id)
+            subscriptions.append(subscription)
 
         return subscriptions
 
@@ -225,35 +235,39 @@ class BillingService:
             "price": float(target_sub.price)
         }
 
-    def get_pricing_options(self) -> Dict[str, Any]:
-        """Get available pricing options"""
+    def get_pricing_options(self, db: Session) -> Dict[str, Any]:
+        """Get available pricing options from subscription plans"""
+        plans = get_active_subscription_plans(db)
+        pricing_options = []
+
+        for plan in plans:
+            # Calculate monthly and yearly prices
+            monthly_price = calculate_subscription_price(db, plan.id, 1, "monthly")
+            yearly_price = calculate_subscription_price(db, plan.id, 1, "yearly")
+
+            # Get features for this plan
+            features = get_plan_features_by_plan(db, plan.id)
+
+            pricing_options.append({
+                "plan_id": plan.id,
+                "name": plan.name,
+                "description": plan.description,
+                "plan_type": plan.plan_type,
+                "trial_days": plan.trial_days,
+                "monthly_price": monthly_price,
+                "yearly_price": yearly_price,
+                "currency": plan.currency,
+                "features": [
+                    {"name": feature.feature_name, "description": feature.feature_description}
+                    for feature in features
+                ]
+            })
+
         return {
-            "base_price_per_student_per_subject": self.PRICE_PER_STUDENT_PER_SUBJECT,
-            "currency": "USD",
+            "pricing_options": pricing_options,
             "free_trial_days": self.FREE_TRIAL_DAYS,
-            "billing_cycle": "monthly",
-            "features_included": [
-                "Unlimited assessments",
-                "Personalized learning paths",
-                "Progress tracking",
-                "AI tutor access",
-                "Parent dashboard",
-                "Detailed reports"
-            ],
-            "example_pricing": {
-                "1_student_1_subject": {
-                    "price": 25.00,
-                    "description": "1 student, 1 subject"
-                },
-                "1_student_3_subjects": {
-                    "price": 75.00,
-                    "description": "1 student, 3 subjects"
-                },
-                "2_students_2_subjects": {
-                    "price": 100.00,
-                    "description": "2 students, 2 subjects each"
-                }
-            }
+            "available_billing_cycles": ["monthly", "yearly"],
+            "total_subjects_available": get_total_subjects_count(db)
         }
 
     def validate_free_trial_eligibility(self, db: Session, parent_id: int) -> Dict[str, Any]:

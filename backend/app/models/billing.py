@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey, DECIMAL
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey, DECIMAL, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -26,13 +26,15 @@ class Subscription(Base, SerializerMixin):
     parent_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)
+    plan_id = Column(Integer, ForeignKey("subscription_plans.id"), nullable=True)
+    billing_cycle = Column(String(20), default="monthly")  # monthly or yearly
     status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE)
     start_date = Column(DateTime(timezone=True), server_default=func.now())
     end_date = Column(DateTime(timezone=True), nullable=True)
     trial_end_date = Column(DateTime(timezone=True), nullable=True)
     payment_method = Column(String(50), nullable=True)
     payment_status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
-    price = Column(DECIMAL(10, 2), default=25.00)
+    price = Column(DECIMAL(10, 2))  # Price will be calculated based on plan
     currency = Column(String(3), default="USD")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -41,6 +43,7 @@ class Subscription(Base, SerializerMixin):
     parent = relationship("User", foreign_keys=[parent_id], backref="parent_subscriptions")
     student = relationship("User", foreign_keys=[student_id], backref="student_subscriptions")
     subject = relationship("Subject", back_populates="subscriptions")
+    plan = relationship("SubscriptionPlan")
     payments = relationship("Payment", back_populates="subscription", cascade="all, delete-orphan")
 
 class Payment(Base, SerializerMixin):
@@ -81,6 +84,60 @@ class BillingInfo(Base, SerializerMixin):
 
     # Relationships
     user = relationship("User", backref="billing_info")
+
+class SubscriptionPlan(Base, SerializerMixin):
+    __tablename__ = "subscription_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    base_price = Column(DECIMAL(10, 2), nullable=True)  # For Basic plan
+    discount_percentage = Column(DECIMAL(5, 2), default=0.00)  # For Premium plan
+    currency = Column(String(3), default="USD")
+    trial_days = Column(Integer, default=15)
+    yearly_discount = Column(DECIMAL(5, 2), default=10.00)  # 10% discount for yearly
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)
+    plan_type = Column(String(20), nullable=False)  # "basic" or "premium"
+
+    # Features included in this plan (many-to-many relationship)
+    features = relationship("PlanFeature", back_populates="plan")
+
+    # For Basic plan: which subject is included
+    # For Premium plan: this will be ignored (all subjects included)
+    subjects = relationship("PlanSubject", back_populates="plan")
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class PlanFeature(Base, SerializerMixin):
+    __tablename__ = "plan_features"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(Integer, ForeignKey("subscription_plans.id"), nullable=False)
+    feature_name = Column(String(100), nullable=False)
+    feature_description = Column(Text, nullable=True)
+    is_included = Column(Boolean, default=True)
+
+    # Relationships
+    plan = relationship("SubscriptionPlan", back_populates="features")
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class PlanSubject(Base, SerializerMixin):
+    __tablename__ = "plan_subjects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(Integer, ForeignKey("subscription_plans.id"), nullable=False)
+    subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False)
+
+    # Relationships
+    plan = relationship("SubscriptionPlan", back_populates="subjects")
+    subject = relationship("Subject")
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class Invoice(Base, SerializerMixin):
     __tablename__ = "invoices"
