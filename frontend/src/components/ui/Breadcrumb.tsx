@@ -20,9 +20,9 @@ export const Breadcrumb = ({ role, items }: BreadcrumbProps) => {
 
   const fullItems: BreadcrumbItem[] = [
     {
-      label: root?.label?? '',
-      to: root?.path?? '/',
-      icon: root?.icon?? null,
+      label: root.label,
+      to: root.path,
+      icon: root.icon,
     },
     ...items,
   ];

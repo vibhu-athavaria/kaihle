@@ -12,7 +12,7 @@ export const roleDashboardMap: Record<UserRole, {
     path: "/dashboard",
     icon: Home,
   },
-  child: {
+  student: {
     label: "Dashboard",
     path: "/child-dashboard",
     icon: Home,
@@ -20,6 +20,11 @@ export const roleDashboardMap: Record<UserRole, {
   teacher: {
     label: "Dashboard",
     path: "/teacher-dashboard",
+    icon: Home,
+  },
+  admin: {
+    label: "Dashboard",
+    path: "/admin-dashboard",
     icon: Home,
   },
 };
