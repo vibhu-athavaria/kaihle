@@ -70,6 +70,13 @@ def update_student_learning_profile(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Student not found or not authorized"
             )
+    elif current_user.role == "student":
+        # Students can only update their own profile
+        if not current_user.student_profile or current_user.student_profile.id != student_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Students can only update their own profile"
+            )
     elif current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

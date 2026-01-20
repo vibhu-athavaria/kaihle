@@ -6,13 +6,14 @@ import { http } from "@/lib/http"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ArrowRight, Edit } from "lucide-react"
+import { ArrowRight, Edit, UserCheck } from "lucide-react"
 
 interface Child {
   id: string
   name: string
   age: number
   grade: number | string
+  profile_completed?: boolean
 }
 
 export const Dashboard: React.FC = () => {
@@ -36,6 +37,7 @@ export const Dashboard: React.FC = () => {
           username: child.user?.username || "unknown",
           age: child.age,
           grade: child.grade_level || "N/A",
+          profile_completed: child.profile_completed || false,
         }))
 
         setChildren(mappedChildren)
@@ -57,6 +59,12 @@ export const Dashboard: React.FC = () => {
 
   const handleEditChild = (childId: string) => {
     window.location.href = `/edit-child/${childId}`
+  }
+
+  const handleCompleteProfile = (child: Child) => {
+    // Set currentChild in localStorage so CompleteProfile knows which child to work on
+    localStorage.setItem('currentChild', JSON.stringify(child));
+    window.location.href = '/complete-profile';
   }
 
   if (loading) return <div className="p-8 text-center">Loading children...</div>
@@ -101,7 +109,18 @@ export const Dashboard: React.FC = () => {
                     Age: {child.age} | Grade: {child.grade}
                   </p>
 
-                  <div className="mt-4 flex gap-3">
+                  <div className="mt-4 flex gap-3 flex-wrap">
+                    {!child.profile_completed && (
+                      <Button
+                        variant="secondary"
+                        className="bg-green-600 text-white hover:bg-green-700 px-6 py-3 rounded-xl font-medium transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"
+                        onClick={() => handleCompleteProfile(child)}
+                      >
+                        <UserCheck className="h-4 w-4" />
+                        <span>Complete Profile</span>
+                      </Button>
+                    )}
+
                     <Button
                       variant="secondary"
                       className="bg-blue-600 text-white hover:bg-blue-700 px-6 py-3 rounded-xl font-medium transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"
