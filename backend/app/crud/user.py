@@ -1,11 +1,11 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.user import User, StudentProfile, UserRole
 from app.schemas.user import UserCreate, UserUpdate, StudentProfileCreate, StudentProfileUpdate
 from app.core.security import get_password_hash, verify_password
 from typing import Optional
 
 def get_user(db: Session, user_id: int) -> Optional[User]:
-    return db.query(User).filter(User.id == user_id).first()
+    return db.query(User).options(joinedload(User.student_profile)).filter(User.id == user_id).first()
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email).first()

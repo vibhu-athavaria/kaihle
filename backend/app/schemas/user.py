@@ -83,10 +83,6 @@ class StudentProfileUpdate(BaseModel):
     preferred_format: Optional[str] = None
     preferred_session_length: Optional[int] = None
     profile_completed: Optional[bool] = None
-    interests: Optional[List[str]] = None
-    preferred_format: Optional[str] = None
-    preferred_session_length: Optional[int] = None
-    profile_completed: bool = False
 
 
 class StudentProfileResponse(BaseModel):

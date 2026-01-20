@@ -96,11 +96,11 @@ const AppContent: React.FC = () => {
             }
           />
 
-          {/* ---------------- STUDENT ---------------- */}
+          {/* ---------------- STUDENT & PARENT (for profile completion) ---------------- */}
           <Route
             path="/complete-profile"
             element={
-              <ProtectedRoute role="student">
+              <ProtectedRoute role={["student", "parent"]}>
                 <CompleteProfile />
               </ProtectedRoute>
             }
