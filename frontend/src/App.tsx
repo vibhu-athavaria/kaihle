@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { Header } from "./components/Layout/Header";
 import { Footer } from "./components/Layout/Footer";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { TrialStatusNotice } from "./components/TrialStatusNotice";
 
 import { Home } from "./pages/Home";
 import { SignUp } from "./pages/SignUp";
@@ -13,6 +14,7 @@ import { StudentLogin } from "./pages/StudentLogin";
 
 import { Dashboard } from "./pages/Dashboard";
 import { ParentSettings } from "./pages/ParentSettings";
+import { PlanSelection } from "./pages/PlanSelection";
 import { AddChild } from "./pages/AddChild";
 import { EditChild } from "./pages/EditChild";
 
@@ -42,6 +44,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-blue-50">
+      <TrialStatusNotice />
       <Header variant={user ? "dashboard" : "landing"} />
 
       <main className="flex-1">
@@ -92,6 +95,15 @@ const AppContent: React.FC = () => {
             element={
               <ProtectedRoute role="parent">
                 <ParentSettings />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/plans"
+            element={
+              <ProtectedRoute role="parent">
+                <PlanSelection />
               </ProtectedRoute>
             }
           />

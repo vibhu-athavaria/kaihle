@@ -103,13 +103,13 @@ def is_in_free_trial(db: Session, parent_id: int) -> bool:
 
     return False
 
-def start_free_trial(db: Session, parent_id: int, student_id: int, subject_id: Optional[int] = None) -> Subscription:
+def start_free_trial(db: Session, parent_id: int, student_id: Optional[int] = None, subject_id: Optional[int] = None) -> Subscription:
     """Start a free trial for a parent"""
     trial_end_date = datetime.now() + timedelta(days=15)
 
     subscription_create = SubscriptionCreate(
         parent_id=parent_id,
-        student_id=student_id,
+        student_id=student_id,  # Can be None for parent-level trials
         subject_id=subject_id,
         status="trial",
         price=25.00,
@@ -546,10 +546,12 @@ def check_trial_status(db: Session, user_id: int) -> dict:
 def get_billing_summary(db: Session, user_id: int):
     """Get a summary of billing information for a user"""
     from datetime import datetime
+    from app.crud.user import get_user
 
     subscriptions = get_subscriptions_by_parent(db, user_id)
     payments = get_payments_by_user(db, user_id)
     billing_info = get_billing_info_by_user(db, user_id)
+    user = get_user(db, user_id)
 
     active_subs = [sub for sub in subscriptions if sub.status in ["active", "trial"]]
     trial_subs = [sub for sub in subscriptions if sub.status == "trial"]
@@ -566,6 +568,7 @@ def get_billing_summary(db: Session, user_id: int):
 
     # Find trial end date and days remaining
     trial_end_date = None
+    trial_start_date = None
     days_remaining_in_trial = 0
     if trial_subs:
         # Find the latest trial end date
@@ -576,6 +579,10 @@ def get_billing_summary(db: Session, user_id: int):
                 days_remaining_in_trial = (trial_end_date - datetime.now()).days
             else:
                 days_remaining_in_trial = 0
+
+        # Calculate trial start date from user registration if no explicit trial start
+        if user and user.created_at:
+            trial_start_date = user.created_at
 
     # Find next payment date
     pending_payments = [p for p in payments if p.status == "pending"]
@@ -595,6 +602,7 @@ def get_billing_summary(db: Session, user_id: int):
         "next_payment_date": next_payment_date,
         "in_free_trial": in_free_trial,
         "trial_end_date": trial_end_date,
+        "trial_start_date": trial_start_date,
         "days_remaining_in_trial": days_remaining_in_trial,
         "payment_methods": len(billing_info),
         "has_payment_method": has_payment_method

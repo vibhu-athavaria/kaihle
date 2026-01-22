@@ -24,7 +24,7 @@ class Subscription(Base, SerializerMixin):
 
     id = Column(Integer, primary_key=True, index=True)
     parent_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Allow null for parent-level trials
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)
     plan_id = Column(Integer, ForeignKey("subscription_plans.id"), nullable=True)
     billing_cycle = Column(String(20), default="monthly")  # monthly or yearly

@@ -22,7 +22,7 @@ class BillingService:
         self.FREE_TRIAL_DAYS = 15
 
     def start_free_trial_for_new_parent(
-        self, db: Session, parent_id: int, student_id: int, subject_id: Optional[int] = None
+        self, db: Session, parent_id: int, student_id: Optional[int] = None, subject_id: Optional[int] = None
     ) -> Any:
         """Start a free trial when a new parent signs up"""
 
@@ -30,7 +30,7 @@ class BillingService:
         if is_in_free_trial(db, parent_id):
             return None
 
-        # Start free trial
+        # Start free trial (student_id can be None for parent-level trial)
         subscription = start_free_trial(db, parent_id, student_id, subject_id)
 
         return subscription
@@ -166,6 +166,11 @@ class BillingService:
             if trial_subs_sorted and trial_subs_sorted[0].trial_end_date:
                 trial_end_date = trial_subs_sorted[0].trial_end_date
 
+        # Calculate trial start date from user registration
+        trial_start_date = None
+        if user and user.created_at and in_trial:
+            trial_start_date = user.created_at
+
         return {
             "active_subscriptions": len(active_subs),
             "trial_subscriptions": len(trial_subs),
@@ -174,10 +179,11 @@ class BillingService:
             "next_payment_date": next_payment_date,
             "in_free_trial": in_trial,
             "trial_end_date": trial_end_date,
+            "trial_start_date": trial_start_date,
             "days_remaining_in_trial": (trial_end_date - datetime.now()).days if trial_end_date and trial_end_date > datetime.now() else 0,
             "payment_methods": len(billing_info),
             "has_payment_method": len(billing_info) > 0,
-            "students_enrolled": len(set(sub.student_id for sub in subscriptions)),
+            "students_enrolled": len(set(sub.student_id for sub in subscriptions if sub.student_id)),
             "subjects_subscribed": len(set(sub.subject_id for sub in subscriptions if sub.subject_id))
         }
 

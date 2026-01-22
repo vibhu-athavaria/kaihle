@@ -19,7 +19,7 @@ class PaymentStatus(str, Enum):
 
 class SubscriptionBase(BaseModel):
     parent_id: int
-    student_id: int
+    student_id: Optional[int] = None  # Allow null for parent-level trials
     subject_id: Optional[int] = None
     status: SubscriptionStatus = SubscriptionStatus.active
     price: float = 25.00
@@ -150,6 +150,7 @@ class UserBillingSummary(BaseModel):
     next_payment_date: Optional[datetime] = None
     in_free_trial: bool = False
     trial_end_date: Optional[datetime] = None
+    trial_start_date: Optional[datetime] = None
     days_remaining_in_trial: int = 0
     payment_methods: int = 0
     has_payment_method: bool = False

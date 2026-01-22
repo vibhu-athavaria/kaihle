@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.crud.user import authenticate_user, create_user, get_user_by_email, get_user_by_username
 from app.schemas.auth import Token, UserCreate, UserResponse, UserLogin
 from app.models.user import UserRole
+from app.services.billing_service import billing_service
 
 router = APIRouter()
 
@@ -33,6 +34,14 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 
     # Create the user
     db_user = create_user(db=db, user=user)
+
+    # Start free trial for new parents
+    if user.role == UserRole.PARENT.value:
+        try:
+            billing_service.start_free_trial_for_new_parent(db, db_user.id)
+        except Exception as e:
+            # Log the error but don't fail signup if trial creation fails
+            print(f"Failed to start trial for new parent {db_user.id}: {e}")
 
     return db_user
 

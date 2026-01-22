@@ -367,34 +367,10 @@ export const ParentSettings: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Free Trial CTA */}
-                    {!billingSummary.in_free_trial && billingSummary.active_subscriptions === 0 && (
-                      <div className="mb-6">
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-                          <h4 className="font-semibold text-gray-900 mb-2">Start Your Free Trial</h4>
-                          <p className="text-gray-600 mb-4">
-                            Get 15 days of full access to Kaihle for free!
-                          </p>
-                          <button
-                            onClick={handleStartFreeTrial}
-                            className="bg-yellow-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-yellow-700 transition-colors"
-                          >
-                            Start Free Trial
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Payment Methods */}
                     <div className="mb-8">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
                         <h3 className="text-xl font-semibold text-gray-900">Payment Methods</h3>
-                        <button
-                          onClick={() => setShowAddPaymentMethod(true)}
-                          className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm"
-                        >
-                          + Add Payment Method
-                        </button>
                       </div>
 
                       {billingInfo.length === 0 ? (

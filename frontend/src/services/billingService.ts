@@ -146,18 +146,6 @@ export async function startFreeTrial(studentId: number, subjectId?: number): Pro
   }
 }
 
-/**
- * Get subscription plans
- */
-export async function getSubscriptionPlans(): Promise<any[]> {
-  try {
-    const response = await http.get(`${API_BASE_URL}/plans`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching subscription plans:', error);
-    throw error;
-  }
-}
 
 /**
  * Create a new subscription

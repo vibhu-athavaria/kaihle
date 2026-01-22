@@ -35,7 +35,7 @@ from app.schemas.billing import (
 from app.models.user import User as UserModel
 from app.schemas.user import User
 
-router = APIRouter(prefix="/billing", tags=["billing"])
+router = APIRouter(tags=["billing"])
 
 # Subscription Endpoints
 
