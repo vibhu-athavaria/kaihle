@@ -30,6 +30,13 @@ export const TrialStatusNotice: React.FC = () => {
       try {
         const response = await http.get('/api/v1/billing/summary');
         setBillingSummary(response.data);
+
+        // Redirect to plans if trial expired and not on billing-related pages
+        const currentPath = window.location.pathname;
+        const isOnBillingPage = currentPath === '/plans' || currentPath === '/parent-settings' || currentPath === '/pricing' || currentPath === '/payment';
+        if (response.data.days_remaining_in_trial <= 0 && !isOnBillingPage) {
+          navigate('/plans');
+        }
       } catch (error) {
         console.error('Failed to fetch billing summary:', error);
       } finally {
@@ -38,7 +45,7 @@ export const TrialStatusNotice: React.FC = () => {
     };
 
     fetchBillingSummary();
-  }, [user]);
+  }, [user, navigate]);
 
   useEffect(() => {
     // Check if notice was dismissed recently (within 24 hours)
@@ -71,45 +78,31 @@ export const TrialStatusNotice: React.FC = () => {
     return null;
   }
 
-  // Don't show if user has active paid subscriptions
-  if (billingSummary.active_subscriptions > 0 && !billingSummary.in_free_trial) {
-    return null;
-  }
-
-  const isTrialExpired = billingSummary.days_remaining_in_trial <= 0;
-  const showNotice = billingSummary.in_free_trial || isTrialExpired;
-
-  if (!showNotice) {
+  // Show banner only for users in active trial (days remaining > 0)
+  if (billingSummary.active_subscriptions > 0 || billingSummary.days_remaining_in_trial <= 0) {
     return null;
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg">
+    <div className="bg-white text-gray-900 shadow-lg border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between py-3">
           <div className="flex items-center space-x-3">
-            {isTrialExpired ? (
-              <CreditCard className="w-5 h-5" />
-            ) : (
-              <Clock className="w-5 h-5" />
-            )}
+            <Clock className="w-5 h-5" />
             <div>
-              {isTrialExpired ? (
-                <p className="text-sm font-medium">
-                  Your free trial has expired. Upgrade to a paid plan to continue learning.
-                </p>
-              ) : (
-                <p className="text-sm font-medium">
-                  {billingSummary.days_remaining_in_trial} days remaining in your free trial
-                </p>
-              )}
-            </div>
+               <p className="text-sm font-medium">
+                 {billingSummary.days_remaining_in_trial > 0
+                   ? `Your trial is expiring in ${billingSummary.days_remaining_in_trial} days. Upgrade to a paid plan to continue learning.`
+                   : 'Your trial has expired. Please upgrade the plan to continue.'
+                 }
+               </p>
+             </div>
           </div>
 
           <div className="flex items-center space-x-3">
             <button
               onClick={handleUpgrade}
-              className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium text-sm hover:bg-gray-50 transition-colors"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium text-sm hover:bg-blue-700 transition-colors"
             >
               Upgrade Plan
             </button>

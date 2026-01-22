@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -590,6 +591,50 @@ def mark_invoice_paid_endpoint(
 
 # Summary and Helper Endpoints
 
+@router.post("/create-payment-intent")
+def create_payment_intent(
+    payment_data: dict,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_active_user)
+):
+    """Create a Stripe payment intent for subscription payment"""
+    import stripe
+    from app.core.config import settings
+
+    # Set your secret key
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+
+    plan_id = payment_data.get('plan_id')
+    billing_cycle = payment_data.get('billing_cycle', 'monthly')
+
+    # Get plan details
+    plan = get_subscription_plan(db, plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    # Calculate price
+    price = calculate_subscription_price(db, plan_id, billing_cycle=billing_cycle)
+
+    try:
+        # Create payment intent
+        intent = stripe.PaymentIntent.create(
+            amount=int(price * 100),  # Amount in cents
+            currency='usd',
+            metadata={
+                'plan_id': plan_id,
+                'billing_cycle': billing_cycle,
+                'user_id': current_user.id
+            }
+        )
+
+        return {
+            'client_secret': intent.client_secret,
+            'amount': price,
+            'currency': 'usd'
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.get("/summary", response_model=UserBillingSummary)
 def get_billing_summary_endpoint(
     db: Session = Depends(get_db),
@@ -606,7 +651,14 @@ def get_subscription_plans(
     current_user: UserModel = Depends(get_current_active_user)
 ):
     """Get all active subscription plans"""
-    return get_all_subscription_plans(db)
+    from app.constants import DEFAULT_YEARLY_DISCOUNT_PERCENTAGE, PREMIUM_BASE_PRICE
+    plans = get_all_subscription_plans(db)
+    for plan in plans:
+        if plan.plan_type == 'premium':
+            plan.base_price = PREMIUM_BASE_PRICE  # Override for premium monthly price
+            discount = Decimal((DEFAULT_YEARLY_DISCOUNT_PERCENTAGE) / 100)
+            plan.yearly_price = Decimal(plan.base_price * Decimal(12) * (Decimal(1.0) - discount))
+    return plans
 
 @router.get("/payment-methods", response_model=List[PaymentMethodResponse])
 def get_payment_methods(

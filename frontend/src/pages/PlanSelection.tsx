@@ -22,16 +22,14 @@ export const PlanSelection: React.FC = () => {
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<'basic' | 'premium'>('basic');
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
 
-  // Fetch subscription plans and billing summary
+  // Fetch subscription plans and billing summary (only for parents)
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [plansResponse, summaryResponse] = await Promise.all([
-          getSubscriptionPlans(),
-          http.get('/api/v1/billing/summary')
-        ]);
+        // Fetch plans first
+        const plansResponse = await getSubscriptionPlans();
 
         // Transform the plans data
         const transformedData = {
@@ -42,7 +40,7 @@ export const PlanSelection: React.FC = () => {
             plan_type: plan.plan_type,
             trial_days: plan.trial_days,
             monthly_price: plan.base_price,
-            yearly_price: plan.base_price * 12 * (1 - (plan.yearly_discount / 100)),
+            yearly_price: plan.yearly_price || plan.base_price * 12 * (1 - 0.20),
             currency: plan.currency,
             features: [] // Will be populated from plan features if available
           })),
@@ -52,16 +50,56 @@ export const PlanSelection: React.FC = () => {
         };
 
         setPricingData(transformedData);
-        setBillingSummary(summaryResponse.data);
+
+        // Try to fetch billing summary for parents
+        if (user?.role === 'parent') {
+          try {
+            const summaryResponse = await http.get('/api/v1/billing/summary');
+            setBillingSummary(summaryResponse.data);
+          } catch (summaryErr) {
+            console.error('Failed to fetch billing summary:', summaryErr);
+            // Don't fail the whole page if summary fails
+          }
+        }
       } catch (err) {
-        console.error('Failed to fetch data:', err);
+        console.error('Failed to fetch subscription plans:', err);
+        // Set fallback data
+        setPricingData({
+          pricing_options: [
+            {
+              plan_id: 1,
+              name: 'Basic',
+              description: 'Perfect for one student and one subject',
+              plan_type: 'basic',
+              trial_days: 15,
+              monthly_price: 25.00,
+              yearly_price: 270.00,
+              currency: 'USD',
+              features: []
+            },
+            {
+              plan_id: 2,
+              name: 'Premium',
+              description: 'Best value for families with multiple children',
+              plan_type: 'premium',
+              trial_days: 15,
+              monthly_price: 80.00,
+              yearly_price: 864.00,
+              currency: 'USD',
+              features: []
+            }
+          ],
+          free_trial_days: 15,
+          available_billing_cycles: ['monthly', 'yearly'],
+          total_subjects_available: 4
+        });
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [user]);
 
   // Fallback to hardcoded data if API fails
   const getPricingOptionsData = () => {
@@ -75,7 +113,7 @@ export const PlanSelection: React.FC = () => {
             plan_type: 'basic',
             trial_days: 15,
             monthly_price: 25.00,
-            yearly_price: 270.00,
+            yearly_price: 240.00,  // 25 * 12 * 0.8 = 240
             currency: 'USD',
             features: [
               { name: '1 student profile', description: 'Access for one student' },
@@ -91,8 +129,8 @@ export const PlanSelection: React.FC = () => {
             description: 'Best value for families with multiple children',
             plan_type: 'premium',
             trial_days: 15,
-            monthly_price: 80.00,
-            yearly_price: 864.00,
+            monthly_price: 90.00,
+            yearly_price: 864.00,  // 90 * 12 * 0.8 = 864
             currency: 'USD',
             features: [
               { name: 'All subjects access', description: 'Access to all available subjects' },
@@ -143,13 +181,18 @@ export const PlanSelection: React.FC = () => {
       return;
     }
 
-    // For now, navigate back to billing settings
-    // In a full implementation, this would create a subscription
-    navigate('/parent-settings?tab=billing');
+    // Navigate to payment page with plan and billing cycle
+    navigate(`/payment?plan=${planType}&billing=${billingCycle}`);
   };
 
   const getCurrentPlanDisplay = () => {
-    if (!billingSummary) return null;
+    if (!billingSummary) {
+      return {
+        name: 'No Active Plan',
+        description: 'Choose a plan to get started',
+        color: 'gray'
+      };
+    }
 
     if (billingSummary.in_free_trial) {
       return {
@@ -179,6 +222,16 @@ export const PlanSelection: React.FC = () => {
   return (
     <div className="min-h-screen bg-blue-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Trial Expired Alert */}
+        {user?.role === 'parent' && (!billingSummary || billingSummary.days_remaining_in_trial <= 0) && (
+          <div className="mb-8 bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center">
+            <h2 className="text-2xl font-bold text-red-800 mb-2">Your Free Trial Has Expired</h2>
+            <p className="text-red-700">
+              Please upgrade to a plan to continue accessing Kaihle's learning platform.
+            </p>
+          </div>
+        )}
+
         {/* Header */}
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold text-gray-900 mb-4">Choose Your Plan</h1>
@@ -213,7 +266,7 @@ export const PlanSelection: React.FC = () => {
               onClick={() => setBillingCycle('annual')}
               className={`px-6 py-2 rounded-lg font-medium transition-colors ${billingCycle === 'annual' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
             >
-              Annual Billing (10% off)
+              Annual Billing (20% off)
             </button>
           </div>
         </div>
@@ -229,7 +282,7 @@ export const PlanSelection: React.FC = () => {
               <span className="text-5xl font-bold text-gray-900">${pricingOptions.basic.price}</span>
               <span className="text-gray-500">/month</span>
               {billingCycle === 'annual' && (
-                <p className="text-sm text-gray-500 mt-1">Billed annually at ${pricingOptions.basic.price * 12 * 0.90}/year</p>
+                <p className="text-sm text-gray-500 mt-1">Billed annually at ${pricingOptions.basic.price * 12}/year</p>
               )}
             </div>
 
@@ -252,7 +305,7 @@ export const PlanSelection: React.FC = () => {
               }}
               className={`w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors ${selectedPlan === 'basic' ? 'ring-2 ring-blue-300' : ''}`}
             >
-              {user ? 'Select Plan' : 'Get Started'}
+              {user ? 'Proceed to Payment' : 'Get Started'}
             </button>
           </div>
 
@@ -271,7 +324,7 @@ export const PlanSelection: React.FC = () => {
               <span className="text-5xl font-bold text-gray-900">${pricingOptions.premium.price}</span>
               <span className="text-gray-500">/month</span>
               {billingCycle === 'annual' && (
-                <p className="text-sm text-gray-500 mt-1">Billed annually at ${pricingOptions.premium.price * 12 * 0.90}/year</p>
+                <p className="text-sm text-gray-500 mt-1">Billed annually at ${pricingOptions.premium.price * 12}/year</p>
               )}
             </div>
 
@@ -294,7 +347,7 @@ export const PlanSelection: React.FC = () => {
               }}
               className={`w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors ${selectedPlan === 'premium' ? 'ring-2 ring-blue-300' : ''}`}
             >
-              {user ? 'Select Plan' : 'Get Started'}
+              {user ? 'Proceed to Payment' : 'Get Started'}
             </button>
           </div>
         </div>

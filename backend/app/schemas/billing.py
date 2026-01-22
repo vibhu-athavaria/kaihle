@@ -193,6 +193,7 @@ class SubscriptionPlanUpdate(BaseModel):
 
 class SubscriptionPlanResponse(SubscriptionPlanBase):
     id: int
+    yearly_price: Optional[float] = None
     created_at: datetime
     updated_at: datetime
 

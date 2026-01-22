@@ -15,6 +15,8 @@ import { StudentLogin } from "./pages/StudentLogin";
 import { Dashboard } from "./pages/Dashboard";
 import { ParentSettings } from "./pages/ParentSettings";
 import { PlanSelection } from "./pages/PlanSelection";
+import { PaymentPage } from "./pages/PaymentPage";
+import { PaymentSuccess } from "./pages/PaymentSuccess";
 import { AddChild } from "./pages/AddChild";
 import { EditChild } from "./pages/EditChild";
 
@@ -44,8 +46,8 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-blue-50">
-      <TrialStatusNotice />
       <Header variant={user ? "dashboard" : "landing"} />
+      <TrialStatusNotice />
 
       <main className="flex-1">
         <Routes>
@@ -104,6 +106,24 @@ const AppContent: React.FC = () => {
             element={
               <ProtectedRoute role="parent">
                 <PlanSelection />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/payment"
+            element={
+              <ProtectedRoute role="parent">
+                <PaymentPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/payment-success"
+            element={
+              <ProtectedRoute role="parent">
+                <PaymentSuccess />
               </ProtectedRoute>
             }
           />

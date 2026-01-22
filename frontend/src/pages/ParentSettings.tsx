@@ -377,10 +377,10 @@ export const ParentSettings: React.FC = () => {
                         <div className="text-center py-8">
                           <p className="text-gray-500 mb-4">No payment methods added</p>
                           <button
-                            onClick={() => setShowAddPaymentMethod(true)}
+                            onClick={() => navigate('/plans')}
                             className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
                           >
-                            Add Payment Method
+                            Upgrade Plan
                           </button>
                         </div>
                       ) : (

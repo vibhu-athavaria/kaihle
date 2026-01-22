@@ -9,6 +9,7 @@ from app.schemas.billing import (
     PlanSubjectCreate
 )
 from app.models.user import User
+from app.constants import DEFAULT_TRIAL_PERIOD_DAYS, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE
 
 # Subscription CRUD operations
 
@@ -105,7 +106,7 @@ def is_in_free_trial(db: Session, parent_id: int) -> bool:
 
 def start_free_trial(db: Session, parent_id: int, student_id: Optional[int] = None, subject_id: Optional[int] = None) -> Subscription:
     """Start a free trial for a parent"""
-    trial_end_date = datetime.now() + timedelta(days=15)
+    trial_end_date = datetime.now() + timedelta(days=DEFAULT_TRIAL_PERIOD_DAYS)
 
     subscription_create = SubscriptionCreate(
         parent_id=parent_id,
@@ -291,7 +292,7 @@ def create_subscription_plan(db: Session, plan: SubscriptionPlanCreate) -> Subsc
         discount_percentage=plan.discount_percentage,
         currency=plan.currency,
         trial_days=plan.trial_days,
-        yearly_discount=plan.yearly_discount,
+        yearly_discount=DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
         is_active=plan.is_active,
         sort_order=plan.sort_order,
         plan_type=plan.plan_type
@@ -583,6 +584,14 @@ def get_billing_summary(db: Session, user_id: int):
         # Calculate trial start date from user registration if no explicit trial start
         if user and user.created_at:
             trial_start_date = user.created_at
+    elif active_subs == 0 and user and user.created_at:
+        # For users with no subscriptions, assume trial started at registration
+        trial_start_date = user.created_at
+        trial_end_date = user.created_at + timedelta(days=DEFAULT_TRIAL_PERIOD_DAYS)
+        if trial_end_date > datetime.now():
+            days_remaining_in_trial = (trial_end_date - datetime.now()).days
+        else:
+            days_remaining_in_trial = 0
 
     # Find next payment date
     pending_payments = [p for p in payments if p.status == "pending"]
