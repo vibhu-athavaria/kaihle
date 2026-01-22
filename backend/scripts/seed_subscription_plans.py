@@ -16,8 +16,9 @@ from app.models.billing import SubscriptionPlan, PlanFeature, PlanSubject
 from app.models.subject import Subject
 from app.crud.billing import (
     create_subscription_plan, create_plan_feature, create_plan_subject,
-    get_subscription_plan_by_name
+    get_subscription_plan_by_name, update_subscription_plan
 )
+from app.schemas.billing import SubscriptionPlanUpdate, PlanFeatureCreate
 
 def seed_subscription_plans():
     """Create initial subscription plans"""
@@ -28,25 +29,27 @@ def seed_subscription_plans():
         basic_plan = get_subscription_plan_by_name(db, "Basic")
         premium_plan = get_subscription_plan_by_name(db, "Premium")
 
-        if basic_plan and premium_plan:
-            print("Subscription plans already exist. Skipping seeding.")
-            return
-
-        # Create Basic Plan
-        print("Creating Basic Plan...")
-        from app.schemas.billing import SubscriptionPlanCreate
-        basic_plan = create_subscription_plan(db, SubscriptionPlanCreate(
-            name="Basic",
-            description="Perfect for one student and one subject",
-            base_price=25.00,
-            discount_percentage=0.00,
-            currency="USD",
-            trial_days=15,
-            yearly_discount=10.00,
-            is_active=True,
-            sort_order=1,
-            plan_type="basic"
-        ))
+        # Create or update Basic Plan
+        if basic_plan:
+            print("Updating Basic Plan...")
+            basic_plan = update_subscription_plan(db, basic_plan.id, SubscriptionPlanUpdate(
+                description="One subject per student"
+            ))
+        else:
+            print("Creating Basic Plan...")
+            from app.schemas.billing import SubscriptionPlanCreate
+            basic_plan = create_subscription_plan(db, SubscriptionPlanCreate(
+                name="Basic",
+                description="One subject per student",
+                base_price=25.00,
+                discount_percentage=0.00,
+                currency="USD",
+                trial_days=15,
+                yearly_discount=10.00,
+                is_active=True,
+                sort_order=1,
+                plan_type="basic"
+            ))
 
         # Add features to Basic Plan
         basic_features = [
@@ -67,20 +70,26 @@ def seed_subscription_plans():
 
         print(f"Created Basic Plan with ID: {basic_plan.id}")
 
-        # Create Premium Plan
-        print("Creating Premium Plan...")
-        premium_plan = create_subscription_plan(db, SubscriptionPlanCreate(
-            name="Premium",
-            description="Best value for families with multiple children",
-            base_price=25.00,  # Base price per subject
-            discount_percentage=20.00,  # 20% discount from total basic price
-            currency="USD",
-            trial_days=15,
-            yearly_discount=10.00,
-            is_active=True,
-            sort_order=2,
-            plan_type="premium"
-        ))
+        # Create or update Premium Plan
+        if premium_plan:
+            print("Updating Premium Plan...")
+            premium_plan = update_subscription_plan(db, premium_plan.id, SubscriptionPlanUpdate(
+                description="All subjects (Science, Math, English, Humanities) per student"
+            ))
+        else:
+            print("Creating Premium Plan...")
+            premium_plan = create_subscription_plan(db, SubscriptionPlanCreate(
+                name="Premium",
+                description="All subjects (Science, Math, English, Humanities) per student",
+                base_price=25.00,  # Base price per subject
+                discount_percentage=20.00,  # 20% discount from total basic price
+                currency="USD",
+                trial_days=15,
+                yearly_discount=10.00,
+                is_active=True,
+                sort_order=2,
+                plan_type="premium"
+            ))
 
         # Add features to Premium Plan
         premium_features = [

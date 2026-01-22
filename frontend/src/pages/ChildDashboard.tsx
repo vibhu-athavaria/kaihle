@@ -105,20 +105,31 @@ export const ChildDashboard: React.FC = () => {
     }
     if (!user?.student_profile?.id) return;
 
-    const checkTrialAndFetchStudent = async () => {
+    const checkSubscriptionAndFetchStudent = async () => {
       try {
-        // Check trial status for the parent
-        const billingResponse = await http.get('/api/v1/billing/summary');
-        const billingSummary = billingResponse.data;
+        // Check if this specific student has an active subscription
+        const subscriptionsResponse = await http.get('/api/v1/billing/subscriptions/active');
+        const activeSubscriptions = subscriptionsResponse.data;
 
-        // If trial has expired and no active subscriptions, show trial expired
-        if (billingSummary.trial_subscriptions > 0 && billingSummary.days_remaining_in_trial === 0 && billingSummary.active_subscriptions === 0) {
-          setTrialExpired(true);
-          setCheckingTrial(false);
-          return;
+        // Check if current student has an active subscription
+        const hasActiveSubscription = activeSubscriptions.some((sub: any) =>
+          sub.student_id === user.student_profile.id && sub.status === 'active'
+        );
+
+        if (!hasActiveSubscription) {
+          // Check if parent has trial
+          const billingResponse = await http.get('/api/v1/billing/summary');
+          const billingSummary = billingResponse.data;
+
+          // If no trial or trial expired, show trial expired
+          if (!billingSummary.in_free_trial || billingSummary.days_remaining_in_trial <= 0) {
+            setTrialExpired(true);
+            setCheckingTrial(false);
+            return;
+          }
         }
 
-        // Trial is active or has active subscription, proceed with normal dashboard
+        // Student has active subscription or trial is active, proceed with normal dashboard
         const res = await http.get(`/api/v1/students/${user.student_profile.id}`);
         setChild(res.data);
 
@@ -129,7 +140,7 @@ export const ChildDashboard: React.FC = () => {
         setSubjects(mapped);
         setCheckingTrial(false);
       } catch (error) {
-        console.error('Error checking trial status:', error);
+        console.error('Error checking subscription status:', error);
         // On error, allow access (fail open)
         setCheckingTrial(false);
       }

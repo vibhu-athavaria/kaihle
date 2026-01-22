@@ -14,18 +14,28 @@ import { Check, CreditCard, Lock, ArrowLeft } from 'lucide-react';
 // Initialize Stripe (replace with your publishable key)
 const stripePromise = loadStripe('pk_test_your_stripe_publishable_key');
 
+interface Student {
+  id: number;
+  user: {
+    full_name: string;
+    username: string;
+  };
+}
+
 interface PaymentFormProps {
   planId: string;
   billingCycle: string;
   planName: string;
   price: number;
+  selectedStudents: Student[];
 }
 
 const PaymentForm: React.FC<PaymentFormProps> = ({
   planId,
   billingCycle,
   planName,
-  price
+  price,
+  selectedStudents
 }) => {
   const stripe = useStripe();
   const elements = useElements();
@@ -61,6 +71,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
       const response = await http.post('/api/v1/billing/create-payment-intent', {
         plan_id: planId,
         billing_cycle: billingCycle,
+        student_ids: selectedStudents.map(s => s.id),
         billing_details: billingDetails
       });
 
@@ -117,7 +128,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
         {/* Order Summary */}
         <div className="bg-gray-50 rounded-lg p-6 mb-8">
           <h3 className="font-semibold text-gray-900 mb-4">Order Summary</h3>
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center mb-4">
             <div>
               <p className="font-medium">{planName}</p>
               <p className="text-sm text-gray-600 capitalize">{billingCycle} billing</p>
@@ -126,6 +137,17 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
               <p className="text-2xl font-bold">${price}</p>
               <p className="text-sm text-gray-600">per {billingCycle === 'monthly' ? 'month' : 'year'}</p>
             </div>
+          </div>
+
+          <div className="border-t pt-4">
+            <h4 className="font-medium text-gray-900 mb-2">Students Included:</h4>
+            <ul className="space-y-1">
+              {selectedStudents.map((student) => (
+                <li key={student.id} className="text-sm text-gray-600">
+                  • {student.user.full_name} (@{student.user.username})
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 
@@ -262,9 +284,12 @@ export const PaymentPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [selectedStudents, setSelectedStudents] = useState<Student[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(true);
 
   const planId = searchParams.get('plan') || 'basic';
   const billingCycle = searchParams.get('billing') || 'monthly';
+  const studentIdsParam = searchParams.get('students') || '';
 
   // Mock plan data - in real app, fetch from API
   const planData = {
@@ -281,11 +306,48 @@ export const PaymentPage: React.FC = () => {
   };
 
   const selectedPlan = planData[planId as keyof typeof planData];
-  const price = billingCycle === 'monthly' ? selectedPlan.monthly_price : Math.round(selectedPlan.yearly_price / 12);
+  const basePrice = billingCycle === 'monthly' ? selectedPlan.monthly_price : Math.round(selectedPlan.yearly_price / 12);
+  const price = basePrice * selectedStudents.length;
+
+  // Fetch selected students
+  useEffect(() => {
+    const fetchSelectedStudents = async () => {
+      if (!studentIdsParam || !user?.role === 'parent') {
+        setLoadingStudents(false);
+        return;
+      }
+
+      try {
+        const studentIds = studentIdsParam.split(',').map(id => parseInt(id));
+        const allStudents = await http.get('/api/v1/users/me/students');
+        const selected = allStudents.data.filter((student: Student) =>
+          studentIds.includes(student.id)
+        );
+        setSelectedStudents(selected);
+      } catch (error) {
+        console.error('Failed to fetch selected students:', error);
+      } finally {
+        setLoadingStudents(false);
+      }
+    };
+
+    fetchSelectedStudents();
+  }, [studentIdsParam, user]);
 
   if (!user) {
     navigate('/parent-login');
     return null;
+  }
+
+  if (loadingStudents) {
+    return (
+      <div className="min-h-screen bg-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading payment details...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -305,6 +367,7 @@ export const PaymentPage: React.FC = () => {
             billingCycle={billingCycle}
             planName={selectedPlan.name}
             price={price}
+            selectedStudents={selectedStudents}
           />
         </Elements>
       </div>

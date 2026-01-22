@@ -15,11 +15,21 @@ interface BillingSummary {
   total_monthly_cost: number;
 }
 
+interface Student {
+  id: number;
+  user: {
+    full_name: string;
+    username: string;
+  };
+}
+
 export const PlanSelection: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [pricingData, setPricingData] = useState<any>(null);
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [selectedStudents, setSelectedStudents] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<'basic' | 'premium'>('basic');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
@@ -51,13 +61,17 @@ export const PlanSelection: React.FC = () => {
 
         setPricingData(transformedData);
 
-        // Try to fetch billing summary for parents
+        // Try to fetch billing summary and students for parents
         if (user?.role === 'parent') {
           try {
-            const summaryResponse = await http.get('/api/v1/billing/summary');
+            const [summaryResponse, studentsResponse] = await Promise.all([
+              http.get('/api/v1/billing/summary'),
+              http.get('/api/v1/users/me/students')
+            ]);
             setBillingSummary(summaryResponse.data);
+            setStudents(studentsResponse.data);
           } catch (summaryErr) {
-            console.error('Failed to fetch billing summary:', summaryErr);
+            console.error('Failed to fetch billing summary or students:', summaryErr);
             // Don't fail the whole page if summary fails
           }
         }
@@ -154,11 +168,16 @@ export const PlanSelection: React.FC = () => {
   const pricingOptionsData = getPricingOptionsData();
 
   // Map plan data to UI format
+  const basePriceBasic = billingCycle === 'monthly' ? pricingOptionsData.pricing_options[0].monthly_price : pricingOptionsData.pricing_options[0].yearly_price / 12;
+  const basePricePremium = billingCycle === 'monthly' ? pricingOptionsData.pricing_options[1].monthly_price : pricingOptionsData.pricing_options[1].yearly_price / 12;
+  const studentCount = selectedStudents.length || 1; // Default to 1 for display
+
   const pricingOptions = {
     basic: {
       name: pricingOptionsData.pricing_options[0].name,
       description: pricingOptionsData.pricing_options[0].description,
-      price: billingCycle === 'monthly' ? pricingOptionsData.pricing_options[0].monthly_price : pricingOptionsData.pricing_options[0].yearly_price / 12,
+      price: basePriceBasic,
+      totalPrice: basePriceBasic * studentCount,
       students: pricingOptionsData.pricing_options[0].plan_type === 'basic' ? 1 : 'Unlimited',
       subjects: pricingOptionsData.pricing_options[0].plan_type === 'basic' ? 1 : 'All',
       features: pricingOptionsData.pricing_options[0].features.map((f: any) => f.name),
@@ -167,7 +186,8 @@ export const PlanSelection: React.FC = () => {
     premium: {
       name: pricingOptionsData.pricing_options[1].name,
       description: pricingOptionsData.pricing_options[1].description,
-      price: billingCycle === 'monthly' ? pricingOptionsData.pricing_options[1].monthly_price : pricingOptionsData.pricing_options[1].yearly_price / 12,
+      price: basePricePremium,
+      totalPrice: basePricePremium * studentCount,
       students: 'Unlimited',
       subjects: 'All',
       features: pricingOptionsData.pricing_options[1].features.map((f: any) => f.name),
@@ -181,8 +201,14 @@ export const PlanSelection: React.FC = () => {
       return;
     }
 
-    // Navigate to payment page with plan and billing cycle
-    navigate(`/payment?plan=${planType}&billing=${billingCycle}`);
+    if (selectedStudents.length === 0) {
+      alert('Please select at least one student for the subscription.');
+      return;
+    }
+
+    // Navigate to payment page with plan, billing cycle, and selected students
+    const studentIds = selectedStudents.join(',');
+    navigate(`/payment?plan=${planType}&billing=${billingCycle}&students=${studentIds}`);
   };
 
   const getCurrentPlanDisplay = () => {
@@ -271,6 +297,55 @@ export const PlanSelection: React.FC = () => {
           </div>
         </div>
 
+        {/* Student Selection */}
+        {user?.role === 'parent' && students.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-lg p-8 mb-8 max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Select Students for Subscription</h2>
+            <p className="text-gray-600 mb-6 text-center">Choose which students you want to subscribe. The price will be calculated per student.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {students.map((student) => (
+                <div
+                  key={student.id}
+                  className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                    selectedStudents.includes(student.id)
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                  onClick={() => {
+                    setSelectedStudents(prev =>
+                      prev.includes(student.id)
+                        ? prev.filter(id => id !== student.id)
+                        : [...prev, student.id]
+                    );
+                  }}
+                >
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedStudents.includes(student.id)}
+                      onChange={() => {}}
+                      className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500 mr-3"
+                    />
+                    <div>
+                      <p className="font-medium text-gray-900">{student.user.full_name}</p>
+                      <p className="text-sm text-gray-500">@{student.user.username}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {selectedStudents.length > 0 && (
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                <p className="text-blue-800 font-medium">
+                  {selectedStudents.length} student{selectedStudents.length > 1 ? 's' : ''} selected
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Pricing Plans */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12 max-w-5xl mx-auto">
           {/* Basic Plan */}
@@ -279,10 +354,11 @@ export const PlanSelection: React.FC = () => {
             <p className="text-gray-600 mb-6">{pricingOptions.basic.description}</p>
 
             <div className="mb-6">
-              <span className="text-5xl font-bold text-gray-900">${pricingOptions.basic.price}</span>
+              <span className="text-5xl font-bold text-gray-900">${pricingOptions.basic.totalPrice}</span>
               <span className="text-gray-500">/month</span>
+              <p className="text-sm text-gray-500 mt-1">${pricingOptions.basic.price} per student × {selectedStudents.length || 1} student{selectedStudents.length !== 1 ? 's' : ''}</p>
               {billingCycle === 'annual' && (
-                <p className="text-sm text-gray-500 mt-1">Billed annually at ${pricingOptions.basic.price * 12}/year</p>
+                <p className="text-sm text-gray-500">Billed annually at ${pricingOptions.basic.totalPrice * 12}/year</p>
               )}
             </div>
 
@@ -321,10 +397,11 @@ export const PlanSelection: React.FC = () => {
             <p className="text-gray-600 mb-6">{pricingOptions.premium.description}</p>
 
             <div className="mb-6">
-              <span className="text-5xl font-bold text-gray-900">${pricingOptions.premium.price}</span>
+              <span className="text-5xl font-bold text-gray-900">${pricingOptions.premium.totalPrice}</span>
               <span className="text-gray-500">/month</span>
+              <p className="text-sm text-gray-500 mt-1">${pricingOptions.premium.price} per student × {selectedStudents.length || 1} student{selectedStudents.length !== 1 ? 's' : ''}</p>
               {billingCycle === 'annual' && (
-                <p className="text-sm text-gray-500 mt-1">Billed annually at ${pricingOptions.premium.price * 12}/year</p>
+                <p className="text-sm text-gray-500">Billed annually at ${pricingOptions.premium.totalPrice * 12}/year</p>
               )}
             </div>
 

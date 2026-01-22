@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
@@ -193,9 +194,9 @@ class SubscriptionPlanUpdate(BaseModel):
 
 class SubscriptionPlanResponse(SubscriptionPlanBase):
     id: int
-    yearly_price: Optional[float] = None
+    yearly_price: Optional[Decimal] = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

@@ -68,7 +68,7 @@ export const Pricing: React.FC = () => {
           {
             plan_id: 1,
             name: 'Basic',
-            description: 'Perfect for one student and one subject',
+            description: 'One subject per student',
             plan_type: 'basic',
             trial_days: 15,
             monthly_price: 25.00,
@@ -85,7 +85,7 @@ export const Pricing: React.FC = () => {
           {
             plan_id: 2,
             name: 'Premium',
-            description: 'Best value for families with multiple children',
+            description: 'All subjects (Science, Math, English, Humanities) per student',
             plan_type: 'premium',
             trial_days: 15,
             monthly_price: 80.00,
@@ -113,7 +113,7 @@ export const Pricing: React.FC = () => {
           {
             plan_id: 1,
             name: 'Basic',
-            description: 'Perfect for one student and one subject',
+            description: 'One subject per student',
             plan_type: 'basic',
             trial_days: 15,
             monthly_price: 25.00,
@@ -130,7 +130,7 @@ export const Pricing: React.FC = () => {
           {
             plan_id: 2,
             name: 'Premium',
-            description: 'Best value for families with multiple children',
+            description: 'All subjects (Science, Math, English, Humanities) per student',
             plan_type: 'premium',
             trial_days: 15,
             monthly_price: 90.00,
@@ -371,8 +371,8 @@ export const Pricing: React.FC = () => {
                 <CreditCard className="w-8 h-8 text-blue-600" />
               </div>
               <div>
-                <h4 className="font-semibold text-gray-900 mb-2">Pay Per Student, Per Subject</h4>
-                <p className="text-gray-600">Only pay for what you need. $25 per student per subject per month gives you full access to our comprehensive learning platform.</p>
+                <h4 className="font-semibold text-gray-900 mb-2">Flexible Pricing Per Student</h4>
+                <p className="text-gray-600">Only pay for what you need. Choose from $25 per student for one subject or $80 for all subjects per month, giving you full access to our comprehensive learning platform.</p>
               </div>
             </div>
 

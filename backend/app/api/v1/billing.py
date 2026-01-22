@@ -606,30 +606,33 @@ def create_payment_intent(
 
     plan_id = payment_data.get('plan_id')
     billing_cycle = payment_data.get('billing_cycle', 'monthly')
+    student_ids = payment_data.get('student_ids', [])
 
     # Get plan details
     plan = get_subscription_plan(db, plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    # Calculate price
-    price = calculate_subscription_price(db, plan_id, billing_cycle=billing_cycle)
+    # Calculate price per student
+    base_price = calculate_subscription_price(db, plan_id, billing_cycle=billing_cycle)
+    total_price = base_price * len(student_ids)
 
     try:
         # Create payment intent
         intent = stripe.PaymentIntent.create(
-            amount=int(price * 100),  # Amount in cents
+            amount=int(total_price * 100),  # Amount in cents
             currency='usd',
             metadata={
                 'plan_id': plan_id,
                 'billing_cycle': billing_cycle,
-                'user_id': current_user.id
+                'user_id': current_user.id,
+                'student_ids': ','.join(map(str, student_ids))
             }
         )
 
         return {
             'client_secret': intent.client_secret,
-            'amount': price,
+            'amount': total_price,
             'currency': 'usd'
         }
     except Exception as e:
@@ -657,7 +660,7 @@ def get_subscription_plans(
         if plan.plan_type == 'premium':
             plan.base_price = PREMIUM_BASE_PRICE  # Override for premium monthly price
             discount = Decimal((DEFAULT_YEARLY_DISCOUNT_PERCENTAGE) / 100)
-            plan.yearly_price = Decimal(plan.base_price * Decimal(12) * (Decimal(1.0) - discount))
+            plan.yearly_price = Decimal(plan.base_price) * Decimal(12) * (Decimal(1.0) - discount)
     return plans
 
 @router.get("/payment-methods", response_model=List[PaymentMethodResponse])
