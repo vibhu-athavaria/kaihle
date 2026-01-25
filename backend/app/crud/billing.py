@@ -79,12 +79,23 @@ def delete_subscription(db: Session, subscription_id: int) -> bool:
     db.commit()
     return True
 
-def get_active_subscriptions(db: Session, parent_id: int) -> List[Subscription]:
-    """Get all active subscriptions for a parent"""
-    return db.query(Subscription).filter(
-        Subscription.parent_id == parent_id,
+def get_active_subscriptions(db: Session, user_id: Optional[int] = None) -> List[Subscription]:
+    """Get all active subscriptions for a user (parent or student)"""
+    # Check if this is a parent user by looking for subscriptions where they are the parent
+    parent_subscriptions = db.query(Subscription).filter(
+        Subscription.parent_id == user_id,
         Subscription.status.in_(["active", "trial"])
     ).all()
+
+    # If no parent subscriptions found, check if this is a student user
+    if not parent_subscriptions:
+        student_subscriptions = db.query(Subscription).filter(
+            Subscription.student_id == user_id,
+            Subscription.status.in_(["active", "trial"])
+        ).all()
+        return student_subscriptions
+
+    return parent_subscriptions
 
 def get_trial_subscriptions(db: Session, parent_id: int) -> List[Subscription]:
     """Get all trial subscriptions for a parent"""

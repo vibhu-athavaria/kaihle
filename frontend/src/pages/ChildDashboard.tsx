@@ -99,16 +99,22 @@ export const ChildDashboard: React.FC = () => {
   /* ---------------------------------- */
 
   useEffect(() => {
+    console.log('ChildDashboard useEffect running, user:', user);
     if (!user?.student_profile?.profile_completed) {
+      console.log('Navigating to complete-profile');
       navigate('/complete-profile');
       return;
     }
-    if (!user?.student_profile?.id) return;
+    if (!user?.student_profile?.id) {
+      console.log('No student id, returning');
+      return;
+    }
 
     const checkSubscriptionAndFetchStudent = async () => {
+      console.log('Starting checkSubscriptionAndFetchStudent');
       try {
         // Check if this specific student has an active subscription
-        const subscriptionsResponse = await http.get('/api/v1/billing/subscriptions/active');
+        const subscriptionsResponse = await http.get(`/api/v1/billing/subscriptions/active?user_id=${user.student_profile.id}`);
         const activeSubscriptions = subscriptionsResponse.data;
 
         // Check if current student has an active subscription
@@ -123,6 +129,7 @@ export const ChildDashboard: React.FC = () => {
 
           // If no trial or trial expired, show trial expired
           if (!billingSummary.in_free_trial || billingSummary.days_remaining_in_trial <= 0) {
+            console.log('Trial expired, setting trialExpired true');
             setTrialExpired(true);
             setCheckingTrial(false);
             return;
@@ -130,6 +137,7 @@ export const ChildDashboard: React.FC = () => {
         }
 
         // Student has active subscription or trial is active, proceed with normal dashboard
+        console.log('Fetching student data');
         const res = await http.get(`/api/v1/students/${user.student_profile.id}`);
         setChild(res.data);
 
@@ -139,6 +147,7 @@ export const ChildDashboard: React.FC = () => {
         );
         setSubjects(mapped);
         setCheckingTrial(false);
+        console.log('Finished checkSubscriptionAndFetchStudent');
       } catch (error) {
         console.error('Error checking subscription status:', error);
         // On error, allow access (fail open)
@@ -146,8 +155,8 @@ export const ChildDashboard: React.FC = () => {
       }
     };
 
-    checkTrialAndFetchStudent();
-  }, [user, navigate]);
+    checkSubscriptionAndFetchStudent();
+  }, [user?.student_profile?.id, navigate]);
 
   if (checkingTrial) {
     return (

@@ -8,6 +8,10 @@ export interface User {
   role: UserRole;
   created_at: string;
   has_completed_assessment?: boolean;
+  student_profile?: {
+    id: string;
+    profile_completed: boolean;
+  };
 }
 
 export interface Child {
