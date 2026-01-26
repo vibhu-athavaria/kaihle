@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
+from decimal import Decimal
 from typing import List, Optional
 from datetime import datetime, timedelta
+from app.crud.user import get_user
 from app.models.billing import Subscription, Payment, BillingInfo, Invoice, SubscriptionPlan, PlanFeature, PlanSubject, TrialExtension
 from app.schemas.billing import (
     SubscriptionCreate, SubscriptionUpdate, PaymentCreate, PaymentUpdate,
@@ -8,17 +10,40 @@ from app.schemas.billing import (
     SubscriptionPlanCreate, SubscriptionPlanUpdate, PlanFeatureCreate, PlanFeatureUpdate,
     PlanSubjectCreate, TrialExtensionCreate
 )
-from app.models.user import User
-from app.constants import DEFAULT_TRIAL_PERIOD_DAYS, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE
+
+from app.constants import (
+    BASIC_PLAN_PRICE_PER_SUBJECT, PREMIUM_PLAN_PRICE, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
+    BILLING_CYCLE_ANNUAL, DEFAULT_TRIAL_PERIOD_DAYS, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
+    PAYMENT_PLAN_BASIC
+)
 
 # Subscription CRUD operations
 
+def create_trial_subscription(db: Session, parent_id: int, student_id: int, trial_end_date: datetime) -> Subscription:
+    db_subscription = Subscription(
+        parent_id=parent_id,
+        student_id=student_id,
+        subject_ids='[]',  # Empty list for trial
+        status=subscription.status,
+        price=subscription.price,
+        currency=subscription.currency,
+        payment_method=subscription.payment_method,
+        trial_end_date=subscription.trial_end_date,
+        end_date=subscription.end_date
+    )
+
+    db.add(db_subscription)
+    db.commit()
+    db.refresh(db_subscription)
+    return db_subscription
+
 def create_subscription(db: Session, subscription: SubscriptionCreate, parent_id: int):
     """Create a new subscription for a parent"""
+
     db_subscription = Subscription(
         parent_id=parent_id,
         student_id=subscription.student_id,
-        subject_id=subscription.subject_id,
+        subject_ids=subscription.subject_ids,
         status=subscription.status,
         price=subscription.price,
         currency=subscription.currency,
@@ -43,6 +68,10 @@ def get_subscriptions_by_parent(db: Session, parent_id: int) -> List[Subscriptio
 def get_subscriptions_by_student(db: Session, student_id: int) -> List[Subscription]:
     """Get all subscriptions for a student"""
     return db.query(Subscription).filter(Subscription.student_id == student_id).all()
+
+def get_all_subscriptions(db: Session) -> List[Subscription]:
+    """Get all subscriptions"""
+    return db.query(Subscription).all()
 
 def update_subscription(db: Session, subscription_id: int, subscription_update: SubscriptionUpdate):
     """Update a subscription"""
@@ -471,25 +500,22 @@ def get_trial_extension(db: Session, extension_id: int):
 
 # Pricing calculation functions
 
-def calculate_subscription_price(db: Session, plan_id: int, num_subjects: int = 1, billing_cycle: str = "monthly") -> float:
+def calculate_subscription_price(db: Session, plan_id: int, num_subjects: int = 1, billing_cycle: str = BILLING_CYCLE_ANNUAL) -> float:
     """Calculate subscription price based on plan and billing cycle"""
-    from app.constants import BASIC_PLAN_PRICE_PER_SUBJECT, PREMIUM_PLAN_PRICE
 
     plan = get_subscription_plan(db, plan_id)
-    if not plan:
-        return 0.0
 
-    if plan.plan_type == "basic":
+    if plan.plan_type == PAYMENT_PLAN_BASIC:
         # Basic plan: fixed price per subject ($25 per subject)
         base_price = BASIC_PLAN_PRICE_PER_SUBJECT * num_subjects
     else:  # premium
-        # Premium plan: fixed price for all subjects ($80)
+        # Premium plan: fixed price for all subjects
         base_price = PREMIUM_PLAN_PRICE
 
     # Apply yearly discount if applicable (20%)
-    if billing_cycle == "yearly":
-        yearly_discount_factor = 1 - (20.00 / 100)  # 20% discount
-        final_price = base_price * yearly_discount_factor
+    if billing_cycle == BILLING_CYCLE_ANNUAL:
+        yearly_discount = Decimal(DEFAULT_YEARLY_DISCOUNT_PERCENTAGE / 100)
+        final_price = Decimal(plan.base_price) * Decimal(12) * (Decimal(1.0) - yearly_discount)
     else:
         final_price = base_price
 
@@ -587,8 +613,6 @@ def check_trial_status(db: Session, user_id: int) -> dict:
 
 def get_billing_summary(db: Session, user_id: int):
     """Get a summary of billing information for a user"""
-    from datetime import datetime
-    from app.crud.user import get_user
 
     subscriptions = get_subscriptions_by_parent(db, user_id)
     payments = get_payments_by_user(db, user_id)

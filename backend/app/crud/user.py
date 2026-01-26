@@ -102,5 +102,20 @@ def update_student(db: Session, student_id: int, student_update: StudentProfileU
     db.refresh(db_student)
     return db_student
 
+from app.models.billing import Subscription
+
+
 def get_students_by_parent(db: Session, parent_id: int):
-    return db.query(StudentProfile).filter(StudentProfile.parent_id == parent_id).all()
+    students = db.query(StudentProfile).filter(StudentProfile.parent_id == parent_id).all()
+    for student in students:
+        student.is_on_trial = if student.
+        subscription = db.query(Subscription).filter(Subscription.student_id == student.user_id).first()
+        if subscription:
+            student.is_on_trial = subscription.is_on_trial
+            student.has_active_subscription = subscription.has_active_subscription
+            student.active_subscription_id = subscription.id
+        else:
+            student.is_on_trial = False
+            student.has_active_subscription = False
+            student.active_subscription_id = None
+    return students

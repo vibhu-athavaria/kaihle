@@ -4,7 +4,7 @@ from sqlalchemy.sql import func
 from app.core.database import Base
 from app.crud.mixin import SerializerMixin
 import enum
-
+from app.constants import BILLING_CYCLE_ANNUAL
 class SubscriptionStatus(str, enum.Enum):
     ACTIVE = "active"
     CANCELLED = "cancelled"
@@ -25,9 +25,9 @@ class Subscription(Base, SerializerMixin):
     id = Column(Integer, primary_key=True, index=True)
     parent_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False) # Each subscription is tied to a specific student
-    subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)
+    subject_ids = Column(String(255), nullable=True)  # Store as comma-separated string of subject IDs
     plan_id = Column(Integer, ForeignKey("subscription_plans.id"), nullable=True)
-    billing_cycle = Column(String(20), default="monthly")  # monthly or yearly
+    billing_cycle = Column(String(20), default=BILLING_CYCLE_ANNUAL)
     status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE)
     start_date = Column(DateTime(timezone=True), server_default=func.now())
     end_date = Column(DateTime(timezone=True), nullable=True)

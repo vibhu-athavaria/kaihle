@@ -92,6 +92,10 @@ class StudentProfileResponse(BaseModel):
     interests: Optional[List[str]] = None
     preferred_format: Optional[str] = None
     preferred_session_length: Optional[int] = None
+    registration_completed_at: Optional[datetime] = None
+    is_on_trial: bool
+    has_active_subscription: bool
+    active_subscription_id: Optional[int] = None
     user: UserBase
 
     class Config:
@@ -99,9 +103,9 @@ class StudentProfileResponse(BaseModel):
 
 
 class LearningProfileUpdate(BaseModel):
-    interests: Optional[List[str]] = None
-    preferred_format: Optional[str] = None
-    preferred_session_length: Optional[int] = None
+    interests: List[str]
+    preferred_format: str
+    preferred_session_length: int
 
 class AssessmentSubjectStatus(BaseModel):
     assessment_id: int

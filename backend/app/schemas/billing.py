@@ -3,6 +3,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+from app.constants import BILLING_CYCLE_ANNUAL
 
 class SubscriptionStatus(str, Enum):
     active = "active"
@@ -20,16 +21,16 @@ class PaymentStatus(str, Enum):
 
 class SubscriptionBase(BaseModel):
     parent_id: int
-    student_id: Optional[int] = None  # Allow null for parent-level trials
-    subject_id: Optional[int] = None
+    student_id: int
+    subject_ids: List[int] = None
     status: SubscriptionStatus = SubscriptionStatus.active
-    price: float = 25.00
+    price: float
     currency: str = "USD"
-    payment_method: Optional[str] = None
+    payment_method: str
 
 class SubscriptionCreate(SubscriptionBase):
     trial_end_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
+    end_date: datetime
 
 class SubscriptionUpdate(BaseModel):
     status: Optional[SubscriptionStatus] = None
@@ -59,7 +60,10 @@ class PaymentBase(BaseModel):
     description: Optional[str] = None
 
 class PaymentCreate(PaymentBase):
-    pass
+    plan_id: int
+    billing_cycle: str = BILLING_CYCLE_ANNUAL  # monthly or annual
+    student_ids: List[int] = []
+    subject_ids: Optional[List[int]] = None
 
 class PaymentUpdate(BaseModel):
     status: Optional[PaymentStatus] = None

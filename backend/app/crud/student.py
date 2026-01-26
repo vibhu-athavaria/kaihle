@@ -1,4 +1,5 @@
 from sqlalchemy import desc
+from sqlalchemy.sql import func
 from sqlalchemy.orm import Session, selectinload
 from app.models.user import StudentProfile, User
 from app.models.assessment import Assessment
@@ -86,10 +87,12 @@ def update_student(db: Session, student_id: int, updates: StudentProfileUpdate) 
     if updates.preferred_session_length is not None:
         db_student_profile.preferred_session_length = updates.preferred_session_length
     # Handle profile completion by setting registration_completed_at
-    if updates.profile_completed is not None and updates.profile_completed:
-        if db_student_profile.registration_completed_at is None:
-            from sqlalchemy.sql import func
-            db_student_profile.registration_completed_at = func.now()
+    if db_student_profile.registration_completed_at is None and (
+        db_student_profile.interests and
+        db_student_profile.preferred_format and
+        db_student_profile.preferred_session_length
+    ):
+        db_student_profile.registration_completed_at = func.now()
 
     db.commit()
     db.refresh(db_student_profile)
@@ -97,24 +100,37 @@ def update_student(db: Session, student_id: int, updates: StudentProfileUpdate) 
     return db_student_profile
 
 def update_learning_profile(db: Session, student_id: int, updates: LearningProfileUpdate) -> StudentProfile | None:
+    create_trial_Subscription = False
     db_student_profile = db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
     if not db_student_profile:
         return None
 
-    if updates.interests is not None:
-        db_student_profile.interests = updates.interests
-    if updates.preferred_format is not None:
-        db_student_profile.preferred_format = updates.preferred_format
-    if updates.preferred_session_length is not None:
-        db_student_profile.preferred_session_length = updates.preferred_session_length
+    db_student_profile.interests = updates.interests
+    db_student_profile.preferred_format = updates.preferred_format
+    db_student_profile.preferred_session_length = updates.preferred_session_length
+
     # Handle profile completion by setting registration_completed_at
-    if updates.profile_completed is not None and updates.profile_completed:
-        if db_student_profile.registration_completed_at is None:
-            from sqlalchemy.sql import func
-            db_student_profile.registration_completed_at = func.now()
+    if db_student_profile.registration_completed_at is None:
+        db_student_profile.registration_completed_at = func.now()
+        create_trial_Subscription = True
 
     db.commit()
     db.refresh(db_student_profile)
+    if create_Subscription:
+
+        db_subscription = Subscription(
+        parent_id=parent_id,
+        student_id=subscription.student_id,
+        subject_ids=subscription.subject_ids,
+        status=subscription.status,
+        price=subscription.price,
+        currency=subscription.currency,
+        payment_method=subscription.payment_method,
+        trial_end_date=subscription.trial_end_date,
+        end_date=subscription.end_date
+    )
+
+        create_trial_subscription(db, db_student_profile.id)
     return db_student_profile
 
 def delete_student(db: Session, student_id: int) -> bool:

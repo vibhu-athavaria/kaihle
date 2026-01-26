@@ -60,11 +60,16 @@ PREFERRED_FORMATS = [
 
 PREFERRED_SESSION_LENGTHS = [15, 30, 45, 60]
 
+# Payment Plan Types
+PAYMENT_PLAN_BASIC = "basic"
+PAYMENT_PLAN_PREMIUM = "premium"
+
 # Billing Constants
 DEFAULT_TRIAL_PERIOD_DAYS = 15
 DEFAULT_YEARLY_DISCOUNT_PERCENTAGE = 20.00
-PREMIUM_BASE_PRICE = 90.00
+BILLING_CYCLE_MONTHLY = "monthly"
+BILLING_CYCLE_ANNUAL = "annual"
 
 # Subscription Plan Constants
 BASIC_PLAN_PRICE_PER_SUBJECT = 25.00  # $25 per subject per month
-PREMIUM_PLAN_PRICE = 80.00  # $80 per month for all subjects
+PREMIUM_PLAN_PRICE = 85.00  # $85 per month for all subjects

@@ -38,7 +38,8 @@ def read_my_students(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only parents can access student information"
         )
-    return get_students_by_parent(db, current_user.id)
+    students = get_students_by_parent(db, current_user.id)
+    return students
 
 @router.post("/me/students", response_model=StudentProfileResponse)
 def create_student_for_me(

@@ -21,22 +21,22 @@ export const TrialStatusNotice: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchBillingSummary = async () => {
+    const fetchSubscriptionSummary = async () => {
       if (!user) {
         setLoading(false);
         return;
       }
 
       try {
-        const response = await http.get('/api/v1/billing/summary');
+        const response = await http.get('/api/v1/billing/subscriptions');
         setBillingSummary(response.data);
 
         // Redirect to plans if trial expired and not on billing-related pages
-        const currentPath = window.location.pathname;
-        const isOnBillingPage = currentPath === '/plans' || currentPath === '/parent-settings' || currentPath === '/pricing' || currentPath === '/payment';
-        if (response.data.days_remaining_in_trial <= 0 && !isOnBillingPage) {
-          navigate('/plans');
-        }
+        // const currentPath = window.location.pathname;
+        // const isOnBillingPage = currentPath === '/plans' || currentPath === '/parent-settings' || currentPath === '/pricing' || currentPath === '/payment';
+        // if (response.data.days_remaining_in_trial <= 0 && !isOnBillingPage) {
+        //   navigate('/plans');
+        // }
       } catch (error) {
         console.error('Failed to fetch billing summary:', error);
       } finally {
@@ -44,7 +44,7 @@ export const TrialStatusNotice: React.FC = () => {
       }
     };
 
-    fetchBillingSummary();
+    fetchSubscriptionSummary();
   }, [user, navigate]);
 
   useEffect(() => {

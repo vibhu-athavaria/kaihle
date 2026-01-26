@@ -8,15 +8,15 @@ from app.core.database import get_db
 from app.core.deps import get_current_active_user, get_current_admin_user
 from app.crud.billing import (
     create_subscription, get_subscription, get_subscriptions_by_parent,
-    update_subscription, cancel_subscription, delete_subscription,
+    update_subscription, cancel_subscription, get_all_subscriptions,
     get_active_subscriptions, get_trial_subscriptions, is_in_free_trial,
     start_free_trial, create_payment, get_payment, get_payments_by_subscription,
     get_payments_by_user, update_payment, mark_payment_as_paid, mark_payment_as_failed,
     create_billing_info, get_billing_info, get_billing_info_by_user,
     get_default_billing_info, update_billing_info, delete_billing_info,
-    create_invoice, get_invoice, get_invoices_by_user, get_invoices_by_subscription,
-    update_invoice, mark_invoice_as_paid, get_billing_summary,
-    create_subscription_plan, get_subscription_plan, get_subscription_plan_by_name,
+    create_invoice, get_invoice, get_invoices_by_user,
+    mark_invoice_as_paid, get_billing_summary,
+    create_subscription_plan, get_subscription_plan, get_subscriptions_by_student,
     get_all_subscription_plans, get_active_subscription_plans, update_subscription_plan,
     delete_subscription_plan, create_plan_feature, get_plan_feature, get_plan_features_by_plan,
     update_plan_feature, delete_plan_feature, create_plan_subject, get_plan_subject,
@@ -38,7 +38,7 @@ from app.schemas.billing import (
 from app.models.user import User as UserModel
 from app.schemas.user import User
 from app.services.access_control_service import access_control_service
-from app.services.validation_service import validation_service
+
 
 router = APIRouter(tags=["billing"])
 
@@ -65,13 +65,17 @@ def get_my_subscriptions(
     current_user: UserModel = Depends(get_current_active_user)
 ):
     """Get current user's subscriptions (for parents)"""
-    if current_user.role != "parent":
+    if current_user.role == "parent":
+        return get_subscriptions_by_parent(db, current_user.id)
+    elif current_user.role == "student":
+        return get_subscriptions_by_student(db, current_user.id)
+    elif current_user.role == "admin":
+        return get_all_subscriptions(db)
+    else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only parents can access subscription information"
+            detail="Not authorized to view subscriptions"
         )
-
-    return get_subscriptions_by_parent(db, current_user.id)
 
 @router.get("/subscriptions/{subscription_id}", response_model=SubscriptionResponse)
 def get_subscription_details(
@@ -671,7 +675,7 @@ def mark_invoice_paid_endpoint(
 
 @router.post("/create-payment-intent")
 def create_payment_intent(
-    payment_data: dict,
+    payment_data: PaymentCreate,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_active_user)
 ):
@@ -682,10 +686,10 @@ def create_payment_intent(
     # Set your secret key
     stripe.api_key = settings.STRIPE_SECRET_KEY
 
-    plan_id = payment_data.get('plan_id')
-    billing_cycle = payment_data.get('billing_cycle', 'monthly')
-    student_ids = payment_data.get('student_ids', [])
-    subject_id = payment_data.get('subject_id')
+    plan_id = payment_data.plan_id
+    billing_cycle = payment_data.billing_cycle
+    student_ids = payment_data.student_ids
+    subject_ids = payment_data.subject_ids
 
     # Get plan details
     plan = get_subscription_plan(db, plan_id)
@@ -693,14 +697,14 @@ def create_payment_intent(
         raise HTTPException(status_code=404, detail="Plan not found")
 
     # Validate subject selection based on plan type
-    if plan.plan_type == "basic" and not subject_id:
+    if plan.plan_type == "basic" and (not subject_ids or len(subject_ids) == 0):
         raise HTTPException(status_code=400, detail="Subject is required for Basic plan")
 
-    if plan.plan_type == "premium" and subject_id:
+    if plan.plan_type == "premium" and subject_ids:
         raise HTTPException(status_code=400, detail="Subject should not be specified for Premium plan")
 
     # Calculate price per student
-    base_price = calculate_subscription_price(db, plan_id, billing_cycle=billing_cycle)
+    base_price = calculate_subscription_price(db, plan_id, len(subject_ids), billing_cycle)
     total_price = base_price * len(student_ids)
 
     try:
@@ -713,7 +717,7 @@ def create_payment_intent(
                 'billing_cycle': billing_cycle,
                 'user_id': current_user.id,
                 'student_ids': ','.join(map(str, student_ids)),
-                'subject_id': str(subject_id) if subject_id else None
+                'subject_ids': ','.join(map(str, subject_ids)) if subject_ids else ''
             }
         )
 
@@ -943,13 +947,13 @@ def get_subscription_plans(
     plans = get_all_subscription_plans(db)
     for plan in plans:
         if plan.plan_type == 'basic':
-            plan.base_price = BASIC_PLAN_PRICE_PER_SUBJECT  # $25 per subject
-            # For yearly pricing, apply 20% discount to annual amount
+            plan.base_price = BASIC_PLAN_PRICE_PER_SUBJECT
+            # For yearly pricing, apply discount to annual amount
             yearly_discount = Decimal(DEFAULT_YEARLY_DISCOUNT_PERCENTAGE / 100)
             plan.yearly_price = Decimal(plan.base_price) * Decimal(12) * (Decimal(1.0) - yearly_discount)
         elif plan.plan_type == 'premium':
-            plan.base_price = PREMIUM_PLAN_PRICE  # $80 for all subjects
-            # For yearly pricing, apply 20% discount to annual amount
+            plan.base_price = PREMIUM_PLAN_PRICE
+            # For yearly pricing, apply discount to annual amount
             yearly_discount = Decimal(DEFAULT_YEARLY_DISCOUNT_PERCENTAGE / 100)
             plan.yearly_price = Decimal(plan.base_price) * Decimal(12) * (Decimal(1.0) - yearly_discount)
     return plans

@@ -14,6 +14,8 @@ from app.crud.user import get_user
 from app.models.user import User
 from app.schemas.billing import SubscriptionCreate, PaymentCreate
 from app.core.config import settings
+from app.constants import BILLING_CYCLE_ANNUAL, BILLING_CYCLE_MONTHLY
+
 
 class BillingService:
     """Service for handling billing and subscription logic"""
@@ -38,7 +40,7 @@ class BillingService:
 
     def calculate_subscription_cost(
         self, db: Session, plan_id: int, num_subjects: int = 1,
-        billing_cycle: str = "monthly", is_trial: bool = False
+        billing_cycle: str = BILLING_CYCLE_ANNUAL, is_trial: bool = False
     ) -> float:
         """Calculate the subscription cost based on plan and billing cycle"""
         if is_trial:
@@ -49,7 +51,7 @@ class BillingService:
 
     def create_monthly_subscription(
         self, db: Session, parent_id: int, student_ids: List[int],
-        plan_id: int, billing_cycle: str = "monthly", payment_method: str = "credit_card",
+        plan_id: int, billing_cycle: str =BILLING_CYCLE_ANNUAL, payment_method: str = "credit_card",
         subject_id: Optional[int] = None
     ) -> List[Any]:
         """Create subscriptions based on selected plan"""
@@ -75,7 +77,7 @@ class BillingService:
 
             # Calculate end date based on billing cycle
             start_date = datetime.now()
-            if billing_cycle == "monthly":
+            if billing_cycle == BILLING_CYCLE_MONTHLY:
                 end_date = start_date + timedelta(days=30)
             else:  # yearly
                 end_date = start_date + timedelta(days=365)
@@ -257,8 +259,8 @@ class BillingService:
 
         for plan in plans:
             # Calculate monthly and yearly prices
-            monthly_price = calculate_subscription_price(db, plan.id, 1, "monthly")
-            yearly_price = calculate_subscription_price(db, plan.id, 1, "yearly")
+            monthly_price = calculate_subscription_price(db, plan.id, 1, BILLING_CYCLE_MONTHLY)
+            yearly_price = calculate_subscription_price(db, plan.id, 1, BILLING_CYCLE_ANNUAL)
 
             # Get features for this plan
             features = get_plan_features_by_plan(db, plan.id)
@@ -295,7 +297,7 @@ class BillingService:
         return {
             "pricing_options": pricing_options,
             "free_trial_days": self.FREE_TRIAL_DAYS,
-            "available_billing_cycles": ["monthly", "yearly"],
+            "available_billing_cycles": [BILLING_CYCLE_MONTHLY, BILLING_CYCLE_ANNUAL],
             "total_subjects_available": get_total_subjects_count(db),
             "plan_types": [
                 {

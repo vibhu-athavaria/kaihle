@@ -35,14 +35,6 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     # Create the user
     db_user = create_user(db=db, user=user)
 
-    # Start free trial for new parents
-    if user.role == UserRole.PARENT.value:
-        try:
-            billing_service.start_free_trial_for_new_parent(db, db_user.id)
-        except Exception as e:
-            # Log the error but don't fail signup if trial creation fails
-            print(f"Failed to start trial for new parent {db_user.id}: {e}")
-
     return db_user
 
 
