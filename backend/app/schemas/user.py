@@ -82,7 +82,6 @@ class StudentProfileUpdate(BaseModel):
     interests: Optional[List[str]] = None
     preferred_format: Optional[str] = None
     preferred_session_length: Optional[int] = None
-    profile_completed: Optional[bool] = None
 
 
 class StudentProfileResponse(BaseModel):
@@ -93,7 +92,6 @@ class StudentProfileResponse(BaseModel):
     interests: Optional[List[str]] = None
     preferred_format: Optional[str] = None
     preferred_session_length: Optional[int] = None
-    profile_completed: bool = False
     user: UserBase
 
     class Config:
@@ -104,7 +102,6 @@ class LearningProfileUpdate(BaseModel):
     interests: Optional[List[str]] = None
     preferred_format: Optional[str] = None
     preferred_session_length: Optional[int] = None
-    profile_completed: Optional[bool] = None
 
 class AssessmentSubjectStatus(BaseModel):
     assessment_id: int
@@ -121,7 +118,6 @@ class StudentDetailResponse(BaseModel):
     interests: Optional[List[str]] = None
     preferred_format: Optional[str] = None
     preferred_session_length: Optional[int] = None
-    profile_completed: bool = False
     user: Optional[UserBase] = None
     assessments: Dict[str, AssessmentSubjectStatus]
 

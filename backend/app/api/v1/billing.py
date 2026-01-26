@@ -1,6 +1,6 @@
 from decimal import Decimal
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 
@@ -843,7 +843,7 @@ async def stripe_webhook(
 
     return {"status": "success"}
 
-async def handle_payment_success(db: Session, payment_intent: stripe.PaymentIntent):
+async def handle_payment_success(db: Session, payment_intent):
     """Handle successful payment"""
     # Get metadata from payment intent
     metadata = payment_intent.metadata or {}
@@ -868,7 +868,7 @@ async def handle_payment_success(db: Session, payment_intent: stripe.PaymentInte
             subscription.payment_status = "paid"
             db.commit()
 
-async def handle_payment_failed(db: Session, payment_intent: stripe.PaymentIntent):
+async def handle_payment_failed(db: Session, payment_intent):
     """Handle failed payment"""
     # Get metadata from payment intent
     metadata = payment_intent.metadata or {}
@@ -890,7 +890,7 @@ async def handle_payment_failed(db: Session, payment_intent: stripe.PaymentInten
             subscription.payment_status = "failed"
             db.commit()
 
-async def handle_subscription_update(db: Session, stripe_subscription: stripe.Subscription):
+async def handle_subscription_update(db: Session, stripe_subscription):
     """Handle subscription updates from Stripe"""
     # Get metadata from subscription
     metadata = stripe_subscription.metadata or {}
@@ -916,7 +916,7 @@ async def handle_subscription_update(db: Session, stripe_subscription: stripe.Su
             subscription.payment_status = 'paid' if stripe_status == 'active' else 'pending'
             db.commit()
 
-async def handle_subscription_cancellation(db: Session, stripe_subscription: stripe.Subscription):
+async def handle_subscription_cancellation(db: Session, stripe_subscription):
     """Handle subscription cancellations from Stripe"""
     # Get metadata from subscription
     metadata = stripe_subscription.metadata or {}

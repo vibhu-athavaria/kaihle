@@ -85,8 +85,11 @@ def update_student(db: Session, student_id: int, updates: StudentProfileUpdate) 
         db_student_profile.preferred_format = updates.preferred_format
     if updates.preferred_session_length is not None:
         db_student_profile.preferred_session_length = updates.preferred_session_length
-    if updates.profile_completed is not None:
-        db_student_profile.profile_completed = updates.profile_completed
+    # Handle profile completion by setting registration_completed_at
+    if updates.profile_completed is not None and updates.profile_completed:
+        if db_student_profile.registration_completed_at is None:
+            from sqlalchemy.sql import func
+            db_student_profile.registration_completed_at = func.now()
 
     db.commit()
     db.refresh(db_student_profile)
@@ -104,8 +107,11 @@ def update_learning_profile(db: Session, student_id: int, updates: LearningProfi
         db_student_profile.preferred_format = updates.preferred_format
     if updates.preferred_session_length is not None:
         db_student_profile.preferred_session_length = updates.preferred_session_length
-    if updates.profile_completed is not None:
-        db_student_profile.profile_completed = updates.profile_completed
+    # Handle profile completion by setting registration_completed_at
+    if updates.profile_completed is not None and updates.profile_completed:
+        if db_student_profile.registration_completed_at is None:
+            from sqlalchemy.sql import func
+            db_student_profile.registration_completed_at = func.now()
 
     db.commit()
     db.refresh(db_student_profile)

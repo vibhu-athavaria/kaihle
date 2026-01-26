@@ -24,7 +24,6 @@ const CompleteProfile: React.FC = () => {
         interests: user.student_profile.interests,
         preferred_format: user.student_profile.preferred_format,
         preferred_session_length: user.student_profile.preferred_session_length,
-        profile_completed: user.student_profile.profile_completed
       });
     }
     setLoading(false);
@@ -48,14 +47,13 @@ const CompleteProfile: React.FC = () => {
       });
 
       const response = await http.patch(`/api/v1/students/${currentChild.id}/learning-profile`, {
-        ...profileData,
-        profile_completed: true
+        ...profileData
       });
 
       console.log('Profile saved successfully:', response.data);
 
       // Update local storage
-      const updatedChild = { ...currentChild, ...profileData, profile_completed: true };
+      const updatedChild = { ...currentChild, ...profileData };
       localStorage.setItem('currentChild', JSON.stringify(updatedChild));
       // Update in children list
       const children = JSON.parse(localStorage.getItem('children') || '[]');
