@@ -8,12 +8,13 @@ import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ArrowRight, Edit, UserCheck } from "lucide-react"
 
+
 interface Child {
   id: string
   name: string
   age: number
   grade: number | string
-  profile_completed?: boolean
+  registration_completed_at: Date
 }
 
 export const Dashboard: React.FC = () => {
@@ -37,7 +38,7 @@ export const Dashboard: React.FC = () => {
           username: child.user?.username || "unknown",
           age: child.age,
           grade: child.grade_level || "N/A",
-          profile_completed: child.profile_completed || false,
+          registration_completed: child.registration_completed_at !== null,
         }))
 
         setChildren(mappedChildren)
@@ -110,7 +111,7 @@ export const Dashboard: React.FC = () => {
                   </p>
 
                   <div className="mt-4 flex gap-3 flex-wrap">
-                    {!child.profile_completed && (
+                    {child.registration_completed === false && (
                       <Button
                         variant="secondary"
                         className="bg-green-600 text-white hover:bg-green-700 px-6 py-3 rounded-xl font-medium transition-all duration-200 transform hover:scale-105 shadow-md hover:shadow-lg"

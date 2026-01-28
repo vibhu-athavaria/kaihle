@@ -1,7 +1,9 @@
+from decimal import Decimal
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+from app.constants import BILLING_CYCLE_ANNUAL
 
 class SubscriptionStatus(str, Enum):
     active = "active"
@@ -20,15 +22,15 @@ class PaymentStatus(str, Enum):
 class SubscriptionBase(BaseModel):
     parent_id: int
     student_id: int
-    subject_id: Optional[int] = None
+    subject_ids: List[int] = None
     status: SubscriptionStatus = SubscriptionStatus.active
-    price: float = 25.00
+    price: float
     currency: str = "USD"
-    payment_method: Optional[str] = None
+    payment_method: str
 
 class SubscriptionCreate(SubscriptionBase):
     trial_end_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
+    end_date: datetime
 
 class SubscriptionUpdate(BaseModel):
     status: Optional[SubscriptionStatus] = None
@@ -58,7 +60,10 @@ class PaymentBase(BaseModel):
     description: Optional[str] = None
 
 class PaymentCreate(PaymentBase):
-    pass
+    plan_id: int
+    billing_cycle: str = BILLING_CYCLE_ANNUAL  # monthly or annual
+    student_ids: List[int] = []
+    subject_ids: Optional[List[int]] = None
 
 class PaymentUpdate(BaseModel):
     status: Optional[PaymentStatus] = None
@@ -146,9 +151,14 @@ class UserBillingSummary(BaseModel):
     active_subscriptions: int = 0
     trial_subscriptions: int = 0
     past_due_subscriptions: int = 0
-    total_due: float = 0.0
+    total_monthly_cost: float = 0.0
     next_payment_date: Optional[datetime] = None
+    in_free_trial: bool = False
+    trial_end_date: Optional[datetime] = None
+    trial_start_date: Optional[datetime] = None
+    days_remaining_in_trial: int = 0
     payment_methods: int = 0
+    has_payment_method: bool = False
 
 class PaymentMethodResponse(BaseModel):
     id: int
@@ -174,6 +184,24 @@ class SubscriptionPlanBase(BaseModel):
 class SubscriptionPlanCreate(SubscriptionPlanBase):
     pass
 
+class TrialExtensionBase(BaseModel):
+    subscription_id: int
+    extended_by_admin_id: int
+    extension_days: int
+    reason: Optional[str] = None
+
+class TrialExtensionCreate(TrialExtensionBase):
+    pass
+
+class TrialExtensionResponse(TrialExtensionBase):
+    id: int
+    original_trial_end: datetime
+    new_trial_end: datetime
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class SubscriptionPlanUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
@@ -188,8 +216,9 @@ class SubscriptionPlanUpdate(BaseModel):
 
 class SubscriptionPlanResponse(SubscriptionPlanBase):
     id: int
+    yearly_price: Optional[Decimal] = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Assessment settings
     MAX_QUESTIONS_PER_ASSESSMENT: int = 32
 
+    # Stripe
+    STRIPE_SECRET_KEY: str = "sk_test_your_stripe_secret_key"
+    STRIPE_PUBLISHABLE_KEY: str = "pk_test_your_stripe_publishable_key"
+
 
     class Config:
         env_file = ".env"

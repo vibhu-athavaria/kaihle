@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Trophy, Sparkles, Lock, FileText, ArrowRight, PlayCircle, Award } from "lucide-react";
+import { Trophy, Sparkles, Lock, FileText, ArrowRight, PlayCircle, Award, Clock, AlertTriangle } from "lucide-react";
 
 import { Progress } from "@/components/ui/progress";
 import { http } from "@/lib/http";
@@ -41,6 +41,8 @@ export const ChildDashboard: React.FC = () => {
 
   const [child, setChild] = useState<Child | null>(null);
   const [subjects, setSubjects] = useState<Record<Subject, SubjectData>>({} as any);
+  const [trialExpired, setTrialExpired] = useState(false);
+  const [checkingTrial, setCheckingTrial] = useState(true);
 
   /* ---------------------------------- */
   /* Navigation */
@@ -97,25 +99,102 @@ export const ChildDashboard: React.FC = () => {
   /* ---------------------------------- */
 
   useEffect(() => {
-    if (!user?.student_profile?.profile_completed) {
+    console.log('ChildDashboard useEffect running, user:', user);
+    if (!user?.student_profile?.registration_completed_at) {
+      console.log('Navigating to complete-profile');
       navigate('/complete-profile');
       return;
     }
-    if (!user?.student_profile?.id) return;
+    if (!user?.student_profile?.id) {
+      console.log('No student id, returning');
+      return;
+    }
 
-    const fetchStudent = async () => {
-      const res = await http.get(`/api/v1/students/${user.student_profile.id}`);
-      setChild(res.data);
+    const checkSubscriptionAndFetchStudent = async () => {
+      console.log('Starting checkSubscriptionAndFetchStudent');
+      try {
+        // // Check if this specific student has an active subscription
+        // const subscriptionsResponse = await http.get(`/api/v1/billing/subscriptions/active?user_id=${user.student_profile.id}`);
+        // const activeSubscriptions = subscriptionsResponse.data;
 
-      const mapped = {} as Record<Subject, SubjectData>;
-      (Object.keys(SUBJECT_UI) as Subject[]).forEach(
-        (s) => (mapped[s] = mapSubjectFromApi(s, res.data))
-      );
-      setSubjects(mapped);
+        // // Check if current student has an active subscription
+        // const hasActiveSubscription = activeSubscriptions.some((sub: any) =>
+        //   sub.student_id === user.student_profile.id && sub.status === 'active'
+        // );
+
+        // if (!hasActiveSubscription) {
+        //   // Check if parent has trial
+        //   const billingResponse = await http.get('/api/v1/billing/summary');
+        //   const billingSummary = billingResponse.data;
+
+        //   // If no trial or trial expired, show trial expired
+        //   if (!billingSummary.in_free_trial || billingSummary.days_remaining_in_trial <= 0) {
+        //     console.log('Trial expired, setting trialExpired true');
+        //     setTrialExpired(true);
+        //     setCheckingTrial(false);
+        //     return;
+        //   }
+        // }
+
+        // Student has active subscription or trial is active, proceed with normal dashboard
+        console.log('Fetching student data');
+        const res = await http.get(`/api/v1/students/${user.student_profile.id}`);
+        setChild(res.data);
+
+        const mapped = {} as Record<Subject, SubjectData>;
+        (Object.keys(SUBJECT_UI) as Subject[]).forEach(
+          (s) => (mapped[s] = mapSubjectFromApi(s, res.data))
+        );
+        setSubjects(mapped);
+        setCheckingTrial(false);
+        console.log('Finished checkSubscriptionAndFetchStudent');
+      } catch (error) {
+        console.error('Error checking subscription status:', error);
+        // On error, allow access (fail open)
+        setCheckingTrial(false);
+      }
     };
 
-    fetchStudent();
-  }, [user, navigate]);
+    checkSubscriptionAndFetchStudent();
+  }, [user?.student_profile?.id, navigate]);
+
+  if (checkingTrial) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Checking access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (trialExpired) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
+          <div className="mb-6">
+            <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Trial Period Expired</h1>
+            <p className="text-gray-600">
+              Your free trial has ended. Please ask your parent to subscribe to continue learning.
+            </p>
+          </div>
+          <div className="space-y-3">
+            <button
+              onClick={() => navigate('/student-login')}
+              className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+            >
+              Back to Login
+            </button>
+            <p className="text-sm text-gray-500">
+              Contact your parent to upgrade your account
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!child) return null;
 

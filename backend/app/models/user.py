@@ -66,7 +66,9 @@ class StudentProfile(Base, SerializerMixin):
     interests = Column(JSON, nullable=True)
     preferred_format = Column(String, nullable=True)
     preferred_session_length = Column(Integer, nullable=True)
-    profile_completed = Column(Boolean, default=False, nullable=False)
+    registration_completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # --- Relationships ---
     user = relationship(

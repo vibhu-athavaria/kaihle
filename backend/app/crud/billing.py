@@ -1,23 +1,49 @@
 from sqlalchemy.orm import Session
+from decimal import Decimal
 from typing import List, Optional
 from datetime import datetime, timedelta
-from app.models.billing import Subscription, Payment, BillingInfo, Invoice, SubscriptionPlan, PlanFeature, PlanSubject
+from app.crud.user import get_user
+from app.models.billing import Subscription, Payment, BillingInfo, Invoice, SubscriptionPlan, PlanFeature, PlanSubject, TrialExtension
 from app.schemas.billing import (
     SubscriptionCreate, SubscriptionUpdate, PaymentCreate, PaymentUpdate,
     BillingInfoCreate, BillingInfoUpdate, InvoiceCreate, InvoiceUpdate,
     SubscriptionPlanCreate, SubscriptionPlanUpdate, PlanFeatureCreate, PlanFeatureUpdate,
-    PlanSubjectCreate
+    PlanSubjectCreate, TrialExtensionCreate
 )
-from app.models.user import User
+
+from app.constants import (
+    BASIC_PLAN_PRICE_PER_SUBJECT, PREMIUM_PLAN_PRICE, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
+    BILLING_CYCLE_ANNUAL, DEFAULT_TRIAL_PERIOD_DAYS, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
+    PAYMENT_PLAN_BASIC
+)
 
 # Subscription CRUD operations
 
+def create_trial_subscription(db: Session, parent_id: int, student_id: int, trial_end_date: datetime) -> Subscription:
+    db_subscription = Subscription(
+        parent_id=parent_id,
+        student_id=student_id,
+        subject_ids='[]',  # Empty list for trial
+        status=subscription.status,
+        price=subscription.price,
+        currency=subscription.currency,
+        payment_method=subscription.payment_method,
+        trial_end_date=subscription.trial_end_date,
+        end_date=subscription.end_date
+    )
+
+    db.add(db_subscription)
+    db.commit()
+    db.refresh(db_subscription)
+    return db_subscription
+
 def create_subscription(db: Session, subscription: SubscriptionCreate, parent_id: int):
     """Create a new subscription for a parent"""
+
     db_subscription = Subscription(
         parent_id=parent_id,
         student_id=subscription.student_id,
-        subject_id=subscription.subject_id,
+        subject_ids=subscription.subject_ids,
         status=subscription.status,
         price=subscription.price,
         currency=subscription.currency,
@@ -42,6 +68,10 @@ def get_subscriptions_by_parent(db: Session, parent_id: int) -> List[Subscriptio
 def get_subscriptions_by_student(db: Session, student_id: int) -> List[Subscription]:
     """Get all subscriptions for a student"""
     return db.query(Subscription).filter(Subscription.student_id == student_id).all()
+
+def get_all_subscriptions(db: Session) -> List[Subscription]:
+    """Get all subscriptions"""
+    return db.query(Subscription).all()
 
 def update_subscription(db: Session, subscription_id: int, subscription_update: SubscriptionUpdate):
     """Update a subscription"""
@@ -78,12 +108,23 @@ def delete_subscription(db: Session, subscription_id: int) -> bool:
     db.commit()
     return True
 
-def get_active_subscriptions(db: Session, parent_id: int) -> List[Subscription]:
-    """Get all active subscriptions for a parent"""
-    return db.query(Subscription).filter(
-        Subscription.parent_id == parent_id,
+def get_active_subscriptions(db: Session, user_id: Optional[int] = None) -> List[Subscription]:
+    """Get all active subscriptions for a user (parent or student)"""
+    # Check if this is a parent user by looking for subscriptions where they are the parent
+    parent_subscriptions = db.query(Subscription).filter(
+        Subscription.parent_id == user_id,
         Subscription.status.in_(["active", "trial"])
     ).all()
+
+    # If no parent subscriptions found, check if this is a student user
+    if not parent_subscriptions:
+        student_subscriptions = db.query(Subscription).filter(
+            Subscription.student_id == user_id,
+            Subscription.status.in_(["active", "trial"])
+        ).all()
+        return student_subscriptions
+
+    return parent_subscriptions
 
 def get_trial_subscriptions(db: Session, parent_id: int) -> List[Subscription]:
     """Get all trial subscriptions for a parent"""
@@ -103,13 +144,13 @@ def is_in_free_trial(db: Session, parent_id: int) -> bool:
 
     return False
 
-def start_free_trial(db: Session, parent_id: int, student_id: int, subject_id: Optional[int] = None) -> Subscription:
+def start_free_trial(db: Session, parent_id: int, student_id: Optional[int] = None, subject_id: Optional[int] = None) -> Subscription:
     """Start a free trial for a parent"""
-    trial_end_date = datetime.now() + timedelta(days=15)
+    trial_end_date = datetime.now() + timedelta(days=DEFAULT_TRIAL_PERIOD_DAYS)
 
     subscription_create = SubscriptionCreate(
         parent_id=parent_id,
-        student_id=student_id,
+        student_id=student_id,  # Can be None for parent-level trials
         subject_id=subject_id,
         status="trial",
         price=25.00,
@@ -291,7 +332,7 @@ def create_subscription_plan(db: Session, plan: SubscriptionPlanCreate) -> Subsc
         discount_percentage=plan.discount_percentage,
         currency=plan.currency,
         trial_days=plan.trial_days,
-        yearly_discount=plan.yearly_discount,
+        yearly_discount=DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
         is_active=plan.is_active,
         sort_order=plan.sort_order,
         plan_type=plan.plan_type
@@ -424,30 +465,57 @@ def delete_plan_subject(db: Session, plan_subject_id: int) -> bool:
     db.commit()
     return True
 
+# Trial Extension CRUD operations
+
+def create_trial_extension(db: Session, trial_extension: TrialExtensionCreate):
+    """Create a trial extension record"""
+    db_extension = TrialExtension(
+        subscription_id=trial_extension.subscription_id,
+        extended_by_admin_id=trial_extension.extended_by_admin_id,
+        extension_days=trial_extension.extension_days,
+        reason=trial_extension.reason
+    )
+
+    # Set original and new trial end dates
+    subscription = get_subscription(db, trial_extension.subscription_id)
+    if subscription and subscription.trial_end_date:
+        db_extension.original_trial_end = subscription.trial_end_date
+        db_extension.new_trial_end = subscription.trial_end_date + timedelta(days=trial_extension.extension_days)
+
+        # Update the subscription's trial end date
+        subscription.trial_end_date = db_extension.new_trial_end
+
+    db.add(db_extension)
+    db.commit()
+    db.refresh(db_extension)
+    return db_extension
+
+def get_trial_extensions_by_subscription(db: Session, subscription_id: int):
+    """Get all trial extensions for a subscription"""
+    return db.query(TrialExtension).filter(TrialExtension.subscription_id == subscription_id).all()
+
+def get_trial_extension(db: Session, extension_id: int):
+    """Get a trial extension by ID"""
+    return db.query(TrialExtension).filter(TrialExtension.id == extension_id).first()
+
 # Pricing calculation functions
 
-def calculate_subscription_price(db: Session, plan_id: int, num_subjects: int = 1, billing_cycle: str = "monthly") -> float:
+def calculate_subscription_price(db: Session, plan_id: int, num_subjects: int = 1, billing_cycle: str = BILLING_CYCLE_ANNUAL) -> float:
     """Calculate subscription price based on plan and billing cycle"""
+
     plan = get_subscription_plan(db, plan_id)
-    if not plan:
-        return 0.0
 
-    if plan.plan_type == "basic":
-        # Basic plan: fixed price per subject
-        base_price = float(plan.base_price) * num_subjects
+    if plan.plan_type == PAYMENT_PLAN_BASIC:
+        # Basic plan: fixed price per subject ($25 per subject)
+        base_price = BASIC_PLAN_PRICE_PER_SUBJECT * num_subjects
     else:  # premium
-        # Premium plan: calculate total basic price for all subjects, then apply discount
-        # Get total number of available subjects from database
-        from app.models.subject import Subject
-        total_subjects = db.query(Subject).count()
-        total_basic_price = float(plan.base_price) * total_subjects
-        discounted_price = total_basic_price * (1 - (float(plan.discount_percentage) / 100))
-        base_price = discounted_price
+        # Premium plan: fixed price for all subjects
+        base_price = PREMIUM_PLAN_PRICE
 
-    # Apply yearly discount if applicable
-    if billing_cycle == "yearly":
-        yearly_discount_factor = 1 - (float(plan.yearly_discount) / 100)
-        final_price = base_price * yearly_discount_factor
+    # Apply yearly discount if applicable (20%)
+    if billing_cycle == BILLING_CYCLE_ANNUAL:
+        yearly_discount = Decimal(DEFAULT_YEARLY_DISCOUNT_PERCENTAGE / 100)
+        final_price = Decimal(plan.base_price) * Decimal(12) * (Decimal(1.0) - yearly_discount)
     else:
         final_price = base_price
 
@@ -519,20 +587,76 @@ def mark_invoice_as_paid(db: Session, invoice_id: int):
 
 # Billing Summary and Helper Functions
 
+def check_trial_status(db: Session, user_id: int) -> dict:
+    """Check if user has active trials and their status"""
+    from datetime import datetime
+
+    subscriptions = get_subscriptions_by_parent(db, user_id)
+    trial_subs = [sub for sub in subscriptions if sub.status == "trial"]
+
+    if not trial_subs:
+        return {"has_trial": False, "trial_expired": False, "days_remaining": 0}
+
+    # Find the latest trial end date
+    trial_end_dates = [sub.trial_end_date for sub in trial_subs if sub.trial_end_date]
+    if not trial_end_dates:
+        return {"has_trial": True, "trial_expired": False, "days_remaining": 0}
+
+    latest_trial_end = max(trial_end_dates)
+    now = datetime.now()
+
+    if latest_trial_end > now:
+        days_remaining = (latest_trial_end - now).days
+        return {"has_trial": True, "trial_expired": False, "days_remaining": days_remaining}
+    else:
+        return {"has_trial": True, "trial_expired": True, "days_remaining": 0}
+
 def get_billing_summary(db: Session, user_id: int):
     """Get a summary of billing information for a user"""
+
     subscriptions = get_subscriptions_by_parent(db, user_id)
     payments = get_payments_by_user(db, user_id)
     billing_info = get_billing_info_by_user(db, user_id)
+    user = get_user(db, user_id)
 
     active_subs = [sub for sub in subscriptions if sub.status in ["active", "trial"]]
     trial_subs = [sub for sub in subscriptions if sub.status == "trial"]
     past_due_subs = [sub for sub in subscriptions if sub.status == "past_due"]
 
-    # Calculate total due
-    total_due = 0.0
-    for sub in past_due_subs:
-        total_due += float(sub.price)
+    # Calculate total monthly cost (sum of all active subscription prices)
+    total_monthly_cost = 0.0
+    for sub in active_subs:
+        if sub.status == "active":  # Only count paid subscriptions for monthly cost
+            total_monthly_cost += float(sub.price)
+
+    # Check if user is in free trial
+    in_free_trial = len(trial_subs) > 0
+
+    # Find trial end date and days remaining
+    trial_end_date = None
+    trial_start_date = None
+    days_remaining_in_trial = 0
+    if trial_subs:
+        # Find the latest trial end date
+        trial_end_dates = [sub.trial_end_date for sub in trial_subs if sub.trial_end_date]
+        if trial_end_dates:
+            trial_end_date = max(trial_end_dates)
+            if trial_end_date > datetime.now():
+                days_remaining_in_trial = (trial_end_date - datetime.now()).days
+            else:
+                days_remaining_in_trial = 0
+
+        # Calculate trial start date from user registration if no explicit trial start
+        if user and user.created_at:
+            trial_start_date = user.created_at
+    elif active_subs == 0 and user and user.created_at:
+        # For users with no subscriptions, assume trial started at registration
+        trial_start_date = user.created_at
+        trial_end_date = user.created_at + timedelta(days=DEFAULT_TRIAL_PERIOD_DAYS)
+        if trial_end_date > datetime.now():
+            days_remaining_in_trial = (trial_end_date - datetime.now()).days
+        else:
+            days_remaining_in_trial = 0
 
     # Find next payment date
     pending_payments = [p for p in payments if p.status == "pending"]
@@ -541,11 +665,19 @@ def get_billing_summary(db: Session, user_id: int):
         # Find the earliest due payment
         next_payment_date = min(p.payment_date for p in pending_payments if p.payment_date)
 
+    # Check if user has payment methods
+    has_payment_method = len(billing_info) > 0
+
     return {
         "active_subscriptions": len(active_subs),
         "trial_subscriptions": len(trial_subs),
         "past_due_subscriptions": len(past_due_subs),
-        "total_due": total_due,
+        "total_monthly_cost": total_monthly_cost,
         "next_payment_date": next_payment_date,
-        "payment_methods": len(billing_info)
+        "in_free_trial": in_free_trial,
+        "trial_end_date": trial_end_date,
+        "trial_start_date": trial_start_date,
+        "days_remaining_in_trial": days_remaining_in_trial,
+        "payment_methods": len(billing_info),
+        "has_payment_method": has_payment_method
     }

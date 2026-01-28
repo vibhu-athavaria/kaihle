@@ -12,4 +12,4 @@ class Subject(Base, SerializerMixin):
 
     # Relationships
     micro_courses = relationship("MicroCourse", back_populates="subject")
-    subscriptions = relationship("Subscription", back_populates="subject")
+    # subscriptions = relationship("Subscription", back_populates="subject")

@@ -24,7 +24,6 @@ const CompleteProfile: React.FC = () => {
         interests: user.student_profile.interests,
         preferred_format: user.student_profile.preferred_format,
         preferred_session_length: user.student_profile.preferred_session_length,
-        profile_completed: user.student_profile.profile_completed
       });
     }
     setLoading(false);
@@ -42,27 +41,43 @@ const CompleteProfile: React.FC = () => {
     }
 
     try {
-      console.log('Submitting profile data:', {
-        studentId: currentChild.id,
-        profileData: { ...profileData, profile_completed: true }
-      });
 
       const response = await http.patch(`/api/v1/students/${currentChild.id}/learning-profile`, {
-        ...profileData,
-        profile_completed: true
+        ...profileData
       });
 
-      console.log('Profile saved successfully:', response.data);
+      const updatedChildFromServer = response.data;
 
-      // Update local storage
-      const updatedChild = { ...currentChild, ...profileData, profile_completed: true };
-      localStorage.setItem('currentChild', JSON.stringify(updatedChild));
-      // Update in children list
-      const children = JSON.parse(localStorage.getItem('children') || '[]');
-      const updatedChildren = children.map((c: any) => c.id === currentChild.id ? updatedChild : c);
+      // Read existing children
+      const existingChildren = JSON.parse(
+        localStorage.getItem('children') || '[]'
+      );
+
+      // Replace updated student using server response
+      const updatedChildren = existingChildren.map((c: any) =>
+        c.id === updatedChildFromServer.id
+          ? updatedChildFromServer
+          : c
+      );
+
+      // Persist server-truth state
       localStorage.setItem('children', JSON.stringify(updatedChildren));
-      navigate('/dashboard');
-    } catch (err: any) {
+      localStorage.setItem(
+        'currentChild',
+        JSON.stringify(updatedChildFromServer)
+      );
+
+      // Navigate to appropriate dashboard based on user role
+      let dashboardRoute = '/dashboard'
+
+      if (user?.role === 'student') {
+        user.student_profile = updatedChildFromServer
+        dashboardRoute = '/child-dashboard'
+      }
+
+      navigate(dashboardRoute);
+    } catch (err) {
+
       console.error('Failed to save learning profile:', err);
       console.error('Error response:', err.response?.data);
       console.error('Error status:', err.response?.status);

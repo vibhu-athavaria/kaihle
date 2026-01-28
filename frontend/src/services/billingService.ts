@@ -40,8 +40,21 @@ export interface PricingCalculation {
 }
 
 /**
- * Get available pricing options from the backend
- */
+  * Get available subscription plans from the backend
+  */
+export async function getSubscriptionPlans(): Promise<any[]> {
+  try {
+    const response = await http.get(`${API_BASE_URL}/subscription-plans`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching subscription plans:', error);
+    throw error;
+  }
+}
+
+/**
+  * Get available pricing options from the backend (legacy)
+  */
 export async function getPricingOptions(): Promise<PricingOptionsResponse> {
   try {
     const response = await http.get(`${API_BASE_URL}/pricing/plans`);
@@ -133,18 +146,6 @@ export async function startFreeTrial(studentId: number, subjectId?: number): Pro
   }
 }
 
-/**
- * Get subscription plans
- */
-export async function getSubscriptionPlans(): Promise<any[]> {
-  try {
-    const response = await http.get(`${API_BASE_URL}/plans`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching subscription plans:', error);
-    throw error;
-  }
-}
 
 /**
  * Create a new subscription

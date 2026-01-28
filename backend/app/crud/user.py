@@ -4,6 +4,11 @@ from app.schemas.user import UserCreate, UserUpdate, StudentProfileCreate, Stude
 from app.core.security import get_password_hash, verify_password
 from typing import Optional
 
+
+def get_student_profile(db: Session, student_id: int) -> Optional[StudentProfile]:
+    """Get student profile by ID"""
+    return db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
+
 def get_user(db: Session, user_id: int) -> Optional[User]:
     return db.query(User).options(joinedload(User.student_profile)).filter(User.id == user_id).first()
 
@@ -97,5 +102,18 @@ def update_student(db: Session, student_id: int, student_update: StudentProfileU
     db.refresh(db_student)
     return db_student
 
+from app.models.billing import Subscription
+
+
 def get_students_by_parent(db: Session, parent_id: int):
-    return db.query(StudentProfile).filter(StudentProfile.parent_id == parent_id).all()
+    students = db.query(StudentProfile).filter(StudentProfile.parent_id == parent_id).all()
+    for student in students:
+
+        subscription = db.query(Subscription).filter(Subscription.student_id == student.user_id).first()
+        if subscription:
+            student.has_active_subscription = subscription.has_active_subscription
+            student.active_subscription_id = subscription.id
+        else:
+            student.has_active_subscription = False
+            student.active_subscription_id = None
+    return students

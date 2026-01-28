@@ -55,16 +55,30 @@ export const AddChild: React.FC = () => {
     preferred_session_length: number;
   }) => {
     try {
-      await http.patch(`/api/v1/students/${newChild.id}/learning-profile`, {
-        ...profileData,
-        profile_completed: true
-      });
-      // Update local storage
-      const existingChildren = JSON.parse(localStorage.getItem('children') || '[]');
-      const updatedChild = { ...newChild, ...profileData, profile_completed: true };
-      const updatedChildren = existingChildren.map((c: any) => c.id === newChild.id ? updatedChild : c);
+      const response = await http.patch(`/api/v1/students/${newChild.id}/learning-profile`,
+        profileData
+      );
+      const updatedChildFromServer = response.data;
+
+      // Read existing children
+      const existingChildren = JSON.parse(
+        localStorage.getItem('children') || '[]'
+      );
+
+      // Replace updated student using server response
+      const updatedChildren = existingChildren.map((c: any) =>
+        c.id === updatedChildFromServer.id
+          ? updatedChildFromServer
+          : c
+      );
+
+      // Persist server-truth state
       localStorage.setItem('children', JSON.stringify(updatedChildren));
-      localStorage.setItem('currentChild', JSON.stringify(updatedChild));
+      localStorage.setItem(
+        'currentChild',
+        JSON.stringify(updatedChildFromServer)
+      );
+
       navigate('/dashboard');
     } catch (err) {
       console.error('Failed to save learning profile:', err);

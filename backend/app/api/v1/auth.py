@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.crud.user import authenticate_user, create_user, get_user_by_email, get_user_by_username
 from app.schemas.auth import Token, UserCreate, UserResponse, UserLogin
 from app.models.user import UserRole
+from app.services.billing_service import billing_service
 
 router = APIRouter()
 

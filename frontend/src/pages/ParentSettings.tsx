@@ -77,6 +77,14 @@ export const ParentSettings: React.FC = () => {
         const summaryResponse = await http.get('/api/v1/billing/summary');
         setBillingSummary(summaryResponse.data);
 
+        // Check if trial has expired and redirect to pricing
+        const summary = summaryResponse.data;
+        if (summary.trial_subscriptions > 0 && summary.days_remaining_in_trial === 0 && summary.active_subscriptions === 0) {
+          // Trial expired and no active subscriptions - redirect to pricing
+          navigate('/pricing?reason=trial_expired');
+          return;
+        }
+
       } catch (err) {
         console.error('Failed to fetch billing data:', err);
         setError('Failed to load billing information');
@@ -318,15 +326,33 @@ export const ParentSettings: React.FC = () => {
                     <h3 className="text-xl font-semibold text-gray-900 mb-4">Billing Summary</h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                      <div className="bg-blue-50 rounded-xl p-6">
+                      <div className={`rounded-xl p-6 ${billingSummary.in_free_trial ? 'bg-orange-50 border-2 border-orange-200' : 'bg-blue-50'}`}>
                         <p className="text-sm text-gray-600 mb-1">Current Status</p>
-                        <p className="text-3xl font-bold text-blue-600">
+                        <p className={`text-3xl font-bold ${billingSummary.in_free_trial ? 'text-orange-600' : 'text-blue-600'}`}>
                           {billingSummary.in_free_trial ? 'Free Trial' : 'Active'}
                         </p>
                         {billingSummary.in_free_trial && (
-                          <p className="text-sm text-gray-600 mt-2">
-                            {billingSummary.days_remaining_in_trial} days remaining
-                          </p>
+                          <div className="mt-3">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <div className="text-2xl font-bold text-orange-600">
+                                {billingSummary.days_remaining_in_trial}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                days left
+                              </div>
+                            </div>
+                            <div className="w-full bg-orange-200 rounded-full h-2">
+                              <div
+                                className="bg-orange-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: `${Math.max(0, (billingSummary.days_remaining_in_trial / 15) * 100)}%` }}
+                              ></div>
+                            </div>
+                            {billingSummary.days_remaining_in_trial <= 3 && (
+                              <p className="text-xs text-red-600 mt-2 font-medium">
+                                ⚠️ Trial expires soon!
+                              </p>
+                            )}
+                          </div>
                         )}
                       </div>
 
@@ -341,44 +367,20 @@ export const ParentSettings: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Free Trial CTA */}
-                    {!billingSummary.in_free_trial && billingSummary.active_subscriptions === 0 && (
-                      <div className="mb-6">
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-                          <h4 className="font-semibold text-gray-900 mb-2">Start Your Free Trial</h4>
-                          <p className="text-gray-600 mb-4">
-                            Get 15 days of full access to Kaihle for free!
-                          </p>
-                          <button
-                            onClick={handleStartFreeTrial}
-                            className="bg-yellow-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-yellow-700 transition-colors"
-                          >
-                            Start Free Trial
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Payment Methods */}
                     <div className="mb-8">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
                         <h3 className="text-xl font-semibold text-gray-900">Payment Methods</h3>
-                        <button
-                          onClick={() => setShowAddPaymentMethod(true)}
-                          className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm"
-                        >
-                          + Add Payment Method
-                        </button>
                       </div>
 
                       {billingInfo.length === 0 ? (
                         <div className="text-center py-8">
                           <p className="text-gray-500 mb-4">No payment methods added</p>
                           <button
-                            onClick={() => setShowAddPaymentMethod(true)}
+                            onClick={() => navigate('/plans')}
                             className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
                           >
-                            Add Payment Method
+                            Upgrade Plan
                           </button>
                         </div>
                       ) : (

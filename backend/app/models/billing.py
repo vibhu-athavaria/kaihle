@@ -4,7 +4,7 @@ from sqlalchemy.sql import func
 from app.core.database import Base
 from app.crud.mixin import SerializerMixin
 import enum
-
+from app.constants import BILLING_CYCLE_ANNUAL
 class SubscriptionStatus(str, enum.Enum):
     ACTIVE = "active"
     CANCELLED = "cancelled"
@@ -24,10 +24,10 @@ class Subscription(Base, SerializerMixin):
 
     id = Column(Integer, primary_key=True, index=True)
     parent_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)
+    student_id = Column(Integer, ForeignKey("users.id"), nullable=False) # Each subscription is tied to a specific student
+    # subject_ids = Column(String(255), nullable=True)  # Store as comma-separated string of subject IDs
     plan_id = Column(Integer, ForeignKey("subscription_plans.id"), nullable=True)
-    billing_cycle = Column(String(20), default="monthly")  # monthly or yearly
+    billing_cycle = Column(String(20), default=BILLING_CYCLE_ANNUAL)
     status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE)
     start_date = Column(DateTime(timezone=True), server_default=func.now())
     end_date = Column(DateTime(timezone=True), nullable=True)
@@ -42,7 +42,7 @@ class Subscription(Base, SerializerMixin):
     # Relationships
     parent = relationship("User", foreign_keys=[parent_id], backref="parent_subscriptions")
     student = relationship("User", foreign_keys=[student_id], backref="student_subscriptions")
-    subject = relationship("Subject", back_populates="subscriptions")
+    # subject = relationship("Subject", back_populates="subscriptions")
     plan = relationship("SubscriptionPlan")
     payments = relationship("Payment", back_populates="subscription", cascade="all, delete-orphan")
 
@@ -95,7 +95,7 @@ class SubscriptionPlan(Base, SerializerMixin):
     discount_percentage = Column(DECIMAL(5, 2), default=0.00)  # For Premium plan
     currency = Column(String(3), default="USD")
     trial_days = Column(Integer, default=15)
-    yearly_discount = Column(DECIMAL(5, 2), default=10.00)  # 10% discount for yearly
+    yearly_discount = Column(DECIMAL(5, 2), default=20.00)  # 20% discount for yearly
     is_active = Column(Boolean, default=True)
     sort_order = Column(Integer, default=0)
     plan_type = Column(String(20), nullable=False)  # "basic" or "premium"
@@ -158,3 +158,20 @@ class Invoice(Base, SerializerMixin):
     # Relationships
     user = relationship("User", backref="invoices")
     subscription = relationship("Subscription", backref="invoices")
+
+
+class TrialExtension(Base, SerializerMixin):
+    __tablename__ = "trial_extensions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=False)
+    extended_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    original_trial_end = Column(DateTime(timezone=True), nullable=False)
+    new_trial_end = Column(DateTime(timezone=True), nullable=False)
+    extension_days = Column(Integer, nullable=False)
+    reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    subscription = relationship("Subscription", backref="trial_extensions")
+    admin = relationship("User", foreign_keys=[extended_by_admin_id])
