@@ -100,7 +100,7 @@ export const ChildDashboard: React.FC = () => {
 
   useEffect(() => {
     console.log('ChildDashboard useEffect running, user:', user);
-    if (!user?.student_profile?.profile_completed) {
+    if (!user?.student_profile?.registration_completed_at) {
       console.log('Navigating to complete-profile');
       navigate('/complete-profile');
       return;
@@ -113,28 +113,28 @@ export const ChildDashboard: React.FC = () => {
     const checkSubscriptionAndFetchStudent = async () => {
       console.log('Starting checkSubscriptionAndFetchStudent');
       try {
-        // Check if this specific student has an active subscription
-        const subscriptionsResponse = await http.get(`/api/v1/billing/subscriptions/active?user_id=${user.student_profile.id}`);
-        const activeSubscriptions = subscriptionsResponse.data;
+        // // Check if this specific student has an active subscription
+        // const subscriptionsResponse = await http.get(`/api/v1/billing/subscriptions/active?user_id=${user.student_profile.id}`);
+        // const activeSubscriptions = subscriptionsResponse.data;
 
-        // Check if current student has an active subscription
-        const hasActiveSubscription = activeSubscriptions.some((sub: any) =>
-          sub.student_id === user.student_profile.id && sub.status === 'active'
-        );
+        // // Check if current student has an active subscription
+        // const hasActiveSubscription = activeSubscriptions.some((sub: any) =>
+        //   sub.student_id === user.student_profile.id && sub.status === 'active'
+        // );
 
-        if (!hasActiveSubscription) {
-          // Check if parent has trial
-          const billingResponse = await http.get('/api/v1/billing/summary');
-          const billingSummary = billingResponse.data;
+        // if (!hasActiveSubscription) {
+        //   // Check if parent has trial
+        //   const billingResponse = await http.get('/api/v1/billing/summary');
+        //   const billingSummary = billingResponse.data;
 
-          // If no trial or trial expired, show trial expired
-          if (!billingSummary.in_free_trial || billingSummary.days_remaining_in_trial <= 0) {
-            console.log('Trial expired, setting trialExpired true');
-            setTrialExpired(true);
-            setCheckingTrial(false);
-            return;
-          }
-        }
+        //   // If no trial or trial expired, show trial expired
+        //   if (!billingSummary.in_free_trial || billingSummary.days_remaining_in_trial <= 0) {
+        //     console.log('Trial expired, setting trialExpired true');
+        //     setTrialExpired(true);
+        //     setCheckingTrial(false);
+        //     return;
+        //   }
+        // }
 
         // Student has active subscription or trial is active, proceed with normal dashboard
         console.log('Fetching student data');

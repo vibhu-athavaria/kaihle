@@ -1,7 +1,7 @@
 """add curriculum mapping tables
 
 Revision ID: 792e00593eac
-Revises: 9237f3645f09
+Revises: 71bfcaf277f8
 Create Date: 2026-01-19 15:10:18.397602
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '792e00593eac'
-down_revision = '9237f3645f09'
+down_revision = '71bfcaf277f8'
 branch_labels = None
 depends_on = None
 

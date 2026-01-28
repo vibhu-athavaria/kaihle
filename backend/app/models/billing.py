@@ -25,7 +25,7 @@ class Subscription(Base, SerializerMixin):
     id = Column(Integer, primary_key=True, index=True)
     parent_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False) # Each subscription is tied to a specific student
-    subject_ids = Column(String(255), nullable=True)  # Store as comma-separated string of subject IDs
+    # subject_ids = Column(String(255), nullable=True)  # Store as comma-separated string of subject IDs
     plan_id = Column(Integer, ForeignKey("subscription_plans.id"), nullable=True)
     billing_cycle = Column(String(20), default=BILLING_CYCLE_ANNUAL)
     status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.ACTIVE)
@@ -42,7 +42,7 @@ class Subscription(Base, SerializerMixin):
     # Relationships
     parent = relationship("User", foreign_keys=[parent_id], backref="parent_subscriptions")
     student = relationship("User", foreign_keys=[student_id], backref="student_subscriptions")
-    subject = relationship("Subject", back_populates="subscriptions")
+    # subject = relationship("Subject", back_populates="subscriptions")
     plan = relationship("SubscriptionPlan")
     payments = relationship("Payment", back_populates="subscription", cascade="all, delete-orphan")
 

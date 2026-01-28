@@ -1,7 +1,7 @@
 """add trial extensions and registration completed
 
-Revision ID: add_trial_extensions_and_registration_completed
-Revises: eb17a948b9f7
+Revision ID: 71bfcaf277f8_add_trial_extensions_and_registration_completed
+Revises: e4c91a0f1d23
 Create Date: 2026-01-25 10:40:00.000000
 
 """
@@ -11,14 +11,12 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '71bfcaf277f8'
-down_revision = ('eb17a948b9f7', 'f606f7d0aaa2')
+down_revision = 'e4c91a0f1d23'
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    # Add registration_completed_at to student_profiles
-    op.add_column('student_profiles', sa.Column('registration_completed_at', sa.DateTime(timezone=True), nullable=True))
 
     # Create trial_extensions table
     op.create_table('trial_extensions',
@@ -44,9 +42,6 @@ def downgrade() -> None:
     # Drop trial_extensions table
     op.drop_index(op.f('ix_trial_extensions_id'), table_name='trial_extensions')
     op.drop_table('trial_extensions')
-
-    # Drop registration_completed_at column
-    op.drop_column('student_profiles', 'registration_completed_at')
 
     # Revert yearly_discount back to 10.00
     op.execute("UPDATE subscription_plans SET yearly_discount = 10.00 WHERE yearly_discount = 20.00")

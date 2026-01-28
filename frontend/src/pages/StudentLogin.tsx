@@ -18,7 +18,7 @@ export const StudentLogin: React.FC = () => {
     setError('');
     try {
       const user = await signInStudent(data.username, data.password);
-      if (user?.student_profile?.profile_completed) {
+      if (user?.student_profile?.registration_completed_at) {
         navigate('/child-dashboard');
       } else {
         navigate('/complete-profile');

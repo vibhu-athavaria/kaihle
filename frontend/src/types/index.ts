@@ -10,7 +10,7 @@ export interface User {
   has_completed_assessment?: boolean;
   student_profile?: {
     id: string;
-    profile_completed: boolean;
+    registration_completed_at: Date | null;
   };
 }
 
@@ -22,7 +22,7 @@ export interface Child {
   interests: string[] | null
   preferred_format: string | null
   preferred_session_length: number | null
-  profile_completed: boolean
+  registration_completed_at: Date | null
   user: {
     full_name: string
     username: string

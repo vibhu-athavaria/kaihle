@@ -168,30 +168,13 @@ def get_active_subscriptions_endpoint(
 ):
     """Get active subscriptions for a specific user"""
     # Check if user has access to this user's data
-    if current_user.role != "admin" and current_user.id != user_id:
+    if current_user.role != "admin" and current_user.id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this user's subscription information"
         )
 
-    return get_active_subscriptions(db, user_id)
-
-@router.get("/subscriptions/{user_id}/active", response_model=List[SubscriptionResponse])
-def get_active_subscriptions_endpoint(
-    user_id: int,
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
-):
-    """Get active subscriptions for a specific user"""
-    # Check if user has access to this user's data
-    if current_user.id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this user's subscription information"
-        )
-
-    return get_active_subscriptions(db, user_id)
-
+    return get_active_subscriptions(db, current_user.id)
 
 @router.get("/subscriptions/trial", response_model=List[SubscriptionResponse])
 def get_trial_subscriptions_endpoint(
