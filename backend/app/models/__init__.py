@@ -5,7 +5,7 @@ from .user import User, StudentProfile
 from .progress import Progress, Badge, StudentBadge
 from .billing import Subscription, Payment, BillingInfo, Invoice
 from .subject import Subject
-from .course import MicroCourse, MicroCourseSection, MicroCourseQuestionLink
+from .course import Course, CourseSection, CourseQuestionLink
 from .ai_tutor import TutorSession, TutorInteraction, StudentAnswer
 from .community import Post, Comment, Notification
 from .curriculum import Curriculum, Topic, Subtopic, CurriculumTopic, TopicPrerequisite

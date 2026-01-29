@@ -28,7 +28,7 @@ import { StudyPlan } from "./pages/StudyPlan";
 import { StudentProgress } from "./pages/StudentProgress";
 import AssessmentPage from "./pages/AssessmentPage";
 import AssessmentDiagnosticSummary from "./pages/AssessmentDiagnosticSummary";
-import MicroCoursePage from "./pages/MicroCoursePage";
+import CoursePage from "./pages/CoursePage";
 
 /* -------------------------------------------------- */
 /* App Shell */
@@ -205,7 +205,7 @@ const AppContent: React.FC = () => {
             path="/child-dashboard/take-micro-course"
             element={
               <ProtectedRoute role="student">
-                <MicroCoursePage
+                <CoursePage
                 title="Understanding Area and Perimeter"
             subtopic="Geometry Basics"
             videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ"

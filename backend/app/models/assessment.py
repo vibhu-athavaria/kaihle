@@ -141,7 +141,7 @@ class QuestionBank(Base, SerializerMixin):
     subtopic = relationship("Subtopic", back_populates="question_banks")
     grade = relationship("Grade")
     assessment_questions = relationship("AssessmentQuestion", back_populates="question_bank")
-    micro_course_questions = relationship("MicroCourseQuestionLink", back_populates="question_bank")
+    course_questions = relationship("CourseQuestionLink", back_populates="question_bank")
     student_answers = relationship("StudentAnswer", back_populates="question_bank")
 
 

@@ -2,7 +2,7 @@ import json
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from app.crud.progress import get_student_total_points, get_student_current_streak, get_student_total_lessons
-from app.crud.lesson import get_lessons, get_study_plans_by_student
+from app.crud.study_plan import get_lessons, get_study_plans_by_student
 from app.schemas.ai_tutor import RecommendationResponse, AnswerEvaluation
 
 

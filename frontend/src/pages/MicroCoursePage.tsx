@@ -22,7 +22,7 @@ interface QuizItem {
   answer?: string;
 }
 
-interface MicroCourseProps {
+interface CourseProps {
   title: string;
   subtopic: string;
   videoUrl?: string;
@@ -107,7 +107,7 @@ const HARDCODED_COURSE = {
   ],
 };
 
-export default function MicroCoursePage({
+export default function CoursePage({
   title = "Untitled Lesson",
   subtopic = "",
   videoUrl = "",
@@ -116,7 +116,7 @@ export default function MicroCoursePage({
   outcomes = [],
   guidedProblems = [],
   quiz = [],
-}: MicroCourseProps) {
+}: CourseProps) {
   const [course, setCourse] = useState({});
   const [currentSection, setCurrentSection] = useState<Section>("objectives");
   const [completedSections, setCompletedSections] = useState<Section[]>([]);

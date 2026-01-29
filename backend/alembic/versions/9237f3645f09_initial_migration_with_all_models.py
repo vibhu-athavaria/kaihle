@@ -1,7 +1,7 @@
 """initial migration with all models
 
 Revision ID: 9237f3645f09
-Revises: 
+Revises:
 Create Date: 2026-01-14 15:02:41.559047
 
 """
@@ -106,7 +106,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_billing_info_id'), 'billing_info', ['id'], unique=False)
-    op.create_table('micro_courses',
+    op.create_table('courses',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('title', sa.String(length=255), nullable=False),
     sa.Column('subject_id', sa.Integer(), nullable=False),
@@ -117,7 +117,7 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['subject_id'], ['subjects.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_micro_courses_id'), 'micro_courses', ['id'], unique=False)
+    op.create_index(op.f('ix_courses_id'), 'courses', ['id'], unique=False)
     op.create_table('notifications',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -230,28 +230,28 @@ def upgrade() -> None:
     sa.UniqueConstraint('invoice_number')
     )
     op.create_index(op.f('ix_invoices_id'), 'invoices', ['id'], unique=False)
-    op.create_table('micro_course_question_links',
+    op.create_table('course_question_links',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('micro_course_id', sa.Integer(), nullable=False),
+    sa.Column('course_id', sa.Integer(), nullable=False),
     sa.Column('question_bank_id', sa.Integer(), nullable=False),
     sa.Column('position', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['micro_course_id'], ['micro_courses.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['course_id'], ['courses.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['question_bank_id'], ['question_bank.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_micro_course_question_links_id'), 'micro_course_question_links', ['id'], unique=False)
-    op.create_table('micro_course_sections',
+    op.create_index(op.f('ix_course_question_links_id'), 'course_question_links', ['id'], unique=False)
+    op.create_table('course_sections',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('micro_course_id', sa.Integer(), nullable=False),
+    sa.Column('course_id', sa.Integer(), nullable=False),
     sa.Column('section_type', sa.String(length=50), nullable=False),
     sa.Column('title', sa.String(length=255), nullable=True),
     sa.Column('content', sa.JSON(), nullable=False),
     sa.Column('position', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['micro_course_id'], ['micro_courses.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['course_id'], ['courses.id'], ondelete='CASCADE')
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_micro_course_sections_id'), 'micro_course_sections', ['id'], unique=False)
+    op.create_index(op.f('ix_course_sections_id'), 'course_sections', ['id'], unique=False)
     op.create_table('payments',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('subscription_id', sa.Integer(), nullable=False),
@@ -430,10 +430,10 @@ def downgrade() -> None:
     op.drop_table('progress')
     op.drop_index(op.f('ix_payments_id'), table_name='payments')
     op.drop_table('payments')
-    op.drop_index(op.f('ix_micro_course_sections_id'), table_name='micro_course_sections')
-    op.drop_table('micro_course_sections')
-    op.drop_index(op.f('ix_micro_course_question_links_id'), table_name='micro_course_question_links')
-    op.drop_table('micro_course_question_links')
+    op.drop_index(op.f('ix_course_sections_id'), table_name='course_sections')
+    op.drop_table('course_sections')
+    op.drop_index(op.f('ix_course_question_links_id'), table_name='course_question_links')
+    op.drop_table('course_question_links')
     op.drop_index(op.f('ix_invoices_id'), table_name='invoices')
     op.drop_table('invoices')
     op.drop_index(op.f('ix_comments_id'), table_name='comments')
@@ -448,8 +448,8 @@ def downgrade() -> None:
     op.drop_table('posts')
     op.drop_index(op.f('ix_notifications_id'), table_name='notifications')
     op.drop_table('notifications')
-    op.drop_index(op.f('ix_micro_courses_id'), table_name='micro_courses')
-    op.drop_table('micro_courses')
+    op.drop_index(op.f('ix_courses_id'), table_name='courses')
+    op.drop_table('courses')
     op.drop_index(op.f('ix_billing_info_id'), table_name='billing_info')
     op.drop_table('billing_info')
     op.drop_index(op.f('ix_users_username'), table_name='users')

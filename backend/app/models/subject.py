@@ -24,7 +24,7 @@ class Subject(Base, SerializerMixin):
 
     # Relationships
     curriculum_topics = relationship("CurriculumTopic", back_populates="subject")
-    micro_courses = relationship("MicroCourse", back_populates="subject")
+    courses = relationship("Course", back_populates="subject")
     assessments = relationship("Assessment", back_populates="subject")
     question_banks = relationship("QuestionBank", back_populates="subject")
     lessons = relationship("Lesson", back_populates="subject")

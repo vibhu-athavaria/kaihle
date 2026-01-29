@@ -3,13 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_active_user
-from app.crud.lesson import (
+from app.crud.study_plan import (
     get_study_plan, get_study_plans_by_student, create_study_plan, update_study_plan,
-    add_lesson_to_study_plan, remove_lesson_from_study_plan, mark_lesson_completed,
+    add_course_to_study_plan, remove_course_from_study_plan, mark_course_completed,
     get_study_plan_progress
 )
 from app.crud.student import get_student_by_parent_and_id, get_student
-from app.schemas.lesson import StudyPlan, StudyPlanCreate, StudyPlanUpdate
+from app.schemas.study_plan import StudyPlan, StudyPlanCreate, StudyPlanUpdate
 from app.models.user import User as UserModel
 
 router = APIRouter(prefix="/api/v1/study-plans", tags=["study-plans"])
@@ -144,14 +144,14 @@ def update_study_plan_endpoint(
     updated_study_plan = update_study_plan(db, study_plan_id, study_plan_update)
     return updated_study_plan
 
-@router.post("/{study_plan_id}/lessons/{lesson_id}")
-def add_lesson_to_plan(
+@router.post("/{study_plan_id}/courses/{course_id}")
+def add_course_to_plan(
     study_plan_id: int,
-    lesson_id: int,
+    course_id: int,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_active_user)
 ):
-    """Add a lesson to a study plan"""
+    """Add a course to a study plan"""
     study_plan = get_study_plan(db, study_plan_id)
     if not study_plan:
         raise HTTPException(status_code=404, detail="Study plan not found")
@@ -168,17 +168,17 @@ def add_lesson_to_plan(
     elif current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
 
-    study_plan_lesson = add_lesson_to_study_plan(db, study_plan_id, lesson_id)
-    return {"message": "Lesson added to study plan successfully"}
+    study_plan_course = add_course_to_study_plan(db, study_plan_id, course_id)
+    return {"message": "Course added to study plan successfully"}
 
-@router.delete("/{study_plan_id}/lessons/{lesson_id}")
-def remove_lesson_from_plan(
+@router.delete("/{study_plan_id}/courses/{course_id}")
+def remove_course_from_plan(
     study_plan_id: int,
-    lesson_id: int,
+    course_id: int,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_active_user)
 ):
-    """Remove a lesson from a study plan"""
+    """Remove a course from a study plan"""
     study_plan = get_study_plan(db, study_plan_id)
     if not study_plan:
         raise HTTPException(status_code=404, detail="Study plan not found")
@@ -195,42 +195,42 @@ def remove_lesson_from_plan(
     elif current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
 
-    success = remove_lesson_from_study_plan(db, study_plan_id, lesson_id)
+    success = remove_course_from_study_plan(db, study_plan_id, course_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Lesson not found in study plan")
-    return {"message": "Lesson removed from study plan successfully"}
+        raise HTTPException(status_code=404, detail="Course not found in study plan")
+    return {"message": "Course removed from study plan successfully"}
 
-@router.post("/{study_plan_id}/lessons/{lesson_id}/complete")
-def complete_lesson(
+@router.post("/{study_plan_id}/courses/{course_id}/complete")
+def complete_course(
     study_plan_id: int,
-    lesson_id: int,
+    course_id: int,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_active_user)
 ):
-    """Mark a lesson as completed in a study plan"""
+    """Mark a course as completed in a study plan"""
     study_plan = get_study_plan(db, study_plan_id)
     if not study_plan:
         raise HTTPException(status_code=404, detail="Study plan not found")
 
-    # Only students can mark lessons as completed
+    # Only students can mark courses as completed
     if current_user.role == "student":
         student = get_student(db, study_plan.student_id)
         if not student or student.id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to complete lessons for this student"
+                detail="Not authorized to complete courses for this student"
             )
     elif current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can mark lessons as completed"
+            detail="Only students can mark courses as completed"
         )
 
-    study_plan_lesson = mark_lesson_completed(db, study_plan_id, lesson_id)
-    if not study_plan_lesson:
-        raise HTTPException(status_code=404, detail="Lesson not found in study plan")
+    study_plan_course = mark_course_completed(db, study_plan_id, course_id)
+    if not study_plan_course:
+        raise HTTPException(status_code=404, detail="Course not found in study plan")
 
-    return {"message": "Lesson marked as completed"}
+    return {"message": "Course marked as completed"}
 
 @router.get("/{study_plan_id}/progress")
 def get_study_plan_progress_endpoint(
