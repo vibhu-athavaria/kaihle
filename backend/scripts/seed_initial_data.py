@@ -10,18 +10,18 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.crud.user import create_user
-from app.crud.lesson import create_lesson
+from app.crud.study_plan import create_lesson
 from app.crud.progress import create_badge
 from app.schemas.user import UserCreate
-from app.schemas.lesson import LessonCreate
+from app.schemas.study_plan import StudyPlanCourseCreate
 from app.schemas.progress import BadgeCreate
 
 def seed_data():
     db = SessionLocal()
-    
+
     try:
         print("🌱 Seeding initial data...")
-        
+
         # Create admin user
         admin_data = UserCreate(
             email="admin@school.com",
@@ -32,7 +32,7 @@ def seed_data():
         )
         admin_user = create_user(db, admin_data)
         print(f"✅ Created admin user: {admin_user.email}")
-        
+
         # Create sample parent user
         parent_data = UserCreate(
             email="parent@example.com",
@@ -43,7 +43,7 @@ def seed_data():
         )
         parent_user = create_user(db, parent_data)
         print(f"✅ Created parent user: {parent_user.email}")
-        
+
         # Create sample lessons
         lessons_data = [
             {
@@ -79,11 +79,11 @@ def seed_data():
                 "points_value": 30
             }
         ]
-        
+
         for lesson_data in lessons_data:
             lesson = create_lesson(db, LessonCreate(**lesson_data))
             print(f"✅ Created lesson: {lesson.title}")
-        
+
         # Create sample badges
         badges_data = [
             {
@@ -117,13 +117,13 @@ def seed_data():
                 "points_required": 200
             }
         ]
-        
+
         for badge_data in badges_data:
             badge = create_badge(db, BadgeCreate(**badge_data))
             print(f"✅ Created badge: {badge.name}")
-        
+
         print("🎉 Initial data seeding completed successfully!")
-        
+
     except Exception as e:
         print(f"❌ Error seeding data: {e}")
         db.rollback()

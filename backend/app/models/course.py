@@ -25,12 +25,12 @@ class CourseContentType(str, enum.Enum):
     ASSIGNMENT = "assignment"
 
 
-class MicroCourse(Base, SerializerMixin):
+class Course(Base, SerializerMixin):
     """
     Bite-sized, focused learning modules (10-20 minutes)
     Can be AI-generated based on knowledge gaps
     """
-    __tablename__ = "micro_courses"
+    __tablename__ = "courses"
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
@@ -76,31 +76,31 @@ class MicroCourse(Base, SerializerMixin):
     )
 
     # Relationships
-    subject = relationship("Subject", back_populates="micro_courses")
-    grade = relationship("Grade", back_populates="micro_courses")
-    topic = relationship("Topic", back_populates="micro_courses")
-    subtopic = relationship("Subtopic", back_populates="micro_courses")
+    subject = relationship("Subject", back_populates="courses")
+    grade = relationship("Grade", back_populates="courses")
+    topic = relationship("Topic", back_populates="courses")
+    subtopic = relationship("Subtopic", back_populates="courses")
 
-    sections = relationship("MicroCourseSection", back_populates="micro_course",
-                          cascade="all, delete-orphan", order_by="MicroCourseSection.position")
-    questions = relationship("MicroCourseQuestionLink", back_populates="micro_course",
-                           cascade="all, delete-orphan", order_by="MicroCourseQuestionLink.position")
+    sections = relationship("CourseSection", back_populates="course",
+                          cascade="all, delete-orphan", order_by="CourseSection.position")
+    questions = relationship("CourseQuestionLink", back_populates="course",
+                           cascade="all, delete-orphan", order_by="CourseQuestionLink.position")
 
-    student_progress = relationship("StudentCourseProgress", back_populates="micro_course",
+    student_progress = relationship("StudentCourseProgress", back_populates="course",
                                    cascade="all, delete-orphan")
-    tutor_sessions = relationship("TutorSession", back_populates="micro_course")
-    student_answers = relationship("StudentAnswer", back_populates="micro_course")
+    tutor_sessions = relationship("TutorSession", back_populates="course")
+    student_answers = relationship("StudentAnswer", back_populates="course")
 
 
-class MicroCourseSection(Base, SerializerMixin):
+class CourseSection(Base, SerializerMixin):
     """
     Individual sections within a micro-course
     (e.g., Introduction, Explanation, Examples, Practice)
     """
-    __tablename__ = "micro_course_sections"
+    __tablename__ = "course_sections"
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
-    micro_course_id = Column(UUID(as_uuid=True), ForeignKey("micro_courses.id", ondelete="CASCADE"),
+    course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"),
                             nullable=False, index=True)
 
     section_type = Column(ENUM(CourseSectionType), nullable=False)
@@ -137,38 +137,38 @@ class MicroCourseSection(Base, SerializerMixin):
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=text("now()"))
 
     __table_args__ = (
-        Index('idx_mcs_course_position', 'micro_course_id', 'position'),
+        Index('idx_mcs_course_position', 'course_id', 'position'),
     )
 
     # Relationships
-    micro_course = relationship("MicroCourse", back_populates="sections")
+    course = relationship("Course", back_populates="sections")
 
 
-class MicroCourseQuestionLink(Base, SerializerMixin):
+class CourseQuestionLink(Base, SerializerMixin):
     """
-    Links questions from QuestionBank to MicroCourses
+    Links questions from QuestionBank to Courses
     Allows reusing questions across multiple courses
     """
-    __tablename__ = "micro_course_question_links"
+    __tablename__ = "course_question_links"
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
-    micro_course_id = Column(UUID(as_uuid=True), ForeignKey("micro_courses.id", ondelete="CASCADE"), nullable=False, index=True)
+    course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True)
     question_bank_id = Column(UUID(as_uuid=True), ForeignKey("question_bank.id", ondelete="CASCADE"), nullable=False, index=True)
 
     position = Column(Integer, nullable=False)  # Order within the course
-    section_id = Column(UUID(as_uuid=True), ForeignKey("micro_course_sections.id", ondelete="SET NULL"), nullable=True)
+    section_id = Column(UUID(as_uuid=True), ForeignKey("course_sections.id", ondelete="SET NULL"), nullable=True)
 
     is_required = Column(Boolean, default=True)
 
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
 
     __table_args__ = (
-        Index('idx_mcql_course_position', 'micro_course_id', 'position'),
+        Index('idx_mcql_course_position', 'course_id', 'position'),
     )
 
     # Relationships
-    micro_course = relationship("MicroCourse", back_populates="questions")
-    question_bank = relationship("QuestionBank", back_populates="micro_course_questions")
+    course = relationship("Course", back_populates="questions")
+    question_bank = relationship("QuestionBank", back_populates="course_questions")
 
 
 class StudentCourseProgress(Base, SerializerMixin):
@@ -179,7 +179,7 @@ class StudentCourseProgress(Base, SerializerMixin):
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
     student_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
-    micro_course_id = Column(UUID(as_uuid=True), ForeignKey("micro_courses.id", ondelete="CASCADE"), nullable=False, index=True)
+    course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True)
 
     status = Column(String(20), default="not_started")  # "not_started", "in_progress", "completed"
     progress_percentage = Column(Integer, default=0)  # 0-100
@@ -198,10 +198,10 @@ class StudentCourseProgress(Base, SerializerMixin):
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=text("now()"))
 
     __table_args__ = (
-        Index('idx_scp_student_course', 'student_id', 'micro_course_id'),
+        Index('idx_scp_student_course', 'student_id', 'course_id'),
         Index('idx_scp_student_status', 'student_id', 'status'),
     )
 
     # Relationships
     student = relationship("StudentProfile", back_populates="course_progress")
-    micro_course = relationship("MicroCourse", back_populates="student_progress")
+    course = relationship("Course", back_populates="student_progress")

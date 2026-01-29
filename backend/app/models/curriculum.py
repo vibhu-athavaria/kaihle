@@ -27,7 +27,7 @@ class Grade(Base, SerializerMixin):
     curriculum_topics = relationship("CurriculumTopic", back_populates="grade")
     assessments = relationship("Assessment", back_populates="grade")
     student_profiles = relationship("StudentProfile", back_populates="grade")
-    micro_courses = relationship("MicroCourse", back_populates="grade")
+    courses = relationship("Course", back_populates="grade")
 
 
 class Curriculum(Base, SerializerMixin):
@@ -91,7 +91,7 @@ class Topic(Base, SerializerMixin):
         foreign_keys="[TopicPrerequisite.prerequisite_topic_id]",
         back_populates="prerequisite_topic"
     )
-    micro_courses = relationship("MicroCourse", back_populates="topic")
+    courses = relationship("Course", back_populates="topic")
     question_banks = relationship("QuestionBank", back_populates="topic")
     lessons = relationship("Lesson", back_populates="topic")
     knowledge_profiles = relationship("StudentKnowledgeProfile", back_populates="topic")
@@ -129,7 +129,7 @@ class Subtopic(Base, SerializerMixin):
 
     # Relationships
     topic = relationship("Topic", back_populates="subtopics")
-    micro_courses = relationship("MicroCourse", back_populates="subtopic")
+    courses = relationship("Course", back_populates="subtopic")
     question_banks = relationship("QuestionBank", back_populates="subtopic")
     lessons = relationship("Lesson", back_populates="subtopic")
     knowledge_profiles = relationship("StudentKnowledgeProfile", back_populates="subtopic")

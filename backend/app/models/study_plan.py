@@ -69,7 +69,7 @@ class StudyPlanCourse(Base, SerializerMixin):
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
     study_plan_id = Column(UUID(as_uuid=True), ForeignKey("study_plans.id", ondelete="CASCADE"), nullable=False, index=True)
-    course_id = Column(UUID(as_uuid=True), ForeignKey("micro_courses.id", ondelete="SET NULL"), nullable=True, index=True)
+    course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # If course_id is NULL, this is custom content
     title = Column(String(255), nullable=False)
