@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from app.core.database import Base
 from app.models import (
-    user, progress, lesson, community, assessment, ai_tutor, billing, course,
+    user, progress, community, assessment, ai_tutor, billing, course,
     subject, curriculum, curriculum_mapping
     )
 

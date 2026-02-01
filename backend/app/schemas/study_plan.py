@@ -6,9 +6,9 @@ from datetime import datetime
 
 
 # -----------------------------
-# Lesson Schemas
+# StudyPlan Schemas
 # -----------------------------
-class LessonBase(BaseModel):
+class StudyPlanBase(BaseModel):
     title: str
     description: Optional[str] = None
     content: Optional[str] = None
@@ -17,11 +17,11 @@ class LessonBase(BaseModel):
     points_value: int = 10
 
 
-class LessonCreate(LessonBase):
+class StudyPlanCreate(StudyPlanBase):
     pass
 
 
-class LessonUpdate(BaseModel):
+class StudyPlanUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     content: Optional[str] = None
@@ -31,7 +31,7 @@ class LessonUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class Lesson(LessonBase):
+class StudyPlan(StudyPlanBase):
     id: int
     is_active: bool
     created_at: datetime
@@ -42,9 +42,9 @@ class Lesson(LessonBase):
 
 
 # -----------------------------
-# StudyPlan Lesson Schemas
+# StudyPlanCourse Schemas
 # -----------------------------
-class StudyPlanLessonBase(BaseModel):
+class StudyPlanCourseBase(BaseModel):
     title: str
     knowledge_area_id: Optional[int] = None
     suggested_duration_mins: Optional[int] = None
@@ -52,15 +52,15 @@ class StudyPlanLessonBase(BaseModel):
     details: Optional[str] = None
 
 
-class StudyPlanLessonCreate(StudyPlanLessonBase):
+class StudyPlanCourseCreate(StudyPlanCourseBase):
     order_index: Optional[int] = None
 
 
-class StudyPlanLessonUpdate(BaseModel):
+class StudyPlanCourseUpdate(BaseModel):
     is_completed: Optional[bool] = None
 
 
-class StudyPlanLessonOut(StudyPlanLessonBase):
+class StudyPlanCourseOut(StudyPlanCourseBase):
     id: int
     study_plan_id: int
     lesson_id: Optional[int] = None
@@ -88,7 +88,7 @@ class StudyPlanCreate(StudyPlan):
     assessment_id: Optional[int] = None
     student_id: int
     lesson_ids: Optional[List[int]] = []  # quick link lessons
-    lessons: List[StudyPlanLessonCreate] = []  # full lesson objects
+    lessons: List[StudyPlanCourseCreate] = []  # full lesson objects
 
 
 class StudyPlanUpdate(BaseModel):
@@ -106,7 +106,7 @@ class StudyPlanOut(StudyPlan):
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
-    lessons: List[StudyPlanLessonOut] = []
+    lessons: List[StudyPlanCourseOut] = []
 
     class Config:
         from_attributes = True
