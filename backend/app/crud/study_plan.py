@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from app.models.study_plan import StudyPlan, StudyPlanCourse
-from app.schemas.course import CourseCreate, CourseUpdate, StudyPlanCreate, StudyPlanUpdate, StudyPlanCourseCreate
+from app.schemas.study_plan import StudyPlanCreate, StudyPlanUpdate, StudyPlanCourseOut, StudyPlanCourseCreate
+from app.schemas.course import CourseCreate, CourseUpdate
 from typing import Optional, List
 
 
@@ -49,7 +50,7 @@ def update_study_plan(db: Session, study_plan_id: int, study_plan_update: StudyP
     db.refresh(db_study_plan)
     return db_study_plan
 
-def add_course_to_study_plan(db: Session, study_plan_id: int, course_id: int) -> Optional[StudyPlanCourse]:
+def add_course_to_study_plan(db: Session, study_plan_id: int, course_id: int) -> Optional[StudyPlanCourseOut]:
     # Check if course is already in the study plan
     existing = db.query(StudyPlanCourse).filter(
         StudyPlanCourse.study_plan_id == study_plan_id,

@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from decimal import Decimal
 from typing import List, Optional
 from datetime import datetime, timedelta
+from uuid import UUID
 from app.crud.user import get_user
 from app.models.billing import Subscription, Payment, BillingInfo, Invoice, SubscriptionPlan, PlanFeature, PlanSubject, TrialExtension
 from app.schemas.billing import (
@@ -19,7 +20,7 @@ from app.constants import (
 
 # Subscription CRUD operations
 
-def create_trial_subscription(db: Session, parent_id: int, student_id: int, trial_end_date: datetime) -> Subscription:
+def create_trial_subscription(db: Session, parent_id: UUID, student_id: UUID, trial_end_date: datetime) -> Subscription:
     db_subscription = Subscription(
         parent_id=parent_id,
         student_id=student_id,
@@ -37,11 +38,11 @@ def create_trial_subscription(db: Session, parent_id: int, student_id: int, tria
     db.refresh(db_subscription)
     return db_subscription
 
-def create_subscription(db: Session, subscription: SubscriptionCreate, parent_id: int):
+def create_subscription(db: Session, subscription: SubscriptionCreate, user_id: UUID):
     """Create a new subscription for a parent"""
 
     db_subscription = Subscription(
-        parent_id=parent_id,
+        user_id=user_id,
         student_id=subscription.student_id,
         subject_ids=subscription.subject_ids,
         status=subscription.status,
@@ -57,15 +58,15 @@ def create_subscription(db: Session, subscription: SubscriptionCreate, parent_id
     db.refresh(db_subscription)
     return db_subscription
 
-def get_subscription(db: Session, subscription_id: int) -> Optional[Subscription]:
+def get_subscription(db: Session, subscription_id: UUID) -> Optional[Subscription]:
     """Get a subscription by ID"""
     return db.query(Subscription).filter(Subscription.id == subscription_id).first()
 
-def get_subscriptions_by_parent(db: Session, parent_id: int) -> List[Subscription]:
+def get_subscriptions_by_user(db: Session, user_id: UUID) -> List[Subscription]:
     """Get all subscriptions for a parent"""
-    return db.query(Subscription).filter(Subscription.parent_id == parent_id).all()
+    return db.query(Subscription).filter(Subscription.user_id == user_id).all()
 
-def get_subscriptions_by_student(db: Session, student_id: int) -> List[Subscription]:
+def get_subscriptions_by_student(db: Session, student_id: UUID) -> List[Subscription]:
     """Get all subscriptions for a student"""
     return db.query(Subscription).filter(Subscription.student_id == student_id).all()
 
@@ -73,7 +74,7 @@ def get_all_subscriptions(db: Session) -> List[Subscription]:
     """Get all subscriptions"""
     return db.query(Subscription).all()
 
-def update_subscription(db: Session, subscription_id: int, subscription_update: SubscriptionUpdate):
+def update_subscription(db: Session, subscription_id: UUID, subscription_update: SubscriptionUpdate):
     """Update a subscription"""
     db_subscription = get_subscription(db, subscription_id)
     if not db_subscription:
@@ -86,7 +87,7 @@ def update_subscription(db: Session, subscription_id: int, subscription_update: 
     db.refresh(db_subscription)
     return db_subscription
 
-def cancel_subscription(db: Session, subscription_id: int):
+def cancel_subscription(db: Session, subscription_id: UUID):
     """Cancel a subscription"""
     db_subscription = get_subscription(db, subscription_id)
     if not db_subscription:
@@ -98,7 +99,7 @@ def cancel_subscription(db: Session, subscription_id: int):
     db.refresh(db_subscription)
     return db_subscription
 
-def delete_subscription(db: Session, subscription_id: int) -> bool:
+def delete_subscription(db: Session, subscription_id: UUID) -> bool:
     """Delete a subscription"""
     db_subscription = get_subscription(db, subscription_id)
     if not db_subscription:
@@ -108,11 +109,11 @@ def delete_subscription(db: Session, subscription_id: int) -> bool:
     db.commit()
     return True
 
-def get_active_subscriptions(db: Session, user_id: Optional[int] = None) -> List[Subscription]:
+def get_active_subscriptions(db: Session, user_id: Optional[UUID] = None) -> List[Subscription]:
     """Get all active subscriptions for a user (parent or student)"""
     # Check if this is a parent user by looking for subscriptions where they are the parent
     parent_subscriptions = db.query(Subscription).filter(
-        Subscription.parent_id == user_id,
+        Subscription.user_id == user_id,
         Subscription.status.in_(["active", "trial"])
     ).all()
 
@@ -126,14 +127,14 @@ def get_active_subscriptions(db: Session, user_id: Optional[int] = None) -> List
 
     return parent_subscriptions
 
-def get_trial_subscriptions(db: Session, parent_id: int) -> List[Subscription]:
+def get_trial_subscriptions(db: Session, parent_id: UUID) -> List[Subscription]:
     """Get all trial subscriptions for a parent"""
     return db.query(Subscription).filter(
-        Subscription.parent_id == parent_id,
+        Subscription.user_id == parent_id,
         Subscription.status == "trial"
     ).all()
 
-def is_in_free_trial(db: Session, parent_id: int) -> bool:
+def is_in_free_trial(db: Session, parent_id: UUID) -> bool:
     """Check if parent has any active trial subscriptions"""
     trial_subs = get_trial_subscriptions(db, parent_id)
     now = datetime.now()
@@ -144,12 +145,12 @@ def is_in_free_trial(db: Session, parent_id: int) -> bool:
 
     return False
 
-def start_free_trial(db: Session, parent_id: int, student_id: Optional[int] = None, subject_id: Optional[int] = None) -> Subscription:
+def start_free_trial(db: Session, parent_id: UUID, student_id: Optional[UUID] = None, subject_id: Optional[UUID] = None) -> Subscription:
     """Start a free trial for a parent"""
     trial_end_date = datetime.now() + timedelta(days=DEFAULT_TRIAL_PERIOD_DAYS)
 
     subscription_create = SubscriptionCreate(
-        parent_id=parent_id,
+        user_id=parent_id,
         student_id=student_id,  # Can be None for parent-level trials
         subject_id=subject_id,
         status="trial",
@@ -177,18 +178,18 @@ def create_payment(db: Session, payment: PaymentCreate):
     db.refresh(db_payment)
     return db_payment
 
-def get_payment(db: Session, payment_id: int) -> Optional[Payment]:
+def get_payment(db: Session, payment_id: UUID) -> Optional[Payment]:
     """Get a payment by ID"""
     return db.query(Payment).filter(Payment.id == payment_id).first()
 
-def get_payments_by_subscription(db: Session, subscription_id: int) -> List[Payment]:
+def get_payments_by_subscription(db: Session, subscription_id: UUID) -> List[Payment]:
     """Get all payments for a subscription"""
     return db.query(Payment).filter(Payment.subscription_id == subscription_id).all()
 
-def get_payments_by_user(db: Session, user_id: int) -> List[Payment]:
+def get_payments_by_user(db: Session, user_id: UUID) -> List[Payment]:
     """Get all payments for a user (parent)"""
     # Get all subscriptions for the user
-    subscriptions = get_subscriptions_by_parent(db, user_id)
+    subscriptions = get_subscriptions_by_user(db, user_id)
     subscription_ids = [sub.id for sub in subscriptions]
 
     if not subscription_ids:
@@ -196,7 +197,7 @@ def get_payments_by_user(db: Session, user_id: int) -> List[Payment]:
 
     return db.query(Payment).filter(Payment.subscription_id.in_(subscription_ids)).all()
 
-def update_payment(db: Session, payment_id: int, payment_update: PaymentUpdate):
+def update_payment(db: Session, payment_id: UUID, payment_update: PaymentUpdate):
     """Update a payment"""
     db_payment = get_payment(db, payment_id)
     if not db_payment:
@@ -209,7 +210,7 @@ def update_payment(db: Session, payment_id: int, payment_update: PaymentUpdate):
     db.refresh(db_payment)
     return db_payment
 
-def mark_payment_as_paid(db: Session, payment_id: int, transaction_id: str):
+def mark_payment_as_paid(db: Session, payment_id: UUID, transaction_id: UUID):
     """Mark a payment as paid"""
     db_payment = get_payment(db, payment_id)
     if not db_payment:
@@ -229,7 +230,7 @@ def mark_payment_as_paid(db: Session, payment_id: int, transaction_id: str):
     db.refresh(db_payment)
     return db_payment
 
-def mark_payment_as_failed(db: Session, payment_id: int, reason: str):
+def mark_payment_as_failed(db: Session, payment_id: UUID, reason: str):
     """Mark a payment as failed"""
     db_payment = get_payment(db, payment_id)
     if not db_payment:
@@ -276,22 +277,22 @@ def create_billing_info(db: Session, billing_info: BillingInfoCreate):
     db.refresh(db_billing)
     return db_billing
 
-def get_billing_info(db: Session, billing_id: int) -> Optional[BillingInfo]:
+def get_billing_info(db: Session, billing_id: UUID) -> Optional[BillingInfo]:
     """Get billing information by ID"""
     return db.query(BillingInfo).filter(BillingInfo.id == billing_id).first()
 
-def get_billing_info_by_user(db: Session, user_id: int) -> List[BillingInfo]:
+def get_billing_info_by_user(db: Session, user_id: UUID) -> List[BillingInfo]:
     """Get all billing information for a user"""
     return db.query(BillingInfo).filter(BillingInfo.user_id == user_id).all()
 
-def get_default_billing_info(db: Session, user_id: int) -> Optional[BillingInfo]:
+def get_default_billing_info(db: Session, user_id: UUID) -> Optional[BillingInfo]:
     """Get the default billing information for a user"""
     return db.query(BillingInfo).filter(
         BillingInfo.user_id == user_id,
         BillingInfo.is_default == True
     ).first()
 
-def update_billing_info(db: Session, billing_id: int, billing_update: BillingInfoUpdate):
+def update_billing_info(db: Session, billing_id: UUID, billing_update: BillingInfoUpdate):
     """Update billing information"""
     db_billing = get_billing_info(db, billing_id)
     if not db_billing:
@@ -311,7 +312,7 @@ def update_billing_info(db: Session, billing_id: int, billing_update: BillingInf
     db.refresh(db_billing)
     return db_billing
 
-def delete_billing_info(db: Session, billing_id: int) -> bool:
+def delete_billing_info(db: Session, billing_id: UUID) -> bool:
     """Delete billing information"""
     db_billing = get_billing_info(db, billing_id)
     if not db_billing:
@@ -343,7 +344,7 @@ def create_subscription_plan(db: Session, plan: SubscriptionPlanCreate) -> Subsc
     db.refresh(db_plan)
     return db_plan
 
-def get_subscription_plan(db: Session, plan_id: int) -> Optional[SubscriptionPlan]:
+def get_subscription_plan(db: Session, plan_id: UUID) -> Optional[SubscriptionPlan]:
     """Get a subscription plan by ID"""
     return db.query(SubscriptionPlan).filter(SubscriptionPlan.id == plan_id).first()
 
@@ -359,7 +360,7 @@ def get_active_subscription_plans(db: Session) -> List[SubscriptionPlan]:
     """Get all active subscription plans"""
     return db.query(SubscriptionPlan).filter(SubscriptionPlan.is_active == True).order_by(SubscriptionPlan.sort_order).all()
 
-def update_subscription_plan(db: Session, plan_id: int, plan_update: SubscriptionPlanUpdate) -> Optional[SubscriptionPlan]:
+def update_subscription_plan(db: Session, plan_id: UUID, plan_update: SubscriptionPlanUpdate) -> Optional[SubscriptionPlan]:
     """Update a subscription plan"""
     db_plan = get_subscription_plan(db, plan_id)
     if not db_plan:
@@ -372,7 +373,7 @@ def update_subscription_plan(db: Session, plan_id: int, plan_update: Subscriptio
     db.refresh(db_plan)
     return db_plan
 
-def delete_subscription_plan(db: Session, plan_id: int) -> bool:
+def delete_subscription_plan(db: Session, plan_id: UUID) -> bool:
     """Delete a subscription plan"""
     db_plan = get_subscription_plan(db, plan_id)
     if not db_plan:
@@ -398,15 +399,15 @@ def create_plan_feature(db: Session, feature: PlanFeatureCreate) -> PlanFeature:
     db.refresh(db_feature)
     return db_feature
 
-def get_plan_feature(db: Session, feature_id: int) -> Optional[PlanFeature]:
+def get_plan_feature(db: Session, feature_id: UUID) -> Optional[PlanFeature]:
     """Get a plan feature by ID"""
     return db.query(PlanFeature).filter(PlanFeature.id == feature_id).first()
 
-def get_plan_features_by_plan(db: Session, plan_id: int) -> List[PlanFeature]:
+def get_plan_features_by_plan(db: Session, plan_id: UUID) -> List[PlanFeature]:
     """Get all features for a specific plan"""
     return db.query(PlanFeature).filter(PlanFeature.plan_id == plan_id).all()
 
-def update_plan_feature(db: Session, feature_id: int, feature_update: PlanFeatureUpdate) -> Optional[PlanFeature]:
+def update_plan_feature(db: Session, feature_id: UUID, feature_update: PlanFeatureUpdate) -> Optional[PlanFeature]:
     """Update a plan feature"""
     db_feature = get_plan_feature(db, feature_id)
     if not db_feature:
@@ -419,7 +420,7 @@ def update_plan_feature(db: Session, feature_id: int, feature_update: PlanFeatur
     db.refresh(db_feature)
     return db_feature
 
-def delete_plan_feature(db: Session, feature_id: int) -> bool:
+def delete_plan_feature(db: Session, feature_id: UUID) -> bool:
     """Delete a plan feature"""
     db_feature = get_plan_feature(db, feature_id)
     if not db_feature:
@@ -443,19 +444,19 @@ def create_plan_subject(db: Session, plan_subject: PlanSubjectCreate) -> PlanSub
     db.refresh(db_plan_subject)
     return db_plan_subject
 
-def get_plan_subject(db: Session, plan_subject_id: int) -> Optional[PlanSubject]:
+def get_plan_subject(db: Session, plan_subject_id: UUID) -> Optional[PlanSubject]:
     """Get a plan subject by ID"""
     return db.query(PlanSubject).filter(PlanSubject.id == plan_subject_id).first()
 
-def get_plan_subjects_by_plan(db: Session, plan_id: int) -> List[PlanSubject]:
+def get_plan_subjects_by_plan(db: Session, plan_id: UUID) -> List[PlanSubject]:
     """Get all subjects for a specific plan"""
     return db.query(PlanSubject).filter(PlanSubject.plan_id == plan_id).all()
 
-def get_plan_subjects_by_subject(db: Session, subject_id: int) -> List[PlanSubject]:
+def get_plan_subjects_by_subject(db: Session, subject_id: UUID) -> List[PlanSubject]:
     """Get all plans that include a specific subject"""
     return db.query(PlanSubject).filter(PlanSubject.subject_id == subject_id).all()
 
-def delete_plan_subject(db: Session, plan_subject_id: int) -> bool:
+def delete_plan_subject(db: Session, plan_subject_id: UUID) -> bool:
     """Delete a plan subject association"""
     db_plan_subject = get_plan_subject(db, plan_subject_id)
     if not db_plan_subject:
@@ -490,17 +491,17 @@ def create_trial_extension(db: Session, trial_extension: TrialExtensionCreate):
     db.refresh(db_extension)
     return db_extension
 
-def get_trial_extensions_by_subscription(db: Session, subscription_id: int):
+def get_trial_extensions_by_subscription(db: Session, subscription_id: UUID):
     """Get all trial extensions for a subscription"""
     return db.query(TrialExtension).filter(TrialExtension.subscription_id == subscription_id).all()
 
-def get_trial_extension(db: Session, extension_id: int):
+def get_trial_extension(db: Session, extension_id: UUID):
     """Get a trial extension by ID"""
     return db.query(TrialExtension).filter(TrialExtension.id == extension_id).first()
 
 # Pricing calculation functions
 
-def calculate_subscription_price(db: Session, plan_id: int, num_subjects: int = 1, billing_cycle: str = BILLING_CYCLE_ANNUAL) -> float:
+def calculate_subscription_price(db: Session, plan_id: UUID, num_subjects: int = 1, billing_cycle: str = BILLING_CYCLE_ANNUAL) -> float:
     """Calculate subscription price based on plan and billing cycle"""
 
     plan = get_subscription_plan(db, plan_id)
@@ -547,19 +548,19 @@ def create_invoice(db: Session, invoice: InvoiceCreate):
     db.refresh(db_invoice)
     return db_invoice
 
-def get_invoice(db: Session, invoice_id: int) -> Optional[Invoice]:
+def get_invoice(db: Session, invoice_id: UUID) -> Optional[Invoice]:
     """Get an invoice by ID"""
     return db.query(Invoice).filter(Invoice.id == invoice_id).first()
 
-def get_invoices_by_user(db: Session, user_id: int) -> List[Invoice]:
+def get_invoices_by_user(db: Session, user_id: UUID) -> List[Invoice]:
     """Get all invoices for a user"""
     return db.query(Invoice).filter(Invoice.user_id == user_id).order_by(Invoice.created_at.desc()).all()
 
-def get_invoices_by_subscription(db: Session, subscription_id: int) -> List[Invoice]:
+def get_invoices_by_subscription(db: Session, subscription_id: UUID) -> List[Invoice]:
     """Get all invoices for a subscription"""
     return db.query(Invoice).filter(Invoice.subscription_id == subscription_id).order_by(Invoice.created_at.desc()).all()
 
-def update_invoice(db: Session, invoice_id: int, invoice_update: InvoiceUpdate):
+def update_invoice(db: Session, invoice_id: UUID, invoice_update: InvoiceUpdate):
     """Update an invoice"""
     db_invoice = get_invoice(db, invoice_id)
     if not db_invoice:
@@ -572,7 +573,7 @@ def update_invoice(db: Session, invoice_id: int, invoice_update: InvoiceUpdate):
     db.refresh(db_invoice)
     return db_invoice
 
-def mark_invoice_as_paid(db: Session, invoice_id: int):
+def mark_invoice_as_paid(db: Session, invoice_id: UUID):
     """Mark an invoice as paid"""
     db_invoice = get_invoice(db, invoice_id)
     if not db_invoice:
@@ -587,11 +588,11 @@ def mark_invoice_as_paid(db: Session, invoice_id: int):
 
 # Billing Summary and Helper Functions
 
-def check_trial_status(db: Session, user_id: int) -> dict:
+def check_trial_status(db: Session, user_id: UUID) -> dict:
     """Check if user has active trials and their status"""
     from datetime import datetime
 
-    subscriptions = get_subscriptions_by_parent(db, user_id)
+    subscriptions = get_subscriptions_by_user(db, user_id)
     trial_subs = [sub for sub in subscriptions if sub.status == "trial"]
 
     if not trial_subs:
@@ -614,7 +615,7 @@ def check_trial_status(db: Session, user_id: int) -> dict:
 def get_billing_summary(db: Session, user_id: int):
     """Get a summary of billing information for a user"""
 
-    subscriptions = get_subscriptions_by_parent(db, user_id)
+    subscriptions = get_subscriptions_by_user(db, user_id)
     payments = get_payments_by_user(db, user_id)
     billing_info = get_billing_info_by_user(db, user_id)
     user = get_user(db, user_id)

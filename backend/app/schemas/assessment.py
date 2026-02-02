@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field, computed_field
 from typing import Optional, List, Any, Dict
 from datetime import datetime
+from uuid import UUID
 
 class QuestionCreateRequest(BaseModel):
     question_text: str
@@ -14,9 +15,9 @@ class QuestionCreateRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 class QuestionOut(BaseModel):
-    id: int
-    assessment_id: int
-    question_bank_id: int
+    id: UUID
+    assessment_id: UUID
+    question_bank_id: UUID
     is_correct: Optional[bool]
     score: Optional[float]
     student_answer: Optional[str]
@@ -25,7 +26,7 @@ class QuestionOut(BaseModel):
     question_bank: Optional["QuestionBankResponse"]
 
 class QuestionBankResponse(BaseModel):
-    id: int
+    id: UUID
     question_text: str
     question_type: str
     difficulty_level: float
@@ -53,9 +54,9 @@ class QuestionBankResponse(BaseModel):
         orm_mode = True
 
 class AssessmentQuestionOut(BaseModel):
-    id: int
-    assessment_id: int
-    knowledge_area_id: int
+    id: UUID
+    assessment_id: UUID
+    knowledge_area_id: UUID
     question_number: int
     difficulty_level: str
     question_text: str
@@ -71,13 +72,13 @@ class AssessmentQuestionOut(BaseModel):
         orm_mode = True
 
 class AssessmentCreate(BaseModel):
-    student_id: int
+    student_id: UUID
     subject: str
 
 
 class AssessmentOut(BaseModel):
-    id: int
-    student_id: int
+    id: UUID
+    student_id: UUID
     subject: str
     grade_level: int
     status: str
@@ -96,7 +97,7 @@ class AnswerSubmit(BaseModel):
     time_taken: Optional[int] = Field(None, description="seconds")
 
 class AnswerOut(BaseModel):
-    question_id: int
+    question_id: UUID
     is_correct: bool
     score: float
     feedback: Optional[str]
@@ -104,8 +105,8 @@ class AnswerOut(BaseModel):
     status: str  # "in_progress"|"completed"
 
 class AssessmentReport(BaseModel):
-    id: int
-    assessment_id: int
+    id: UUID
+    assessment_id: UUID
     diagnostic_summary: str
     study_plan_json: List[Dict[str, Any]]
     mastery_table_json: List[Dict[str, Any]]
@@ -126,6 +127,6 @@ class AssessmentReportSchema(BaseModel):
 class AssessmentReportResponse(BaseModel):
     completed: bool
     subject: str
-    assessment_id: int
+    assessment_id: UUID
     assessment_report: Optional[AssessmentReportSchema]
     diagnostic_summary: Optional[str]

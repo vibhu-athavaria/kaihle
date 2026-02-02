@@ -2,7 +2,7 @@
 import uuid, enum
 from sqlalchemy import (
     Column, Integer, String, ForeignKey, Boolean,
-    TIMESTAMP, text, Index, CheckConstraint, ENUM
+    TIMESTAMP, text, Index, CheckConstraint, Enum
 )
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY, UUID
 from sqlalchemy.orm import relationship
@@ -48,7 +48,7 @@ class Course(Base, SerializerMixin):
     difficulty_level = Column(Integer, nullable=True)  # 1-5
 
     # Prerequisites - consistent with QuestionBank
-    prerequisite_topic_ids = Column(ARRAY(Integer), nullable=True)  # Array of topic IDs that must be mastered first
+    prerequisite_topic_ids = Column(ARRAY(UUID(as_uuid=True)), nullable=True)  # Array of topic IDs that must be mastered first
 
     # AI generation metadata
     generated_by_ai = Column(Boolean, default=False)
@@ -88,8 +88,8 @@ class Course(Base, SerializerMixin):
 
     student_progress = relationship("StudentCourseProgress", back_populates="course",
                                    cascade="all, delete-orphan")
-    tutor_sessions = relationship("TutorSession", back_populates="course")
-    student_answers = relationship("StudentAnswer", back_populates="course")
+    # tutor_sessions = relationship("TutorSession", back_populates="course")
+
 
 
 class CourseSection(Base, SerializerMixin):
@@ -103,10 +103,10 @@ class CourseSection(Base, SerializerMixin):
     course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"),
                             nullable=False, index=True)
 
-    section_type = Column(ENUM(CourseSectionType), nullable=False)
+    section_type = Column(Enum(CourseSectionType), nullable=False)
     title = Column(String(255), nullable=True)
 
-    content_type = Column(ENUM(CourseContentType), nullable=False)
+    content_type = Column(Enum(CourseContentType), nullable=False)
     # Content stored as structured JSON
     content = Column(JSONB, nullable=False)
     """

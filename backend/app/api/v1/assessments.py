@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas import assessment as schemas
 from app.core.deps import get_current_user
+from uuid import UUID
 
 from app.services.assessment_service import (
     create_question,

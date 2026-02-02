@@ -24,7 +24,7 @@ def get_current_user(
     if user_id is None:
         raise credentials_exception
 
-    user = get_user(db, user_id=int(user_id))
+    user = get_user(db, user_id=user_id)
     if user is None:
         raise credentials_exception
 

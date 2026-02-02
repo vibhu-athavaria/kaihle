@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 
 from app.crud.billing import (
-    create_subscription, get_subscriptions_by_parent, is_in_free_trial,
+    create_subscription, get_subscriptions_by_user, is_in_free_trial,
     start_free_trial, create_payment, mark_payment_as_paid,
     get_billing_info_by_user, get_default_billing_info,
     get_subscription_plan, get_active_subscription_plans, calculate_subscription_price,
@@ -114,7 +114,7 @@ class BillingService:
         }
 
         for parent in all_users:
-            active_subs = get_subscriptions_by_parent(db, parent.id)
+            active_subs = get_subscriptions_by_user(db, parent.id)
             active_subs = [sub for sub in active_subs if sub.status == "active"]
 
             if not active_subs:
@@ -151,7 +151,7 @@ class BillingService:
 
     def get_billing_summary(self, db: Session, parent_id: int) -> Dict[str, Any]:
         """Get a comprehensive billing summary for a parent"""
-        subscriptions = get_subscriptions_by_parent(db, parent_id)
+        subscriptions = get_subscriptions_by_user(db, parent_id)
         billing_info = get_billing_info_by_user(db, parent_id)
 
         active_subs = [sub for sub in subscriptions if sub.status in ["active", "trial"]]
@@ -200,7 +200,7 @@ class BillingService:
 
     def check_subscription_status(self, db: Session, parent_id: int, student_id: int, subject_id: Optional[int] = None) -> Dict[str, Any]:
         """Check the subscription status for a specific student/subject"""
-        subscriptions = get_subscriptions_by_parent(db, parent_id)
+        subscriptions = get_subscriptions_by_user(db, parent_id)
 
         # Find the specific subscription
         target_sub = None
@@ -324,7 +324,7 @@ class BillingService:
             return {"eligible": False, "reason": "Already in free trial"}
 
         # Check if parent already had a trial in the past
-        subscriptions = get_subscriptions_by_parent(db, parent_id)
+        subscriptions = get_subscriptions_by_user(db, parent_id)
         past_trials = [sub for sub in subscriptions if sub.status == "trial"]
 
         if past_trials:
@@ -414,7 +414,7 @@ class BillingService:
         parent_id = student_profile.parent_id
 
         # Check if student already has a trial
-        existing_trials = get_subscriptions_by_parent(db, parent_id)
+        existing_trials = get_subscriptions_by_user(db, parent_id)
         existing_trials = [sub for sub in existing_trials if sub.student_id == student_id and sub.status == "trial"]
 
         if existing_trials:

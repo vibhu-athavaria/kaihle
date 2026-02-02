@@ -3,6 +3,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+from uuid import UUID
 from app.constants import BILLING_CYCLE_ANNUAL
 
 class SubscriptionStatus(str, Enum):
@@ -20,9 +21,9 @@ class PaymentStatus(str, Enum):
     disputed = "disputed"
 
 class SubscriptionBase(BaseModel):
-    parent_id: int
-    student_id: int
-    subject_ids: List[int] = None
+    parent_id: UUID
+    student_id: UUID
+    subject_ids: List[UUID] = None
     status: SubscriptionStatus = SubscriptionStatus.active
     price: float
     currency: str = "USD"
@@ -40,7 +41,7 @@ class SubscriptionUpdate(BaseModel):
     end_date: Optional[datetime] = None
 
 class SubscriptionResponse(SubscriptionBase):
-    id: int
+    id: UUID
     start_date: datetime
     trial_end_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
@@ -52,7 +53,7 @@ class SubscriptionResponse(SubscriptionBase):
         from_attributes = True
 
 class PaymentBase(BaseModel):
-    subscription_id: int
+    subscription_id: UUID
     amount: float
     currency: str = "USD"
     payment_method: Optional[str] = None
@@ -60,10 +61,10 @@ class PaymentBase(BaseModel):
     description: Optional[str] = None
 
 class PaymentCreate(PaymentBase):
-    plan_id: int
+    plan_id: UUID
     billing_cycle: str = BILLING_CYCLE_ANNUAL  # monthly or annual
-    student_ids: List[int] = []
-    subject_ids: Optional[List[int]] = None
+    student_ids: List[UUID] = []
+    subject_ids: Optional[List[UUID]] = None
 
 class PaymentUpdate(BaseModel):
     status: Optional[PaymentStatus] = None
@@ -71,7 +72,7 @@ class PaymentUpdate(BaseModel):
     transaction_id: Optional[str] = None
 
 class PaymentResponse(PaymentBase):
-    id: int
+    id: UUID
     status: PaymentStatus = PaymentStatus.pending
     payment_date: Optional[datetime] = None
     created_at: datetime
@@ -81,7 +82,7 @@ class PaymentResponse(PaymentBase):
         from_attributes = True
 
 class BillingInfoBase(BaseModel):
-    user_id: int
+    user_id: UUID
     payment_method: Optional[str] = None
     card_last_four: Optional[str] = None
     card_brand: Optional[str] = None
@@ -109,7 +110,7 @@ class BillingInfoUpdate(BaseModel):
     is_default: Optional[bool] = None
 
 class BillingInfoResponse(BillingInfoBase):
-    id: int
+    id: UUID
     created_at: datetime
     updated_at: datetime
 
@@ -117,8 +118,8 @@ class BillingInfoResponse(BillingInfoBase):
         from_attributes = True
 
 class InvoiceBase(BaseModel):
-    user_id: int
-    subscription_id: int
+    user_id: UUID
+    subscription_id: UUID
     invoice_number: str
     amount: float
     currency: str = "USD"
@@ -137,7 +138,7 @@ class InvoiceUpdate(BaseModel):
     pdf_url: Optional[str] = None
 
 class InvoiceResponse(InvoiceBase):
-    id: int
+    id: UUID
     created_at: datetime
     updated_at: datetime
 
@@ -161,7 +162,7 @@ class UserBillingSummary(BaseModel):
     has_payment_method: bool = False
 
 class PaymentMethodResponse(BaseModel):
-    id: int
+    id: UUID
     payment_method: str
     card_last_four: Optional[str] = None
     card_brand: Optional[str] = None
@@ -185,8 +186,8 @@ class SubscriptionPlanCreate(SubscriptionPlanBase):
     pass
 
 class TrialExtensionBase(BaseModel):
-    subscription_id: int
-    extended_by_admin_id: int
+    subscription_id: UUID
+    extended_by_admin_id: UUID
     extension_days: int
     reason: Optional[str] = None
 
@@ -194,7 +195,7 @@ class TrialExtensionCreate(TrialExtensionBase):
     pass
 
 class TrialExtensionResponse(TrialExtensionBase):
-    id: int
+    id: UUID
     original_trial_end: datetime
     new_trial_end: datetime
     created_at: datetime
@@ -215,7 +216,7 @@ class SubscriptionPlanUpdate(BaseModel):
     plan_type: Optional[str] = None
 
 class SubscriptionPlanResponse(SubscriptionPlanBase):
-    id: int
+    id: UUID
     yearly_price: Optional[Decimal] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -224,7 +225,7 @@ class SubscriptionPlanResponse(SubscriptionPlanBase):
         from_attributes = True
 
 class PlanFeatureBase(BaseModel):
-    plan_id: int
+    plan_id: UUID
     feature_name: str
     feature_description: Optional[str] = None
     is_included: bool = True
@@ -238,7 +239,7 @@ class PlanFeatureUpdate(BaseModel):
     is_included: Optional[bool] = None
 
 class PlanFeatureResponse(PlanFeatureBase):
-    id: int
+    id: UUID
     created_at: datetime
     updated_at: datetime
 
@@ -246,14 +247,14 @@ class PlanFeatureResponse(PlanFeatureBase):
         from_attributes = True
 
 class PlanSubjectBase(BaseModel):
-    plan_id: int
-    subject_id: int
+    plan_id: UUID
+    subject_id: UUID
 
 class PlanSubjectCreate(PlanSubjectBase):
     pass
 
 class PlanSubjectResponse(PlanSubjectBase):
-    id: int
+    id: UUID
     created_at: datetime
     updated_at: datetime
 
@@ -261,7 +262,7 @@ class PlanSubjectResponse(PlanSubjectBase):
         from_attributes = True
 
 class PricingCalculationResponse(BaseModel):
-    plan_id: int
+    plan_id: UUID
     plan_name: str
     plan_type: str
     num_subjects: int

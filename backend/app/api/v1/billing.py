@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.core.deps import get_current_active_user, get_current_admin_user
 from app.crud.billing import (
-    create_subscription, get_subscription, get_subscriptions_by_parent,
+    create_subscription, get_subscription, get_subscriptions_by_user,
     update_subscription, cancel_subscription, get_all_subscriptions,
     get_active_subscriptions, get_trial_subscriptions, is_in_free_trial,
     start_free_trial, create_payment, get_payment, get_payments_by_subscription,
@@ -66,7 +66,7 @@ def get_my_subscriptions(
 ):
     """Get current user's subscriptions (for parents)"""
     if current_user.role == "parent":
-        return get_subscriptions_by_parent(db, current_user.id)
+        return get_subscriptions_by_user(db, current_user.id)
     elif current_user.role == "student":
         return get_subscriptions_by_student(db, current_user.id)
     elif current_user.role == "admin":

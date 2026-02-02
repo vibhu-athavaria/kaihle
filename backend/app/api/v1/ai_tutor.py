@@ -6,13 +6,11 @@ from app.core.deps import get_current_active_user
 from app.services.ai_tutor import ai_tutor_service
 from app.crud.ai_tutor import (
     create_tutor_session, get_active_session_by_student, create_tutor_interaction,
-    get_session_interactions, create_student_answer, get_student_answers,
     update_interaction_feedback
 )
 from app.crud.student import get_student_by_parent_and_id, get_student
 from app.schemas.ai_tutor import (
-    RecommendationRequest, RecommendationResponse, AnswerSubmission, AnswerEvaluation,
-    ChatMessage, ChatResponse, TutorSessionCreate, StudentAnswerResponse
+    RecommendationRequest, RecommendationResponse, ChatMessage, ChatResponse, TutorSessionCreate
 )
 from app.models.user import User as UserModel
 
@@ -66,47 +64,6 @@ def get_personalized_recommendations(
     )
 
     return recommendations
-
-@router.post("/submit", response_model=AnswerEvaluation)
-def submit_answer_for_evaluation(
-    submission: AnswerSubmission,
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
-):
-    """Submit a student answer for AI evaluation"""
-
-    # Verify access permissions
-    if current_user.role == "parent":
-        student = get_student_by_parent_and_id(db, current_user.id, submission.student_id)
-        if not student:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Student not found or not authorized"
-            )
-    elif current_user.role == "student":
-        student = get_student(db, submission.student_id)
-        if not student or student.id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to submit answers for this student"
-            )
-    elif current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
-
-    # Evaluate the answer using AI service
-    evaluation = ai_tutor_service.evaluate_student_answer(
-        question=submission.question,
-        student_answer=submission.student_answer,
-        correct_answer=submission.correct_answer
-    )
-
-    # Store the answer and evaluation in database
-    create_student_answer(db, submission, evaluation.dict())
-
-    return evaluation
 
 @router.post("/chat", response_model=ChatResponse)
 def chat_with_tutor(
@@ -168,38 +125,6 @@ def chat_with_tutor(
         session_id=session.id,
         suggestions=["Ask me about any topic you're studying!", "Need help with a specific question?"]
     )
-
-@router.get("/answers/{student_id}", response_model=List[StudentAnswerResponse])
-def get_student_answer_history(
-    student_id: int,
-    lesson_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
-):
-    """Get student's answer history"""
-
-    # Verify access permissions
-    if current_user.role == "parent":
-        student = get_student_by_parent_and_id(db, current_user.id, student_id)
-        if not student:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Student not found or not authorized"
-            )
-    elif current_user.role == "student":
-        student = get_student(db, student_id)
-        if not student or student.id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to view this student's answers"
-            )
-    elif current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
-
-    return get_student_answers(db, student_id, lesson_id)
 
 @router.post("/feedback/{interaction_id}")
 def provide_feedback(
