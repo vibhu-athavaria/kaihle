@@ -1,6 +1,6 @@
 # app/models/subject.py
 import uuid
-from sqlalchemy import Column, Integer, String, Text, Boolean, TIMESTAMP, text
+from sqlalchemy import Column, String, Text, Boolean, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
@@ -27,5 +27,4 @@ class Subject(Base, SerializerMixin):
     courses = relationship("Course", back_populates="subject")
     assessments = relationship("Assessment", back_populates="subject")
     question_banks = relationship("QuestionBank", back_populates="subject")
-    lessons = relationship("Lesson", back_populates="subject")
-    subscriptions = relationship("Subscription", back_populates="subject")
+    # subscriptions = relationship("Subscription", back_populates="subject")

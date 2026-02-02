@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+from uuid import UUID
 
 class ProgressBase(BaseModel):
     points_earned: int = 0
@@ -8,7 +9,7 @@ class ProgressBase(BaseModel):
     lessons_completed: int = 0
 
 class ProgressCreate(ProgressBase):
-    student_id: int
+    student_id: UUID
     week_start: datetime
 
 class ProgressUpdate(BaseModel):
@@ -17,12 +18,12 @@ class ProgressUpdate(BaseModel):
     lessons_completed: Optional[int] = None
 
 class Progress(ProgressBase):
-    id: int
-    student_id: int
+    id: UUID
+    student_id: UUID
     week_start: datetime
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -36,17 +37,17 @@ class BadgeCreate(BadgeBase):
     pass
 
 class Badge(BadgeBase):
-    id: int
+    id: UUID
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 class StudentBadgeResponse(BaseModel):
-    id: int
+    id: UUID
     badge: Badge
     earned_at: datetime
-    
+
     class Config:
         from_attributes = True
 

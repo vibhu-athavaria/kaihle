@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
+from uuid import UUID
 from sqlalchemy.orm import Session
 
-from app.crud.billing import get_active_subscriptions, get_subscriptions_by_parent
+from app.crud.billing import get_active_subscriptions, get_subscriptions_by_user
 from app.models.billing import Subscription
 
 
@@ -12,7 +13,7 @@ class AccessControlService:
     def __init__(self):
         pass
 
-    def can_access_courses(self, db: Session, student_id: int) -> bool:
+    def can_access_courses(self, db: Session, student_id: UUID) -> bool:
         """Check if student can access courses"""
         # Get active subscriptions for student
         subscriptions = get_active_subscriptions(db, student_id)
@@ -33,7 +34,7 @@ class AccessControlService:
 
         return False
 
-    def can_create_courses(self, db: Session, student_id: int) -> bool:
+    def can_create_courses(self, db: Session, student_id: UUID) -> bool:
         """Check if student can create new courses"""
         # Same logic as can_access_courses for now
         return self.can_access_courses(db, student_id)
@@ -109,7 +110,7 @@ class AccessControlService:
 
     def get_parent_dashboard_status(self, db: Session, parent_id: int) -> Dict[str, Any]:
         """Get access status for all students of a parent"""
-        subscriptions = get_subscriptions_by_parent(db, parent_id)
+        subscriptions = get_subscriptions_by_user(db, parent_id)
 
         now = datetime.now()
         student_statuses = {}

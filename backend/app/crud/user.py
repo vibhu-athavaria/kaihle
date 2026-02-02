@@ -1,3 +1,4 @@
+from uuid import UUID
 from sqlalchemy.orm import Session, joinedload
 from app.models.user import User, StudentProfile, UserRole
 from app.schemas.user import UserCreate, UserUpdate, StudentProfileCreate, StudentProfileUpdate
@@ -5,11 +6,11 @@ from app.core.security import get_password_hash, verify_password
 from typing import Optional
 
 
-def get_student_profile(db: Session, student_id: int) -> Optional[StudentProfile]:
+def get_student_profile(db: Session, student_id: UUID) -> Optional[StudentProfile]:
     """Get student profile by ID"""
     return db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
 
-def get_user(db: Session, user_id: int) -> Optional[User]:
+def get_user(db: Session, user_id: UUID) -> Optional[User]:
     return db.query(User).options(joinedload(User.student_profile)).filter(User.id == user_id).first()
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
@@ -46,7 +47,7 @@ def authenticate_user(db: Session, identifier: str, password: str) -> Optional[U
         return None
     return user
 
-def update_user(db: Session, user_id: int, user_update: UserUpdate) -> Optional[User]:
+def update_user(db: Session, user_id: UUID, user_update: UserUpdate) -> Optional[User]:
     db_user = get_user(db, user_id)
     if not db_user:
         return None
@@ -59,7 +60,7 @@ def update_user(db: Session, user_id: int, user_update: UserUpdate) -> Optional[
     db.refresh(db_user)
     return db_user
 
-def create_student(db: Session, student: StudentProfileCreate, parent_id: int) -> StudentProfile:
+def create_student(db: Session, student: StudentProfileCreate, parent_id: UUID) -> StudentProfile:
     hashed_password = get_password_hash(student.password)
     # Step 1: Create a User entry for the student
     student_user = User(
@@ -78,10 +79,7 @@ def create_student(db: Session, student: StudentProfileCreate, parent_id: int) -
         user_id=student_user.id,
         parent_id=parent_id,
         age=student.age,
-        grade_level=student.grade_level,
-        math_checkpoint=student.checkpoints.get("math") if student.checkpoints else None,
-        science_checkpoint=student.checkpoints.get("science") if student.checkpoints else None,
-        english_checkpoint=student.checkpoints.get("english") if student.checkpoints else None,
+        grade_id=student.grade_id
     )
     db.add(db_student_profile)
     db.commit()
@@ -89,7 +87,7 @@ def create_student(db: Session, student: StudentProfileCreate, parent_id: int) -
 
     return db_student_profile
 
-def update_student(db: Session, student_id: int, student_update: StudentProfileUpdate) -> Optional[StudentProfile]:
+def update_student(db: Session, student_id: UUID, student_update: StudentProfileUpdate) -> Optional[StudentProfile]:
     db_student = db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
     if not db_student:
         return None
@@ -105,7 +103,7 @@ def update_student(db: Session, student_id: int, student_update: StudentProfileU
 from app.models.billing import Subscription
 
 
-def get_students_by_parent(db: Session, parent_id: int):
+def get_students_by_parent(db: Session, parent_id: UUID):
     students = db.query(StudentProfile).filter(StudentProfile.parent_id == parent_id).all()
     for student in students:
 

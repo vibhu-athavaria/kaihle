@@ -1,14 +1,16 @@
+import uuid
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
 
 
 class Progress(Base):
     __tablename__ = "progress"
 
-    id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("student_profiles.id"), nullable=False)  # FIXED
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id"), nullable=False)  # FIXED
     week_start = Column(DateTime(timezone=True), nullable=False)
     points_earned = Column(Integer, default=0)
     streak_days = Column(Integer, default=0)
@@ -23,7 +25,7 @@ class Progress(Base):
 class Badge(Base):
     __tablename__ = "badges"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
     icon = Column(String, nullable=True)
@@ -34,11 +36,11 @@ class Badge(Base):
 class StudentBadge(Base):
     __tablename__ = "student_badges"
 
-    id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("student_profiles.id"), nullable=False)  # FIXED
-    badge_id = Column(Integer, ForeignKey("badges.id"), nullable=False)
+    id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
+    student_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id"), nullable=False)  # FIXED
+    badge_id = Column(UUID(as_uuid=True), ForeignKey("badges.id"), nullable=False)
     earned_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    # student = relationship("StudentProfile")  # FIXED
-    # badge = relationship("Badge")
+    student = relationship("StudentProfile")  # FIXED
+    badge = relationship("Badge")

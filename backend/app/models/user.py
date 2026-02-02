@@ -50,11 +50,11 @@ class User(Base, SerializerMixin):
         foreign_keys="StudentProfile.parent_id"
     )
 
-    # Community
-    posts = relationship("Post", back_populates="author", cascade="all, delete-orphan")
-    comments = relationship("Comment", back_populates="author", cascade="all, delete-orphan")
-    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
-
+    user_subscriptions = relationship(
+        "Subscription",
+        back_populates="user",
+        foreign_keys="Subscription.user_id"
+    )
 
 class StudentProfile(Base, SerializerMixin):
     __tablename__ = "student_profiles"
@@ -110,8 +110,7 @@ class StudentProfile(Base, SerializerMixin):
     assessments = relationship("Assessment", back_populates="student", cascade="all, delete-orphan")
     study_plans = relationship("StudyPlan", back_populates="student", cascade="all, delete-orphan")
     knowledge_profiles = relationship("StudentKnowledgeProfile", back_populates="student", cascade="all, delete-orphan")
-    progress_records = relationship("Progress", back_populates="student", cascade="all, delete-orphan")
+
     student_badges = relationship("StudentBadge", back_populates="student", cascade="all, delete-orphan")
     course_progress = relationship("StudentCourseProgress", back_populates="student", cascade="all, delete-orphan")
-    tutor_sessions = relationship("TutorSession", back_populates="student", cascade="all, delete-orphan")
-    answers = relationship("StudentAnswer", back_populates="student", cascade="all, delete-orphan")
+    student_subscriptions = relationship("Subscription", back_populates="student", foreign_keys="Subscription.student_profile_id", cascade="all, delete-orphan")

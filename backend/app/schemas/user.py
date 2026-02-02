@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, validator
 from typing import Dict, Optional, List
 from datetime import datetime
+from uuid import UUID
 from app.models.user import UserRole
 from app.schemas.assessment import AssessmentOut
 
@@ -16,7 +17,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
-    parent_id: Optional[int] = None
+    parent_id: Optional[UUID] = None
     student_profile: Optional["StudentProfileCreate"] = None  # forward reference
 
     # Role-based validation
@@ -42,7 +43,7 @@ class UserUpdate(BaseModel):
 
 
 class User(UserBase):
-    id: int
+    id: UUID
     is_active: bool
     created_at: datetime
     student_profile: Optional["StudentProfileResponse"] = None
@@ -85,8 +86,8 @@ class StudentProfileUpdate(BaseModel):
 
 
 class StudentProfileResponse(BaseModel):
-    id: int
-    parent_id: int
+    id: UUID
+    parent_id: UUID
     age: Optional[int] = None
     grade_level: Optional[int] = None
     interests: Optional[List[str]] = None
@@ -94,7 +95,7 @@ class StudentProfileResponse(BaseModel):
     preferred_session_length: Optional[int] = None
     registration_completed_at: Optional[datetime] = None
     # has_active_subscription: bool
-    # active_subscription_id: Optional[int] = None
+    # active_subscription_id: Optional[UUID] = None
     user: UserBase
 
     class Config:
@@ -107,15 +108,15 @@ class LearningProfileUpdate(BaseModel):
     preferred_session_length: int
 
 class AssessmentSubjectStatus(BaseModel):
-    assessment_id: int
+    assessment_id: UUID
     status: str
 
     class Config:
         from_attributes = True
 
 class StudentDetailResponse(BaseModel):
-    id: int
-    parent_id: int
+    id: UUID
+    parent_id: UUID
     age: Optional[int] = None
     grade_level: Optional[int] = None
     interests: Optional[List[str]] = None

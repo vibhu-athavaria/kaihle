@@ -4,6 +4,7 @@ import json
 import math, random
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
+from uuid import UUID
 from venv import logger
 from sqlalchemy.orm import Session
 from sqlalchemy import func, select, text
@@ -47,7 +48,7 @@ def difficulty_float_from_label(label: str) -> float:
     except:
         return 0.5
 
-def pick_next_topic_and_difficulty(db: Session, student_id: int, subject: str):
+def pick_next_topic_and_difficulty(db: Session, student_id: UUID, subject: str):
     # get student's knowledge profiles for subject
     skps = db.query(StudentKnowledgeProfile).join(QuestionBank).filter(
         StudentKnowledgeProfile.student_id == student_id,
@@ -300,7 +301,7 @@ def count_questions_for_topic(db: Session, assessment: Assessment, subtopic: str
 
 
 # ---------- Topic selection & difficulty logic ----------
-def pick_next_topic_and_difficulty(db: Session, student_id: int, subject: str, assessment: Optional[Assessment] = None) -> Dict[str, Any]:
+def pick_next_topic_and_difficulty(db: Session, student_id: UUID, subject: str, assessment: Optional[Assessment] = None) -> Dict[str, Any]:
     """
     Central logic to pick next (topic, subtopic, difficulty).
     - Uses student's profile checkpoints.
@@ -679,7 +680,7 @@ async def score_answer_and_maybe_next(db: Session, assessment: Assessment, quest
     }
 
 # ---------- Process completed assessment and generate summary ----------
-def get_subtopic_mastery_results_for_assessment(db: Session, assessment_id: int):
+def get_subtopic_mastery_results_for_assessment(db: Session, assessment_id: UUID):
     query = (
         select(
             QuestionBank.subtopic,
@@ -775,7 +776,7 @@ def generate_study_plan(df):
 
     return study_plan
 
-def get_or_create_assessment_report(db: Session, assessment_id: int, student_name: str, grade_level: int) -> Dict[str, Any]:
+def get_or_create_assessment_report(db: Session, assessment_id: UUID, student_name: str, grade_level: int) -> Dict[str, Any]:
     existing_report = db.query(AssessmentReport).filter(AssessmentReport.assessment_id == assessment_id).first()
     if existing_report:
         return existing_report
@@ -795,7 +796,7 @@ def get_or_create_assessment_report(db: Session, assessment_id: int, student_nam
     return report
 
 
-def process_completed_assessment(db: Session, assessment_id :int, student_name: str, grade_level: int) -> Dict[str, Any]:
+def process_completed_assessment(db: Session, assessment_id: UUID, student_name: str, grade_level: int) -> Dict[str, Any]:
 
     # Step 1: get results
     rows = get_subtopic_mastery_results_for_assessment(db, assessment_id)
@@ -822,7 +823,7 @@ def process_completed_assessment(db: Session, assessment_id :int, student_name: 
     return {"diagnostic_summary": diagnostic_summary, "study_plan": study_plan, "mastery_table": df.to_dict(orient="records")}
 
 
-def db_query_for_diagnostic(db: Session, assessment_id: int):
+def db_query_for_diagnostic(db: Session, assessment_id: UUID):
     """Helper to get diagnostic data for an assessment."""
     query = """
         WITH per_sub AS (
@@ -834,7 +835,7 @@ def db_query_for_diagnostic(db: Session, assessment_id: int):
             AVG(difficulty_level)::numeric AS avg_difficulty,
             SUM(score * difficulty_level)::numeric AS weighted_sum,
             SUM(difficulty_level)::numeric AS difficulty_sum
-        from assessment_questions inner join question_bank as qb on qb.id = question_bank_id  where assessment_id = 7
+        from assessment_questions inner join question_bank as qb on qb.id = question_bank_id  where assessment_id = :assessment_id
         GROUP BY subtopic
         )
         SELECT

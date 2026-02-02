@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.schemas import assessment as schemas
 from app.core.deps import get_current_user
+from uuid import UUID
 
 from app.services.assessment_service import (
     create_question,
@@ -73,7 +74,7 @@ def create_assessment(payload: schemas.AssessmentCreate, db: Session = Depends(g
 
 
 @router.post("/{assessment_id}/questions", response_model=schemas.QuestionOut)
-async def create_assessment_question(assessment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def create_assessment_question(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Create a new question for an existing assessment.
 
@@ -100,7 +101,7 @@ async def create_assessment_question(assessment_id: int, db: Session = Depends(g
 
 
 @router.post("/{assessment_id}/questions/{question_id}/answer", response_model=schemas.AnswerOut)
-async def check_answer_and_next(assessment_id: int, question_id: int, payload: schemas.AnswerSubmit, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def check_answer_and_next(assessment_id: UUID, question_id: UUID, payload: schemas.AnswerSubmit, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Submit an answer for a question:
     - Update the question record (is_correct/score/answered_at/time_taken).
@@ -196,7 +197,7 @@ async def check_answer_and_next(assessment_id: int, question_id: int, payload: s
 
 
 @router.get("/{assessment_id}", response_model=schemas.AssessmentOut)
-def get_assessment(assessment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_assessment(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
@@ -204,7 +205,7 @@ def get_assessment(assessment_id: int, db: Session = Depends(get_db), current_us
 
 
 @router.post("/{assessment_id}/completed", response_model=schemas.AssessmentReport)
-def complete_assessment(assessment_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def complete_assessment(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
@@ -219,7 +220,7 @@ def complete_assessment(assessment_id: int, db: Session = Depends(get_db), curre
 
 @router.get("/{assessment_id}/report", response_model=schemas.AssessmentReportResponse)
 def get_assessment_report(
-    assessment_id: int,
+    assessment_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):

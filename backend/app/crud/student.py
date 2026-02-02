@@ -6,15 +6,16 @@ from app.models.assessment import Assessment
 from app.schemas.user import StudentProfileUpdate, LearningProfileUpdate
 from typing import Optional
 from app.core.security import verify_password, get_password_hash
+from uuid import UUID
 
-def get_student(db: Session, student_id: int) -> Optional[StudentProfile]:
+def get_student(db: Session, student_id: UUID) -> Optional[StudentProfile]:
     return db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
 
 def get_student_by_username(db: Session, username: str) -> Optional[StudentProfile]:
     query = db.query(StudentProfile).filter(StudentProfile.username == username)
     return query.first()
 
-def get_student_with_assessments(db: Session, student_id: int) -> Optional[dict]:
+def get_student_with_assessments(db: Session, student_id: UUID) -> Optional[dict]:
     # Load the student and base relations
     query = (
         db.query(StudentProfile)
@@ -50,7 +51,7 @@ def get_student_with_assessments(db: Session, student_id: int) -> Optional[dict]
 
     return student_dict
 
-def update_student(db: Session, student_id: int, updates: StudentProfileUpdate) -> StudentProfile | None:
+def update_student(db: Session, student_id: UUID, updates: StudentProfileUpdate) -> StudentProfile | None:
     # Fetch student profile
     db_student_profile = db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
     if not db_student_profile:
@@ -99,7 +100,7 @@ def update_student(db: Session, student_id: int, updates: StudentProfileUpdate) 
 
     return db_student_profile
 
-def update_learning_profile(db: Session, student_id: int, updates: LearningProfileUpdate) -> StudentProfile | None:
+def update_learning_profile(db: Session, student_id: UUID, updates: LearningProfileUpdate) -> StudentProfile | None:
     # create_trial_Subscription = False
     db_student_profile = db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
     if not db_student_profile:
@@ -137,7 +138,7 @@ def update_learning_profile(db: Session, student_id: int, updates: LearningProfi
     #     create_trial_subscription(db, db_student_profile.id)
     return db_student_profile
 
-def delete_student(db: Session, student_id: int) -> bool:
+def delete_student(db: Session, student_id: UUID) -> bool:
     db_student = get_student(db, student_id)
     if not db_student:
         return False
@@ -146,7 +147,7 @@ def delete_student(db: Session, student_id: int) -> bool:
     db.commit()
     return True
 
-def get_student_by_parent_and_id(db: Session, parent_id: int, student_id: int) -> Optional[StudentProfile]:
+def get_student_by_parent_and_id(db: Session, parent_id: UUID, student_id: UUID) -> Optional[StudentProfile]:
     return db.query(StudentProfile).filter(
         StudentProfile.parent_id == parent_id,
         StudentProfile.id == student_id

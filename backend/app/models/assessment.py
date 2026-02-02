@@ -112,7 +112,7 @@ class QuestionBank(Base, SerializerMixin):
     estimated_time_seconds = Column(Integer, nullable=True)
 
     # For tracking prerequisite topics required
-    prerequisites = Column(ARRAY(Integer), nullable=True)  # Array of topic IDs
+    prerequisites = Column(ARRAY(UUID(as_uuid=True)), nullable=True)  # Array of topic IDs
 
     learning_objectives = Column(ARRAY(Text), nullable=True)
     explanation = Column(Text, nullable=True)  # Detailed explanation of the answer
@@ -142,7 +142,7 @@ class QuestionBank(Base, SerializerMixin):
     grade = relationship("Grade")
     assessment_questions = relationship("AssessmentQuestion", back_populates="question_bank")
     course_questions = relationship("CourseQuestionLink", back_populates="question_bank")
-    student_answers = relationship("StudentAnswer", back_populates="question_bank")
+
 
 
 class AssessmentReport(Base, SerializerMixin):

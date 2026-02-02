@@ -1,15 +1,18 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from app.models.study_plan import StudyPlan, StudyPlanCourse
-from app.schemas.course import CourseCreate, CourseUpdate, StudyPlanCreate, StudyPlanUpdate, StudyPlanCourseCreate
+from app.schemas.study_plan import StudyPlanCreate, StudyPlanUpdate, StudyPlanCourseOut, StudyPlanCourseCreate
+from app.schemas.course import CourseCreate, CourseUpdate
 from typing import Optional, List
+from uuid import UUID
+from datetime import datetime
 
 
 # Study Plan CRUD operations
-def get_study_plan(db: Session, study_plan_id: int) -> Optional[StudyPlan]:
+def get_study_plan(db: Session, study_plan_id: UUID) -> Optional[StudyPlan]:
     return db.query(StudyPlan).filter(StudyPlan.id == study_plan_id).first()
 
-def get_study_plans_by_student(db: Session, student_id: int) -> List[StudyPlan]:
+def get_study_plans_by_student(db: Session, student_id: UUID) -> List[StudyPlan]:
     return db.query(StudyPlan).filter(
         StudyPlan.student_id == student_id,
         StudyPlan.is_active == True
@@ -36,7 +39,7 @@ def create_study_plan(db: Session, study_plan: StudyPlanCreate) -> StudyPlan:
     db.refresh(db_study_plan)
     return db_study_plan
 
-def update_study_plan(db: Session, study_plan_id: int, study_plan_update: StudyPlanUpdate) -> Optional[StudyPlan]:
+def update_study_plan(db: Session, study_plan_id: UUID, study_plan_update: StudyPlanUpdate) -> Optional[StudyPlan]:
     db_study_plan = get_study_plan(db, study_plan_id)
     if not db_study_plan:
         return None
@@ -49,7 +52,7 @@ def update_study_plan(db: Session, study_plan_id: int, study_plan_update: StudyP
     db.refresh(db_study_plan)
     return db_study_plan
 
-def add_course_to_study_plan(db: Session, study_plan_id: int, course_id: int) -> Optional[StudyPlanCourse]:
+def add_course_to_study_plan(db: Session, study_plan_id: UUID, course_id: UUID) -> Optional[StudyPlanCourseOut]:
     # Check if course is already in the study plan
     existing = db.query(StudyPlanCourse).filter(
         StudyPlanCourse.study_plan_id == study_plan_id,
@@ -74,7 +77,7 @@ def add_course_to_study_plan(db: Session, study_plan_id: int, course_id: int) ->
     db.refresh(study_plan_course)
     return study_plan_course
 
-def remove_course_from_study_plan(db: Session, study_plan_id: int, course_id: int) -> bool:
+def remove_course_from_study_plan(db: Session, study_plan_id: UUID, course_id: UUID) -> bool:
     study_plan_course = db.query(StudyPlanCourse).filter(
         StudyPlanCourse.study_plan_id == study_plan_id,
         StudyPlanCourse.course_id == course_id
@@ -87,7 +90,7 @@ def remove_course_from_study_plan(db: Session, study_plan_id: int, course_id: in
     db.commit()
     return True
 
-def mark_course_completed(db: Session, study_plan_id: int, course_id: int) -> Optional[StudyPlanCourse]:
+def mark_course_completed(db: Session, study_plan_id: UUID, course_id: UUID) -> Optional[StudyPlanCourse]:
     study_plan_course = db.query(StudyPlanCourse).filter(
         StudyPlanCourse.study_plan_id == study_plan_id,
         StudyPlanCourse.course_id == course_id
@@ -102,7 +105,7 @@ def mark_course_completed(db: Session, study_plan_id: int, course_id: int) -> Op
     db.refresh(study_plan_course)
     return study_plan_course
 
-def get_study_plan_progress(db: Session, study_plan_id: int) -> dict:
+def get_study_plan_progress(db: Session, study_plan_id: UUID) -> dict:
     total_courses = db.query(StudyPlanCourse).filter(
         StudyPlanCourse.study_plan_id == study_plan_id
     ).count()
