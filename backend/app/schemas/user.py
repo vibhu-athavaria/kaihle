@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 from app.models.user import UserRole
 from app.schemas.assessment import AssessmentOut
+from app.schemas.grade import Grade
 
 # -------------------
 # USER SCHEMAS
@@ -55,31 +56,23 @@ class User(UserBase):
 # -------------------
 # STUDENT PROFILE SCHEMAS
 # -------------------
-class StudentProfileCreate(BaseModel):
+class StudentProfileBase(BaseModel):
     # User fields
-    name: str                              # full name
+    full_name: str                              # full name
     username: str                          # required for students
     email: Optional[EmailStr] = None       # optional
-    password: str                          # plain text (hash before save)
+
 
     # Profile fields
     age: Optional[int] = None
-    grade_level: Optional[int] = None
-    checkpoints: Optional[Dict[str, str]] = None   # {"math": "A", "science": "B", ...}
+    grade_id: Optional[UUID] = None
 
+class StudentProfileCreate(StudentProfileBase):
+    password: str
+    pass
 
-
-class StudentProfileUpdate(BaseModel):
-    # User fields
-    full_name: Optional[str] = None
-    username: Optional[str] = None
-    email: Optional[EmailStr] = None
-    password: Optional[str] = None   # if updating, re-hash before save
-
-    # Profile fields
-    age: Optional[int] = None
-    grade_level: Optional[int] = None
-    checkpoints: Optional[Dict[str, str]] = None
+class StudentProfileUpdate(StudentProfileBase):
+    id: UUID
     interests: Optional[List[str]] = None
     preferred_format: Optional[str] = None
     preferred_session_length: Optional[int] = None
@@ -88,8 +81,7 @@ class StudentProfileUpdate(BaseModel):
 class StudentProfileResponse(BaseModel):
     id: UUID
     parent_id: UUID
-    age: Optional[int] = None
-    grade_level: Optional[int] = None
+    grade: Optional[Grade] = None
     interests: Optional[List[str]] = None
     preferred_format: Optional[str] = None
     preferred_session_length: Optional[int] = None
@@ -114,15 +106,7 @@ class AssessmentSubjectStatus(BaseModel):
     class Config:
         from_attributes = True
 
-class StudentDetailResponse(BaseModel):
-    id: UUID
-    parent_id: UUID
-    age: Optional[int] = None
-    grade_level: Optional[int] = None
-    interests: Optional[List[str]] = None
-    preferred_format: Optional[str] = None
-    preferred_session_length: Optional[int] = None
-    user: Optional[UserBase] = None
+class StudentDetailResponse(StudentProfileResponse):
     assessments: Dict[str, AssessmentSubjectStatus]
 
     class Config:
