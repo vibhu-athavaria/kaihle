@@ -63,6 +63,7 @@ class StudentProfile(Base, SerializerMixin):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
     parent_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     grade_id = Column(UUID(as_uuid=True), ForeignKey("grades.id", ondelete="SET NULL"), nullable=True, index=True)
+    school_id = Column(UUID(as_uuid=True), ForeignKey("schools.id", ondelete="SET NULL"), nullable=True, index=True)
 
     age = Column(Integer, nullable=True)
 
@@ -106,6 +107,7 @@ class StudentProfile(Base, SerializerMixin):
     user = relationship("User", back_populates="student_profile", foreign_keys=[user_id])
     parent = relationship("User", back_populates="children_profiles", foreign_keys=[parent_id])
     grade = relationship("Grade", back_populates="student_profiles")
+    school = relationship("School", back_populates="students")
 
     assessments = relationship("Assessment", back_populates="student", cascade="all, delete-orphan")
     study_plans = relationship("StudyPlan", back_populates="student", cascade="all, delete-orphan")

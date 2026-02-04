@@ -7,3 +7,6 @@ from .billing import (
     SubscriptionWithPayments, UserBillingSummary, PaymentMethodResponse,
     SubscriptionStatus, PaymentStatus
 )
+from .school import School, SchoolCreate, SchoolUpdate
+from .role import Role, RoleCreate, RoleUpdate
+from .teacher import Teacher, TeacherCreate, TeacherUpdate
