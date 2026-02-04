@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
+from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.crud.billing import get_active_subscriptions, get_subscriptions_by_user
@@ -12,7 +13,7 @@ class AccessControlService:
     def __init__(self):
         pass
 
-    def can_access_courses(self, db: Session, student_id: int) -> bool:
+    def can_access_courses(self, db: Session, student_id: UUID) -> bool:
         """Check if student can access courses"""
         # Get active subscriptions for student
         subscriptions = get_active_subscriptions(db, student_id)
@@ -33,7 +34,7 @@ class AccessControlService:
 
         return False
 
-    def can_create_courses(self, db: Session, student_id: int) -> bool:
+    def can_create_courses(self, db: Session, student_id: UUID) -> bool:
         """Check if student can create new courses"""
         # Same logic as can_access_courses for now
         return self.can_access_courses(db, student_id)

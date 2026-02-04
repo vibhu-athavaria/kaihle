@@ -1,6 +1,6 @@
 # app/models/subject.py
 import uuid
-from sqlalchemy import Column, Integer, String, Text, Boolean, TIMESTAMP, text
+from sqlalchemy import Column, String, Text, Boolean, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base

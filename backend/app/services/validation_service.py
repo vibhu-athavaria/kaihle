@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
+from uuid import UUID
 
 from app.crud.billing import get_subscription_plan, get_subscription
 from app.crud.user import get_user, get_student_profile
@@ -15,8 +16,8 @@ class ValidationService:
         pass
 
     def validate_subscription_creation(
-        self, db: Session, parent_id: int, student_id: int,
-        plan_id: int, subject_id: Optional[int] = None
+        self, db: Session, parent_id: UUID, student_id: UUID,
+        plan_id: UUID, subject_id: Optional[UUID] = None
     ) -> Dict[str, Any]:
         """Validate subscription creation parameters"""
         errors = []
@@ -52,7 +53,7 @@ class ValidationService:
         return {"valid": True, "plan_type": plan.plan_type if plan else None}
 
     def validate_trial_extension(
-        self, db: Session, subscription_id: int, admin_id: int
+        self, db: Session, subscription_id: UUID, admin_id: UUID
     ) -> Dict[str, Any]:
         """Validate trial extension request"""
         errors = []
@@ -77,7 +78,7 @@ class ValidationService:
         return {"valid": True, "subscription": subscription}
 
     def validate_subject_access(
-        self, db: Session, student_id: int, subject_id: int
+        self, db: Session, student_id: UUID, subject_id: UUID
     ) -> Dict[str, Any]:
         """Validate if student can access a specific subject"""
         from app.services.access_control_service import access_control_service
@@ -93,7 +94,7 @@ class ValidationService:
         return {"valid": True}
 
     def validate_trial_start(
-        self, db: Session, parent_id: int, student_id: int
+        self, db: Session, parent_id: UUID, student_id: UUID
     ) -> Dict[str, Any]:
         """Validate if a trial can be started for a student"""
         errors = []
@@ -128,7 +129,7 @@ class ValidationService:
         return {"valid": True}
 
     def validate_subscription_cancellation(
-        self, db: Session, subscription_id: int, user_id: int, user_role: str
+        self, db: Session, subscription_id: UUID, user_id: UUID, user_role: str
     ) -> Dict[str, Any]:
         """Validate subscription cancellation"""
         errors = []

@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
+from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.crud.billing import (
@@ -25,7 +26,7 @@ class BillingService:
         self.FREE_TRIAL_DAYS = 15
 
     def start_free_trial_for_new_parent(
-        self, db: Session, parent_id: int, student_id: Optional[int] = None, subject_id: Optional[int] = None
+        self, db: Session, parent_id: UUID, student_id: Optional[UUID] = None, subject_id: Optional[UUID] = None
     ) -> Any:
         """Start a free trial when a new parent signs up"""
 
@@ -39,7 +40,7 @@ class BillingService:
         return subscription
 
     def calculate_subscription_cost(
-        self, db: Session, plan_id: int, num_subjects: int = 1,
+        self, db: Session, plan_id: UUID, num_subjects: int = 1,
         billing_cycle: str = BILLING_CYCLE_ANNUAL, is_trial: bool = False
     ) -> float:
         """Calculate the subscription cost based on plan and billing cycle"""
@@ -50,9 +51,9 @@ class BillingService:
         return calculate_subscription_price(db, plan_id, num_subjects, billing_cycle)
 
     def create_monthly_subscription(
-        self, db: Session, parent_id: int, student_ids: List[int],
-        plan_id: int, billing_cycle: str =BILLING_CYCLE_ANNUAL, payment_method: str = "credit_card",
-        subject_id: Optional[int] = None
+        self, db: Session, parent_id: UUID, student_ids: List[UUID],
+        plan_id: UUID, billing_cycle: str =BILLING_CYCLE_ANNUAL, payment_method: str = "credit_card",
+        subject_id: Optional[UUID] = None
     ) -> List[Any]:
         """Create subscriptions based on selected plan"""
         from app.crud.billing import get_subscription_plan
@@ -149,7 +150,7 @@ class BillingService:
 
         return results
 
-    def get_billing_summary(self, db: Session, parent_id: int) -> Dict[str, Any]:
+    def get_billing_summary(self, db: Session, parent_id: UUID) -> Dict[str, Any]:
         """Get a comprehensive billing summary for a parent"""
         subscriptions = get_subscriptions_by_user(db, parent_id)
         billing_info = get_billing_info_by_user(db, parent_id)
@@ -198,7 +199,7 @@ class BillingService:
             "subjects_subscribed": len(set(sub.subject_id for sub in subscriptions if sub.subject_id))
         }
 
-    def check_subscription_status(self, db: Session, parent_id: int, student_id: int, subject_id: Optional[int] = None) -> Dict[str, Any]:
+    def check_subscription_status(self, db: Session, parent_id: UUID, student_id: UUID, subject_id: Optional[UUID] = None) -> Dict[str, Any]:
         """Check the subscription status for a specific student/subject"""
         subscriptions = get_subscriptions_by_user(db, parent_id)
 
@@ -313,7 +314,7 @@ class BillingService:
             ]
         }
 
-    def validate_free_trial_eligibility(self, db: Session, parent_id: int) -> Dict[str, Any]:
+    def validate_free_trial_eligibility(self, db: Session, parent_id: UUID) -> Dict[str, Any]:
         """Check if a parent is eligible for a free trial"""
         parent = get_user(db, parent_id)
         if not parent:
@@ -343,7 +344,7 @@ class BillingService:
         }
 
     def extend_trial(
-        self, db: Session, subscription_id: int, admin_id: int,
+        self, db: Session, subscription_id: UUID, admin_id: UUID,
         extension_days: int, reason: str = None
     ):
         """Extend a student's trial period"""
@@ -379,7 +380,7 @@ class BillingService:
             "extension_id": extension.id
         }
 
-    def get_trial_extensions(self, db: Session, subscription_id: int):
+    def get_trial_extensions(self, db: Session, subscription_id: UUID):
         """Get all trial extensions for a subscription"""
         extensions = get_trial_extensions_by_subscription(db, subscription_id)
 
@@ -395,8 +396,8 @@ class BillingService:
         } for ext in extensions]
 
     def start_trial_for_student(
-        self, db: Session, student_id: int,
-        plan_id: int = None, subject_id: int = None
+        self, db: Session, student_id: UUID,
+        plan_id: UUID = None, subject_id: UUID = None
     ):
         """Start a trial for a student when they complete registration"""
         from app.crud.user import get_student_profile

@@ -1,4 +1,5 @@
 from typing import List, Optional
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -68,7 +69,7 @@ def get_personalized_recommendations(
 @router.post("/chat", response_model=ChatResponse)
 def chat_with_tutor(
     message: ChatMessage,
-    student_id: int,
+    student_id: UUID,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_active_user)
 ):
@@ -128,7 +129,7 @@ def chat_with_tutor(
 
 @router.post("/feedback/{interaction_id}")
 def provide_feedback(
-    interaction_id: int,
+    interaction_id: UUID,
     feedback_score: int,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_active_user)

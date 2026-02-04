@@ -1,5 +1,6 @@
 from decimal import Decimal
 from typing import List, Optional
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -79,7 +80,7 @@ def get_my_subscriptions(
 
 @router.get("/subscriptions/{subscription_id}", response_model=SubscriptionResponse)
 def get_subscription_details(
-    subscription_id: int,
+    subscription_id: UUID,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_active_user)
 ):
@@ -102,7 +103,7 @@ def get_subscription_details(
 
 @router.put("/subscriptions/{subscription_id}", response_model=SubscriptionResponse)
 def update_subscription_details(
-    subscription_id: int,
+    subscription_id: UUID,
     subscription_update: SubscriptionUpdate,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_active_user)
@@ -133,7 +134,7 @@ def update_subscription_details(
 
 @router.delete("/subscriptions/{subscription_id}", response_model=SubscriptionResponse)
 def cancel_my_subscription(
-    subscription_id: int,
+    subscription_id: UUID,
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_active_user)
 ):
