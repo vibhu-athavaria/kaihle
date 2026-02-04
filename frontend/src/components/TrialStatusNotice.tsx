@@ -20,32 +20,32 @@ export const TrialStatusNotice: React.FC = () => {
   const [isDismissed, setIsDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchSubscriptionSummary = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
+  // useEffect(() => {
+  //   const fetchSubscriptionSummary = async () => {
+  //     if (!user) {
+  //       setLoading(false);
+  //       return;
+  //     }
 
-      try {
-        const response = await http.get('/api/v1/billing/subscriptions');
-        setBillingSummary(response.data);
+  //     try {
+  //       const response = await http.get('/api/v1/billing/subscriptions');
+  //       setBillingSummary(response.data);
 
-        // Redirect to plans if trial expired and not on billing-related pages
-        // const currentPath = window.location.pathname;
-        // const isOnBillingPage = currentPath === '/plans' || currentPath === '/parent-settings' || currentPath === '/pricing' || currentPath === '/payment';
-        // if (response.data.days_remaining_in_trial <= 0 && !isOnBillingPage) {
-        //   navigate('/plans');
-        // }
-      } catch (error) {
-        console.error('Failed to fetch billing summary:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  //       // Redirect to plans if trial expired and not on billing-related pages
+  //       // const currentPath = window.location.pathname;
+  //       // const isOnBillingPage = currentPath === '/plans' || currentPath === '/parent-settings' || currentPath === '/pricing' || currentPath === '/payment';
+  //       // if (response.data.days_remaining_in_trial <= 0 && !isOnBillingPage) {
+  //       //   navigate('/plans');
+  //       // }
+  //     } catch (error) {
+  //       console.error('Failed to fetch billing summary:', error);
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
 
-    fetchSubscriptionSummary();
-  }, [user, navigate]);
+  //   fetchSubscriptionSummary();
+  // }, [user, navigate]);
 
   useEffect(() => {
     // Check if notice was dismissed recently (within 24 hours)

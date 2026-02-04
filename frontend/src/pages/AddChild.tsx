@@ -1,18 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { http } from "@/lib/http";
-import { GRADES }  from '../lib/utils';
 import { Breadcrumb } from '../components/ui/Breadcrumb';
 import { Users } from 'lucide-react';
 import LearningProfileForm from '../components/LearningProfileForm';
 
-
+interface Grade {
+  id: string;
+  name: string;
+  // Add other grade properties if your API returns them
+}
 
 interface AddChildForm {
   full_name: string;
   age: number;
-  grade: number;
+  grade_id: string;
   username: string;
   password: string;
 }
@@ -22,7 +25,26 @@ export const AddChild: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [newChild, setNewChild] = useState<any>(null);
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [gradesLoading, setGradesLoading] = useState(true);
   const { register, handleSubmit, formState: { errors } } = useForm<AddChildForm>();
+
+  // Fetch grades when component mounts
+  useEffect(() => {
+    const fetchGrades = async () => {
+      try {
+        const response = await http.get('/api/v1/grades');
+        setGrades(response.data);
+      } catch (err) {
+        console.error('Failed to fetch grades:', err);
+        alert('Failed to load grade options. Please refresh the page.');
+      } finally {
+        setGradesLoading(false);
+      }
+    };
+
+    fetchGrades();
+  }, []);
 
 
   const onSubmit = async (data: AddChildForm) => {
@@ -31,9 +53,9 @@ export const AddChild: React.FC = () => {
 
       // 2. Proceed with creating child if username available
       const response = await http.post('/api/v1/users/me/students', {
-        name: data.full_name,
+        full_name: data.full_name,
         age: data.age,
-        grade_level: data.grade,
+        grade_id: data.grade_id,
         username: data.username,
         password: data.password,
       });
@@ -206,17 +228,23 @@ export const AddChild: React.FC = () => {
             {/* Grade */}
             <div>
               <select
-                {...register('grade', { required: 'Grade selection is required' })}
+                {...register('grade_id', {
+                  required: 'Grade selection is required',
+                })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white"
-                defaultValue=""
+                disabled={gradesLoading}
               >
-                <option value="" disabled>Select grade</option>
-                {GRADES.map((grade) => (
-                  <option key={grade.value} value={grade.value}>{grade.label}</option>
+                <option value="">
+                  {gradesLoading ? 'Loading grades...' : 'Select grade'}
+                </option>
+                {grades.map((grade) => (
+                  <option key={grade.id} value={grade.id}>
+                    {grade.name}
+                  </option>
                 ))}
               </select>
-              {errors.grade && (
-                <p className="mt-1 text-sm text-red-600">{errors.grade.message}</p>
+              {errors.grade_id && (
+                <p className="mt-1 text-sm text-red-600">{errors.grade_id.message}</p>
               )}
             </div>
 

@@ -65,7 +65,7 @@ def create_student(db: Session, student: StudentProfileCreate, parent_id: UUID) 
     # Step 1: Create a User entry for the student
     student_user = User(
         role=UserRole.STUDENT,
-        full_name=student.name,
+        full_name=student.full_name,
         username=student.username,   # required for student
         email=student.email,         # optional
         hashed_password=hashed_password  # should be hashed before
@@ -105,9 +105,9 @@ from app.models.billing import Subscription
 
 def get_students_by_parent(db: Session, parent_id: UUID):
     students = db.query(StudentProfile).filter(StudentProfile.parent_id == parent_id).all()
-    for student in students:
 
-        subscription = db.query(Subscription).filter(Subscription.student_id == student.user_id).first()
+    for student in students:
+        subscription = db.query(Subscription).filter(Subscription.student_profile_id == student.id).first()
         if subscription:
             student.has_active_subscription = subscription.has_active_subscription
             student.active_subscription_id = subscription.id
