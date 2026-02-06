@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import LearningProfileForm from '../components/LearningProfileForm';
+import LearningProfileIntakeForm from '@/components/LearningProfileIntakeForm';
 import { http } from '@/lib/http';
 import { Breadcrumb } from '../components/ui/Breadcrumb';
 import { User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { IntakeAnswers } from '@/types/learningProfile';
 
 const CompleteProfile: React.FC = () => {
   const navigate = useNavigate();
@@ -20,20 +21,13 @@ const CompleteProfile: React.FC = () => {
       // For students, use their own profile
       setCurrentChild({
         id: user.student_profile.id,
-        name: user.full_name,
-        interests: user.student_profile.interests,
-        preferred_format: user.student_profile.preferred_format,
-        preferred_session_length: user.student_profile.preferred_session_length,
+        name: user.full_name
       });
     }
     setLoading(false);
   }, [user]);
 
-  const handleProfileSubmit = async (profileData: {
-    interests: string[];
-    preferred_format: string;
-    preferred_session_length: number;
-  }) => {
+  const handleProfileSubmit = async (answers: IntakeAnswers) => {
     if (!currentChild?.id) {
       alert('No student selected. Please go back and select a child first.');
       navigate('/dashboard');
@@ -43,7 +37,7 @@ const CompleteProfile: React.FC = () => {
     try {
 
       const response = await http.patch(`/api/v1/students/${currentChild.id}/learning-profile`, {
-        ...profileData
+        answers
       });
 
       const updatedChildFromServer = response.data;
@@ -131,13 +125,9 @@ const CompleteProfile: React.FC = () => {
         <div className="mb-6">
           <Breadcrumb role={user?.role === 'parent' ? 'parent' : 'student'} items={[{ label: 'Complete Profile', icon: User }]} />
         </div>
-        <LearningProfileForm
+        <LearningProfileIntakeForm
           onSubmit={handleProfileSubmit}
-          initialData={{
-            interests: currentChild.interests,
-            preferred_format: currentChild.preferred_format,
-            preferred_session_length: currentChild.preferred_session_length
-          }}
+
         />
       </div>
     </div>

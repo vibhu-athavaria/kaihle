@@ -1,12 +1,13 @@
 import uuid
+import enum
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey, DECIMAL, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
+
 from app.core.database import Base
 from app.crud.mixin import SerializerMixin
-import enum
-from app.constants import BILLING_CYCLE_ANNUAL
+from app.constants.constants import BILLING_CYCLE_ANNUAL
 
 
 class SubscriptionStatus(str, enum.Enum):

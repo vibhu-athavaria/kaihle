@@ -18,7 +18,7 @@ from app.models.assessment import (
 from app.models.user import StudentProfile  # adjust import to match your structure
 from app.services.llm_service import llm_service as llm
 
-from app.constants import (
+from app.constants.constants import (
     ASSESSMENT_SUBJECTS,
     TOTAL_QUESTIONS_PER_ASSESSMENT,
     ASSESSMENT_MAX_QUESTIONS_PER_SUBTOPIC as MAX_PER_TOPIC

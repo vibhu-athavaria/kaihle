@@ -12,7 +12,7 @@ from app.schemas.billing import (
     PlanSubjectCreate, TrialExtensionCreate
 )
 
-from app.constants import (
+from app.constants.constants import (
     BASIC_PLAN_PRICE_PER_SUBJECT, PREMIUM_PLAN_PRICE, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
     BILLING_CYCLE_ANNUAL, DEFAULT_TRIAL_PERIOD_DAYS, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE,
     PAYMENT_PLAN_BASIC

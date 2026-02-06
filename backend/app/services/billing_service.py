@@ -1,21 +1,20 @@
+from uuid import UUID
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
-from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.crud.billing import (
     create_subscription, get_subscriptions_by_user, is_in_free_trial,
     start_free_trial, create_payment, mark_payment_as_paid,
     get_billing_info_by_user, get_default_billing_info,
-    get_subscription_plan, get_active_subscription_plans, calculate_subscription_price,
+    get_active_subscription_plans, calculate_subscription_price,
     get_plan_features_by_plan, get_total_subjects_count, create_trial_extension,
     get_trial_extensions_by_subscription
 )
 from app.crud.user import get_user
 from app.models.user import User
 from app.schemas.billing import SubscriptionCreate, PaymentCreate
-from app.core.config import settings
-from app.constants import BILLING_CYCLE_ANNUAL, BILLING_CYCLE_MONTHLY
+from app.constants.constants import BILLING_CYCLE_ANNUAL, BILLING_CYCLE_MONTHLY
 
 
 class BillingService:

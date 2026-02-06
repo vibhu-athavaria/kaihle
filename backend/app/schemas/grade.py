@@ -9,6 +9,11 @@ class GradeBase(BaseModel):
     description: Optional[str] = None
     is_active: bool = True
 
+class Grade(GradeBase):
+    id: UUID
+
+    class Config:
+        from_attributes = True
 
 class GradeCreate(GradeBase):
     pass
@@ -19,10 +24,3 @@ class GradeUpdate(BaseModel):
     level: Optional[int] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
-
-
-class Grade(GradeBase):
-    id: UUID
-
-    class Config:
-        from_attributes = True

@@ -113,7 +113,7 @@ const { user, signOut } = useAuth();
                   <div className="text-left">
                     <div className="text-sm font-semibold text-white">{user.full_name || 'Parent'}</div>
                     {user.role === 'student' && (
-                      <div className="text-xs text-blue-100">{'Grade ' + (user.student_profile?.grade_level)}</div>
+                      <div className="text-xs text-blue-100">{'Grade ' + (user.student_profile?.grade.level)}</div>
                     )}
                   </div>
                   {/* Dropdown menu button for parents */}

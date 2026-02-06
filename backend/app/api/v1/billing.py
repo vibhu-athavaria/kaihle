@@ -17,34 +17,26 @@ from app.crud.billing import (
     get_default_billing_info, update_billing_info, delete_billing_info,
     create_invoice, get_invoice, get_invoices_by_user,
     mark_invoice_as_paid, get_billing_summary,
-    create_subscription_plan, get_subscription_plan, get_subscriptions_by_student,
-    get_all_subscription_plans, get_active_subscription_plans, update_subscription_plan,
-    delete_subscription_plan, create_plan_feature, get_plan_feature, get_plan_features_by_plan,
-    update_plan_feature, delete_plan_feature, create_plan_subject, get_plan_subject,
-    get_plan_subjects_by_plan, get_plan_subjects_by_subject, delete_plan_subject,
-    calculate_subscription_price, get_total_subjects_count, create_trial_extension,
+     get_subscription_plan, get_subscriptions_by_student,
+    get_all_subscription_plans, create_trial_extension,
     get_trial_extensions_by_subscription
 )
 from app.schemas.billing import (
     SubscriptionCreate, SubscriptionUpdate, SubscriptionResponse,
     PaymentCreate, PaymentUpdate, PaymentResponse,
     BillingInfoCreate, BillingInfoUpdate, BillingInfoResponse,
-    InvoiceCreate, InvoiceUpdate, InvoiceResponse,
-    SubscriptionWithPayments, UserBillingSummary, PaymentMethodResponse,
-    SubscriptionPlanCreate, SubscriptionPlanUpdate, SubscriptionPlanResponse,
-    PlanFeatureCreate, PlanFeatureUpdate, PlanFeatureResponse,
-    PlanSubjectCreate, PlanSubjectResponse, PricingCalculationResponse,
+    InvoiceCreate, InvoiceResponse,
+    UserBillingSummary, PaymentMethodResponse, SubscriptionPlanResponse,
     TrialExtensionCreate, TrialExtensionResponse
 )
 from app.models.user import User as UserModel
 from app.schemas.user import User
 from app.services.access_control_service import access_control_service
-
+from app.constants.constants import BASIC_PLAN_PRICE_PER_SUBJECT, PREMIUM_PLAN_PRICE, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE
 
 router = APIRouter(tags=["billing"])
 
 # Subscription Endpoints
-
 @router.post("/subscriptions", response_model=SubscriptionResponse)
 def create_new_subscription(
     subscription: SubscriptionCreate,
@@ -926,8 +918,6 @@ def get_subscription_plans(
     current_user: UserModel = Depends(get_current_active_user)
 ):
     """Get all active subscription plans"""
-    from app.constants import BASIC_PLAN_PRICE_PER_SUBJECT, PREMIUM_PLAN_PRICE, DEFAULT_YEARLY_DISCOUNT_PERCENTAGE
-
     plans = get_all_subscription_plans(db)
     for plan in plans:
         if plan.plan_type == 'basic':

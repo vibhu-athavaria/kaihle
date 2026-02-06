@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.deps import get_current_active_user, get_current_admin_user
 from app.crud.user import get_user, update_user, get_students_by_parent, create_student, update_student
-from app.schemas.user import User, UserUpdate, StudentProfileCreate, StudentProfileResponse, StudentProfileUpdate
+from app.schemas.user import User, UserUpdate, StudentProfileCreate, StudentProfileBase, StudentProfileUpdate
 from app.models.user import User as UserModel
 from app.crud.user import get_user as get_user_crud
 
@@ -13,6 +13,7 @@ router = APIRouter()
 @router.get("/me", response_model=User)
 def read_user_me(current_user: UserModel = Depends(get_current_active_user)):
     """Get current user's profile"""
+
     return current_user
 
 @router.put("/me", response_model=User)
@@ -27,7 +28,7 @@ def update_user_me(
         raise HTTPException(status_code=404, detail="User not found")
     return updated_user
 
-@router.get("/me/students", response_model=List[StudentProfileResponse])
+@router.get("/me/students", response_model=List[StudentProfileBase])
 def read_my_students(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_active_user)
@@ -41,7 +42,7 @@ def read_my_students(
     students = get_students_by_parent(db, current_user.id)
     return students
 
-@router.post("/me/students", response_model=StudentProfileResponse)
+@router.post("/me/students", response_model=StudentProfileBase)
 def create_student_for_me(
     student: StudentProfileCreate,
     db: Session = Depends(get_db),
@@ -55,7 +56,7 @@ def create_student_for_me(
         )
     return create_student(db, student, current_user.id)
 
-@router.put("/me/students/{student_id}", response_model=StudentProfileResponse)
+@router.put("/me/students/{student_id}", response_model=StudentProfileBase)
 def update_student_for_me(
     student_id: int,
     student: StudentProfileUpdate,
