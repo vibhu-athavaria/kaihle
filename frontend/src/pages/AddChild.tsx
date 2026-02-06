@@ -4,7 +4,8 @@ import { useForm } from 'react-hook-form';
 import { http } from "@/lib/http";
 import { Breadcrumb } from '../components/ui/Breadcrumb';
 import { Users } from 'lucide-react';
-import LearningProfileForm from '../components/LearningProfileForm';
+import LearningProfileIntakeForm from '@/components/LearningProfileIntakeForm';
+import { IntakeAnswers } from '@/types/learningProfile';
 
 interface Grade {
   id: string;
@@ -71,14 +72,10 @@ export const AddChild: React.FC = () => {
     }
   };
 
-  const handleProfileSubmit = async (profileData: {
-    interests: string[];
-    preferred_format: string;
-    preferred_session_length: number;
-  }) => {
+  const handleProfileSubmit = async (answers: IntakeAnswers) => {
     try {
       const response = await http.patch(`/api/v1/students/${newChild.id}/learning-profile`,
-        profileData
+        answers
       );
       const updatedChildFromServer = response.data;
 
@@ -125,7 +122,7 @@ export const AddChild: React.FC = () => {
           <div className="mb-6">
             <Breadcrumb role="parent" items={[{ label: 'Add Child', icon: Users }, { label: 'Learning Profile' }]} />
           </div>
-          <LearningProfileForm
+          <LearningProfileIntakeForm
             onSubmit={handleProfileSubmit}
             onSkip={handleProfileSkip}
           />

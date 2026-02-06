@@ -15,7 +15,7 @@ from app.services.assessment_service import (
     difficulty_label_from_value,
     get_or_create_assessment_report
 )
-from app.constants import (
+from app.constants.constants import (
     ASSESSMENT_STATUS_PROGRESS,
     ASSESSMENT_STATUS_COMPLETED,
     ASSESSMENT_TYPES,

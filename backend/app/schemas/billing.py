@@ -4,7 +4,7 @@ from typing import Optional, List
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
-from app.constants import BILLING_CYCLE_ANNUAL
+from app.constants.constants import BILLING_CYCLE_ANNUAL
 
 class SubscriptionStatus(str, Enum):
     active = "active"

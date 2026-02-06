@@ -66,37 +66,35 @@ class StudentProfile(Base, SerializerMixin):
     school_id = Column(UUID(as_uuid=True), ForeignKey("schools.id", ondelete="SET NULL"), nullable=True, index=True)
 
     age = Column(Integer, nullable=True)
-
     has_completed_assessment = Column(Boolean, default=False)
 
-    # Checkpoints removed - use knowledge profiles instead
-    interests = Column(JSONB, nullable=True)
-
-    # Learning preferences
-    preferred_format = Column(String(50), nullable=True)  # visual, auditory, kinesthetic, reading
-    preferred_session_length = Column(Integer, nullable=True)  # in minutes
-
-    # AI-powered persona
-    learning_style = Column(JSONB, nullable=True)  # AI-detected learning patterns
+    # AI-detected learning patterns
+    learning_profile = Column(JSONB, nullable=True)
     """
-    Example:
-    {
-        "pace": "fast",
-        "depth_preference": "conceptual",
-        "error_patterns": ["rushes_through", "skips_steps"],
-        "strengths": ["problem_solving", "visual_thinking"],
-        "challenges": ["attention_to_detail", "showing_work"]
-    }
-    """
+        {
+            "instructional_preferences": {
+                "scaffolding_level": "high",
+                "example_dependency": true,
+                "exploration_tolerance": "low"
+            },
+            "attention_profile": {
+                "focus_duration_minutes": 15,
+                "preferred_chunk_size_minutes": 5
+            },
+            "accessibility_flags": {
+                "reading_load_sensitive": true,
+                "attention_regulation_support": false,
+                "auditory_memory_support": true,
+                "visual_simplicity_required": false
+            },
+            "interest_signals": ["technology_ai", "stories_characters"],
+            "expression_preferences": ["explain_own_words"],
+            "confidence_notes": {
+                "is_diagnostic": false,
+                "self_reported": true
+            }
+        }
 
-    motivation_profile = Column(JSONB, nullable=True)
-    """
-    Example:
-    {
-        "primary_motivators": ["achievement", "curiosity"],
-        "engagement_triggers": ["real_world_applications", "competitive_elements"],
-        "frustration_points": ["repetitive_practice", "time_pressure"]
-    }
     """
 
     registration_completed_at = Column(DateTime(timezone=True), nullable=True)
@@ -106,7 +104,7 @@ class StudentProfile(Base, SerializerMixin):
     # Relationships
     user = relationship("User", back_populates="student_profile", foreign_keys=[user_id])
     parent = relationship("User", back_populates="children_profiles", foreign_keys=[parent_id])
-    grade = relationship("Grade", back_populates="student_profiles")
+    grade = relationship("Grade", back_populates="student_profiles", lazy="joined")
     school = relationship("School", back_populates="students")
 
     assessments = relationship("Assessment", back_populates="student", cascade="all, delete-orphan")

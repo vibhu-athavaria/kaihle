@@ -1,10 +1,11 @@
-from pydantic import BaseModel, EmailStr, validator
-from typing import Dict, Optional, List
+from pydantic import BaseModel, EmailStr, validator, Field
+from typing import Dict, Optional, List, Union
 from datetime import datetime
 from uuid import UUID
 from app.models.user import UserRole
-from app.schemas.assessment import AssessmentOut
-from app.schemas.grade import Grade
+from app.schemas.grade import GradeBase
+
+AnswerValue = Union[str, int, List[str]]
 
 # -------------------
 # USER SCHEMAS
@@ -47,45 +48,37 @@ class User(UserBase):
     id: UUID
     is_active: bool
     created_at: datetime
-    student_profile: Optional["StudentProfileResponse"] = None
+    student_profile: Optional["StudentProfileBase"] = None
 
     class Config:
         from_attributes = True
 
 
-# -------------------
+# --------------------------
 # STUDENT PROFILE SCHEMAS
-# -------------------
+# --------------------------
 class StudentProfileBase(BaseModel):
     # User fields
-    full_name: str                              # full name
-    username: str                          # required for students
-    email: Optional[EmailStr] = None       # optional
+    id: UUID
+    user_id: UUID
+    parent_id: UUID
+    grade_id: UUID
+    age: int
+    registration_completed_at: Optional[datetime] = None
+    grade: Optional[GradeBase] = None
 
 
-    # Profile fields
-    age: Optional[int] = None
-    grade_id: Optional[UUID] = None
-
-class StudentProfileCreate(StudentProfileBase):
+class StudentProfileCreate(BaseModel):
+    full_name: str
+    age: int
+    grade_id: str
+    username: str
     password: str
-    pass
 
 class StudentProfileUpdate(StudentProfileBase):
     id: UUID
-    interests: Optional[List[str]] = None
-    preferred_format: Optional[str] = None
-    preferred_session_length: Optional[int] = None
 
-
-class StudentProfileResponse(BaseModel):
-    id: UUID
-    parent_id: UUID
-    grade: Optional[Grade] = None
-    interests: Optional[List[str]] = None
-    preferred_format: Optional[str] = None
-    preferred_session_length: Optional[int] = None
-    registration_completed_at: Optional[datetime] = None
+class StudentProfileResponse(StudentProfileBase):
     # has_active_subscription: bool
     # active_subscription_id: Optional[UUID] = None
     user: UserBase
@@ -93,11 +86,47 @@ class StudentProfileResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# --------------------------
+# STUDENT LEARNING PROFILE SCHEMAS
+# --------------------------
+class LearningProfileIntakePayload(BaseModel):
+    answers: Dict[str, AnswerValue] = Field(
+        ...,
+        description="Question ID → Answer value"
+    )
 
-class LearningProfileUpdate(BaseModel):
-    interests: List[str]
-    preferred_format: str
-    preferred_session_length: int
+    @validator("answers")
+    def validate_not_empty(cls, v):
+        if not v:
+            raise ValueError("Intake answers cannot be empty")
+        return v
+
+
+class LearningStyle(BaseModel):
+    scaffolding_level: str
+    example_dependency: bool
+    exploration_tolerance: str
+
+class AttentionProfile(BaseModel):
+    focus_duration_minutes: int
+    preferred_chunk_size_minutes: int
+
+class AccessibilityFlags(BaseModel):
+    reading_load_sensitive: bool
+    auditory_memory_support: bool
+    visual_simplicity_required: bool
+    attention_regulation_support: bool
+
+class LearningProfile(BaseModel):
+    learning_style: LearningStyle
+    interest_signals: list[str]
+    attention_profile: AttentionProfile
+    accessibility_flags: AccessibilityFlags
+    expression_preferences: list[str]
+
+class StudentLearningProfileUpdate(StudentProfileBase):
+    learning_profile: LearningProfile
+
 
 class AssessmentSubjectStatus(BaseModel):
     assessment_id: UUID
@@ -106,7 +135,7 @@ class AssessmentSubjectStatus(BaseModel):
     class Config:
         from_attributes = True
 
-class StudentDetailResponse(StudentProfileResponse):
+class StudentDetailResponse(StudentProfileBase):
     assessments: Dict[str, AssessmentSubjectStatus]
 
     class Config:

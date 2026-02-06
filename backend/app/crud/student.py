@@ -1,12 +1,14 @@
 from sqlalchemy import desc
 from sqlalchemy.sql import func
 from sqlalchemy.orm import Session, selectinload
+from uuid import UUID
+
 from app.models.user import StudentProfile, User
 from app.models.assessment import Assessment
-from app.schemas.user import StudentProfileUpdate, LearningProfileUpdate
+from app.schemas.user import StudentProfileUpdate, LearningProfileIntakePayload
 from typing import Optional
 from app.core.security import verify_password, get_password_hash
-from uuid import UUID
+from app.services.students import normalize_learning_profile
 
 def get_student(db: Session, student_id: UUID) -> Optional[StudentProfile]:
     return db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
@@ -33,7 +35,43 @@ def get_student_with_assessments(db: Session, student_id: UUID) -> Optional[dict
     assessments = (
         db.query(Assessment)
         .filter(Assessment.student_id == student_id)
-        .order_by(Assessment.subject, desc(Assessment.created_at))
+        .order_by(Assessment.subject_id, desc(Assessment.created_at))
+        .all()
+    )
+
+    # Keep only the latest assessment per subject
+    unique_latest = {}
+    for a in assessments:
+        if a.subject not in unique_latest:  # first occurrence = most recent
+            unique_latest[a.subject] = {
+                "assessment_id": a.id,
+                "status": a.status,
+            }
+
+    # Replace the structure in student_dict
+    student_dict["assessments"] = unique_latest
+
+    return student_dict
+
+def get_student_assessments(db:Session, student_id: UUID) -> Optional[dict]:
+    # Load the student and base relations
+    query = (
+        db.query(StudentProfile)
+        .options(selectinload(StudentProfile.user))
+        .filter(StudentProfile.id == student_id)
+    )
+
+    student = query.first()
+    if not student:
+        return None
+
+    student_dict = student.__dict__.copy()
+
+    # Fetch most recent assessment per subject
+    assessments = (
+        db.query(Assessment)
+        .filter(Assessment.student_id == student_id)
+        .order_by(Assessment.subject_id, desc(Assessment.created_at))
         .all()
     )
 
@@ -100,42 +138,22 @@ def update_student(db: Session, student_id: UUID, updates: StudentProfileUpdate)
 
     return db_student_profile
 
-def update_learning_profile(db: Session, student_id: UUID, updates: LearningProfileUpdate) -> StudentProfile | None:
-    # create_trial_Subscription = False
+def update_learning_profile(db: Session, student_id: UUID, updates: LearningProfileIntakePayload) -> StudentProfile | None:
+
     db_student_profile = db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
     if not db_student_profile:
         return None
 
-    db_student_profile.interests = updates.interests
-    db_student_profile.preferred_format = updates.preferred_format
-    db_student_profile.preferred_session_length = updates.preferred_session_length
+    normalized_learning_profile = normalize_learning_profile(updates.answers)
+    db_student_profile.learning_profile = normalized_learning_profile
 
     # Handle profile completion by setting registration_completed_at
-    if db_student_profile.registration_completed_at is None and (
-        db_student_profile.interests and
-        db_student_profile.preferred_format and
-        db_student_profile.preferred_session_length
-    ):
+    if db_student_profile.registration_completed_at is None:
         db_student_profile.registration_completed_at = func.now()
-        # create_trial_Subscription = True
 
     db.commit()
     db.refresh(db_student_profile)
-    # if create_Subscription:
 
-    #     db_subscription = Subscription(
-    #     parent_id=parent_id,
-    #     student_id=subscription.student_id,
-    #     subject_ids=subscription.subject_ids,
-    #     status=subscription.status,
-    #     price=subscription.price,
-    #     currency=subscription.currency,
-    #     payment_method=subscription.payment_method,
-    #     trial_end_date=subscription.trial_end_date,
-    #     end_date=subscription.end_date
-    # )
-
-    #     create_trial_subscription(db, db_student_profile.id)
     return db_student_profile
 
 def delete_student(db: Session, student_id: UUID) -> bool:
