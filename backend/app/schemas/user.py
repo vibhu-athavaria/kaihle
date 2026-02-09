@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 from app.models.user import UserRole
 from app.schemas.grade import GradeBase
+from app.schemas.subject import SubjectResponse
 
 AnswerValue = Union[str, int, List[str]]
 
@@ -62,11 +63,11 @@ class StudentProfileBase(BaseModel):
     id: UUID
     user_id: UUID
     parent_id: UUID
-    grade_id: UUID
     age: int
+    curriculum_id: Optional[UUID] = None
     registration_completed_at: Optional[datetime] = None
     grade: Optional[GradeBase] = None
-
+    subjects: Optional[List[SubjectResponse]] = None
 
 class StudentProfileCreate(BaseModel):
     full_name: str

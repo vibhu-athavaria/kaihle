@@ -126,7 +126,7 @@ class AssessmentReportSchema(BaseModel):
 
 class AssessmentReportResponse(BaseModel):
     completed: bool
-    subject: str
+    subject_id: UUID
     assessment_id: UUID
     assessment_report: Optional[AssessmentReportSchema]
     diagnostic_summary: Optional[str]

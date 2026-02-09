@@ -38,8 +38,10 @@ class Curriculum(Base, SerializerMixin):
     name = Column(String(200), nullable=False, unique=True)
     code = Column(String(50), nullable=True, unique=True)  # "CCSS", "IB", "CA-STATE"
     description = Column(Text, nullable=True)
+
     country = Column(String(100), nullable=True)
     region = Column(String(100), nullable=True)
+
     is_default = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
 
@@ -47,6 +49,7 @@ class Curriculum(Base, SerializerMixin):
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=text("now()"))
 
     # Relationships
+    subjects = relationship("CurriculumSubject", back_populates="curriculum", cascade="all, delete-orphan")
     curriculum_topics = relationship("CurriculumTopic", back_populates="curriculum", cascade="all, delete-orphan")
 
 
@@ -152,6 +155,20 @@ class TopicPrerequisite(Base, SerializerMixin):
     # Relationships
     topic = relationship("Topic", foreign_keys=[topic_id], back_populates="prerequisites")
     prerequisite_topic = relationship("Topic", foreign_keys=[prerequisite_topic_id], back_populates="prerequisite_for")
+
+
+class CurriculumSubject(Base):
+    __tablename__ = "curriculum_subjects"
+
+    curriculum_id = Column(UUID(as_uuid=True), ForeignKey("curricula.id", ondelete="CASCADE"), primary_key=True)
+    subject_id = Column(UUID(as_uuid=True), ForeignKey("subjects.id", ondelete="CASCADE"), primary_key=True)
+
+    is_core = Column(Boolean, nullable=False, default=True)
+    sort_order = Column(Integer, nullable=True)
+
+    # relationships
+    curriculum = relationship("Curriculum", back_populates="subjects")
+    subject = relationship("Subject", back_populates="curriculum_links")
 
 
 class CurriculumTopic(Base, SerializerMixin):
