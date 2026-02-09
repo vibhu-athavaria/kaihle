@@ -68,6 +68,8 @@ class StudentProfile(Base, SerializerMixin):
     age = Column(Integer, nullable=True)
     has_completed_assessment = Column(Boolean, default=False)
 
+    curriculum_id = Column(UUID(as_uuid=True), ForeignKey("curricula.id"), nullable=True)
+
     # AI-detected learning patterns
     learning_profile = Column(JSONB, nullable=True)
     """
@@ -105,6 +107,7 @@ class StudentProfile(Base, SerializerMixin):
     user = relationship("User", back_populates="student_profile", foreign_keys=[user_id])
     parent = relationship("User", back_populates="children_profiles", foreign_keys=[parent_id])
     grade = relationship("Grade", back_populates="student_profiles", lazy="joined")
+    curriculum = relationship("Curriculum")
     school = relationship("School", back_populates="students")
 
     assessments = relationship("Assessment", back_populates="student", cascade="all, delete-orphan")

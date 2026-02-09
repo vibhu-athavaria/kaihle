@@ -1,14 +1,14 @@
 # app/api/v1/assessments.py
-from app.models.assessment import Assessment, AssessmentReport, AssessmentQuestion
-from app.models.user import User, StudentProfile
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from app.core.database import get_db
-from app.schemas import assessment as schemas
-from app.core.deps import get_current_user
-from uuid import UUID
 
+from app.core.database import get_db
+from app.core.deps import get_current_user
+from app.models.assessment import Assessment, AssessmentReport, AssessmentQuestion
+from app.models.user import User, StudentProfile
+from app.schemas.assessment import AssessmentCreate, AssessmentOut, QuestionOut, AnswerOut, AnswerSubmit, AssessmentReportResponse
 from app.services.assessment_service import (
     create_question,
     difficulty_float_from_label,
@@ -23,11 +23,10 @@ from app.constants.constants import (
     TOTAL_QUESTIONS_PER_ASSESSMENT
 )
 
-
 router = APIRouter()
 
-@router.post("/", response_model=schemas.AssessmentOut)
-def create_assessment(payload: schemas.AssessmentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.post("/", response_model=AssessmentOut)
+def create_assessment(payload: AssessmentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Create a new assessment record. This endpoint **only creates the assessment**
     (no question generation). Use POST /{id}/questions to create questions.
@@ -73,7 +72,7 @@ def create_assessment(payload: schemas.AssessmentCreate, db: Session = Depends(g
     return assessment
 
 
-@router.post("/{assessment_id}/questions", response_model=schemas.QuestionOut)
+@router.post("/{assessment_id}/questions", response_model=QuestionOut)
 async def create_assessment_question(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Create a new question for an existing assessment.
@@ -100,8 +99,8 @@ async def create_assessment_question(assessment_id: UUID, db: Session = Depends(
     return question
 
 
-@router.post("/{assessment_id}/questions/{question_id}/answer", response_model=schemas.AnswerOut)
-async def check_answer_and_next(assessment_id: UUID, question_id: UUID, payload: schemas.AnswerSubmit, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.post("/{assessment_id}/questions/{question_id}/answer", response_model=AnswerOut)
+async def check_answer_and_next(assessment_id: UUID, question_id: UUID, payload: AnswerSubmit, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Submit an answer for a question:
     - Update the question record (is_correct/score/answered_at/time_taken).
@@ -196,7 +195,7 @@ async def check_answer_and_next(assessment_id: UUID, question_id: UUID, payload:
     }
 
 
-@router.get("/{assessment_id}", response_model=schemas.AssessmentOut)
+@router.get("/{assessment_id}", response_model=AssessmentOut)
 def get_assessment(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
@@ -204,7 +203,7 @@ def get_assessment(assessment_id: UUID, db: Session = Depends(get_db), current_u
     return assessment
 
 
-@router.post("/{assessment_id}/completed", response_model=schemas.AssessmentReport)
+@router.post("/{assessment_id}/completed", response_model=AssessmentReportResponse)
 def complete_assessment(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
@@ -218,7 +217,7 @@ def complete_assessment(assessment_id: UUID, db: Session = Depends(get_db), curr
 
     return get_or_create_assessment_report(db, assessment_id, student_name, grade_level)
 
-@router.get("/{assessment_id}/report", response_model=schemas.AssessmentReportResponse)
+@router.get("/{assessment_id}/report", response_model=AssessmentReportResponse)
 def get_assessment_report(
     assessment_id: UUID,
     db: Session = Depends(get_db),

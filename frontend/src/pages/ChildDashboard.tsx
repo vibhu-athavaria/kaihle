@@ -3,7 +3,15 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Trophy, Sparkles, Lock, FileText, ArrowRight, PlayCircle, Award } from "lucide-react";
+import {
+  Trophy,
+  Sparkles,
+  Lock,
+  FileText,
+  ArrowRight,
+  PlayCircle,
+  Award,
+} from "lucide-react";
 
 import { Progress } from "@/components/ui/progress";
 import { http } from "@/lib/http";
@@ -11,24 +19,38 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Child } from "@/types";
 
 import {
-  Subject,
   AssessmentStatus,
-  SUBJECT_UI,
-  BADGES,
-  BADGE_GRADIENTS,
+  ICON_MAP,
+  GRADIENT_MAP,
 } from "@/config/childDashboard";
 
 /* ---------------------------------- */
-/* Types */
+/* Types (API-driven) */
 /* ---------------------------------- */
 
+interface Subject {
+  id: string;
+  name: string;
+  code?: string;
+  icon?: string;
+  gradient_key?: string;
+}
+
 interface SubjectData {
-  name: Subject;
+  subject: Subject;
   status: AssessmentStatus;
   description: string;
   assessment_id?: number;
   progress?: number;
   level?: string;
+}
+
+interface Badge {
+  id: string;
+  name: string;
+  icon: string;
+  color_key: string;
+  unlocked: boolean;
 }
 
 /* ---------------------------------- */
@@ -39,136 +61,60 @@ export const ChildDashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [child, setChild] = useState<Child | null>(null);
-  const [subjects, setSubjects] = useState<Record<Subject, SubjectData>>({} as any);
-  const [trialExpired, setTrialExpired] = useState(false);
-  const [checkingTrial, setCheckingTrial] = useState(true);
+  const [subjects, setSubjects] = useState<SubjectData[]>([]);
+  const [badges, setBadges] = useState<Badge[]>([]);
 
   /* ---------------------------------- */
   /* Navigation */
   /* ---------------------------------- */
 
-  const goToAssessment = (subject: Subject, resume = false) => {
-    navigate(`/child-dashboard/assessment?subject=${subject}${resume ? "&resume=true" : ""}`);
+  const goToAssessment = (subjectId: string, resume = false) => {
+    navigate(
+      `/child-dashboard/assessment?subject_id=${subjectId}${
+        resume ? "&resume=true" : ""
+      }`
+    );
   };
 
   const goToReport = (assessmentId: number) => {
-    navigate(`/child-dashboard/assessment-diagnostic-report?assessmentId=${assessmentId}`);
+    navigate(
+      `/child-dashboard/assessment-diagnostic-report?assessmentId=${assessmentId}`
+    );
   };
 
-  const goToCourse = (subject: Subject) => {
-    navigate(`/child-dashboard/take-micro-course?subject=${subject}`);
-  };
-
-  /* ---------------------------------- */
-  /* Data mapping */
-  /* ---------------------------------- */
-
-  const mapSubjectFromApi = (subject: Subject, data: any): SubjectData => {
-    const assessment = data?.assessments?.[subject];
-
-    if (!assessment) {
-      return {
-        name: subject,
-        status: "not_started",
-        description: `Start your diagnostic test to discover your ${subject} level.`,
-      };
-    }
-
-    if (assessment.status === "completed") {
-      return {
-        name: subject,
-        status: "completed",
-        level: assessment.level,
-        assessment_id: assessment.assessment_id,
-        description: "Great job! You've completed your diagnostic assessment.",
-      };
-    }
-
-    return {
-      name: subject,
-      status: "in_progress",
-      progress: assessment.progress ?? 0,
-      assessment_id: assessment.assessment_id,
-      description: `You're ${assessment.progress ?? 0}% through your diagnostic assessment.`,
-    };
+  const goToCourse = (subjectId: string) => {
+    navigate(`/child-dashboard/take-micro-course?subject_id=${subjectId}`);
   };
 
   /* ---------------------------------- */
-  /* Fetch student */
+  /* Fetch data */
   /* ---------------------------------- */
 
   useEffect(() => {
-    console.log('ChildDashboard useEffect running, user:', user);
     if (!user?.student_profile?.registration_completed_at) {
-      console.log('Navigating to complete-profile');
-      navigate('/complete-profile');
-      return;
-    }
-    if (!user?.student_profile?.id) {
-      console.log('No student id, returning');
+      navigate("/complete-profile");
       return;
     }
 
-    const checkStudentAssessments = async () => {
+    if (!user?.student_profile?.id) return;
 
+    const fetchDashboardData = async () => {
       try {
-        console.log('Fetching student assessment data');
-        const res = await http.get(`/api/v1/students/${user.student_profile.id}/assessments`);
-        // setChild(res.data);
+        const [subjectsRes, badgesRes] = await Promise.all([
+          http.get(`/api/v1/students/${user.student_profile.id}/subjects`,
+          ),
+          http.get(`/api/v1/students/${user.student_profile.id}/badges`),
+        ]);
 
-        const mapped = {} as Record<Subject, SubjectData>;
-        (Object.keys(SUBJECT_UI) as Subject[]).forEach(
-          (s) => (mapped[s] = mapSubjectFromApi(s, res.data))
-        );
-        setSubjects(mapped);
-      } catch (error) {
-        console.error('Error getting student assessment data:', error);
+        setSubjects(subjectsRes.data);
+        setBadges(badgesRes.data);
+      } catch (err) {
+        console.error("Failed to load child dashboard", err);
       }
     };
 
-    checkStudentAssessments();
+    fetchDashboardData();
   }, [user?.student_profile?.id, navigate]);
-
-  // if (checkingTrial) {
-  //   return (
-  //     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center">
-  //       <div className="text-center">
-  //         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-  //         <p className="text-gray-600">Checking access...</p>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  // if (trialExpired) {
-  //   return (
-  //     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center p-4">
-  //       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
-  //         <div className="mb-6">
-  //           <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-  //           <h1 className="text-2xl font-bold text-gray-900 mb-2">Trial Period Expired</h1>
-  //           <p className="text-gray-600">
-  //             Your free trial has ended. Please ask your parent to subscribe to continue learning.
-  //           </p>
-  //         </div>
-  //         <div className="space-y-3">
-  //           <button
-  //             onClick={() => navigate('/student-login')}
-  //             className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors"
-  //           >
-  //             Back to Login
-  //           </button>
-  //           <p className="text-sm text-gray-500">
-  //             Contact your parent to upgrade your account
-  //           </p>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  // if (!child) return null;
 
   /* ---------------------------------- */
   /* Render */
@@ -181,28 +127,45 @@ export const ChildDashboard: React.FC = () => {
         {/* Header */}
         <div className="bg-white rounded-xl shadow p-6 mb-8 flex justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Welcome back, {user.full_name}!</h1>
-            <p className="text-gray-600">Grade {user.student_profile?.grade.level}</p>
+            <h1 className="text-3xl font-bold">
+              Welcome back, {user.full_name}!
+            </h1>
+            <p className="text-gray-600">
+              Grade {user.student_profile?.grade.level}
+            </p>
           </div>
           <div className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-full">
             <Trophy className="w-5 h-5" />
-            3 Badges Earned
+            {badges.length === 0 ? "No badges yet" : `${badges.filter((b) => b.unlocked).length} Badges Earned`}
+
           </div>
         </div>
 
         {/* Subjects */}
         <div className="grid md:grid-cols-2 gap-6 mb-10">
-          {Object.values(subjects).map((s, i) => {
-            const ui = SUBJECT_UI[s.name];
-            const Icon = ui.icon;
+          {subjects.map((s) => {
+            const Icon =
+              (s.subject.icon && ICON_MAP[s.subject.icon]) ?? Award;
+            const gradient =
+              (s.subject.gradient_key &&
+                GRADIENT_MAP[s.subject.gradient_key]) ??
+              "from-gray-400 to-gray-600";
 
             return (
-              <motion.div key={s.name} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              <motion.div
+                key={s.subject.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
                 <div className="bg-white rounded-xl shadow overflow-hidden">
-                  <div className={`bg-gradient-to-r ${ui.gradientFrom} ${ui.gradientTo} p-6 text-white`}>
+                  <div
+                    className={`bg-gradient-to-r ${gradient} p-6 text-white`}
+                  >
                     <div className="flex items-center gap-3">
                       <Icon className="w-7 h-7" />
-                      <h3 className="text-2xl font-bold">{s.name}</h3>
+                      <h3 className="text-2xl font-bold">
+                        {s.subject.name}
+                      </h3>
                     </div>
                   </div>
 
@@ -212,24 +175,40 @@ export const ChildDashboard: React.FC = () => {
                     {s.status === "in_progress" && (
                       <>
                         <Progress value={s.progress} />
-                        <button onClick={() => goToAssessment(s.name, true)} className="btn-primary mt-4">
+                        <button
+                          onClick={() =>
+                            goToAssessment(s.subject.id, true)
+                          }
+                          className="btn-primary mt-4"
+                        >
                           <PlayCircle /> Resume Assessment
                         </button>
                       </>
                     )}
 
                     {s.status === "not_started" && (
-                      <button onClick={() => goToAssessment(s.name)} className="btn-primary">
+                      <button
+                        onClick={() =>
+                          goToAssessment(s.subject.id)
+                        }
+                        className="btn-primary"
+                      >
                         <PlayCircle /> Take Assessment
                       </button>
                     )}
 
                     {s.status === "completed" && (
                       <>
-                        <button onClick={() => goToReport(s.assessment_id!)} className="btn-secondary">
+                        <button
+                          onClick={() => goToReport(s.assessment_id!)}
+                          className="btn-secondary"
+                        >
                           <FileText /> View Report
                         </button>
-                        <button onClick={() => goToCourse(s.name)} className="btn-primary mt-2">
+                        <button
+                          onClick={() => goToCourse(s.subject.id)}
+                          className="btn-primary mt-2"
+                        >
                           <ArrowRight /> Start Course
                         </button>
                       </>
@@ -248,20 +227,32 @@ export const ChildDashboard: React.FC = () => {
           </h2>
 
           <div className="grid grid-cols-4 md:grid-cols-8 gap-4">
-            {BADGES.map((b) => {
-              const Icon = b.icon;
+            {badges.map((b) => {
+              const Icon = ICON_MAP[b.icon] ?? Award;
+              const gradient =
+                GRADIENT_MAP[b.color_key] ?? "from-gray-400 to-gray-600";
+
               return (
-                <div key={b.id} className="flex flex-col items-center gap-2">
+                <div
+                  key={b.id}
+                  className="flex flex-col items-center gap-2"
+                >
                   <div
                     className={`w-14 h-14 rounded-full flex items-center justify-center ${
                       b.unlocked
-                        ? `bg-gradient-to-br ${BADGE_GRADIENTS[b.color]}`
+                        ? `bg-gradient-to-br ${gradient}`
                         : "bg-gray-300"
                     }`}
                   >
-                    {b.unlocked ? <Icon className="text-white" /> : <Lock />}
+                    {b.unlocked ? (
+                      <Icon className="text-white" />
+                    ) : (
+                      <Lock />
+                    )}
                   </div>
-                  <span className="text-xs text-center">{b.name}</span>
+                  <span className="text-xs text-center">
+                    {b.name}
+                  </span>
                 </div>
               );
             })}
@@ -271,7 +262,9 @@ export const ChildDashboard: React.FC = () => {
             <Sparkles className="text-purple-600" />
             <div>
               <p className="font-semibold">Keep it up!</p>
-              <p className="text-sm text-gray-600">Complete more courses to unlock badges.</p>
+              <p className="text-sm text-gray-600">
+                Complete more courses to unlock badges.
+              </p>
             </div>
           </div>
         </div>

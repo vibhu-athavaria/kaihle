@@ -5,13 +5,29 @@ from uuid import UUID
 
 from app.models.user import StudentProfile, User
 from app.models.assessment import Assessment
+from app.models.curriculum import CurriculumSubject
+from app.models.subject import Subject
 from app.schemas.user import StudentProfileUpdate, LearningProfileIntakePayload
 from typing import Optional
 from app.core.security import verify_password, get_password_hash
 from app.services.students import normalize_learning_profile
 
 def get_student(db: Session, student_id: UUID) -> Optional[StudentProfile]:
-    return db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
+    student = db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
+
+    if not student:
+        return None
+
+    student.subjects = (
+        db.query(Subject)
+        .join(CurriculumSubject)
+        .filter(CurriculumSubject.curriculum_id == student.curriculum_id)
+        .order_by(CurriculumSubject.sort_order)
+        .all()
+    )
+
+    return student
+
 
 def get_student_by_username(db: Session, username: str) -> Optional[StudentProfile]:
     query = db.query(StudentProfile).filter(StudentProfile.username == username)

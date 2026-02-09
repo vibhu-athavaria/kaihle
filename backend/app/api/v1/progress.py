@@ -2,17 +2,16 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.deps import get_current_active_user, get_current_admin_user
+from app.core.deps import get_current_active_user
+from app.crud.badge import get_student_earned_badges, check_and_award_badges
 from app.crud.progress import (
     get_progress_by_student_and_week, create_progress, update_progress,
     get_student_progress_history, get_student_total_points, get_student_current_streak,
-    get_student_total_lessons, get_student_badges, check_and_award_badges,
-    create_badge, get_all_badges
+    get_student_total_lessons
 )
 from app.crud.student import get_student_by_parent_and_id, get_student
 from app.schemas.progress import (
-    Progress, ProgressCreate, ProgressUpdate, ProgressSummary,
-    Badge, BadgeCreate, StudentBadgeResponse
+    Progress, ProgressCreate, ProgressUpdate, ProgressSummary
 )
 from app.models.user import User as UserModel
 from datetime import datetime
@@ -51,7 +50,7 @@ def get_student_progress_summary(
     total_points = get_student_total_points(db, student_id)
     current_streak = get_student_current_streak(db, student_id)
     total_lessons = get_student_total_lessons(db, student_id)
-    badges = get_student_badges(db, student_id)
+    badges = get_student_earned_badges(db, student_id)
     weekly_progress = get_student_progress_history(db, student_id)
 
     return ProgressSummary(
@@ -138,21 +137,3 @@ def get_student_progress_history_endpoint(
         )
 
     return get_student_progress_history(db, student_id, limit)
-
-# Badge management endpoints
-@router.post("/badges", response_model=Badge)
-def create_new_badge(
-    badge: BadgeCreate,
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_admin_user)
-):
-    """Create a new badge (admin only)"""
-    return create_badge(db, badge)
-
-@router.get("/badges", response_model=List[Badge])
-def list_all_badges(
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_active_user)
-):
-    """Get all available badges"""
-    return get_all_badges(db)

@@ -27,33 +27,8 @@ class Progress(ProgressBase):
     class Config:
         from_attributes = True
 
-class BadgeBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    icon: Optional[str] = None
-    points_required: int = 0
-
-class BadgeCreate(BadgeBase):
-    pass
-
-class Badge(BadgeBase):
-    id: UUID
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-class StudentBadgeResponse(BaseModel):
-    id: UUID
-    badge: Badge
-    earned_at: datetime
-
-    class Config:
-        from_attributes = True
-
 class ProgressSummary(BaseModel):
     total_points: int
     current_streak: int
     total_lessons_completed: int
-    badges_earned: List[StudentBadgeResponse]
     weekly_progress: List[Progress]

@@ -15,14 +15,19 @@ class Subject(Base, SerializerMixin):
     name = Column(String(100), nullable=False, unique=True, index=True)
     code = Column(String(20), nullable=True, unique=True)  # "MATH", "SCI", "ENG"
     description = Column(Text, nullable=True)
+
+    # UI related fields
     icon = Column(String(50), nullable=True)
     color = Column(String(7), nullable=True)  # Hex color for UI
+    gradient_key = Column(String(50), nullable=True)
+
     is_active = Column(Boolean, default=True)
 
     created_at = Column(TIMESTAMP(timezone=True), server_default=text("now()"))
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=text("now()"))
 
     # Relationships
+    curriculum_links = relationship("CurriculumSubject", back_populates="subject", cascade="all, delete-orphan")
     curriculum_topics = relationship("CurriculumTopic", back_populates="subject")
     courses = relationship("Course", back_populates="subject")
     assessments = relationship("Assessment", back_populates="subject")

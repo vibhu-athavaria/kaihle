@@ -13,7 +13,6 @@ router = APIRouter()
 @router.get("/me", response_model=User)
 def read_user_me(current_user: UserModel = Depends(get_current_active_user)):
     """Get current user's profile"""
-
     return current_user
 
 @router.put("/me", response_model=User)
