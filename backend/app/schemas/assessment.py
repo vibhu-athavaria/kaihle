@@ -4,6 +4,8 @@ from typing import Optional, List, Any, Dict
 from datetime import datetime
 from uuid import UUID
 
+from app.models.assessment import AssessmentStatus, AssessmentType
+
 class QuestionCreateRequest(BaseModel):
     question_text: str
     question_type: str  # "multiple_choice"|"short_answer"|"true_false"
@@ -37,6 +39,7 @@ class QuestionBankResponse(BaseModel):
     subject: Optional[str] = None
     topic: Optional[str] = None
     description: Optional[str] = None
+    meta_tags: Optional[Dict[str, Any]] = None
 
     @computed_field
     @property
@@ -52,6 +55,23 @@ class QuestionBankResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+class QuestionBankCreate(BaseModel):
+    subject_id: UUID
+    question_text: str
+    question_type: str
+    options: Optional[List[str]] = None
+    correct_answer: str
+    difficulty_level: Optional[float] = None
+    meta_tags: Optional[Dict[str, Any]] = None
+
+class QuestionBankUpdate(BaseModel):
+    question_text: Optional[str] = None
+    question_type: Optional[str] = None
+    options: Optional[List[str]] = None
+    correct_answer: Optional[str] = None
+    difficulty_level: Optional[float] = None
+    meta_tags: Optional[Dict[str, Any]] = None
 
 class AssessmentQuestionOut(BaseModel):
     id: UUID
@@ -73,7 +93,13 @@ class AssessmentQuestionOut(BaseModel):
 
 class AssessmentCreate(BaseModel):
     student_id: UUID
-    subject: str
+    subject_id: UUID
+    assessment_type: Optional[AssessmentType] = None
+    total_questions_configurable: Optional[int] = None
+
+
+class AssessmentUpdate(BaseModel):
+    total_questions_configurable: Optional[int] = None
 
 
 class AssessmentOut(BaseModel):
@@ -83,6 +109,7 @@ class AssessmentOut(BaseModel):
     grade_level: int
     status: str
     total_questions: int = 0
+    total_questions_configurable: Optional[int] = None
     questions_answered: int = 0
     overall_score: Optional[float] = None
     created_at: datetime

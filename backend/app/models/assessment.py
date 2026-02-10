@@ -30,7 +30,6 @@ class Assessment(Base, SerializerMixin):
     id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
     student_id = Column(UUID(as_uuid=True), ForeignKey("student_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
     subject_id = Column(UUID(as_uuid=True), ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False, index=True)
-    grade_id = Column(UUID(as_uuid=True), ForeignKey("grades.id", ondelete="SET NULL"), nullable=True, index=True)
     topic_id = Column(UUID(as_uuid=True), ForeignKey("topics.id", ondelete="SET NULL"), nullable=True, index=True)
 
     assessment_type = Column(Enum(AssessmentType), nullable=False)  # "diagnostic", "progress", "final", "topic_specific"
@@ -38,6 +37,7 @@ class Assessment(Base, SerializerMixin):
     status = Column(Enum(AssessmentStatus), default=AssessmentStatus.STARTED, index=True)  # "started", "in_progress", "completed", "abandoned"
 
     total_questions = Column(Integer, default=0)
+    total_questions_configurable = Column(Integer, nullable=True, default=20)
     questions_answered = Column(Integer, default=0)
     overall_score = Column(Float, nullable=True)  # 0-100
     time_taken = Column(Integer, nullable=True)  # in minutes
@@ -54,7 +54,6 @@ class Assessment(Base, SerializerMixin):
     # Relationships
     student = relationship("StudentProfile", back_populates="assessments")
     subject = relationship("Subject", back_populates="assessments")
-    grade = relationship("Grade", back_populates="assessments")
     topic = relationship("Topic")
     questions = relationship("AssessmentQuestion", back_populates="assessment", cascade="all, delete-orphan")
     study_plan = relationship("StudyPlan", uselist=False, back_populates="assessment")
@@ -117,6 +116,8 @@ class QuestionBank(Base, SerializerMixin):
     learning_objectives = Column(ARRAY(Text), nullable=True)
     explanation = Column(Text, nullable=True)  # Detailed explanation of the answer
     hints = Column(JSONB, nullable=True)  # Progressive hints
+
+    meta_tags = Column(JSONB, nullable=True)
 
     # For question deduplication and similarity
     canonical_form = Column(Text, nullable=False)  # Normalized version for dedup

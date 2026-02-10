@@ -54,7 +54,7 @@ class LLMService:
     # Question generation
     # ---------------------
     async def generate_question(
-        self, subject: str, grade_level: str, topic: Optional[str], difficulty_level: str
+        self, subject: str, grade_level: str, topic: Optional[str], difficulty_level: str, student_profile: Optional[Dict[str, Any]] = None, meta_tags: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Returns validated dict keys:
@@ -70,13 +70,44 @@ class LLMService:
                 "options": choices,
                 "correct_answer": correct,
                 "subject": subject,
-                "topic": None,
+                "subtopic": topic,
                 "difficulty_level": difficulty_level,
+                "learning_objectives": ["Mock objective"],
+                "description": "Mock description",
+                "prerequisites": ["Basic knowledge"],
+                "meta_tags": {"mock": True},
+                "canonical_form": f"MOCK_{subject.upper()}_{topic.upper() if topic else 'GENERAL'}",
+                "problem_signature": {
+                    "subject": subject,
+                    "topic": topic or "General",
+                    "subtopic": topic or "General",
+                    "concept": "mock_concept",
+                    "operation": "mock_op",
+                    "grade_level": grade_level,
+                    "difficulty": difficulty_level
+                }
             }
+
+        student_info = ""
+        if student_profile:
+            student_info = f"""
+            STUDENT PROFILE FOR PERSONALIZATION:
+            Personalize the question based on the student's learning profile: {json.dumps(student_profile)}
+            Adapt the question style, examples, or context to match their preferences and needs.
+            """
+
+        meta_info = ""
+        if meta_tags:
+            meta_info = f"""
+            META TAGS GUIDANCE:
+            Incorporate these meta tags into the question generation: {json.dumps(meta_tags)}
+            """
 
         prompt = f"""
             Generate EXACTLY 1 {subject} assessment question for Grade {grade_level} with difficulty '{difficulty_level}'.
             Follow ALL rules strictly and output STRICT JSON ONLY (no extra text).
+            {student_info}
+            {meta_info}
 
             RULES:
             1. The question MUST be appropriate for Grade {grade_level}.
@@ -98,6 +129,7 @@ class LLMService:
             - a clear 'description' of what the question assesses.
             - 1–2 learning_objectives.
             - prerequisites array (skills needed).
+            - meta_tags: a dict with relevant tags based on student profile and question (e.g., {{"learning_style": "visual", "interest": "stories"}})
 
             9. MUST generate a deterministic 'canonical_form'.
             Examples:
@@ -139,6 +171,7 @@ class LLMService:
             "learning_objectives": [],
             "description": "",
             "prerequisites": [],
+            "meta_tags": {{}},
             "canonical_form": "",
             "problem_signature": {{}},
             }}
@@ -196,7 +229,7 @@ class LLMService:
                 except json.JSONDecodeError:
                     logger.warning("⚠️ Could not parse Gemini JSON directly. Raw text:\n%s", text)
                     # Fallback: wrap raw text in a basic dict
-                    return {"question_text": text, "question_type": "open", "options": [], "correct_answer": "", "topic": topic or "General", "subtopic": None, "difficulty_level": difficulty_level}
+                    return {"question_text": text, "question_type": "open", "options": [], "correct_answer": "", "subject": subject, "subtopic": topic or "General", "difficulty_level": difficulty_level, "learning_objectives": [], "description": "Fallback description", "prerequisites": [], "meta_tags": {}, "canonical_form": "", "problem_signature": {}}
             except Exception as e:
                 logger.exception("Failed to generate or parse Gemini question")
                 raise
