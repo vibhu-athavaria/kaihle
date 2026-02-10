@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any, List
 from uuid import UUID
 from venv import logger
 from sqlalchemy import func, select, text, asc
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 
 from app.models.assessment import (
@@ -507,6 +507,7 @@ async def resolve_question(db: Session, assessment: Assessment) -> AssessmentQue
     # Get last unanswered
     unanswered = (
         db.query(AssessmentQuestion)
+        .options(joinedload(AssessmentQuestion.question_bank))
         .filter(
             AssessmentQuestion.assessment_id == assessment.id,
             AssessmentQuestion.student_answer.is_(None),
@@ -518,47 +519,11 @@ async def resolve_question(db: Session, assessment: Assessment) -> AssessmentQue
     if unanswered:
         return unanswered
 
-    total_assessment_questions = len(assessment.questions)
+
     max_questions = assessment.total_questions_configurable or TOTAL_QUESTIONS_PER_ASSESSMENT
 
-    if total_assessment_questions >= max_questions:
+    if assessment.total_questions >= max_questions:
         raise ValueError("Max questions per assessment reached")
-
-
-
-    # next_bank_question = (
-    #     db.query(QuestionBank)
-    #     .filter(
-    #         QuestionBank.subject_id == assessment.subject_id,
-    #         ~QuestionBank.id.in_(used_question_ids),
-    #     )
-    #     .order_by(QuestionBank.difficulty_level.asc())
-    #     .first()
-    # )
-
-    # if not next_bank_question:
-    #     assessment.status = "completed"
-    #     db.commit()
-    #     return None
-
-    # next_number = (
-    #     db.query(AssessmentQuestion)
-    #     .filter(AssessmentQuestion.assessment_id == assessment.id)
-    #     .count()
-    #     + 1
-    # )
-
-    # aq = AssessmentQuestion(
-    #     assessment_id=assessment.id,
-    #     question_bank_id=next_bank_question.id,
-    #     question_number=next_number,
-    # )
-
-    # db.add(aq)
-    # db.commit()
-    # db.refresh(aq)
-
-    # # return aq
 
     subtopic_list = get_subtopics_for_grade(assessment.subject, assessment.grade_level)
     # For simplicity, pick subtopic in round-robin fashion based on order

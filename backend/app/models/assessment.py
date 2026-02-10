@@ -111,7 +111,7 @@ class QuestionBank(Base, SerializerMixin):
     estimated_time_seconds = Column(Integer, nullable=True)
 
     # For tracking prerequisite topics required
-    prerequisites = Column(ARRAY(UUID(as_uuid=True)), nullable=True)  # Array of topic IDs
+    prerequisite_topic_ids = Column(ARRAY(UUID(as_uuid=True)), nullable=True)  # Array of topic IDs
 
     learning_objectives = Column(ARRAY(Text), nullable=True)
     explanation = Column(Text, nullable=True)  # Detailed explanation of the answer

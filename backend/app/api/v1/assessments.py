@@ -12,7 +12,7 @@ from app.schemas.assessment import (
     AssessmentCreate,
     AssessmentUpdate,
     AssessmentOut,
-    QuestionOut,
+    AssessmentQuestionBase,
     AnswerOut,
     AnswerSubmit,
     AssessmentReportResponse
@@ -55,7 +55,6 @@ def create_assessment_api(payload: AssessmentCreate, db: Session = Depends(get_d
     )
     return assessment
 
-
 @router.post("/resolve", response_model=AssessmentOut)
 def resolve_diagnostic_assessment_api(
     payload: AssessmentCreate,
@@ -78,7 +77,7 @@ def resolve_diagnostic_assessment_api(
     )
 
 
-@router.post("/{assessment_id}/questions/resolve", response_model=QuestionOut)
+@router.post("/{assessment_id}/questions/resolve", response_model=AssessmentQuestionBase)
 async def create_assessment_question(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Returns:
@@ -90,7 +89,7 @@ async def create_assessment_question(assessment_id: UUID, db: Session = Depends(
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
 
-    if assessment.status != AssessmentStatus.IN_PROGRESS:
+    if assessment.status not in [AssessmentStatus.IN_PROGRESS, AssessmentStatus.STARTED]:
         raise HTTPException(status_code=400, detail="Assessment is not in progress")
 
     # Finally get the last unanswered question or create one
