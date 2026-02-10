@@ -1,4 +1,4 @@
-# app/services/assessment_service.py
+# app/services/assessment.py
 import pandas as pd
 import json
 import math, random
@@ -6,10 +6,14 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 from venv import logger
+from sqlalchemy import func, select, text, asc
 from sqlalchemy.orm import Session
-from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
+
 from app.models.assessment import (
     Assessment,
+    AssessmentType,
+    AssessmentStatus,
     AssessmentQuestion,
     AssessmentReport,
     QuestionBank,
@@ -19,7 +23,6 @@ from app.models.user import StudentProfile  # adjust import to match your struct
 from app.services.llm_service import llm_service as llm
 
 from app.constants.constants import (
-    ASSESSMENT_SUBJECTS,
     TOTAL_QUESTIONS_PER_ASSESSMENT,
     ASSESSMENT_MAX_QUESTIONS_PER_SUBTOPIC as MAX_PER_TOPIC
 )
@@ -218,45 +221,77 @@ def difficulty_label_from_value(val: float) -> str:
         return "medium"
     return "hard"
 
+###################################
+## Assessment Reated
+###################################
+def create_assessment(
+    db: Session,
+    student_id: UUID,
+    subject_id: UUID,
+    assessment_type: AssessmentType,
+    total_questions_configurable: int=None
+) -> Assessment:
 
-# ---------- Checkpoint utilities ----------
-def ensure_profile_checkpoints(profile: StudentProfile) -> Dict[str, Any]:
-    """
-    Ensure math/science/english/humanities checkpoint fields exist as JSON structure.
-    Return them combined as a dict-like view.
-    Each field will be JSON string in DB; we convert to dict objects in memory.
-    Example structure stored in DB: {"algebra": {"grade_level": 5, "mastery": 0.4}, ...}
-    """
-    changed = False
-    result = {}
-    for subject in ASSESSMENT_SUBJECTS:
-        field_name = f"{subject.value}_checkpoint"
-        raw = getattr(profile, field_name, None)
-        if not raw:
-            obj = {}
-            setattr(profile, field_name, json.dumps(obj))
-            changed = True
-        else:
-            try:
-                obj = raw if isinstance(raw, dict) else json.loads(raw)
-            except Exception:
-                obj = {}
-                setattr(profile, field_name, json.dumps(obj))
-                changed = True
-        result[subject] = obj
-    if changed:
-        profile.updated_at = datetime.now(timezone.utc)
-    return result
+    assessment = Assessment(
+        student_id=student_id,
+        subject_id=subject_id,
+        assessment_type=assessment_type
+    )
+    if total_questions_configurable:
+        assessment.total_questions_configurable = total_questions_configurable
 
-
-def save_profile_checkpoints(db: Session, profile: StudentProfile, checkpoints: Dict[str, Any]):
-    """Persist the checkpoint dicts back onto the StudentProfile as JSON strings."""
-    for subject, obj in checkpoints.items():
-        setattr(profile, f"{subject}_checkpoint", json.dumps(obj))
-    profile.updated_at = datetime.now(timezone.utc)
-    db.add(profile)
+    db.add(assessment)
     db.commit()
-    db.refresh(profile)
+    db.refresh(assessment)
+
+    return assessment
+
+def _get_diagnostic_assessment_for_student(db: Session, student_id: UUID, subject_id: UUID ) -> Assessment:
+    return (
+        db.query(Assessment)
+        .filter(
+            Assessment.student_id == student_id,
+            Assessment.subject_id == subject_id,
+            Assessment.assessment_type == AssessmentType.DIAGNOSTIC,
+        )
+        .order_by(Assessment.created_at.desc())
+        .first()
+    )
+
+def resolve_diagnostic_assessment(
+        db: Session,
+        student_id : UUID,
+        subject_id : UUID,
+        total_questions_configurable: int = None
+    ) -> Assessment:
+    """
+    Idempotent:
+    - returns active assessment if exists
+    - otherwise creates a new one
+    """
+
+    assessment = _get_diagnostic_assessment_for_student(db, student_id, subject_id)
+
+    if assessment:
+        return assessment
+
+    assessment = Assessment(
+        student_id=student_id,
+        subject_id=subject_id,
+        assessment_type=AssessmentType.DIAGNOSTIC
+    )
+    if total_questions_configurable:
+        assessment.total_questions_configurable = total_questions_configurable
+
+    db.add(assessment)
+    try:
+        db.commit()
+        db.refresh(assessment)
+        return assessment
+    except IntegrityError as e:
+        db.rollback()
+        assessment = _get_diagnostic_assessment_for_student(db, student_id, subject_id)
+        return assessment
 
 
 # ---------- QuestionBank helper ----------
@@ -452,23 +487,89 @@ def find_duplicates_question(
 
     return result
 
-async def create_question(db: Session, assessment: Assessment) -> AssessmentQuestion:
+async def resolve_question(db: Session, assessment: Assessment) -> AssessmentQuestion:
     """
+    Returns:
+    - last unanswered question
+    - OR creates next question
+    - OR None if assessment complete
+    Create a new question for an existing assessment.
+
+    Rules to create a new question:
+    - Will not create more than 8 questions within the same topic for this assessment.
+    - If student has repeated wrong answers for this assessment, pick lower difficulty.
+    - Returns the created question or raises error if limits reached or assessment closed.
+
     Create a question using LLM and persist it.
     This enforces the MAX_PER_TOPIC limit and returns the created AssessmentQuestion.
     """
 
-    total_assessment_questions = len(assessment.questions)
+    # Get last unanswered
+    unanswered = (
+        db.query(AssessmentQuestion)
+        .filter(
+            AssessmentQuestion.assessment_id == assessment.id,
+            AssessmentQuestion.student_answer.is_(None),
+        )
+        .order_by(asc(AssessmentQuestion.question_number))
+        .first()
+    )
 
-    if total_assessment_questions >= TOTAL_QUESTIONS_PER_ASSESSMENT:
+    if unanswered:
+        return unanswered
+
+    total_assessment_questions = len(assessment.questions)
+    max_questions = assessment.total_questions_configurable or TOTAL_QUESTIONS_PER_ASSESSMENT
+
+    if total_assessment_questions >= max_questions:
         raise ValueError("Max questions per assessment reached")
+
+
+
+    # next_bank_question = (
+    #     db.query(QuestionBank)
+    #     .filter(
+    #         QuestionBank.subject_id == assessment.subject_id,
+    #         ~QuestionBank.id.in_(used_question_ids),
+    #     )
+    #     .order_by(QuestionBank.difficulty_level.asc())
+    #     .first()
+    # )
+
+    # if not next_bank_question:
+    #     assessment.status = "completed"
+    #     db.commit()
+    #     return None
+
+    # next_number = (
+    #     db.query(AssessmentQuestion)
+    #     .filter(AssessmentQuestion.assessment_id == assessment.id)
+    #     .count()
+    #     + 1
+    # )
+
+    # aq = AssessmentQuestion(
+    #     assessment_id=assessment.id,
+    #     question_bank_id=next_bank_question.id,
+    #     question_number=next_number,
+    # )
+
+    # db.add(aq)
+    # db.commit()
+    # db.refresh(aq)
+
+    # # return aq
 
     subtopic_list = get_subtopics_for_grade(assessment.subject, assessment.grade_level)
     # For simplicity, pick subtopic in round-robin fashion based on order
-    subtopic_index = int(total_assessment_questions / int(TOTAL_QUESTIONS_PER_ASSESSMENT / len(subtopic_list))) if subtopic_list and len(subtopic_list) > 1 else 0
+    subtopic_index = int(total_assessment_questions / int(max_questions / len(subtopic_list))) if subtopic_list and len(subtopic_list) > 1 else 0
     subtopic = subtopic_list[subtopic_index] if subtopic_list else None
 
     difficulty = calculate_difficulty_from_history(db, assessment, subtopic) if subtopic else 0.5
+
+    # Get student profile for personalization
+    profile = db.query(StudentProfile).filter(StudentProfile.id == assessment.student_id).first()
+    student_profile_data = profile.learning_profile if profile and profile.learning_profile else None
 
     # Ask LLM to generate question object
     # Expected return: dict with question_text, question_type, options, correct_answer, difficulty_level, ai_feedback, topic, subtopic
@@ -477,7 +578,8 @@ async def create_question(db: Session, assessment: Assessment) -> AssessmentQues
             assessment.subject,
             assessment.grade_level,
             subtopic,
-            difficulty_label_from_value(difficulty)
+            difficulty_label_from_value(difficulty),
+            student_profile=student_profile_data
         )
         logger.debug("LLM generated question payload: %s", payload)
     except Exception as e:
@@ -525,6 +627,7 @@ async def create_question(db: Session, assessment: Assessment) -> AssessmentQues
             options=options,
             correct_answer=correct_answer,
             difficulty_level=difficulty_level,
+            meta_tags=meta_tags,
             created_at=datetime.now(timezone.utc),
         )
         db.add(question_bank)
@@ -628,7 +731,8 @@ async def score_answer_and_maybe_next(db: Session, assessment: Assessment, quest
             save_profile_checkpoints(db, profile, cps)
 
     # Decide if assessment should finish
-    if assessment.questions_answered >= MAX_QUESTIONS_PER_ASSESSMENT:
+    max_questions = assessment.total_questions_configurable or TOTAL_QUESTIONS_PER_ASSESSMENT
+    if assessment.questions_answered >= max_questions:
         assessment.status = "completed"
         assessment.completed_at = datetime.now(timezone.utc)
         answers_scores = [q.score or 0.0 for q in assessment.questions]

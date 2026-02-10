@@ -59,16 +59,16 @@ export interface Badge {
   unlocked: boolean;
 }
 
-// export const BADGES = [
-//   { id: "1", name: "Quick Starter", icon: Zap, unlocked: true, color: "yellow" },
-//   { id: "2", name: "First Steps", icon: Star, unlocked: true, color: "blue" },
-//   { id: "3", name: "Math Master", icon: Trophy, unlocked: false, color: "purple" },
-//   { id: "4", name: "Science Explorer", icon: Beaker, unlocked: true, color: "green" },
-//   { id: "5", name: "Reading Champion", icon: BookOpen, unlocked: false, color: "pink" },
-//   { id: "6", name: "Goal Achiever", icon: Target, unlocked: false, color: "orange" },
-//   { id: "7", name: "Perfect Score", icon: Award, unlocked: false, color: "red" },
-//   { id: "8", name: "Creative Thinker", icon: Sparkles, unlocked: false, color: "indigo" },
-// ];
+export const BADGES = [
+  { id: "1", name: "Quick Starter", icon: Zap, unlocked: true, color: "yellow" },
+  { id: "2", name: "First Steps", icon: Star, unlocked: true, color: "blue" },
+  { id: "3", name: "Math Master", icon: Trophy, unlocked: false, color: "purple" },
+  { id: "4", name: "Science Explorer", icon: Beaker, unlocked: true, color: "green" },
+  { id: "5", name: "Reading Champion", icon: BookOpen, unlocked: false, color: "pink" },
+  { id: "6", name: "Goal Achiever", icon: Target, unlocked: false, color: "orange" },
+  { id: "7", name: "Perfect Score", icon: Award, unlocked: false, color: "red" },
+  { id: "8", name: "Creative Thinker", icon: Sparkles, unlocked: false, color: "indigo" },
+];
 
 // export const BADGE_GRADIENTS: Record<string, string> = {
 //   yellow: "from-yellow-400 to-yellow-600",

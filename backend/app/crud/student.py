@@ -4,30 +4,18 @@ from sqlalchemy.orm import Session, selectinload
 from uuid import UUID
 
 from app.models.user import StudentProfile, User
-from app.models.assessment import Assessment
+from app.models.assessment import Assessment, AssessmentStatus, AssessmentType
 from app.models.curriculum import CurriculumSubject
 from app.models.subject import Subject
 from app.schemas.user import StudentProfileUpdate, LearningProfileIntakePayload
 from typing import Optional
 from app.core.security import verify_password, get_password_hash
 from app.services.students import normalize_learning_profile
+from app.crud.assessment import resolve_diagnostic_assessment
+
 
 def get_student(db: Session, student_id: UUID) -> Optional[StudentProfile]:
-    student = db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
-
-    if not student:
-        return None
-
-    student.subjects = (
-        db.query(Subject)
-        .join(CurriculumSubject)
-        .filter(CurriculumSubject.curriculum_id == student.curriculum_id)
-        .order_by(CurriculumSubject.sort_order)
-        .all()
-    )
-
-    return student
-
+    return db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
 
 def get_student_by_username(db: Session, username: str) -> Optional[StudentProfile]:
     query = db.query(StudentProfile).filter(StudentProfile.username == username)
@@ -194,3 +182,61 @@ def authenticate_student(db: Session, username: str, password: str) -> Optional[
     if not verify_password(password, student.hashed_password):
         return None
     return student
+
+
+def get_student_subjects_with_diagnostic_assessment(db: Session, student_id: UUID, student_curriculum_id : UUID):
+
+    subjects = (
+        db.query(Subject)
+        .join(CurriculumSubject)
+        .filter(CurriculumSubject.curriculum_id == student_curriculum_id)
+        .filter(Subject.is_active == True)
+        .all()
+    )
+
+    diagnostic_assessments = db.query(Assessment).filter(
+            Assessment.student_id == student_id,
+            Assessment.assessment_type == AssessmentType.DIAGNOSTIC
+        ).order_by(
+            Assessment.subject_id, desc(Assessment.created_at)
+        ).all()
+
+    assessments_by_subject: dict[UUID, Assessment] = {}
+    for assessment in diagnostic_assessments:
+        if assessment.subject_id not in assessments_by_subject:
+            assessments_by_subject[assessment.subject_id] = assessment
+
+    response = []
+
+    for subject in subjects:
+        assessment = assessments_by_subject.get(subject.id)
+
+        if not assessment:
+            status = "not_started"
+            progress = None
+        elif assessment.status in [AssessmentStatus.IN_PROGRESS, AssessmentStatus.STARTED]:
+            status = "in_progress"
+            progress = (
+                (assessment.questions_answered / assessment.total_questions) * 100
+                if assessment.total_questions > 0
+                else 0
+            )
+        else:
+            status = "completed"
+            progress = 100
+
+        response.append({
+            "subject": {
+                "id": str(subject.id),
+                "name": subject.name,
+                "code": subject.code,
+                "icon": subject.icon,
+                "gradient_key": subject.gradient_key,
+            },
+            "status": status,
+            "description": subject.description or "",
+            "assessment_id": assessment.id if assessment else None,
+            "progress": progress,
+        })
+
+    return response

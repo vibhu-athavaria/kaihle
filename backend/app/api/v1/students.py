@@ -6,10 +6,8 @@ from app.core.deps import get_current_active_user
 from app.crud.badge import get_student_earned_badges
 from app.crud.student import (
     get_student, get_student_by_parent_and_id, update_student, delete_student,
-    get_student_with_assessments, update_learning_profile
+    get_student_with_assessments, update_learning_profile, get_student_subjects_with_diagnostic_assessment
 )
-from app.crud.subject import get_subjects_for_student
-
 from app.schemas.badge import StudentBadgeResponse
 from app.schemas.dashboard import StudentSubjectDashboardItem
 from app.schemas.user import (
@@ -162,9 +160,14 @@ def delete_student_profile(
     return {"message": "Student deleted successfully"}
 
 @router.get("/{student_id}/subjects", response_model=list[StudentSubjectDashboardItem])
-def get_student_subjects(student_id: str, db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_active_user)):
-    return get_subjects_for_student(db, student_id)
+def get_student_subjects(student_id: UUID, db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_active_user)):
+    student = get_student(db, student_id)
+
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    return get_student_subjects_with_diagnostic_assessment(db, student_id, student.curriculum_id)
 
 @router.get("/{student_id}/badges", response_model=list[StudentBadgeResponse])
-def get_student_badges(student_id: str, db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_active_user)):
+def get_student_badges(student_id: UUID, db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_active_user)):
     return get_student_earned_badges(db, student_id)

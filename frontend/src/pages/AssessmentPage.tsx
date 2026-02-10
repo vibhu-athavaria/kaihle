@@ -1,18 +1,29 @@
 // src/components/Assessment/AssessmentPage.tsx
+"use client";
+
 import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { http } from "@/lib/http";
-import config from "../config";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { useAuth } from "@/contexts/AuthContext";
+
+/* ----------------------------- */
+/* Types */
+/* ----------------------------- */
+
+type Assessment = {
+  id: number;
+  status: "in_progress" | "completed";
+  subject_id: string;
+};
 
 type QuestionBank = {
   id: number;
   question_text: string;
   question_type: string;
   options?: string[] | null;
-  correct_answer?: string;
-  difficulty_level?: string;
-  learning_objectives: string
+  difficulty_label?: string;
+  meta_tags?: Record<string, any> | null;
 };
 
 type Question = {
@@ -21,130 +32,181 @@ type Question = {
   question_bank: QuestionBank;
 };
 
+type ResolveQuestionResponse =
+  | { status: "question"; question: Question }
+  | { status: "completed" };
+
 type AnswerResponse = {
-  question_id: number;
   is_correct: boolean;
-  score: number;
   feedback?: string;
   next_question?: Question | null;
+  status?: "completed";
 };
 
+/* ----------------------------- */
+/* Component */
+/* ----------------------------- */
+
 const AssessmentPage: React.FC = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [assessment, setAssessment] = useState<any>(null);
+  const [subjectId, setSubjectId] = useState<string | null>(null);
+  const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
-  const [answer, setAnswer] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const [report, setReport] = useState<any | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [subject, setSubject] = useState<string | null>(null);
 
-  // ✅ Extract subject from query string
+  const [answer, setAnswer] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<any | null>(null);
+
+  /* ----------------------------- */
+  /* Extract subject_id */
+  /* ----------------------------- */
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const subjectParam = params.get("subject");
-    setSubject(subjectParam); // fallback if none passed
+    const subject = params.get("subject_id");
+
+    if (!subject) {
+      setError("Missing subject_id");
+      return;
+    }
+
+    setSubjectId(subject);
   }, [location.search]);
 
-  // ✅ Start or resume assessment
-  useEffect(() => {
-    if (subject) startOrResume();
-    // eslint-disable-next-line
-  }, [subject]);
+  /* ----------------------------- */
+  /* Resolve assessment */
+  /* ----------------------------- */
 
-  const startOrResume = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const user = localStorage.getItem("user");
-      if (!user) {
-        navigate("/login");
-        return;
+  useEffect(() => {
+  if (!subjectId) {
+    console.error("Missing subject_id");
+    return;
+  }
+  if (!user?.student_profile?.id) {
+    console.error("Missing student_id");
+    return;
+  }
+
+  void resolveAssessmentAndQuestion();
+}, [subjectId, user?.student_profile?.id]);
+
+const resolveAssessmentAndQuestion = async () => {
+  setLoading(true);
+  setError(null);
+
+  try {
+    // resolve assessment
+    const resp = await http.post<Assessment>(
+      "/api/v1/assessments/resolve",
+      {
+        student_id: user.student_profile.id,
+        subject_id: subjectId,
       }
-      const parsedUser = JSON.parse(user);
-      //  create or get assessment
-      const resp = await http.post(
-        "/api/v1/assessments/",
-        {
-          student_id: parsedUser.student_profile.id,
-          subject: subject,
-        }
+    );
+
+    const assessment = resp.data;
+    setAssessment(assessment);
+
+    // defensive guard (never assume backend correctness)
+    if (!assessment?.id) {
+      throw new Error("Assessment resolved without id");
+    }
+
+    // resolve question ONLY after assessment exists
+    await resolveQuestion(assessment.id);
+
+  } catch (err) {
+    console.error(err);
+    setError("Failed to start assessment");
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  /* ----------------------------- */
+  /* Resolve next question */
+  /* ----------------------------- */
+
+  const resolveQuestion = async (assessmentId: number) => {
+    try {
+      const resp = await http.post<ResolveQuestionResponse>(
+        `/api/v1/assessments/${assessmentId}/questions/resolve`
       );
 
-      const body = resp.data;
-      setAssessment(body);
-      console.log(`Assessment for ${subject}:`, body);
-
-      const nextUnanswered =
-        body.questions?.find((q: any) => !q.student_answer) || null;
-
-      if (nextUnanswered) {
-        setQuestion(stripServerFields(nextUnanswered));
-      } else {
-        const qResp = await http.post(`/api/v1/assessments/${body.id}/questions`);
-        const nq = qResp.data.questions?.find((q: any) => !q.student_answer) || null;
-        setQuestion(nq ? stripServerFields(nq) : null);
+      if (resp.data.status === "completed") {
+        const r = await http.get(
+          `/api/v1/assessments/${assessmentId}/completed`
+        );
+        setReport(r.data);
+        setTimeout(() => navigate("/child-dashboard"), 2500);
+        return;
       }
-    } catch (err: any) {
+
+      setQuestion(resp.data.question);
+    } catch (err) {
       console.error(err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      setError("Failed to load question");
     }
   };
 
-  const stripServerFields = (q: any) => {
-    if (!q) return null;
-    const { correct_answer, ai_feedback, ...client } = q;
-    return client as Question;
-  };
+  /* ----------------------------- */
+  /* Submit answer */
+  /* ----------------------------- */
 
-  // ✅ Submit answer
-  const submitAnswer = async (timeTaken = 15, hintsUsed = 0) => {
-    if (!question || !assessment) return;
+  const submitAnswer = async () => {
+    if (!assessment || !question) return;
+
     setLoading(true);
+
     try {
-      const token = localStorage.getItem("access_token");
       const resp = await http.post<AnswerResponse>(
         `/api/v1/assessments/${assessment.id}/questions/${question.id}/answer`,
-        {
-          answer_text: answer,
-          time_taken: timeTaken,
-          hints_used: hintsUsed,
-        }
+        { answer_text: answer }
       );
 
-      const body = resp.data;
-      alert(body.feedback || (body.is_correct ? "✅ Correct!" : "❌ Not correct"));
+      alert(
+        resp.data.feedback ||
+          (resp.data.is_correct ? "✅ Correct!" : "❌ Not correct")
+      );
 
-      if (body.next_question) {
-        setQuestion(stripServerFields(body.next_question));
+      if (resp.data.next_question) {
+        setQuestion(resp.data.next_question);
         setAnswer("");
-      } else if (body.status === "completed") {
-        // Finished — show report
-        const r = await http.get(`/api/v1/assessments/${assessment.id}/completed`);
+        return;
+      }
+
+      if (resp.data.status === "completed") {
+        const r = await http.get(
+          `/api/v1/assessments/${assessment.id}/completed`
+        );
         setReport(r.data);
         setTimeout(() => navigate("/child-dashboard"), 2500);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError(err.message);
+      setError("Failed to submit answer");
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ Render states
+  /* ----------------------------- */
+  /* Render states */
+  /* ----------------------------- */
+
   if (loading && !question) {
-    return <div className="p-6">Loading {subject} Assessment...</div>;
+    return <div className="p-6">Loading assessment...</div>;
   }
 
   if (error) {
     return (
       <div className="p-6 text-center text-red-600">
-        <p>Error: {error}</p>
+        <p>{error}</p>
         <button
           onClick={() => navigate("/child-dashboard")}
           className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
@@ -158,9 +220,9 @@ const AssessmentPage: React.FC = () => {
   if (report) {
     return (
       <div className="max-w-3xl mx-auto p-6">
-        <h2 className="text-2xl font-bold">{subject} Assessment Report</h2>
+        <h2 className="text-2xl font-bold">Assessment Report</h2>
         <pre className="bg-white p-4 rounded mt-4">
-          {JSON.stringify(report.recommendations || report, null, 2)}
+          {JSON.stringify(report, null, 2)}
         </pre>
         <p className="mt-4 text-gray-600">Redirecting to dashboard...</p>
       </div>
@@ -171,20 +233,42 @@ const AssessmentPage: React.FC = () => {
     return <div className="p-6">No question loaded</div>;
   }
 
-  // Main question UI
+  /* ----------------------------- */
+  /* Main UI */
+  /* ----------------------------- */
+
   return (
     <div className="min-h-screen p-6 bg-gray-50">
       <div className="max-w-3xl mx-auto bg-white p-6 rounded-xl shadow">
-        <Breadcrumb role="student" items={[{ label: `${subject} Assessment` }]} />
+        <Breadcrumb
+          role="student"
+          items={[{ label: "Assessment" }]}
+        />
+
         <div className="text-sm text-gray-500">
-          {subject} • Question {question.question_number} • {question.question_bank.difficulty_label}
+          Question {question.question_number} •{" "}
+          {question.question_bank.difficulty_label}
         </div>
+
         <h3 className="text-xl font-semibold mt-2">
           {question.question_number}.{" "}
           {question.question_bank.question_text}
-          </h3>
+        </h3>
 
-        {question.question_bank.options && question.question_bank.options.length ? (
+        {question.question_bank.meta_tags && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {Object.entries(question.question_bank.meta_tags).map(([key, value]) => (
+              <span
+                key={key}
+                className="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full"
+              >
+                {key}: {String(value)}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {question.question_bank.options?.length ? (
           <div className="mt-4 space-y-2">
             {question.question_bank.options.map((opt, i) => (
               <label
@@ -197,8 +281,6 @@ const AssessmentPage: React.FC = () => {
               >
                 <input
                   type="radio"
-                  name="choice"
-                  value={opt}
                   checked={answer === opt}
                   onChange={() => setAnswer(opt)}
                   className="mr-2"
@@ -216,17 +298,18 @@ const AssessmentPage: React.FC = () => {
           />
         )}
 
-        <div className="mt-4 flex justify-end space-x-3">
+        <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={() => navigate("/child-dashboard")}
             className="px-4 py-2 rounded border"
           >
             Exit
           </button>
+
           <button
-            onClick={() => submitAnswer()}
-            disabled={loading || !answer}
-            className="px-4 py-2 rounded bg-blue-600 text-white"
+            onClick={submitAnswer}
+            disabled={!answer || loading}
+            className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50"
           >
             {loading ? "..." : "Submit"}
           </button>

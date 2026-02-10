@@ -5,102 +5,102 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
-from app.models.assessment import Assessment, AssessmentReport, AssessmentQuestion
+from app.core.deps import get_current_active_user
+from app.models.assessment import Assessment, AssessmentReport, AssessmentQuestion, AssessmentStatus, AssessmentType
 from app.models.user import User, StudentProfile
-from app.schemas.assessment import AssessmentCreate, AssessmentOut, QuestionOut, AnswerOut, AnswerSubmit, AssessmentReportResponse
-from app.services.assessment_service import (
-    create_question,
+from app.schemas.assessment import (
+    AssessmentCreate,
+    AssessmentUpdate,
+    AssessmentOut,
+    QuestionOut,
+    AnswerOut,
+    AnswerSubmit,
+    AssessmentReportResponse
+)
+from app.crud.assessment import (
+    create_assessment,
+    resolve_diagnostic_assessment,
+    resolve_question,
     difficulty_float_from_label,
     difficulty_label_from_value,
     get_or_create_assessment_report
 )
 from app.constants.constants import (
-    ASSESSMENT_STATUS_PROGRESS,
-    ASSESSMENT_STATUS_COMPLETED,
-    ASSESSMENT_TYPES,
-    ASSESSMENT_SUBJECTS,
     TOTAL_QUESTIONS_PER_ASSESSMENT
 )
 
 router = APIRouter()
 
 @router.post("/", response_model=AssessmentOut)
-def create_assessment(payload: AssessmentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_assessment_api(payload: AssessmentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
-    Create a new assessment record. This endpoint **only creates the assessment**
-    (no question generation). Use POST /{id}/questions to create questions.
+    This endpoint **only creates the non-diagnostic assessment**
+    Use POST /resolve to create diagnostic assessments.
     """
-    print(f"Creating assessment for student_id={payload.student_id}, subject={payload.subject }")
+
+    if payload.assessment_type == AssessmentType.DIAGNOSTIC:
+        raise HTTPException(status_code=400, detail="Use POST /resolve to create diagnostic assessments")
 
     student = db.query(StudentProfile).filter(StudentProfile.id == payload.student_id).first()
 
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    # check if there is already an in-progress assessment for this student
-    existing = (
-        db.query(Assessment)
-        .filter(
-            Assessment.student_id == payload.student_id,
-            Assessment.status == ASSESSMENT_STATUS_PROGRESS,
-            Assessment.subject == payload.subject,
-            Assessment.grade_level == student.grade_level
-        )
-        .order_by(Assessment.created_at.desc())
-        .first()
+    assessment = create_assessment(
+        db,
+        payload.student_id,
+        payload.subject_id,
+        payload.assessment_type,
+        payload.total_questions_configurable
     )
-    if existing:
-        # If an in-progress assessment exists, return it (useful for idempotency)
-        return existing
-
-    grade_level = student.grade_level
-    assessment = Assessment(
-        student_id=payload.student_id,
-        subject=payload.subject,
-        grade_level=grade_level,
-        assessment_type=ASSESSMENT_TYPES[0],  # default to "diagnostic"
-        # difficulty_level="medium",
-        status=ASSESSMENT_STATUS_PROGRESS,
-        total_questions=0,
-        questions_answered=0,
-        created_at=datetime.now(timezone.utc)
-    )
-    db.add(assessment)
-    db.commit()
-    db.refresh(assessment)
     return assessment
 
 
-@router.post("/{assessment_id}/questions", response_model=QuestionOut)
-async def create_assessment_question(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """
-    Create a new question for an existing assessment.
+@router.post("/resolve", response_model=AssessmentOut)
+def resolve_diagnostic_assessment_api(
+    payload: AssessmentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    if payload.assessment_type != AssessmentType.DIAGNOSTIC:
+        raise HTTPException(status_code=400, detail="Use POST / to create non-diagnostic assessments")
 
-    Rules implemented:
-    - Will not create more than 8 questions within the same topic for this assessment.
-    - If student has repeated wrong answers for this subject, pick lower difficulty.
-    - Uses student_profile checkpoint fields as preference hints (if present).
-    - Returns the created question or raises error if limits reached or assessment closed.
+    student = db.query(StudentProfile).filter(StudentProfile.id == payload.student_id).first()
+
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    return resolve_diagnostic_assessment(
+        db=db,
+        student_id=payload.student_id,
+        subject_id=payload.subject_id,
+        total_questions_configurable=payload.total_questions_configurable,
+    )
+
+
+@router.post("/{assessment_id}/questions/resolve", response_model=QuestionOut)
+async def create_assessment_question(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Returns:
+    - last unanswered question
+    - OR creates next question
+    - OR None if assessment complete
     """
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
 
-    if assessment.status != ASSESSMENT_STATUS_PROGRESS:
+    if assessment.status != AssessmentStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail="Assessment is not in progress")
 
-    if not assessment.subject in ASSESSMENT_SUBJECTS:
-        raise HTTPException(status_code=400, detail="Invalid subject for assessment")
-
-    # Finally create the question using existing create_question service
-    question = await create_question(db, assessment)
+    # Finally get the last unanswered question or create one
+    question = await resolve_question(db, assessment)
 
     return question
 
 
 @router.post("/{assessment_id}/questions/{question_id}/answer", response_model=AnswerOut)
-async def check_answer_and_next(assessment_id: UUID, question_id: UUID, payload: AnswerSubmit, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def check_answer_and_next(assessment_id: UUID, question_id: UUID, payload: AnswerSubmit, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Submit an answer for a question:
     - Update the question record (is_correct/score/answered_at/time_taken).
@@ -158,8 +158,9 @@ async def check_answer_and_next(assessment_id: UUID, question_id: UUID, payload:
     assessment.difficulty_level = difficulty_label_from_value(new_val)
 
     # Possibly mark assessment complete
-    if assessment.questions_answered >= TOTAL_QUESTIONS_PER_ASSESSMENT:
-        assessment.status = ASSESSMENT_STATUS_COMPLETED
+    max_questions = assessment.total_questions_configurable or TOTAL_QUESTIONS_PER_ASSESSMENT
+    if assessment.questions_answered >= max_questions:
+        assessment.status = AssessmentStatus.COMPLETED
         assessment.completed_at = datetime.now(timezone.utc)
         # compute overall score
         answers_scores = [q.score or 0.0 for q in assessment.questions]
@@ -196,20 +197,35 @@ async def check_answer_and_next(assessment_id: UUID, question_id: UUID, payload:
 
 
 @router.get("/{assessment_id}", response_model=AssessmentOut)
-def get_assessment(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_assessment(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
     return assessment
 
 
-@router.post("/{assessment_id}/completed", response_model=AssessmentReportResponse)
-def complete_assessment(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.put("/{assessment_id}", response_model=AssessmentOut)
+def update_assessment(assessment_id: UUID, payload: AssessmentUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
 
-    if assessment.status != ASSESSMENT_STATUS_COMPLETED:
+    # Update fields if provided
+    if payload.total_questions_configurable is not None:
+        assessment.total_questions_configurable = payload.total_questions_configurable
+
+    db.commit()
+    db.refresh(assessment)
+    return assessment
+
+
+@router.post("/{assessment_id}/completed", response_model=AssessmentReportResponse)
+def complete_assessment(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    assessment = db.query(Assessment).filter(Assessment.id == assessment_id).first()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    if assessment.status != AssessmentStatus.COMPLETED:
         raise HTTPException(status_code=400, detail="Assessment is not marked as completed yet")
 
     student_name = assessment.student.user.full_name
@@ -221,7 +237,7 @@ def complete_assessment(assessment_id: UUID, db: Session = Depends(get_db), curr
 def get_assessment_report(
     assessment_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
 
     #Load Assessment
