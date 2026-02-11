@@ -1,39 +1,56 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from pydantic import Field
+from typing import List
+
 
 class Settings(BaseSettings):
-    # # Database
-    DATABASE_URL: str = "postgresql://user:password@localhost/school_management"
+    # ======================
+    # Database (REQUIRED)
+    # ======================
+    DATABASE_URL: str = Field(..., description="PostgreSQL connection string")
 
-    # JWT
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    # ======================
+    # Security
+    # ======================
+    SECRET_KEY: str = Field(..., description="JWT secret key")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # ======================
     # API
+    # ======================
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "Kaihle Backend"
 
+    # ======================
     # CORS
-    BACKEND_CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:5173"]
+    # ======================
+    BACKEND_CORS_ORIGINS: List[str] = []
 
-    # LLM-related fields
-    LLM_PROVIDER: str = "gemini"  # "openai", "gemini", "ollama", "mock"
+    # ======================
+    # LLM
+    # ======================
+    LLM_PROVIDER: str = "gemini"
     OPENAI_API_KEY: str | None = None
     GEMINI_API_KEY: str | None = None
     OLLAMA_URL: str | None = None
     MOONSHOT_API_KEY: str | None = None
     MOONSHOT_API_URL: str | None = None
-    # Assessment settings
+
+    # ======================
+    # Assessment
+    # ======================
     MAX_QUESTIONS_PER_ASSESSMENT: int = 32
 
+    # ======================
     # Stripe
-    STRIPE_SECRET_KEY: str = "sk_test_your_stripe_secret_key"
-    STRIPE_PUBLISHABLE_KEY: str = "pk_test_your_stripe_publishable_key"
-
+    # ======================
+    STRIPE_SECRET_KEY: str | None = None
+    STRIPE_PUBLISHABLE_KEY: str | None = None
 
     class Config:
         env_file = ".env"
+        env_file_encoding = "utf-8"
+
 
 settings = Settings()
-

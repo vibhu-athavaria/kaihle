@@ -60,7 +60,7 @@ class Topic(Base, SerializerMixin):
     __tablename__ = "topics"
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
-    name = Column(String(200), nullable=False, index=True)
+    name = Column(Text, nullable=False, index=True)
     description = Column(Text, nullable=True)
     canonical_code = Column(String(50), nullable=True, unique=True)  # e.g., "MATH.ALG.001"
     difficulty_level = Column(Integer, nullable=True)  # 1-5 scale
@@ -95,7 +95,6 @@ class Topic(Base, SerializerMixin):
     )
     courses = relationship("Course", back_populates="topic")
     question_banks = relationship("QuestionBank", back_populates="topic")
-    courses = relationship("Course", back_populates="topic")
     knowledge_profiles = relationship("StudentKnowledgeProfile", back_populates="topic")
 
 
@@ -108,7 +107,7 @@ class Subtopic(Base, SerializerMixin):
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
     topic_id = Column(UUID(as_uuid=True), ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True)
-    name = Column(String(200), nullable=False)
+    name = Column(Text, nullable=False)
     description = Column(Text, nullable=True)
     canonical_code = Column(String(50), nullable=True)
     sequence_order = Column(Integer, nullable=True)
@@ -133,7 +132,6 @@ class Subtopic(Base, SerializerMixin):
     topic = relationship("Topic", back_populates="subtopics")
     courses = relationship("Course", back_populates="subtopic")
     question_banks = relationship("QuestionBank", back_populates="subtopic")
-    courses = relationship("Course", back_populates="subtopic")
     knowledge_profiles = relationship("StudentKnowledgeProfile", back_populates="subtopic")
 
 
