@@ -123,10 +123,6 @@ class QuestionBank(Base, SerializerMixin):
     canonical_form = Column(Text, nullable=False)  # Normalized version for dedup
     problem_signature = Column(JSONB, nullable=False)  # For similarity matching
 
-    # Usage tracking
-    times_used = Column(Integer, default=0)
-    average_score = Column(Float, nullable=True)
-
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
