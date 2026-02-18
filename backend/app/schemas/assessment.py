@@ -11,7 +11,7 @@ class QuestionBankBase(BaseModel):
     question_text: str
     question_type: str
     difficulty_level: float
-    options: Optional[List[str]] = None
+    options: Dict[str, str]
     learning_objectives: Optional[List[str]] = None
     prerequisite_topic_ids: Optional[List[UUID]] = None
     meta_tags: Optional[Dict[str, Any]] = None
@@ -99,8 +99,7 @@ class AssessmentUpdate(BaseModel):
 class AssessmentOut(BaseModel):
     id: UUID
     student_id: UUID
-    subject: str
-    grade_level: int
+    subject_id: UUID
     status: str
     total_questions: int = 0
     total_questions_configurable: Optional[int] = None

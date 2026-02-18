@@ -78,7 +78,7 @@ def resolve_diagnostic_assessment_api(
 
 
 @router.post("/{assessment_id}/questions/resolve", response_model=AssessmentQuestionBase)
-async def create_assessment_question(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+async def get_or_create_assessment_question(assessment_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
     Returns:
     - last unanswered question
@@ -93,7 +93,7 @@ async def create_assessment_question(assessment_id: UUID, db: Session = Depends(
         raise HTTPException(status_code=400, detail="Assessment is not in progress")
 
     # Finally get the last unanswered question or create one
-    question = await resolve_question(db, assessment)
+    question = await resolve_question(db, assessment, current_user.student_profile.grade_id)
 
     return question
 

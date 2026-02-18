@@ -35,3 +35,4 @@ venv
 .env.local
 plans
 PROJECT_DESCRIPTION.md
+AGENTS.md

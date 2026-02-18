@@ -16,13 +16,8 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { http } from "@/lib/http";
 import { useAuth } from "@/contexts/AuthContext";
-
-
-import {
-  AssessmentStatus,
-  ICON_MAP,
-  GRADIENT_MAP,
-} from "@/config/childDashboard";
+import {AssessmentStatus} from "@/types/index"
+import {ICON_MAP, GRADIENT_MAP} from "@/config/childDashboard";
 
 /* ---------------------------------- */
 /* Types (API-driven) */

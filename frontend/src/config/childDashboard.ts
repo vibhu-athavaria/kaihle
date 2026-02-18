@@ -11,10 +11,6 @@ import {
   Sparkles,
 } from "lucide-react";
 
-// export type Subject = "Math" | "Science" | "English" | "Humanities";
-
-export type AssessmentStatus = "not_started" | "in_progress" | "completed";
-
 export interface Subject {
   id: string;
   name: string;

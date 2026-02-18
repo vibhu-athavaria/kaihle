@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 from venv import logger
+from sqlalchemy.dialects import postgresql
 from sqlalchemy import func, select, text, asc
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +21,7 @@ from app.models.assessment import (
     StudentKnowledgeProfile
 )
 from app.models.user import StudentProfile  # adjust import to match your structure
+from app.models.curriculum import CurriculumTopic, Subtopic
 from app.services.llm_service import llm_service as llm
 
 from app.constants.constants import (
@@ -84,33 +86,348 @@ def choose_grade_by_age(student_age:int) -> int:
     return 12
 
 
-def get_subtopics_for_grade(subject: str, grade_level: int) -> List[str]:
+def get_subtopics_for_grade(db:Session, subject_id: UUID, grade_id: UUID) -> List[str]:
     """
     Return a list of subtopics for a subject and grade.
-    Prefer built-in mapping; try LLM (generate_study_plan or fallback) for more detail if available.
     """
-    g = str(grade_level)
-    subject_key = subject.lower()
-    if subject_key in BUILTIN_SUBTOPICS and g in BUILTIN_SUBTOPICS[subject_key]:
-        base = BUILTIN_SUBTOPICS[subject_key][g]
-    else:
-        base = ["General"]
+    subtopics = (db.query(Subtopic)
+        .join(CurriculumTopic, Subtopic.topic_id == CurriculumTopic.topic_id)
+        .filter(
+            CurriculumTopic.subject_id == subject_id,
+            CurriculumTopic.grade_id == grade_id
+        )
+    ).all()
 
-    # # Attempt to get refined subtopics from LLM (non-blocking fallback)
-    # try:
-    #     # Use generate_study_plan with empty mastery_map to ask for recommended subtopics
-    #     # Note: llm.generate_study_plan may return a JSON/structure; adapt as needed.
-    #     plan = llm.generate_study_plan({}, subject, grade_level)
-    #     # Expect plan to be dict with keys 'subtopics' or similar; try to parse defensively
-    #     if isinstance(plan, dict):
-    #         sub = plan.get("subtopics") or plan.get("topics") or []
-    #         if isinstance(sub, list) and sub:
-    #             return [s for s in sub]
-    # except Exception:
-    #     # ignore LLM failure and use builtin
-    #     pass
+    subtopics = [s.name for s in subtopics]
+    return subtopics
 
-    return base
+
+def get_subtopics_for_grade_and_subject(
+    db: Session,
+    grade_id: UUID,
+    subject_id: UUID,
+    curriculum_id: Optional[UUID] = None
+) -> List[Subtopic]:
+    """
+    Query subtopics from the database for a specific grade and subject.
+
+    Joins through CurriculumTopic to get grade/subject filtering.
+    Optionally filters by curriculum_id if provided.
+
+    Args:
+        db: SQLAlchemy session
+        grade_id: UUID of the grade to filter by
+        subject_id: UUID of the subject to filter by
+        curriculum_id: Optional UUID of the curriculum to filter by
+
+    Returns:
+        List of Subtopic objects with their relationships loaded.
+        Returns empty list if no subtopics are found.
+    """
+    query = (
+        db.query(Subtopic)
+        .join(CurriculumTopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
+        .filter(
+            CurriculumTopic.grade_id == grade_id,
+            CurriculumTopic.subject_id == subject_id,
+            CurriculumTopic.is_active == True,
+            Subtopic.is_active == True
+        )
+    )
+
+    # Optionally filter by curriculum if provided
+    if curriculum_id is not None:
+        query = query.filter(CurriculumTopic.curriculum_id == curriculum_id)
+
+    # Order by sequence_order and load the curriculum_topic relationship
+    subtopics = (
+        query
+        .options(joinedload(Subtopic.curriculum_topic))
+        .order_by(Subtopic.sequence_order)
+        .all()
+    )
+
+    return subtopics if subtopics else []
+
+
+def count_questions_per_subtopic(
+    db: Session,
+    assessment_id: UUID
+) -> Dict[UUID, int]:
+    """
+    Count how many questions have been asked per subtopic for an assessment.
+
+    Queries AssessmentQuestion joined with QuestionBank to get subtopic_id,
+    then groups by subtopic_id to get counts.
+
+    Args:
+        db: SQLAlchemy session
+        assessment_id: UUID of the assessment to count questions for
+
+    Returns:
+        Dictionary mapping subtopic_id (UUID) to count (int).
+        Returns empty dict if no questions exist for the assessment.
+    """
+    results = (
+        db.query(
+            QuestionBank.subtopic_id,
+            func.count(AssessmentQuestion.id).label('count')
+        )
+        .join(AssessmentQuestion, QuestionBank.id == AssessmentQuestion.question_bank_id)
+        .filter(AssessmentQuestion.assessment_id == assessment_id)
+        .filter(QuestionBank.subtopic_id.isnot(None))  # Only count questions with subtopics
+        .group_by(QuestionBank.subtopic_id)
+        .all()
+    )
+
+    return {row.subtopic_id: row.count for row in results}
+
+
+def select_subtopic_by_priority(
+    subtopics: List[Subtopic],
+    questions_per_subtopic: Dict[UUID, int],
+    student_knowledge_profile: List[StudentKnowledgeProfile],
+    max_questions_per_subtopic: int = MAX_PER_TOPIC
+) -> Optional[Subtopic]:
+    """
+    Select a subtopic based on priority (lower mastery = higher priority).
+
+    Filters out subtopics that already have max_questions_per_subtopic questions,
+    then selects based on student's mastery level per subtopic.
+
+    Args:
+        subtopics: List of Subtopic objects to choose from
+        questions_per_subtopic: Dict mapping subtopic_id to question count
+        student_knowledge_profile: List of StudentKnowledgeProfile objects for the student
+        max_questions_per_subtopic: Maximum questions allowed per subtopic (default: 5)
+
+    Returns:
+        Selected Subtopic object, or None if all subtopics are at max questions.
+    """
+    if not subtopics:
+        return None
+
+    # Create a lookup for mastery levels by subtopic_id
+    mastery_by_subtopic: Dict[UUID, float] = {}
+    for profile in student_knowledge_profile:
+        if profile.subtopic_id:
+            mastery_by_subtopic[profile.subtopic_id] = profile.mastery_level or 0.5
+
+    # Filter out subtopics that have reached max questions
+    available_subtopics = [
+        s for s in subtopics
+        if questions_per_subtopic.get(s.id, 0) < max_questions_per_subtopic
+    ]
+
+    if not available_subtopics:
+        return None
+
+    # Score each subtopic: lower mastery = higher priority
+    # Add small random factor to avoid determinism
+    scored_subtopics = []
+    for subtopic in available_subtopics:
+        mastery = mastery_by_subtopic.get(subtopic.id, 0.5)  # Default to 0.5 if no profile exists
+        # Invert mastery so lower mastery = higher priority
+        priority = 1.0 - mastery
+        # Add small random factor (±0.05) to break ties and avoid determinism
+        priority += 0.05 * (0.5 - random.random())
+        scored_subtopics.append((subtopic, priority))
+
+    # Sort by priority descending (highest priority first)
+    scored_subtopics.sort(key=lambda x: x[1], reverse=True)
+
+    return scored_subtopics[0][0]
+
+
+# ---------- Question Selection Helpers ----------
+
+def get_recent_answers_for_subtopic(
+    db: Session,
+    assessment_id: UUID,
+    subtopic_id: UUID,
+    limit: int = 5
+) -> List[AssessmentQuestion]:
+    """
+    Get the most recent answered questions for a specific subtopic within an assessment.
+
+    Joins AssessmentQuestion with QuestionBank to filter by subtopic, then returns
+    the most recent answers ordered by answered_at descending.
+
+    Args:
+        db: SQLAlchemy session
+        assessment_id: UUID of the assessment to query
+        subtopic_id: UUID of the subtopic to filter by
+        limit: Maximum number of answers to return (default: 5)
+
+    Returns:
+        List of AssessmentQuestion objects that have been answered (is_correct is not None).
+        Returns empty list if no answers exist for the subtopic in this assessment.
+    """
+    recent_answers = (
+        db.query(AssessmentQuestion)
+        .join(QuestionBank, AssessmentQuestion.question_bank_id == QuestionBank.id)
+        .filter(
+            AssessmentQuestion.assessment_id == assessment_id,
+            QuestionBank.subtopic_id == subtopic_id,
+            AssessmentQuestion.is_correct.isnot(None)  # Only answered questions
+        )
+        .order_by(AssessmentQuestion.answered_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return recent_answers if recent_answers else []
+
+
+def calculate_subtopic_difficulty(
+    db: Session,
+    assessment_id: UUID,
+    subtopic_id: UUID,
+    initial_difficulty: int = 3
+) -> int:
+    """
+    Calculate the appropriate difficulty level for a subtopic based on recent answers.
+
+    Uses a sliding window of the last 3-5 answers to adjust difficulty:
+    - Starts from initial_difficulty (default 3 = middle)
+    - For each wrong answer, decrease difficulty (min 1)
+    - For each correct answer, increase difficulty (max 5)
+
+    Args:
+        db: SQLAlchemy session
+        assessment_id: UUID of the assessment
+        subtopic_id: UUID of the subtopic to calculate difficulty for
+        initial_difficulty: Starting difficulty level (default: 3, range: 1-5)
+
+    Returns:
+        Integer difficulty level from 1 (easiest) to 5 (hardest).
+        Returns initial_difficulty if no answers exist for the subtopic.
+    """
+    # Get recent answers (using 5 as window size for better adaptation)
+    recent_answers = get_recent_answers_for_subtopic(
+        db, assessment_id, subtopic_id, limit=5
+    )
+
+    if not recent_answers:
+        return initial_difficulty
+
+    # Start from initial difficulty and adjust based on answers
+    difficulty = initial_difficulty
+
+    # Process answers in reverse chronological order (most recent first)
+    # Use only the last 3 answers for more responsive adaptation
+    answers_to_consider = recent_answers[:3]
+
+    for answer in answers_to_consider:
+        if answer.is_correct:
+            # Correct answer - increase difficulty
+            difficulty = min(5, difficulty + 1)
+        else:
+            # Wrong answer - decrease difficulty
+            difficulty = max(1, difficulty - 1)
+
+    return difficulty
+
+
+def find_existing_question(
+    db: Session,
+    subtopic_id: UUID,
+    difficulty: int,
+    grade_id: UUID,
+    subject_id: UUID,
+    exclude_ids: Optional[set] = None
+) -> Optional[QuestionBank]:
+    """
+    Find a question in QuestionBank matching the given criteria.
+
+    Searches for questions matching subtopic, grade, and subject, with difficulty
+    at the exact level or within ±1 range. Prioritizes exact difficulty matches.
+
+    Args:
+        db: SQLAlchemy session
+        subtopic_id: UUID of the subtopic to filter by
+        difficulty: Target difficulty level (1-5 integer scale)
+        grade_id: UUID of the grade to filter by
+        subject_id: UUID of the subject to filter by
+        exclude_ids: Optional set of question IDs to exclude (already used questions)
+
+    Returns:
+        A single QuestionBank object matching the criteria, or None if not found.
+        Prioritizes exact difficulty match over ±1 range matches.
+    """
+
+    # Build base query
+    base_query = (
+        db.query(QuestionBank)
+        .filter(
+            QuestionBank.subtopic_id == subtopic_id,
+            QuestionBank.grade_id == grade_id,
+            QuestionBank.subject_id == subject_id,
+            QuestionBank.is_active == True
+        )
+    )
+
+    # Exclude specified question IDs
+    if exclude_ids:
+        base_query = base_query.filter(~QuestionBank.id.in_(exclude_ids))
+
+    # First, try to find exact difficulty match
+    exact_match = base_query.filter(
+        QuestionBank.difficulty_level == difficulty
+    ).first()
+
+    if exact_match:
+        return exact_match
+
+    print("No exact match found, trying ±1 range")
+    # If no exact match, try ±1 difficulty range
+    # Calculate min/max difficulty for ±1 range
+    min_difficulty = max(1, difficulty - 1)
+    max_difficulty = min(5, difficulty + 1)
+
+    range_match = (
+        db.query(QuestionBank)
+        .filter(
+            QuestionBank.subtopic_id == subtopic_id,
+            QuestionBank.grade_id == grade_id,
+            QuestionBank.subject_id == subject_id,
+            QuestionBank.is_active == True,
+            QuestionBank.difficulty_level >= min_difficulty,
+            QuestionBank.difficulty_level <= max_difficulty
+        )
+    )
+
+    if exclude_ids:
+        range_match = range_match.filter(~QuestionBank.id.in_(exclude_ids))
+
+    return range_match.first()
+
+
+def get_used_question_ids(
+    db: Session,
+    assessment_id: UUID
+) -> set:
+    """
+    Get all question_ids already used in an assessment.
+
+    Queries AssessmentQuestion for the given assessment and returns
+    a set of question_bank_id UUIDs for questions that have been used.
+
+    Args:
+        db: SQLAlchemy session
+        assessment_id: UUID of the assessment to query
+
+    Returns:
+        Set of question_bank_id UUIDs (as UUID objects).
+        Returns empty set if no questions have been used.
+    """
+    used_questions = (
+        db.query(AssessmentQuestion.question_bank_id)
+        .filter(AssessmentQuestion.assessment_id == assessment_id)
+        .all()
+    )
+
+    return {row.question_bank_id for row in used_questions}
 
 
 # ---------- Difficulty helpers ----------
@@ -431,24 +748,31 @@ def find_duplicates_question(
 
     return result
 
-async def resolve_question(db: Session, assessment: Assessment) -> AssessmentQuestion:
+async def resolve_question(db: Session, assessment: Assessment, grade_id: UUID) -> AssessmentQuestion:
     """
+    Resolve the next question for an assessment using the QuestionBank.
+
+    This function implements an adaptive, per-subtopic question selection algorithm:
+    1. Returns any existing unanswered question first
+    2. Loads subtopics from the database for the student's grade and subject
+    3. Tracks questions per subtopic (max 5 per subtopic)
+    4. Selects subtopic based on student's mastery (lower mastery = higher priority)
+    5. Calculates adaptive difficulty based on recent answers
+    6. Finds an existing question from QuestionBank (no LLM generation)
+
+    Args:
+        db: SQLAlchemy session
+        assessment: Assessment object with student and subject relationships
+        grade_id: UUID of the grade for question filtering
+
     Returns:
-    - last unanswered question
-    - OR creates next question
-    - OR None if assessment complete
-    Create a new question for an existing assessment.
+        AssessmentQuestion with question_bank relationship loaded.
 
-    Rules to create a new question:
-    - Will not create more than 8 questions within the same topic for this assessment.
-    - If student has repeated wrong answers for this assessment, pick lower difficulty.
-    - Returns the created question or raises error if limits reached or assessment closed.
-
-    Create a question using LLM and persist it.
-    This enforces the MAX_PER_TOPIC limit and returns the created AssessmentQuestion.
+    Raises:
+        ValueError: If max questions reached, no subtopics found, all subtopics at max,
+                   or no questions available in QuestionBank.
     """
-
-    # Get last unanswered
+    # Step 1: Check for existing unanswered question
     unanswered = (
         db.query(AssessmentQuestion)
         .options(joinedload(AssessmentQuestion.question_bank))
@@ -463,100 +787,99 @@ async def resolve_question(db: Session, assessment: Assessment) -> AssessmentQue
     if unanswered:
         return unanswered
 
-
+    # Step 2: Check assessment limits
     max_questions = assessment.total_questions_configurable or TOTAL_QUESTIONS_PER_ASSESSMENT
 
     if assessment.total_questions >= max_questions:
         raise ValueError("Max questions per assessment reached")
 
-    subtopic_list = get_subtopics_for_grade(assessment.subject, assessment.grade_level)
-    # For simplicity, pick subtopic in round-robin fashion based on order
-    subtopic_index = int(total_assessment_questions / int(max_questions / len(subtopic_list))) if subtopic_list and len(subtopic_list) > 1 else 0
-    subtopic = subtopic_list[subtopic_index] if subtopic_list else None
 
-    difficulty = calculate_difficulty_from_history(db, assessment, subtopic) if subtopic else 0.5
-
-    # Get student profile for personalization
-    profile = db.query(StudentProfile).filter(StudentProfile.id == assessment.student_id).first()
-    student_profile_data = profile.learning_profile if profile and profile.learning_profile else None
-
-    # Ask LLM to generate question object
-    # Expected return: dict with question_text, question_type, options, correct_answer, difficulty_level, ai_feedback, topic, subtopic
-    try:
-        payload = await llm.generate_question(
-            assessment.subject,
-            assessment.grade_level,
-            subtopic,
-            difficulty_label_from_value(difficulty),
-            student_profile=student_profile_data
-        )
-        logger.debug("LLM generated question payload: %s", payload)
-    except Exception as e:
-        raise ValueError("Failed to generate question from LLM. Error: {}".format(str(e)))
-
-    duplicates = find_duplicates_question(
+    # Step 3: Load subtopics from database
+    subtopics = get_subtopics_for_grade_and_subject(
         db,
-        assessment.subject,
-        str(assessment.grade_level),
-        payload.get("canonical_form"),
-        payload.get("problem_signature")
+        grade_id,
+        assessment.subject_id
     )
 
-    if duplicates["canonical_match"]:
-        question_bank = db.query(QuestionBank).filter(QuestionBank.id == duplicates["canonical_match"]).first()
-        existing_q = True
-    elif duplicates["signature_match"]:
-        question_bank = db.query(QuestionBank).filter(QuestionBank.id == duplicates["signature_match"]).first()
-        existing_q = True
-    else:
-        question_bank = None
-        existing_q = False
+    if not subtopics:
+        raise ValueError(f"No subtopics found for grade {grade_id} and subject {assessment.subject_id}")
 
-    q_text = payload.get("question_text")
-    q_type = payload.get("question_type")
-    options = payload.get("options")
-    correct_answer = payload.get("correct_answer")
-    difficulty_level = difficulty_float_from_label(payload.get("difficulty_level"))
-    learning_objectives = payload.get("learning_objectives")
-    description = payload.get("description")
-    prerequisites = payload.get("prerequisites")
-    subtopic = subtopic
-    subject = payload.get("subject")
+    # Step 4: Count questions per subtopic
+    questions_per_subtopic = count_questions_per_subtopic(db, assessment.id)
 
-    if not existing_q:
-        question_bank = QuestionBank(
-            subject=subject,
-            subtopic=subtopic,
-            grade_level=str(assessment.grade_level),
-            prerequisites=prerequisites,
-            description=description,
-            learning_objectives=learning_objectives,
-            question_text=q_text,
-            question_type=q_type,
-            options=options,
-            correct_answer=correct_answer,
-            difficulty_level=difficulty_level,
-            meta_tags=meta_tags,
-            created_at=datetime.now(timezone.utc),
+    # Step 5: Get student's knowledge profile for mastery data
+    student_knowledge_profiles = (
+        db.query(StudentKnowledgeProfile)
+        .filter(StudentKnowledgeProfile.student_id == assessment.student_id)
+        .all()
+    )
+
+    # Step 6: Select a subtopic based on priority (lower mastery = higher priority)
+    selected_subtopic = select_subtopic_by_priority(
+        subtopics=subtopics,
+        questions_per_subtopic=questions_per_subtopic,
+        student_knowledge_profile=student_knowledge_profiles,
+        max_questions_per_subtopic=MAX_PER_TOPIC
+    )
+
+    if not selected_subtopic:
+        raise ValueError("All subtopics have reached maximum questions (5 per subtopic)")
+
+    # Step 7: Calculate difficulty for selected subtopic
+    difficulty = calculate_subtopic_difficulty(
+        db,
+        assessment.id,
+        selected_subtopic.id,
+        initial_difficulty=3  # Start at middle difficulty
+    )
+
+    # Step 8: Get used question IDs to exclude
+    used_question_ids = get_used_question_ids(db, assessment.id)
+
+    # Step 9: Find an existing question from QuestionBank
+    question = find_existing_question(
+        db,
+        subtopic_id=selected_subtopic.id,
+        difficulty=difficulty,
+        grade_id=grade_id,
+        subject_id=assessment.subject_id,
+        exclude_ids=used_question_ids
+    )
+
+    if not question:
+        raise ValueError(
+            f"No question found in QuestionBank for subtopic {selected_subtopic.name} ID:{selected_subtopic.id}, "
+            f"difficulty {difficulty}, grade {grade_id}, subject {assessment.subject_id}, excluded IDs: {used_question_ids}"
         )
-        db.add(question_bank)
-        db.commit()
-        db.refresh(question_bank)
 
+    # Step 10: Create AssessmentQuestion
+    next_number = _next_question_number(db, assessment)
 
-    aq = AssessmentQuestion(
+    assessment_question = AssessmentQuestion(
         assessment_id=assessment.id,
-        question_bank_id=question_bank.id,
-        question_number=total_assessment_questions+1
+        question_bank_id=question.id,
+        question_number=next_number
     )
 
-    db.add(aq)
-    db.commit()
-    db.refresh(aq)
+    db.add(assessment_question)
+
+    # Update assessment total_questions count
+    assessment.total_questions = (assessment.total_questions or 0) + 1
     db.add(assessment)
+
     db.commit()
-    db.refresh(assessment)
-    return aq
+    db.refresh(assessment_question)
+
+    # Load the question_bank relationship for the returned object
+    db.refresh(assessment_question)
+    assessment_question = (
+        db.query(AssessmentQuestion)
+        .options(joinedload(AssessmentQuestion.question_bank))
+        .filter(AssessmentQuestion.id == assessment_question.id)
+        .first()
+    )
+
+    return assessment_question
 
 
 # ---------- Answer scoring and adaptive update ----------
