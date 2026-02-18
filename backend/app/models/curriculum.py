@@ -81,7 +81,6 @@ class Topic(Base, SerializerMixin):
 
     # Relationships
     curriculum_topics = relationship("CurriculumTopic", back_populates="topic")
-    subtopics = relationship("Subtopic", back_populates="topic", cascade="all, delete-orphan")
     prerequisites = relationship(
         "TopicPrerequisite",
         foreign_keys="[TopicPrerequisite.topic_id]",
@@ -106,7 +105,7 @@ class Subtopic(Base, SerializerMixin):
     __tablename__ = "subtopics"
 
     id = Column(UUID(as_uuid=True), default=uuid.uuid4, primary_key=True, index=True)
-    topic_id = Column(UUID(as_uuid=True), ForeignKey("topics.id", ondelete="CASCADE"), nullable=False, index=True)
+    curriculum_topic_id = Column(UUID(as_uuid=True), ForeignKey("curriculum_topics.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(Text, nullable=False)
     description = Column(Text, nullable=True)
     canonical_code = Column(String(50), nullable=True)
@@ -124,12 +123,12 @@ class Subtopic(Base, SerializerMixin):
 
     __table_args__ = (
         CheckConstraint('difficulty_level BETWEEN 1 AND 5', name='chk_subtopic_difficulty'),
-        UniqueConstraint('topic_id', 'canonical_code', name='uq_topic_subtopic_code'),
-        Index('idx_subtopic_topic_sequence', 'topic_id', 'sequence_order'),
+        UniqueConstraint("curriculum_topic_id", "canonical_code", name="uq_subtopic_curriculum_topic_code"),
+        Index('idx_subtopic_curriculum_topic_sequence', 'curriculum_topic_id', 'sequence_order'),
     )
 
     # Relationships
-    topic = relationship("Topic", back_populates="subtopics")
+    curriculum_topic = relationship("CurriculumTopic", back_populates="subtopics")
     courses = relationship("Course", back_populates="subtopic")
     question_banks = relationship("QuestionBank", back_populates="subtopic")
     knowledge_profiles = relationship("StudentKnowledgeProfile", back_populates="subtopic")
@@ -205,3 +204,5 @@ class CurriculumTopic(Base, SerializerMixin):
     grade = relationship("Grade", back_populates="curriculum_topics")
     subject = relationship("Subject", back_populates="curriculum_topics")
     topic = relationship("Topic", back_populates="curriculum_topics")
+    subtopics = relationship("Subtopic", back_populates="curriculum_topic")
+

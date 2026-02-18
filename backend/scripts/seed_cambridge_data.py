@@ -590,7 +590,7 @@ def seed_subtopics_and_curriculum_topics(
                         "bloom_taxonomy_level":bloom_level,
                         "is_active":           True,
                     },
-                    topic_id=topic.id,
+                    curriculum_topic_id=ct.id,
                     canonical_code=subtopic_code,
                 )
                 stats["subtopics_created" if s_new else "subtopics_exists"] += 1

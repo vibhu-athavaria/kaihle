@@ -62,7 +62,7 @@ const AssessmentPage: React.FC = () => {
   const [report, setReport] = useState<any | null>(null);
 
   /* ----------------------------- */
-  /* Extract subject_id */
+  /* Resolve assessment */
   /* ----------------------------- */
 
   useEffect(() => {
@@ -75,24 +75,17 @@ const AssessmentPage: React.FC = () => {
     }
 
     setSubjectId(subject);
-  }, [location.search]);
+    if (!subjectId) {
+      console.error("Missing subject_id");
+      return;
+    }
+    if (!user?.student_profile?.id) {
+      console.error("Missing student_id");
+      return;
+    }
 
-  /* ----------------------------- */
-  /* Resolve assessment */
-  /* ----------------------------- */
-
-  useEffect(() => {
-  if (!subjectId) {
-    console.error("Missing subject_id");
-    return;
-  }
-  if (!user?.student_profile?.id) {
-    console.error("Missing student_id");
-    return;
-  }
-
-  void resolveAssessmentAndQuestion();
-}, [subjectId, user?.student_profile?.id]);
+    void resolveAssessmentAndQuestion();
+}, [location.search, subjectId, user?.student_profile?.id]);
 
 const resolveAssessmentAndQuestion = async () => {
   setLoading(true);
@@ -138,14 +131,14 @@ const resolveAssessmentAndQuestion = async () => {
         `/api/v1/assessments/${assessmentId}/questions/resolve`
       );
 
-      if (resp.data.status === "completed") {
-        const r = await http.get(
-          `/api/v1/assessments/${assessmentId}/completed`
-        );
-        setReport(r.data);
-        setTimeout(() => navigate("/child-dashboard"), 2500);
-        return;
-      }
+      // if (resp.data.status === "completed") {
+      //   const r = await http.get(
+      //     `/api/v1/assessments/${assessmentId}/completed`
+      //   );
+      //   setReport(r.data);
+      //   setTimeout(() => navigate("/child-dashboard"), 2500);
+      //   return;
+      // }
 
       setQuestion(resp.data.question);
     } catch (err) {

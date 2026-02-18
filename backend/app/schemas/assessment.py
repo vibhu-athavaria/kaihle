@@ -6,39 +6,14 @@ from uuid import UUID
 
 from app.models.assessment import AssessmentStatus, AssessmentType
 
-class QuestionCreateRequest(BaseModel):
-    question_text: str
-    question_type: str  # "multiple_choice"|"short_answer"|"true_false"
-    options: Optional[List[str]] = None
-    correct_answer: Optional[str] = None
-    topic: Optional[str] = None
-    subtopic: Optional[str] = None
-    difficulty_level: Optional[str] = None  # "easy"|"medium"|"hard"
-    metadata: Optional[Dict[str, Any]] = None
-
-class QuestionOut(BaseModel):
-    id: UUID
-    assessment_id: UUID
-    question_bank_id: UUID
-    is_correct: Optional[bool]
-    score: Optional[float]
-    student_answer: Optional[str]
-    question_number: int
-    # Nested QuestionBank fields
-    question_bank: Optional["QuestionBankResponse"]
-
-class QuestionBankResponse(BaseModel):
-    id: UUID
+class QuestionBankBase(BaseModel):
+    id : UUID
     question_text: str
     question_type: str
     difficulty_level: float
     options: Optional[List[str]] = None
-    correct_answer: str
     learning_objectives: Optional[List[str]] = None
-    prerequisites: Optional[List[str]] = None
-    subject: Optional[str] = None
-    topic: Optional[str] = None
-    description: Optional[str] = None
+    prerequisite_topic_ids: Optional[List[UUID]] = None
     meta_tags: Optional[Dict[str, Any]] = None
 
     @computed_field
@@ -56,8 +31,26 @@ class QuestionBankResponse(BaseModel):
     class Config:
         orm_mode = True
 
+class QuestionBankDetailResponse(QuestionBankBase):
+    correct_answer: str
+    subject_id: UUID
+    topic_id: Optional[UUID] = None
+    subtopic_id: Optional[UUID] = None
+    grade_id: Optional[UUID] = None
+    bloom_taxonomy_level: Optional[str] = None
+    estimated_time_seconds: Optional[int] = None
+    explanation: Optional[str] = None
+    hints: Optional[Dict[str, Any]] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
 class QuestionBankCreate(BaseModel):
     subject_id: UUID
+    topic_id: Optional[UUID] = None
+    subtopic_id: Optional[UUID] = None
+    grade_id: Optional[UUID] = None
     question_text: str
     question_type: str
     options: Optional[List[str]] = None
@@ -66,6 +59,11 @@ class QuestionBankCreate(BaseModel):
     meta_tags: Optional[Dict[str, Any]] = None
 
 class QuestionBankUpdate(BaseModel):
+    id: UUID
+    subject_id: Optional[UUID] = None
+    topic_id: Optional[UUID] = None
+    subtopic_id: Optional[UUID] = None
+    grade_id: Optional[UUID] = None
     question_text: Optional[str] = None
     question_type: Optional[str] = None
     options: Optional[List[str]] = None
@@ -73,23 +71,21 @@ class QuestionBankUpdate(BaseModel):
     difficulty_level: Optional[float] = None
     meta_tags: Optional[Dict[str, Any]] = None
 
-class AssessmentQuestionOut(BaseModel):
+
+class AssessmentQuestionBase(BaseModel):
     id: UUID
     assessment_id: UUID
-    knowledge_area_id: UUID
     question_number: int
-    difficulty_level: str
-    question_text: str
-    question_type: str
-    options: Optional[List[str]] = None
-    student_answer: Optional[str] = None
-    is_correct: Optional[bool] = None
-    score: Optional[float] = None
+    question_bank: Optional[QuestionBankBase]
+
+class AssessmentQuestionOut(AssessmentQuestionBase):
+    is_correct: Optional[bool]
+    score: Optional[float]
+    student_answer: Optional[str]
+    hints_used: int
+    time_taken: Optional[int]
     created_at: Optional[datetime] = None
     answered_at: Optional[datetime] = None
-
-    class Config:
-        orm_mode = True
 
 class AssessmentCreate(BaseModel):
     student_id: UUID
@@ -97,10 +93,8 @@ class AssessmentCreate(BaseModel):
     assessment_type: Optional[AssessmentType] = None
     total_questions_configurable: Optional[int] = None
 
-
 class AssessmentUpdate(BaseModel):
     total_questions_configurable: Optional[int] = None
-
 
 class AssessmentOut(BaseModel):
     id: UUID
@@ -114,7 +108,7 @@ class AssessmentOut(BaseModel):
     overall_score: Optional[float] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
-    questions: List[QuestionOut] = []
+    questions: List[AssessmentQuestionBase] = []
 
     class Config:
         orm_mode = True
@@ -128,7 +122,7 @@ class AnswerOut(BaseModel):
     is_correct: bool
     score: float
     feedback: Optional[str]
-    next_question: Optional[QuestionOut]
+    next_question: Optional[AssessmentQuestionBase]
     status: str  # "in_progress"|"completed"
 
 class AssessmentReport(BaseModel):

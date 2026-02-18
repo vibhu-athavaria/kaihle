@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any, List
 from uuid import UUID
 from venv import logger
 from sqlalchemy import func, select, text, asc
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 
 from app.models.assessment import (
@@ -82,62 +82,6 @@ def choose_grade_by_age(student_age:int) -> int:
     if student_age <= 15: return 10
     if student_age <= 16: return 11
     return 12
-
-
-# ---------- Topic/Subtopic selection ----------
-# A small canonical mapping for grade -> common subtopics (fallback)
-BUILTIN_SUBTOPICS = {
-  "math": {
-    "5": ["arithmetic", "fractions", "basic geometry", "word problems"],
-    "6": ["ratios and proportions", "decimals", "area and perimeter", "basic statistics"],
-    "7": ["integers", "pre-algebra", "geometry basics", "rational numbers"],
-    "8": ["algebra", "linear equations", "functions", "geometry applications"],
-    "9": ["algebra I", "quadratic equations", "functions and graphs", "statistics basics"],
-    "10": ["geometry", "algebra II", "probability", "data interpretation"],
-    "11": ["pre-calculus", "trigonometry", "statistics", "analytic geometry"],
-    "12": ["calculus basics", "advanced algebra", "mathematical modeling", "applied statistics"]
-  },
-  "science": {
-    "5": ["life science", "earth science", "human body systems", "simple machines"],
-    "6": ["ecosystems", "matter and its properties", "weather and climate", "forces and motion"],
-    "7": ["cells and organisms", "basic physics forces", "the water cycle", "energy transfer"],
-    "8": ["chemistry basics", "energy and heat", "electricity", "scientific inquiry"],
-    "9": ["biology intro", "physics intro", "atoms and molecules", "environmental science"],
-    "10": ["chemistry", "genetics", "ecology", "cell biology"],
-    "11": ["physics", "organic chemistry", "evolution", "astronomy"],
-    "12": ["advanced biology", "advanced physics", "biotechnology", "sustainability"]
-  },
-  "english": {
-    "5": ["reading comprehension", "grammar basics", "story elements", "vocabulary building"],
-    "6": ["vocabulary", "writing paragraphs", "reading fluency", "summarizing texts"],
-    "7": ["literary devices", "essay structure", "narrative writing", "poetry appreciation"],
-    "8": ["analysis", "argument writing", "research skills", "persuasive writing"],
-    "9": ["literature study", "creative writing", "grammar refinement", "critical response essays"],
-    "10": ["shaping arguments", "critical reading", "public speaking", "comparative literature"],
-    "11": ["advanced composition", "literary analysis", "academic writing", "rhetorical techniques"],
-    "12": ["rhetoric", "college-level writing", "literary criticism", "speech and debate"]
-  },
-  "humanities": {
-    "5": ["history basics", "maps and geography", "ancient civilizations", "community and culture"],
-    "6": ["civilizations overview", "cultural traditions", "early religions", "geography skills"],
-    "7": ["world geography", "early history", "trade and exploration", "ancient empires"],
-    "8": ["medieval history", "cultural studies", "colonialism", "global connections"],
-    "9": ["modern history intro", "industrial revolution", "global conflicts", "nationalism"],
-    "10": ["world history", "revolutions", "economic systems", "political ideologies"],
-    "11": ["historical analysis", "philosophy basics", "sociology", "human rights movements"],
-    "12": ["deep historical themes", "comparative cultures", "globalization", "modern world issues"]
-  },
-  "entrepreneurship": {
-    "5": ["understanding needs and wants", "saving and spending", "teamwork", "creative thinking"],
-    "6": ["problem solving", "introduction to business", "goal setting", "basic budgeting"],
-    "7": ["identifying opportunities", "customer understanding", "simple business plans", "marketing basics"],
-    "8": ["entrepreneurial mindset", "value creation", "product development", "financial literacy"],
-    "9": ["market research", "branding", "basic accounting", "pitching ideas"],
-    "10": ["business models", "social entrepreneurship", "operations and logistics", "team leadership"],
-    "11": ["financial planning", "startup case studies", "marketing strategy", "scaling a business"],
-    "12": ["innovation and design thinking", "funding and investment", "global entrepreneurship", "sustainable ventures"]
-  }
-}
 
 
 def get_subtopics_for_grade(subject: str, grade_level: int) -> List[str]:
@@ -507,6 +451,7 @@ async def resolve_question(db: Session, assessment: Assessment) -> AssessmentQue
     # Get last unanswered
     unanswered = (
         db.query(AssessmentQuestion)
+        .options(joinedload(AssessmentQuestion.question_bank))
         .filter(
             AssessmentQuestion.assessment_id == assessment.id,
             AssessmentQuestion.student_answer.is_(None),
@@ -518,47 +463,11 @@ async def resolve_question(db: Session, assessment: Assessment) -> AssessmentQue
     if unanswered:
         return unanswered
 
-    total_assessment_questions = len(assessment.questions)
+
     max_questions = assessment.total_questions_configurable or TOTAL_QUESTIONS_PER_ASSESSMENT
 
-    if total_assessment_questions >= max_questions:
+    if assessment.total_questions >= max_questions:
         raise ValueError("Max questions per assessment reached")
-
-
-
-    # next_bank_question = (
-    #     db.query(QuestionBank)
-    #     .filter(
-    #         QuestionBank.subject_id == assessment.subject_id,
-    #         ~QuestionBank.id.in_(used_question_ids),
-    #     )
-    #     .order_by(QuestionBank.difficulty_level.asc())
-    #     .first()
-    # )
-
-    # if not next_bank_question:
-    #     assessment.status = "completed"
-    #     db.commit()
-    #     return None
-
-    # next_number = (
-    #     db.query(AssessmentQuestion)
-    #     .filter(AssessmentQuestion.assessment_id == assessment.id)
-    #     .count()
-    #     + 1
-    # )
-
-    # aq = AssessmentQuestion(
-    #     assessment_id=assessment.id,
-    #     question_bank_id=next_bank_question.id,
-    #     question_number=next_number,
-    # )
-
-    # db.add(aq)
-    # db.commit()
-    # db.refresh(aq)
-
-    # # return aq
 
     subtopic_list = get_subtopics_for_grade(assessment.subject, assessment.grade_level)
     # For simplicity, pick subtopic in round-robin fashion based on order

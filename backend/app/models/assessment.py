@@ -111,7 +111,7 @@ class QuestionBank(Base, SerializerMixin):
     estimated_time_seconds = Column(Integer, nullable=True)
 
     # For tracking prerequisite topics required
-    prerequisites = Column(ARRAY(UUID(as_uuid=True)), nullable=True)  # Array of topic IDs
+    prerequisite_topic_ids = Column(ARRAY(UUID(as_uuid=True)), nullable=True)  # Array of topic IDs
 
     learning_objectives = Column(ARRAY(Text), nullable=True)
     explanation = Column(Text, nullable=True)  # Detailed explanation of the answer
@@ -122,10 +122,6 @@ class QuestionBank(Base, SerializerMixin):
     # For question deduplication and similarity
     canonical_form = Column(Text, nullable=False)  # Normalized version for dedup
     problem_signature = Column(JSONB, nullable=False)  # For similarity matching
-
-    # Usage tracking
-    times_used = Column(Integer, default=0)
-    average_score = Column(Float, nullable=True)
 
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
