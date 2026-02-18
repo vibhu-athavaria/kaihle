@@ -41,8 +41,6 @@ class QuestionBankDetailResponse(QuestionBankBase):
     estimated_time_seconds: Optional[int] = None
     explanation: Optional[str] = None
     hints: Optional[Dict[str, Any]] = None
-    times_used: int
-    average_score: Optional[float] = None
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
