@@ -1,0 +1,38 @@
+# Kaihle Test Environment
+# Docker Compose configuration for running tests
+# Usage: docker compose -f docker-compose.yml -f docker-compose.test.yml up -d
+
+services:
+  # PostgreSQL Database - Test settings
+  db:
+    environment:
+      POSTGRES_DB: kaihle_test_db
+
+  # FastAPI Application - Test settings
+  api:
+    environment:
+      DATABASE_URL: postgresql+asyncpg://kaihle_user:changeme_in_production@db:5432/kaihle_test_db
+      ENVIRONMENT: test
+      DEBUG: "true"
+      TESTING: "true"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  # Celery Worker - Test settings (disabled for tests)
+  celery_worker:
+    deploy:
+      replicas: 0
+
+  # Celery Beat - Test settings (disabled for tests)
+  celery_beat:
+    deploy:
+      replicas: 0
+
+  # Flower - Test settings (disabled for tests)
+  flower:
+    deploy:
+      replicas: 0
+
+  # Frontend - Test settings (disabled for tests)
+  frontend:
+    deploy:
+      replicas: 0
