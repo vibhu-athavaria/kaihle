@@ -6,41 +6,37 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { http } from "@/lib/http";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { useAuth } from "@/contexts/AuthContext";
-
+import { AssessmentStatus, AssessmentType } from "@/types/index";
 /* ----------------------------- */
 /* Types */
 /* ----------------------------- */
 
 type Assessment = {
-  id: number;
-  status: "in_progress" | "completed";
+  id: string;
+  status: AssessmentStatus;
   subject_id: string;
 };
 
 type QuestionBank = {
-  id: number;
+  id: string;
   question_text: string;
   question_type: string;
-  options?: string[] | null;
+  options?: Record<string, string> | null;
   difficulty_label?: string;
   meta_tags?: Record<string, any> | null;
 };
 
 type Question = {
-  id: number;
+  id: string;
   question_number: number;
   question_bank: QuestionBank;
 };
-
-type ResolveQuestionResponse =
-  | { status: "question"; question: Question }
-  | { status: "completed" };
 
 type AnswerResponse = {
   is_correct: boolean;
   feedback?: string;
   next_question?: Question | null;
-  status?: "completed";
+  status?: AssessmentStatus.COMPLETED;
 };
 
 /* ----------------------------- */
@@ -66,28 +62,24 @@ const AssessmentPage: React.FC = () => {
   /* ----------------------------- */
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const subject = params.get("subject_id");
+  const params = new URLSearchParams(location.search);
+  const subjectIdParam = params.get("subject_id");
 
-    if (!subject) {
-      setError("Missing subject_id");
-      return;
-    }
+  if (!subjectIdParam) {
+    setError("Missing subject_id");
+    return;
+  }
 
-    setSubjectId(subject);
-    if (!subjectId) {
-      console.error("Missing subject_id");
-      return;
-    }
-    if (!user?.student_profile?.id) {
-      console.error("Missing student_id");
-      return;
-    }
+  if (!user?.student_profile?.id) {
+    console.error("Missing student_id");
+    return;
+  }
 
-    void resolveAssessmentAndQuestion();
-}, [location.search, subjectId, user?.student_profile?.id]);
+  void resolveAssessmentAndQuestion(subjectIdParam);
 
-const resolveAssessmentAndQuestion = async () => {
+}, [location.search, user?.student_profile?.id]);
+
+const resolveAssessmentAndQuestion = async (subjectId: string) => {
   setLoading(true);
   setError(null);
 
@@ -98,6 +90,7 @@ const resolveAssessmentAndQuestion = async () => {
       {
         student_id: user.student_profile.id,
         subject_id: subjectId,
+        assessment_type: AssessmentType.DIAGNOSTIC,
       }
     );
 
@@ -125,27 +118,23 @@ const resolveAssessmentAndQuestion = async () => {
   /* Resolve next question */
   /* ----------------------------- */
 
-  const resolveQuestion = async (assessmentId: number) => {
-    try {
-      const resp = await http.post<ResolveQuestionResponse>(
-        `/api/v1/assessments/${assessmentId}/questions/resolve`
-      );
+  const resolveQuestion = async (assessmentId: string) => {
+  try {
+    const resp = await http.post(
+      `/api/v1/assessments/${assessmentId}/questions/resolve`
+    );
 
-      // if (resp.data.status === "completed") {
-      //   const r = await http.get(
-      //     `/api/v1/assessments/${assessmentId}/completed`
-      //   );
-      //   setReport(r.data);
-      //   setTimeout(() => navigate("/child-dashboard"), 2500);
-      //   return;
-      // }
+    console.log("FULL RESPONSE:", resp);
+    console.log("RESPONSE.DATA:", resp.data);
 
-      setQuestion(resp.data.question);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load question");
-    }
-  };
+    setQuestion(resp.data);  // ← important
+
+  } catch (err) {
+    console.error(err);
+    setError("Failed to load question");
+  }
+};
+
 
   /* ----------------------------- */
   /* Submit answer */
@@ -261,26 +250,28 @@ const resolveAssessmentAndQuestion = async () => {
           </div>
         )}
 
-        {question.question_bank.options?.length ? (
+        {question.question_bank.options ? (
           <div className="mt-4 space-y-2">
-            {question.question_bank.options.map((opt, i) => (
-              <label
-                key={i}
-                className={`block p-3 rounded border cursor-pointer ${
-                  answer === opt
-                    ? "border-blue-500 bg-blue-50"
-                    : "border-gray-200"
-                }`}
-              >
-                <input
-                  type="radio"
-                  checked={answer === opt}
-                  onChange={() => setAnswer(opt)}
-                  className="mr-2"
-                />
-                {opt}
-              </label>
-            ))}
+            {Object.entries(question.question_bank.options).map(
+              ([label, value]) => (
+                <label
+                  key={label}
+                  className={`block p-3 rounded border cursor-pointer ${
+                    answer === label
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-gray-200"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    checked={answer === label}
+                    onChange={() => setAnswer(label)}
+                    className="mr-2"
+                  />
+                  <strong>{label}.</strong> {value}
+                </label>
+              )
+            )}
           </div>
         ) : (
           <textarea
