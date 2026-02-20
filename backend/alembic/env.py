@@ -15,6 +15,12 @@ from app.models import *  # Import all your models here
 # access to the values within the .ini file in use.
 config = context.config
 
+# Override sqlalchemy.url with DATABASE_URL from environment if available
+# This allows Docker environment to use its own database URL
+db_url = os.environ.get("DATABASE_URL")
+if db_url:
+    config.set_main_option("sqlalchemy.url", db_url)
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
