@@ -19,6 +19,8 @@ config = context.config
 # This allows Docker environment to use its own database URL
 db_url = os.environ.get("DATABASE_URL")
 if db_url:
+    # Convert async URL to sync for Alembic
+    db_url = db_url.replace("+asyncpg", "")
     config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.

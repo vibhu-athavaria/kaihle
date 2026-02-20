@@ -21,7 +21,12 @@ def upgrade() -> None:
     op.add_column('assessments', sa.Column('total_questions_configurable', sa.Integer(), nullable=True, server_default=sa.text('20')))
     op.drop_column('assessments', 'grade_id')
     op.drop_index('ix_badges_id', table_name='badges')
-    op.drop_constraint('uq_badges_name', 'badges', type_='unique')
+    # Check if constraint exists before dropping (may not exist in some environments)
+    try:
+        op.drop_constraint('uq_badges_name', 'badges', type_='unique')
+    except Exception:
+        # Constraint doesn't exist, skip
+        pass
     op.drop_column('badges', 'created_at')
     op.drop_column('courses', 'prerequisite_topic_ids')
     op.add_column(
