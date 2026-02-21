@@ -36,3 +36,6 @@ venv
 plans
 PROJECT_DESCRIPTION.md
 AGENTS.md
+
+# Celery Beat schedule database
+backend/celerybeat-schedule
