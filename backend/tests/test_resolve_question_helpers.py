@@ -812,7 +812,7 @@ class TestFindExistingQuestion:
         # Create mock question
         mock_question = MagicMock(spec=QuestionBank)
         mock_question.id = uuid4()
-        mock_question.difficulty_level = 0.5  # Maps to difficulty 3
+        mock_question.difficulty_level = 3  # Integer difficulty 1-5
 
         # Create mock query chain - need to match the actual function's chain
         # db.query(QuestionBank).filter(...).filter(...).filter(...).filter(...).first()
@@ -829,7 +829,7 @@ class TestFindExistingQuestion:
         grade_id = uuid4()
         subject_id = uuid4()
 
-        # Execute with difficulty 3 (maps to 0.5)
+        # Execute with difficulty 3
         result = find_existing_question(mock_db, subtopic_id, 3, grade_id, subject_id)
 
         # Assert
@@ -898,7 +898,7 @@ class TestFindExistingQuestion:
         # Create mock question for range match
         mock_question = MagicMock(spec=QuestionBank)
         mock_question.id = uuid4()
-        mock_question.difficulty_level = 0.4  # Within range for difficulty 3
+        mock_question.difficulty_level = 4  # Within range for difficulty 3 (±1)
 
         # Create mock query chain
         mock_db = MagicMock()

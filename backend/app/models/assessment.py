@@ -19,10 +19,8 @@ class AssessmentStatus(str, enum.Enum):
     COMPLETED = "completed"
     ABANDONED = "abandoned"
 
-class DifficultyLevel(str, enum.Enum):
-    EASY = "easy"
-    MEDIUM = "medium"
-    HARD = "hard"
+# DifficultyLevel enum removed - difficulty is now Integer 1-5
+# 1 = Beginner, 2 = Easy, 3 = Medium, 4 = Hard, 5 = Expert
 
 class Assessment(Base, SerializerMixin):
     __tablename__ = "assessments"
@@ -33,7 +31,7 @@ class Assessment(Base, SerializerMixin):
     topic_id = Column(UUID(as_uuid=True), ForeignKey("topics.id", ondelete="SET NULL"), nullable=True, index=True)
 
     assessment_type = Column(Enum(AssessmentType), nullable=False)  # "diagnostic", "progress", "final", "topic_specific"
-    difficulty_level = Column(Enum(DifficultyLevel), default=DifficultyLevel.MEDIUM)  # "easy", "medium", "hard"
+    difficulty_level = Column(Integer, default=3, nullable=True)  # Integer 1-5 scale: 1=Beginner, 2=Easy, 3=Medium, 4=Hard, 5=Expert
     status = Column(Enum(AssessmentStatus), default=AssessmentStatus.STARTED, index=True)  # "started", "in_progress", "completed", "abandoned"
 
     total_questions = Column(Integer, default=0)
@@ -106,7 +104,7 @@ class QuestionBank(Base, SerializerMixin):
     correct_answer = Column(Text, nullable=False)
 
     # Question metadata
-    difficulty_level = Column(Float, default=0.5)  # 0.0-1.0 scale
+    difficulty_level = Column(Integer, default=3, nullable=False)  # Integer 1-5 scale: 1=Beginner, 2=Easy, 3=Medium, 4=Hard, 5=Expert
     bloom_taxonomy_level = Column(String(50), nullable=True)  # Remember, Understand, Apply, Analyze, Evaluate, Create
     estimated_time_seconds = Column(Integer, nullable=True)
 

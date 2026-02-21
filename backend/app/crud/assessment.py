@@ -41,17 +41,36 @@ def update_mastery(skill: float, difficulty: float, correct: bool, alpha: float 
     new_skill = max(0.0, min(1.0, skill + delta))
     return new_skill
 
-# Difficulty mapping helpers
-def difficulty_float_from_label(label: str) -> float:
-    if not label: return 0.5
-    label = label.lower()
-    if label == "easy": return 0.25
-    if label == "medium": return 0.5
-    if label == "hard": return 0.8
-    try:
-        return float(label)
-    except:
-        return 0.5
+# Difficulty scale: Integer 1-5
+# 1 = Beginner, 2 = Easy, 3 = Medium, 4 = Hard, 5 = Expert
+
+DIFFICULTY_LABELS = {
+    1: "beginner",
+    2: "easy",
+    3: "medium",
+    4: "hard",
+    5: "expert"
+}
+
+def difficulty_label_from_int(value: int) -> str:
+    """Convert integer difficulty (1-5) to label."""
+    return DIFFICULTY_LABELS.get(value, "unknown")
+
+
+def difficulty_int_from_label(label: str) -> int:
+    """Convert difficulty label to integer (1-5)."""
+    if not label:
+        return 3  # Default to medium
+    label_lower = label.lower()
+    label_map = {
+        "beginner": 1,
+        "easy": 2,
+        "medium": 3,
+        "hard": 4,
+        "expert": 5
+    }
+    return label_map.get(label_lower, 3)
+
 
 def pick_next_topic_and_difficulty(db: Session, student_id: UUID, subject: str):
     # get student's knowledge profiles for subject
@@ -64,10 +83,12 @@ def pick_next_topic_and_difficulty(db: Session, student_id: UUID, subject: str):
         skps_sorted = sorted(skps, key=lambda s: s.mastery_level)
         target = skps_sorted[0].knowledge_area
         # propose difficulty based on mastery (lower mastery -> easier)
-        difficulty = max(0.2, 1.0 - skps_sorted[0].mastery_level)
+        # Convert mastery (0-1) to difficulty (1-5): lower mastery = lower difficulty
+        mastery = skps_sorted[0].mastery_level or 0.5
+        difficulty = max(1, min(5, int((1.0 - mastery) * 5) + 1))
         return {"topic": target.topic, "subtopic": target.subtopic, "difficulty": difficulty}
     # fallback default
-    return {"topic": None, "subtopic": None, "difficulty": 0.5}
+    return {"topic": None, "subtopic": None, "difficulty": 3}
 
 def choose_grade_by_age(student_age:int) -> int:
     # simple mapping (tweak to match your locale)
@@ -432,7 +453,11 @@ def get_used_question_ids(
 
 # ---------- Difficulty helpers ----------
 
-def calculate_difficulty_from_history(db: Session, assessment: Assessment, subtopic: str) -> float:
+def calculate_difficulty_from_history(db: Session, assessment: Assessment, subtopic: str) -> int:
+    """
+    Calculate difficulty based on recent answers for a subtopic.
+    Returns integer difficulty 1-5.
+    """
     last_three = (
         db.query(AssessmentQuestion)
         .join(Assessment, AssessmentQuestion.assessment_id == Assessment.id)
@@ -447,27 +472,37 @@ def calculate_difficulty_from_history(db: Session, assessment: Assessment, subto
 
     wrong_count = sum(1 for q in last_three if not q.is_correct)
 
-    # Lower difficulty if student got 2 or more wrong in last 3
+    # Adjust difficulty based on wrong answers
+    # More wrong = easier questions
     if wrong_count >= 3:
-        difficulty_val = 0.25  # force to easy-ish
+        return 1  # Beginner - student struggling
+    elif wrong_count >= 2:
+        return 2  # Easy
     elif wrong_count >= 1:
-        difficulty_val = 0.50   # allow medium/hard if doing well
+        return 3  # Medium
     else:
-        difficulty_val = 0.85   # allow medium if mixed results
-
-    return difficulty_val
+        return 4  # Hard - student doing well
 
 
+# Legacy functions kept for backward compatibility during transition
 def difficulty_float_from_label(label: str) -> float:
+    """
+    DEPRECATED: Use difficulty_int_from_label instead.
+    Kept for backward compatibility.
+    """
     if not label:
         return 0.5
     l = label.lower()
+    if l == "beginner":
+        return 0.15
     if l == "easy":
         return 0.25
     if l == "medium":
         return 0.5
     if l == "hard":
-        return 0.85
+        return 0.75
+    if l == "expert":
+        return 0.9
     try:
         # maybe it's numeric string
         return float(label)
@@ -476,11 +511,19 @@ def difficulty_float_from_label(label: str) -> float:
 
 
 def difficulty_label_from_value(val: float) -> str:
-    if val <= 0.33:
+    """
+    DEPRECATED: Use difficulty_label_from_int instead.
+    Kept for backward compatibility. Converts float (0.0-1.0) to label.
+    """
+    if val <= 0.20:
+        return "beginner"
+    if val <= 0.35:
         return "easy"
-    if val <= 0.66:
+    if val <= 0.60:
         return "medium"
-    return "hard"
+    if val <= 0.80:
+        return "hard"
+    return "expert"
 
 ###################################
 ## Assessment Reated
@@ -672,11 +715,12 @@ def pick_next_topic_and_difficulty(db: Session, student_id: UUID, subject: str, 
     else:
         chosen_subtopic = (subtopics[0] if isinstance(subtopics, list) and subtopics else None)
 
-    # difficulty: derive from assessment.difficulty_level if present, else medium
+    # difficulty: derive from assessment.difficulty_level if present, else medium (3)
+    # Integer 1-5 scale: 1=Beginner, 2=Easy, 3=Medium, 4=Hard, 5=Expert
     if assessment and assessment.difficulty_level:
-        d_val = difficulty_float_from_label(assessment.difficulty_level)
+        d_val = assessment.difficulty_level
     else:
-        d_val = 0.5
+        d_val = 3  # Default to medium
 
     # Make small adjustments: if topic has many wrong recent answers, decrease difficulty
     # Get last 3 answered questions for this student & topic across assessments
@@ -695,7 +739,7 @@ def pick_next_topic_and_difficulty(db: Session, student_id: UUID, subject: str, 
     )
     wrong_count = sum(1 for q in last_three if not q.is_correct)
     if wrong_count >= 2:
-        d_val = min(d_val, 0.3)
+        d_val = max(1, d_val - 1)  # Decrease difficulty, minimum 1
 
     return {"topic": chosen_topic, "subtopic": chosen_subtopic, "difficulty": d_val}
 
@@ -918,7 +962,8 @@ async def score_answer_and_maybe_next(db: Session, assessment: Assessment, quest
     if not skp:
         skp = StudentKnowledgeProfile(student_id=assessment.student_id, knowledge_area_id=ka.id, mastery_level=0.5, assessment_count=0)
     cur_skill = skp.mastery_level or 0.5
-    diff_val = difficulty_float_from_label(question.difficulty_level)
+    # difficulty_level is now integer 1-5, normalize to 0-1 for mastery calculation
+    diff_val = (question.difficulty_level or 3) / 5.0  # Convert 1-5 to 0.2-1.0
     # update_mastery function: small ELO-like update (simple)
     # delta = learning rate * (outcome - expected)
     expected = cur_skill
@@ -938,16 +983,15 @@ async def score_answer_and_maybe_next(db: Session, assessment: Assessment, quest
     assessment.questions_answered = (assessment.questions_answered or 0) + 1
 
     # Update assessment-level difficulty (guides next question)
-    try:
-        cur_val = difficulty_float_from_label(assessment.difficulty_level or "medium")
-    except Exception:
-        cur_val = 0.5
-
+    # Integer 1-5 scale: 1=Beginner, 2=Easy, 3=Medium, 4=Hard, 5=Expert
+    cur_difficulty = assessment.difficulty_level or 3  # Default to medium
     if is_correct:
-        cur_val = min(1.0, cur_val + 0.12)
+        # increase by 1 up to 5
+        new_difficulty = min(5, cur_difficulty + 1)
     else:
-        cur_val = max(0.05, cur_val - 0.2)
-    assessment.difficulty_level = difficulty_label_from_value(cur_val)
+        # decrease by 1 down to 1
+        new_difficulty = max(1, cur_difficulty - 1)
+    assessment.difficulty_level = new_difficulty
 
     # Update student's subject checkpoint if necessary
     # Load student profile

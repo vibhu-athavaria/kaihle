@@ -21,8 +21,6 @@ from app.crud.assessment import (
     create_assessment,
     resolve_diagnostic_assessment,
     resolve_question,
-    difficulty_float_from_label,
-    difficulty_label_from_value,
     get_or_create_assessment_report
 )
 from app.constants.constants import (
@@ -140,21 +138,18 @@ async def check_answer_and_next(assessment_id: UUID, question_id: UUID, payload:
     assessment.questions_answered = (assessment.questions_answered or 0) + 1
 
     # Adjust assessment difficulty_level for next question:
-    # Simple rule:
-    # - if correct, gently increase difficulty
-    # - if wrong, decrease difficulty
-    try:
-        cur_val = difficulty_float_from_label(assessment.difficulty_level or "medium")
-    except Exception:
-        cur_val = 0.5
+    # Integer 1-5 scale: 1=Beginner, 2=Easy, 3=Medium, 4=Hard, 5=Expert
+    # - if correct, increase difficulty (max 5)
+    # - if wrong, decrease difficulty (min 1)
+    cur_difficulty = assessment.difficulty_level or 3  # Default to medium
     if is_correct:
-        # increase by 0.15 up to 1.0
-        new_val = min(1.0, cur_val + 0.15)
+        # increase by 1 up to 5
+        new_difficulty = min(5, cur_difficulty + 1)
     else:
-        # decrease by 0.2 down to 0.05
-        new_val = max(0.05, cur_val - 0.2)
+        # decrease by 1 down to 1
+        new_difficulty = max(1, cur_difficulty - 1)
 
-    assessment.difficulty_level = difficulty_label_from_value(new_val)
+    assessment.difficulty_level = new_difficulty
 
     # Possibly mark assessment complete
     max_questions = assessment.total_questions_configurable or TOTAL_QUESTIONS_PER_ASSESSMENT

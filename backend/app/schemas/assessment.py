@@ -6,11 +6,22 @@ from uuid import UUID
 
 from app.models.assessment import AssessmentStatus, AssessmentType
 
+# Difficulty scale: Integer 1-5
+# 1 = Beginner, 2 = Easy, 3 = Medium, 4 = Hard, 5 = Expert
+
+DIFFICULTY_LABELS = {
+    1: "beginner",
+    2: "easy",
+    3: "medium",
+    4: "hard",
+    5: "expert"
+}
+
 class QuestionBankBase(BaseModel):
     id : UUID
     question_text: str
     question_type: str
-    difficulty_level: float
+    difficulty_level: int  # Integer 1-5 scale
     options: Dict[str, str]
     learning_objectives: Optional[List[str]] = None
     prerequisite_topic_ids: Optional[List[UUID]] = None
@@ -19,14 +30,8 @@ class QuestionBankBase(BaseModel):
     @computed_field
     @property
     def difficulty_label(self) -> str:
-        if self.difficulty_level is None:
-            return "unknown"
-        if self.difficulty_level < 0.33:
-            return "easy"
-        elif self.difficulty_level < 0.66:
-            return "medium"
-        else:
-            return "hard"
+        """Convert integer difficulty (1-5) to label."""
+        return DIFFICULTY_LABELS.get(self.difficulty_level, "unknown")
 
     class Config:
         orm_mode = True
@@ -55,7 +60,7 @@ class QuestionBankCreate(BaseModel):
     question_type: str
     options: Optional[List[str]] = None
     correct_answer: str
-    difficulty_level: Optional[float] = None
+    difficulty_level: Optional[int] = Field(default=3, ge=1, le=5)  # Integer 1-5 scale
     meta_tags: Optional[Dict[str, Any]] = None
 
 class QuestionBankUpdate(BaseModel):
@@ -68,7 +73,7 @@ class QuestionBankUpdate(BaseModel):
     question_type: Optional[str] = None
     options: Optional[List[str]] = None
     correct_answer: Optional[str] = None
-    difficulty_level: Optional[float] = None
+    difficulty_level: Optional[int] = Field(default=None, ge=1, le=5)  # Integer 1-5 scale
     meta_tags: Optional[Dict[str, Any]] = None
 
 
