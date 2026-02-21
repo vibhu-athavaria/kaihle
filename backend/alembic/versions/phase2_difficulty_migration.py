@@ -111,8 +111,8 @@ def upgrade() -> None:
     """)
 
     # Update existing index to use integer difficulty
-    # First drop the old index
-    op.drop_index('idx_qb_subject_topic_difficulty', table_name='question_bank')
+    # First drop the old index (if exists)
+    op.execute("DROP INDEX IF EXISTS idx_qb_subject_topic_difficulty")
 
     # Recreate with integer difficulty
     op.create_index(
@@ -161,9 +161,9 @@ def downgrade() -> None:
         END
     """)
 
-    # Step 5: Drop check constraints
-    op.drop_constraint('chk_question_bank_difficulty', 'question_bank', type_='check')
-    op.drop_constraint('chk_assessment_difficulty', 'assessments', type_='check')
+    # Step 5: Drop check constraints (if they exist)
+    op.execute("ALTER TABLE question_bank DROP CONSTRAINT IF EXISTS chk_question_bank_difficulty")
+    op.execute("ALTER TABLE assessments DROP CONSTRAINT IF EXISTS chk_assessment_difficulty")
 
     # Step 6: Drop the integer columns
     op.drop_column('question_bank', 'difficulty_level')
@@ -176,8 +176,8 @@ def downgrade() -> None:
     # Step 8: Set default for assessments
     op.alter_column('assessments', 'difficulty_level', nullable=True)
 
-    # Step 9: Drop and recreate the old index
-    op.drop_index('idx_qb_subject_topic_difficulty', table_name='question_bank')
+    # Step 9: Drop and recreate the old index (if exists)
+    op.execute("DROP INDEX IF EXISTS idx_qb_subject_topic_difficulty")
     op.create_index(
         'idx_qb_subject_topic_difficulty',
         'question_bank',
@@ -185,5 +185,5 @@ def downgrade() -> None:
         unique=False
     )
 
-    # Step 10: Drop the adaptive query index
-    op.drop_index('idx_qb_subtopic_difficulty_active', table_name='question_bank')
+    # Step 10: Drop the adaptive query index (if exists)
+    op.execute("DROP INDEX IF EXISTS idx_qb_subtopic_difficulty_active")
