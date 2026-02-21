@@ -8,6 +8,7 @@ Create Date: 2026-02-10 09:30:14.024408
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision = '25b7607b597f'
@@ -21,7 +22,15 @@ def upgrade() -> None:
     op.add_column('assessments', sa.Column('total_questions_configurable', sa.Integer(), nullable=True, server_default=sa.text('20')))
     op.drop_column('assessments', 'grade_id')
     op.drop_index('ix_badges_id', table_name='badges')
-    op.drop_constraint('uq_badges_name', 'badges', type_='unique')
+    # Check if constraint exists before dropping (may not exist in some environments)
+    conn = op.get_bind()
+    result = conn.execute(text("""
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'uq_badges_name'
+        AND conrelid = 'badges'::regclass
+    """))
+    if result.fetchone():
+        op.drop_constraint('uq_badges_name', 'badges', type_='unique')
     op.drop_column('badges', 'created_at')
     op.drop_column('courses', 'prerequisite_topic_ids')
     op.add_column(

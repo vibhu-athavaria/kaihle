@@ -1,0 +1,75 @@
+# Kaihle Production Environment
+# Docker Compose overrides for production deployment
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  # PostgreSQL Database - Production settings
+  db:
+    restart: always
+
+  # Redis - Production settings
+  redis:
+    restart: always
+
+  # FastAPI Application - Production settings
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        ENVIRONMENT: production
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+    volumes: []  # Remove volume mounts for production
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    restart: always
+
+  # Celery Worker - Production settings
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        ENVIRONMENT: production
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+    volumes: []  # Remove volume mounts for production
+    command: celery -A app.celery_app worker --loglevel=warning --concurrency=4
+    restart: always
+
+  # Celery Beat - Production settings
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        ENVIRONMENT: production
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+    volumes: []  # Remove volume mounts for production
+    command: celery -A app.celery_app beat --loglevel=warning
+    restart: always
+
+  # Flower - Production settings
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        ENVIRONMENT: production
+    volumes: []  # Remove volume mounts for production
+    restart: always
+
+  # Frontend - Production settings (if needed)
+  # Note: In production, frontend is typically served as static files
+  # by the API server or a separate CDN/nginx container
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    volumes: []  # Remove volume mounts for production
+    restart: always
+    command: npm run preview -- --host 0.0.0.0

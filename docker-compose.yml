@@ -1,0 +1,194 @@
+# Kaihle Development Environment
+# Docker Compose configuration for local development
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: kaihle-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kaihle_db}
+      POSTGRES_USER: ${POSTGRES_USER:-kaihle_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kaihle_user} -d ${POSTGRES_DB:-kaihle_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - kaihle-network
+
+  # Redis - Session cache + Celery broker
+  redis:
+    image: redis:7-alpine
+    container_name: kaihle-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - kaihle-network
+
+  # FastAPI Application
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kaihle-api
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://kaihle_user:changeme_in_production@db:5432/kaihle_db}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      SECRET_KEY: ${SECRET_KEY:-changeme_generate_with_openssl_rand_hex_32}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DEBUG: ${DEBUG:-true}
+      LLM_PROVIDER: ${LLM_PROVIDER:-runpod}
+      RUNPOD_API_BASE: ${RUNPOD_API_BASE:-}
+      RUNPOD_API_KEY: ${RUNPOD_API_KEY:-}
+      RUNPOD_MODEL: ${RUNPOD_MODEL:-}
+      AUTOCONTENTAPI_BASE_URL: ${AUTOCONTENTAPI_BASE_URL:-}
+      AUTOCONTENTAPI_KEY: ${AUTOCONTENTAPI_KEY:-}
+      AUTOCONTENTAPI_MODEL: ${AUTOCONTENTAPI_MODEL:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_MODEL: ${GOOGLE_MODEL:-gemini-1.5-flash}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-4000}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.3}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
+      DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC: ${DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC:-5}
+      DIAGNOSTIC_STARTING_DIFFICULTY: ${DIAGNOSTIC_STARTING_DIFFICULTY:-3}
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - kaihle-network
+
+  # Celery Worker - Background task processor
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kaihle-celery-worker
+    depends_on:
+      - db
+      - redis
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://kaihle_user:changeme_in_production@db:5432/kaihle_db}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      SECRET_KEY: ${SECRET_KEY:-changeme_generate_with_openssl_rand_hex_32}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DEBUG: ${DEBUG:-true}
+      LLM_PROVIDER: ${LLM_PROVIDER:-runpod}
+      RUNPOD_API_BASE: ${RUNPOD_API_BASE:-}
+      RUNPOD_API_KEY: ${RUNPOD_API_KEY:-}
+      RUNPOD_MODEL: ${RUNPOD_MODEL:-}
+      AUTOCONTENTAPI_BASE_URL: ${AUTOCONTENTAPI_BASE_URL:-}
+      AUTOCONTENTAPI_KEY: ${AUTOCONTENTAPI_KEY:-}
+      AUTOCONTENTAPI_MODEL: ${AUTOCONTENTAPI_MODEL:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_MODEL: ${GOOGLE_MODEL:-gemini-1.5-flash}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-4000}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.3}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
+      DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC: ${DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC:-5}
+      DIAGNOSTIC_STARTING_DIFFICULTY: ${DIAGNOSTIC_STARTING_DIFFICULTY:-3}
+    volumes:
+      - ./backend:/app
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=4
+    networks:
+      - kaihle-network
+
+  # Celery Beat - Scheduled task scheduler
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kaihle-celery-beat
+    depends_on:
+      - redis
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://kaihle_user:changeme_in_production@db:5432/kaihle_db}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      SECRET_KEY: ${SECRET_KEY:-changeme_generate_with_openssl_rand_hex_32}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DEBUG: ${DEBUG:-true}
+      LLM_PROVIDER: ${LLM_PROVIDER:-runpod}
+      RUNPOD_API_BASE: ${RUNPOD_API_BASE:-}
+      RUNPOD_API_KEY: ${RUNPOD_API_KEY:-}
+      RUNPOD_MODEL: ${RUNPOD_MODEL:-}
+      AUTOCONTENTAPI_BASE_URL: ${AUTOCONTENTAPI_BASE_URL:-}
+      AUTOCONTENTAPI_KEY: ${AUTOCONTENTAPI_KEY:-}
+      AUTOCONTENTAPI_MODEL: ${AUTOCONTENTAPI_MODEL:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_MODEL: ${GOOGLE_MODEL:-gemini-1.5-flash}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-4000}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.3}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
+      DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC: ${DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC:-5}
+      DIAGNOSTIC_STARTING_DIFFICULTY: ${DIAGNOSTIC_STARTING_DIFFICULTY:-3}
+    volumes:
+      - ./backend:/app
+    command: celery -A app.celery_app beat --loglevel=info
+    networks:
+      - kaihle-network
+
+  # Flower - Celery monitoring UI
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kaihle-flower
+    depends_on:
+      - redis
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+    volumes:
+      - ./backend:/app
+    ports:
+      - "5555:5555"
+    command: celery -A app.celery_app flower --port=5555
+    networks:
+      - kaihle-network
+
+  # Frontend - React + Vite dev server
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kaihle-frontend
+    depends_on:
+      - api
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    networks:
+      - kaihle-network
+
+networks:
+  kaihle-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
