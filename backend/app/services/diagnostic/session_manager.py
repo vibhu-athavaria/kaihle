@@ -364,13 +364,21 @@ class DiagnosticSessionManager:
         Raises:
             ValueError: If assessment not found or invalid state
         """
-        # Get assessment
-        assessment = self.db.query(Assessment).filter(
+        # Get assessment with student relationship eagerly loaded
+        assessment = self.db.query(Assessment).options(
+            joinedload(Assessment.student)
+        ).filter(
             Assessment.id == assessment_id
         ).first()
 
         if not assessment:
             raise ValueError(f"Assessment not found: {assessment_id}")
+
+        if not assessment.student:
+            raise ValueError(
+                f"Assessment {assessment_id} has no associated student. "
+                "Data integrity error."
+            )
 
         # Get session state
         state = self.get_session_state(assessment_id)
@@ -405,7 +413,7 @@ class DiagnosticSessionManager:
         # Select next question
         question = self.selector.get_next_question(
             subtopic_id=current_subtopic["subtopic_id"],
-            grade_id=assessment.student.grade_id if assessment.student else None,
+            grade_id=assessment.student.grade_id,
             subject_id=state["subject_id"],
             target_difficulty=current_subtopic["current_difficulty"],
             used_question_ids=current_subtopic["used_question_ids"],
