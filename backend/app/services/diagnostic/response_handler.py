@@ -249,12 +249,13 @@ class DiagnosticResponseHandler:
         else:
             next_difficulty = max(1, current_difficulty - 1)
 
-        # Check if subtopic is complete
+        # Check if subtopic is complete using updated state
         subtopic_complete = False
-        if current_index < len(subtopics):
-            current_subtopic = subtopics[current_index]
-            questions_answered = current_subtopic.get("questions_answered", 0) + 1
-            questions_total = current_subtopic.get("questions_total", 5)
+        updated_subtopics = updated_state.get("subtopics", [])
+        if current_index < len(updated_subtopics):
+            updated_subtopic = updated_subtopics[current_index]
+            questions_answered = updated_subtopic.get("questions_answered", 0)
+            questions_total = updated_subtopic.get("questions_total", 5)
             subtopic_complete = questions_answered >= questions_total
 
         # Check if all subjects are complete
