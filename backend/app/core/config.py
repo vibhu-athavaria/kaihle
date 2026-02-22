@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     MAX_QUESTIONS_PER_ASSESSMENT: int = 32
 
     # ======================
+    # Diagnostic Assessment
+    # ======================
+    DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC: int = 5
+    DIAGNOSTIC_STARTING_DIFFICULTY: int = 3
+
+    # ======================
     # Stripe
     # ======================
     STRIPE_SECRET_KEY: str | None = None
