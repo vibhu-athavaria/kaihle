@@ -39,3 +39,8 @@ AGENTS.md
 
 # Celery Beat schedule database
 backend/celerybeat-schedule
+
+# Coverage reports
+.coverage
+htmlcov/
+*.cover
