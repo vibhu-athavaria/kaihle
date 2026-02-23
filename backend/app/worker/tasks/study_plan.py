@@ -12,16 +12,18 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+import redis
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.celery_app import celery_app
+from app.core.config import settings
 from app.models.assessment import Assessment, AssessmentReport, AssessmentStatus
 from app.models.course import Course
 from app.models.study_plan import StudyPlan, StudyPlanCourse
 from app.models.user import StudentProfile
-from app.core.config import settings
+from app.services.llm.provider import get_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -226,13 +228,11 @@ def validate_llm_response(
 
 def _update_redis_flag(student_id: str, status: str) -> None:
     """Update Redis generation flag."""
-    import redis
-
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     client = redis.from_url(redis_url)
 
     key = f"kaihle:diagnostic:generating:{student_id}"
-    client.setex(key, 2 * 60 * 60, status)  # 2 hour TTL
+    client.setex(key, 2 * 60 * 60, status)
 
     logger.info("Set Redis flag '%s' for student %s", status, student_id)
 
@@ -254,8 +254,6 @@ def _call_llm(prompt: str, student_id: str) -> Dict[str, Any]:
     Raises:
         Exception: If LLM call fails or response is invalid
     """
-    from app.services.llm.provider import get_llm_provider
-
     system_prompt = "You are an expert Cambridge curriculum learning designer. Return ONLY valid JSON."
 
     try:

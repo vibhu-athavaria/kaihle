@@ -468,15 +468,15 @@ class TestUpdateRedisFlag:
         mock_redis = MagicMock()
         mock_redis.from_url.return_value = mock_client
 
-        with patch.dict('sys.modules', {'redis': mock_redis}):
-            with patch.dict('os.environ', {'REDIS_URL': 'redis://test:6379/0'}):
+        with patch("app.worker.tasks.study_plan.redis", mock_redis):
+            with patch.dict("os.environ", {"REDIS_URL": "redis://test:6379/0"}):
                 _update_redis_flag("test-student-id", "study_plan")
 
         mock_redis.from_url.assert_called_once()
         mock_client.setex.assert_called_once()
         call_args = mock_client.setex.call_args
         assert "kaihle:diagnostic:generating:test-student-id" in call_args[0]
-        assert call_args[0][1] == 2 * 60 * 60  # 2 hours TTL
+        assert call_args[0][1] == 2 * 60 * 60
         assert call_args[0][2] == "study_plan"
 
     def test_uses_default_redis_url(self):
@@ -485,14 +485,9 @@ class TestUpdateRedisFlag:
         mock_redis = MagicMock()
         mock_redis.from_url.return_value = mock_client
 
-        # Clear REDIS_URL from environment
-        with patch.dict('sys.modules', {'redis': mock_redis}):
-            with patch.dict('os.environ', {}, clear=False):
-                # Remove REDIS_URL if present
-                os_env = dict(os_module.environ)
-                os_env.pop('REDIS_URL', None)
-                with patch.dict('os.environ', os_env, clear=True):
-                    _update_redis_flag("test-student-id", "complete")
+        with patch("app.worker.tasks.study_plan.redis", mock_redis):
+            with patch.dict("os.environ", {}, clear=True):
+                _update_redis_flag("test-student-id", "complete")
 
         mock_redis.from_url.assert_called_with("redis://localhost:6379/0")
 

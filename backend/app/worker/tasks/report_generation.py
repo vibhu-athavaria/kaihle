@@ -7,15 +7,18 @@ and updates StudentKnowledgeProfile records.
 """
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 from uuid import UUID
 
+import redis
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.celery_app import celery_app
+from app.core.config import settings
 from app.models.assessment import (
     Assessment,
     AssessmentQuestion,
@@ -26,7 +29,6 @@ from app.models.assessment import (
     StudentKnowledgeProfile,
 )
 from app.models.curriculum import Subtopic, Topic
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -459,13 +461,10 @@ def _generate_single_report(db: Session, assessment: Assessment) -> None:
 
 def _update_redis_flag(student_id: str, status: str) -> None:
     """Update Redis generation flag."""
-    import redis
-    import os
-
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     client = redis.from_url(redis_url)
 
     key = f"kaihle:diagnostic:generating:{student_id}"
-    client.setex(key, 2 * 60 * 60, status)  # 2 hour TTL
+    client.setex(key, 2 * 60 * 60, status)
 
     logger.info("Set Redis flag '%s' for student %s", status, student_id)

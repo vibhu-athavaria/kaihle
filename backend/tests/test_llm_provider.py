@@ -280,13 +280,12 @@ class TestOpenAIProviderComplete:
             mock_response.usage.prompt_tokens = 50
             mock_response.usage.completion_tokens = 25
 
+            mock_client = MagicMock()
+            mock_client.chat.completions.create.return_value = mock_response
+
             with patch.object(provider, "check_cache", return_value=None):
                 with patch.object(provider, "store_cache") as mock_store:
-                    with patch("openai.OpenAI") as mock_openai:
-                        mock_client = MagicMock()
-                        mock_client.chat.completions.create.return_value = mock_response
-                        mock_openai.return_value = mock_client
-
+                    with patch("app.services.llm.provider.OpenAI", return_value=mock_client):
                         response = provider.complete("system", "user")
 
             assert response.cached is False
@@ -531,13 +530,12 @@ class TestRunPodProviderAPICall:
             mock_response.usage.prompt_tokens = 50
             mock_response.usage.completion_tokens = 25
 
+            mock_client = MagicMock()
+            mock_client.chat.completions.create.return_value = mock_response
+
             with patch.object(provider, "check_cache", return_value=None):
                 with patch.object(provider, "store_cache") as mock_store:
-                    with patch("openai.OpenAI") as mock_openai:
-                        mock_client = MagicMock()
-                        mock_client.chat.completions.create.return_value = mock_response
-                        mock_openai.return_value = mock_client
-
+                    with patch("app.services.llm.provider.OpenAI", return_value=mock_client):
                         response = provider.complete("system", "user")
 
             assert response.cached is False
@@ -565,13 +563,12 @@ class TestAutoContentAPIProviderAPICall:
             mock_response.usage.prompt_tokens = 60
             mock_response.usage.completion_tokens = 30
 
+            mock_client = MagicMock()
+            mock_client.chat.completions.create.return_value = mock_response
+
             with patch.object(provider, "check_cache", return_value=None):
                 with patch.object(provider, "store_cache") as mock_store:
-                    with patch("openai.OpenAI") as mock_openai:
-                        mock_client = MagicMock()
-                        mock_client.chat.completions.create.return_value = mock_response
-                        mock_openai.return_value = mock_client
-
+                    with patch("app.services.llm.provider.OpenAI", return_value=mock_client):
                         response = provider.complete("system", "user")
 
             assert response.cached is False

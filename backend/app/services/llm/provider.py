@@ -17,8 +17,16 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import redis
+from openai import OpenAI
 
 from app.core.config import settings
+
+try:
+    import google.generativeai as genai
+    GOOGLE_AVAILABLE = True
+except ImportError:
+    genai = None
+    GOOGLE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +130,6 @@ class RunPodProvider(BaseLLMProvider):
             raise ValueError("RUNPOD_API_BASE and RUNPOD_API_KEY must be set")
 
     def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
-        from openai import OpenAI
-
         cache_key = self._generate_cache_key("runpod", system_prompt, user_prompt)
         cached = self.check_cache(cache_key)
         if cached:
@@ -186,8 +192,6 @@ class AutoContentAPIProvider(BaseLLMProvider):
             raise ValueError("AUTOCONTENTAPI_BASE_URL and AUTOCONTENTAPI_KEY must be set")
 
     def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
-        from openai import OpenAI
-
         cache_key = self._generate_cache_key("autocontentapi", system_prompt, user_prompt)
         cached = self.check_cache(cache_key)
         if cached:
@@ -261,7 +265,8 @@ class GoogleGeminiProvider(BaseLLMProvider):
                 cached=True,
             )
 
-        import google.generativeai as genai
+        if not GOOGLE_AVAILABLE:
+            raise ImportError("google-generativeai package is not installed. Install with: pip install google-generativeai")
 
         genai.configure(api_key=self.api_key)
         model = genai.GenerativeModel(
@@ -310,8 +315,6 @@ class OpenAIProvider(BaseLLMProvider):
             raise ValueError("OPENAI_API_KEY must be set")
 
     def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
-        from openai import OpenAI
-
         cache_key = self._generate_cache_key("openai", system_prompt, user_prompt)
         cached = self.check_cache(cache_key)
         if cached:
