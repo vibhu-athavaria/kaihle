@@ -19,7 +19,6 @@ from app.schemas.assessment import (
 )
 from app.crud.assessment import (
     create_assessment,
-    resolve_diagnostic_assessment,
     resolve_question,
     get_or_create_assessment_report
 )
@@ -32,12 +31,13 @@ router = APIRouter()
 @router.post("/", response_model=AssessmentOut)
 def create_assessment_api(payload: AssessmentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
-    This endpoint **only creates the non-diagnostic assessment**
-    Use POST /resolve to create diagnostic assessments.
+    Create a non-diagnostic assessment.
+    
+    For diagnostic assessments, use POST /diagnostic/initialize instead.
     """
 
     if payload.assessment_type == AssessmentType.DIAGNOSTIC:
-        raise HTTPException(status_code=400, detail="Use POST /resolve to create diagnostic assessments")
+        raise HTTPException(status_code=400, detail="Use POST /diagnostic/initialize to create diagnostic assessments")
 
     student = db.query(StudentProfile).filter(StudentProfile.id == payload.student_id).first()
 
@@ -52,27 +52,6 @@ def create_assessment_api(payload: AssessmentCreate, db: Session = Depends(get_d
         payload.total_questions_configurable
     )
     return assessment
-
-@router.post("/resolve", response_model=AssessmentOut)
-def resolve_diagnostic_assessment_api(
-    payload: AssessmentCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    if payload.assessment_type != AssessmentType.DIAGNOSTIC:
-        raise HTTPException(status_code=400, detail="Use POST / to create non-diagnostic assessments")
-
-    student = db.query(StudentProfile).filter(StudentProfile.id == payload.student_id).first()
-
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
-
-    return resolve_diagnostic_assessment(
-        db=db,
-        student_id=payload.student_id,
-        subject_id=payload.subject_id,
-        total_questions_configurable=payload.total_questions_configurable,
-    )
 
 
 @router.post("/{assessment_id}/questions/resolve", response_model=AssessmentQuestionBase)
