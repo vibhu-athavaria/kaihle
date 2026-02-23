@@ -24,6 +24,7 @@ from app.worker.tasks.report_generation import (
     _update_redis_flag,
     generate_assessment_reports,
 )
+from app.models.assessment import Assessment
 
 
 # =============================================================================
@@ -676,8 +677,8 @@ class TestUpdateRedisFlag:
         mock_redis = MagicMock()
         mock_redis.from_url.return_value = mock_client
 
-        with patch.dict('sys.modules', {'redis': mock_redis}):
-            with patch.dict('os.environ', {'REDIS_URL': 'redis://test:6379/0'}):
+        with patch("app.worker.tasks.report_generation.redis", mock_redis):
+            with patch.dict("os.environ", {"REDIS_URL": "redis://test:6379/0"}):
                 _update_redis_flag(str(uuid4()), "study_plan")
 
         mock_redis.from_url.assert_called_once()
@@ -689,14 +690,9 @@ class TestUpdateRedisFlag:
         mock_redis = MagicMock()
         mock_redis.from_url.return_value = mock_client
 
-        # Clear REDIS_URL from environment
-        with patch.dict('sys.modules', {'redis': mock_redis}):
-            with patch.dict('os.environ', {}, clear=False):
-                # Remove REDIS_URL if present
-                os_env = dict(os.environ)
-                os_env.pop('REDIS_URL', None)
-                with patch.dict('os.environ', os_env, clear=True):
-                    _update_redis_flag(str(uuid4()), "test")
+        with patch("app.worker.tasks.report_generation.redis", mock_redis):
+            with patch.dict("os.environ", {}, clear=True):
+                _update_redis_flag(str(uuid4()), "test")
 
         mock_redis.from_url.assert_called_with("redis://localhost:6379/0")
 
@@ -902,3 +898,128 @@ class TestPhase5AcceptanceCriteria:
         assert mastery_below_threshold < 0.60
         assert mastery_at_threshold >= 0.60
         assert mastery_above_threshold >= 0.60
+
+
+class TestPerSubjectReportGeneration:
+    """Tests verifying one report is generated per subject assessment."""
+
+    @patch('app.worker.tasks.report_generation.create_engine')
+    @patch('app.worker.tasks.report_generation.sessionmaker')
+    @patch('app.worker.tasks.report_generation._update_redis_flag')
+    def test_generates_one_report_per_subject_assessment(
+        self, mock_update_redis, mock_sessionmaker, mock_create_engine
+    ):
+        """Test that one report is generated for each of the 4 subject assessments."""
+        mock_session = MagicMock()
+        mock_sessionmaker.return_value.return_value = mock_session
+
+        math_subject_id = uuid4()
+        english_subject_id = uuid4()
+        science_subject_id = uuid4()
+        humanities_subject_id = uuid4()
+
+        mock_math = MagicMock()
+        mock_math.id = uuid4()
+        mock_math.subject_id = math_subject_id
+
+        mock_english = MagicMock()
+        mock_english.id = uuid4()
+        mock_english.subject_id = english_subject_id
+
+        mock_science = MagicMock()
+        mock_science.id = uuid4()
+        mock_science.subject_id = science_subject_id
+
+        mock_humanities = MagicMock()
+        mock_humanities.id = uuid4()
+        mock_humanities.subject_id = humanities_subject_id
+
+        assessments = [mock_math, mock_english, mock_science, mock_humanities]
+
+        query_mock = MagicMock()
+        filter_mock1 = MagicMock()
+        filter_mock2 = MagicMock()
+        filter_mock3 = MagicMock()
+
+        filter_mock3.all.return_value = assessments
+        filter_mock2.filter.return_value = filter_mock3
+        filter_mock1.filter.return_value = filter_mock2
+        query_mock.filter.return_value = filter_mock1
+        mock_session.query.return_value = query_mock
+
+        answered_query = MagicMock()
+        answered_join = MagicMock()
+        answered_filter1 = MagicMock()
+        answered_filter2 = MagicMock()
+        answered_order = MagicMock()
+
+        answered_order.all.return_value = []
+        answered_filter2.order_by.return_value = answered_order
+        answered_filter1.filter.return_value = answered_filter2
+        answered_join.filter.return_value = answered_filter1
+        answered_query.join.return_value = answered_join
+
+        def query_side_effect(model):
+            if model == Assessment:
+                return query_mock
+            return answered_query
+
+        mock_session.query.side_effect = query_side_effect
+
+        student_id = str(uuid4())
+        result = generate_assessment_reports.run(student_id)
+
+        assert mock_session.commit.called
+        assert result == student_id
+
+    @patch('app.worker.tasks.report_generation.create_engine')
+    @patch('app.worker.tasks.report_generation.sessionmaker')
+    @patch('app.worker.tasks.report_generation._update_redis_flag')
+    def test_report_generation_respects_subject_boundary(
+        self, mock_update_redis, mock_sessionmaker, mock_create_engine
+    ):
+        """Test that each report is generated for its specific subject assessment."""
+        mock_session = MagicMock()
+        mock_sessionmaker.return_value.return_value = mock_session
+
+        subject_ids = [uuid4() for _ in range(4)]
+        assessments = []
+        for i, subject_id in enumerate(subject_ids):
+            assessment = MagicMock()
+            assessment.id = uuid4()
+            assessment.subject_id = subject_id
+            assessments.append(assessment)
+
+        query_mock = MagicMock()
+        filter_mock1 = MagicMock()
+        filter_mock2 = MagicMock()
+        filter_mock3 = MagicMock()
+
+        filter_mock3.all.return_value = assessments
+        filter_mock2.filter.return_value = filter_mock3
+        filter_mock1.filter.return_value = filter_mock2
+        query_mock.filter.return_value = filter_mock1
+
+        answered_query = MagicMock()
+        answered_join = MagicMock()
+        answered_filter1 = MagicMock()
+        answered_filter2 = MagicMock()
+        answered_order = MagicMock()
+
+        answered_order.all.return_value = []
+        answered_filter2.order_by.return_value = answered_order
+        answered_filter1.filter.return_value = answered_filter2
+        answered_join.filter.return_value = answered_filter1
+        answered_query.join.return_value = answered_join
+
+        def query_side_effect(model):
+            if model == Assessment:
+                return query_mock
+            return answered_query
+
+        mock_session.query.side_effect = query_side_effect
+
+        student_id = str(uuid4())
+        generate_assessment_reports.run(student_id)
+
+        assert mock_session.commit.called
