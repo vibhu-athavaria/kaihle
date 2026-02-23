@@ -28,11 +28,30 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = []
 
     # ======================
+    # Redis
+    # ======================
+    REDIS_URL: str = "redis://localhost:6379/0"
+    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+
+    # ======================
     # LLM
     # ======================
-    LLM_PROVIDER: str = "gemini"
+    LLM_PROVIDER: str = "runpod"
+    LLM_MODEL: str = "gpt-4o-mini"
+    LLM_MAX_TOKENS: int = 4000
+    LLM_TEMPERATURE: float = 0.3
+    LLM_TIMEOUT_SECONDS: int = 90
     OPENAI_API_KEY: str | None = None
     GEMINI_API_KEY: str | None = None
+    GOOGLE_API_KEY: str | None = None
+    GOOGLE_MODEL: str = "gemini-1.5-flash"
+    RUNPOD_API_BASE: str | None = None
+    RUNPOD_API_KEY: str | None = None
+    RUNPOD_MODEL: str | None = None
+    AUTOCONTENTAPI_BASE_URL: str | None = None
+    AUTOCONTENTAPI_KEY: str | None = None
+    AUTOCONTENTAPI_MODEL: str | None = None
     OLLAMA_URL: str | None = None
     MOONSHOT_API_KEY: str | None = None
     MOONSHOT_API_URL: str | None = None

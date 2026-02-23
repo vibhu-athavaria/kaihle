@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Dict, Optional
 from uuid import UUID
 
+from celery import chain as celery_chain
 from sqlalchemy.orm import Session
 
 from app.models.assessment import (
@@ -21,6 +22,8 @@ from app.models.assessment import (
 )
 from app.models.user import StudentProfile
 from app.services.diagnostic.session_manager import DiagnosticSessionManager
+from app.worker.tasks.report_generation import generate_assessment_reports
+from app.worker.tasks.study_plan import generate_study_plan
 
 logger = logging.getLogger(__name__)
 
@@ -350,15 +353,14 @@ class DiagnosticResponseHandler:
                 student_id
             )
 
-            # Dispatch Celery chain for report and study plan generation
-            # This will be implemented in Phase 5 & 6
-            # For now, we just set the flag
-            # from celery import chain as celery_chain
-            # from app.worker.tasks.report_generation import generate_assessment_reports
-            # from app.worker.tasks.study_plan import generate_study_plan
-            # celery_chain(
-            #     generate_assessment_reports.s(str(student_id)),
-            #     generate_study_plan.s()
-            # ).delay()
+            celery_chain(
+                generate_assessment_reports.s(str(student_id)),
+                generate_study_plan.s()
+            ).delay()
+
+            logger.info(
+                "Dispatched Celery chain for student %s: reports -> study_plan",
+                student_id
+            )
 
         return True
