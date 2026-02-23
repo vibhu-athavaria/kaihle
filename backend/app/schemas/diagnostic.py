@@ -131,7 +131,7 @@ class NextQuestionResponse(BaseModel):
     total_questions: int = 0
     current_subtopic_index: int = 0
     subtopics_count: int = 0
-    subtopics: List[SubtopicProgress] = []
+    subtopics: List[SubtopicProgress] = Field(default_factory=list)
 
 
 class AnswerSubmitRequest(BaseModel):
@@ -166,8 +166,8 @@ class SubtopicReportItem(BaseModel):
     mastery_label: str
     questions_attempted: int
     questions_correct: int
-    difficulty_path: List[int] = []
-    correct_path: List[bool] = []
+    difficulty_path: List[int] = Field(default_factory=list)
+    correct_path: List[bool] = Field(default_factory=list)
 
 
 class KnowledgeGapItem(BaseModel):
@@ -208,9 +208,9 @@ class SubjectReportItem(BaseModel):
     average_difficulty_reached: float
     strongest_subtopic: Optional[str] = None
     weakest_subtopic: Optional[str] = None
-    knowledge_gaps: List[KnowledgeGapItem] = []
-    strengths: List[StrengthItem] = []
-    subtopics: List[SubtopicReportItem] = []
+    knowledge_gaps: List[KnowledgeGapItem] = Field(default_factory=list)
+    strengths: List[StrengthItem] = Field(default_factory=list)
+    subtopics: List[SubtopicReportItem] = Field(default_factory=list)
 
 
 class DiagnosticReportResponse(BaseModel):
@@ -218,7 +218,7 @@ class DiagnosticReportResponse(BaseModel):
 
     student_id: UUID
     status: str
-    subjects: List[SubjectReportItem] = []
+    subjects: List[SubjectReportItem] = Field(default_factory=list)
     retry_after_seconds: Optional[int] = None
     generation_stage: Optional[str] = None
 
@@ -250,7 +250,7 @@ class StudyPlanResponse(BaseModel):
     total_weeks: Optional[int] = None
     status: str
     progress_percentage: int = 0
-    courses: List[StudyPlanCourseItem] = []
+    courses: List[StudyPlanCourseItem] = Field(default_factory=list)
     retry_after_seconds: Optional[int] = None
     generation_stage: Optional[str] = None
 

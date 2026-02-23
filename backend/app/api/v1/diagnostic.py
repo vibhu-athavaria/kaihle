@@ -19,7 +19,7 @@ from uuid import UUID
 
 import redis
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -116,6 +116,7 @@ def _get_generation_status(redis_client, student_id: UUID) -> Optional[str]:
 
 def _build_question_response(question, assessment_id: UUID, session_state: dict, subject_id: UUID) -> NextQuestionResponse:
     """Build the response for the next-question endpoint. Never includes correct_answer/explanation."""
+    subtopics = session_state.get("subtopics", [])
     if not question:
         return NextQuestionResponse(
             assessment_id=assessment_id,
@@ -124,6 +125,7 @@ def _build_question_response(question, assessment_id: UUID, session_state: dict,
             status=session_state.get("status", AssessmentStatus.COMPLETED.value),
             answered_count=session_state.get("answered_count", 0),
             total_questions=session_state.get("total_questions", 0),
+            subtopics_count=len(subtopics),
             subtopics=[
                 SubtopicProgress(
                     subtopic_id=st["subtopic_id"],
@@ -133,7 +135,7 @@ def _build_question_response(question, assessment_id: UUID, session_state: dict,
                     current_difficulty=st["current_difficulty"],
                     difficulty_label=get_difficulty_label(st["current_difficulty"]),
                 )
-                for st in session_state.get("subtopics", [])
+                for st in subtopics
             ],
             current_subtopic_index=session_state.get("current_subtopic_index", 0),
         )
@@ -169,6 +171,7 @@ def _build_question_response(question, assessment_id: UUID, session_state: dict,
         status=session_state.get("status", AssessmentStatus.IN_PROGRESS.value),
         answered_count=session_state.get("answered_count", 0),
         total_questions=session_state.get("total_questions", 0),
+        subtopics_count=len(subtopics),
         subtopics=[
             SubtopicProgress(
                 subtopic_id=st["subtopic_id"],
@@ -435,13 +438,23 @@ def submit_answer(
 
     redis_client = get_redis_client()
     manager = DiagnosticSessionManager(db, redis_client=redis_client)
-    session_state = manager.get_session_state(assessment_id)
+
+    try:
+        session_state = manager.get_session_state(assessment_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
     current_question_id = session_state.get("current_question_bank_id")
     if not current_question_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No current question available. Request a new question first."
+        )
+
+    if payload.question_bank_id != UUID(current_question_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Submitted answer does not match the current question"
         )
 
     handler = DiagnosticResponseHandler(db, redis_client=redis_client)
@@ -496,10 +509,13 @@ def get_diagnostic_report(
     generation_status = _get_generation_status(redis_client, student_id)
 
     if generation_status in ("reports", "study_plan"):
-        return GenerationStatusResponse(
-            status="generating",
-            stage=generation_status,
-            retry_after_seconds=15,
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content=GenerationStatusResponse(
+                status="generating",
+                stage=generation_status,
+                retry_after_seconds=15,
+            ).model_dump(),
         )
 
     if generation_status == "failed":
@@ -602,10 +618,13 @@ def get_study_plan(
     generation_status = _get_generation_status(redis_client, student_id)
 
     if generation_status in ("reports", "study_plan"):
-        return GenerationStatusResponse(
-            status="generating",
-            stage=generation_status,
-            retry_after_seconds=15,
+        return JSONResponse(
+            status_code=status.HTTP_202_ACCEPTED,
+            content=GenerationStatusResponse(
+                status="generating",
+                stage=generation_status,
+                retry_after_seconds=15,
+            ).model_dump(),
         )
 
     if generation_status == "failed":
