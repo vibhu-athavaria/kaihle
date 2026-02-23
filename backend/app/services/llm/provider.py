@@ -155,6 +155,7 @@ class RunPodProvider(BaseLLMProvider):
             ],
             max_tokens=self.max_tokens,
             timeout=self.timeout,
+            response_format={"type": "json_object"},
         )
 
         content = response.choices[0].message.content
@@ -278,6 +279,7 @@ class GoogleGeminiProvider(BaseLLMProvider):
             user_prompt,
             generation_config=genai.types.GenerationConfig(
                 max_output_tokens=self.max_tokens,
+                response_mime_type="application/json",
             ),
         )
 

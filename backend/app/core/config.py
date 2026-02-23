@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # ======================
     # LLM
     # ======================
-    LLM_PROVIDER: str = "openai"
+    LLM_PROVIDER: str = "runpod"
     LLM_MODEL: str = "gpt-4o-mini"
     LLM_MAX_TOKENS: int = 4000
     LLM_TEMPERATURE: float = 0.3
