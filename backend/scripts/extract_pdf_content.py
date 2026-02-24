@@ -28,12 +28,11 @@ Chunking strategy:
     1. Extract full text per page using PyMuPDF (fitz.open)
     2. Split text into paragraphs on double newline
     3. Group paragraphs into chunks targeting RAG_CHUNK_SIZE_TOKENS tokens
-       with RAG_CHUNK_OVERLAP_TOKENS overlap between adjacent chunks
+       with RAG_CHUNK_OVERLAP_TOKENS token-based overlap between adjacent chunks
     4. Skip chunks with fewer than 50 tokens (noise/headers)
     5. Attempt subtopic mapping: match chunk text against subtopic names
-       using fuzzy keyword match (no LLM call — purely string matching)
-    6. Insert CurriculumContent rows with subtopic_id only
-       (grade/subject/topic relationships derived via Subtopic → CurriculumTopic FK)
+       using Jaccard similarity on normalized keywords (no LLM call)
+    6. Insert CurriculumContent rows; unmapped chunks get subtopic_id=NULL
 
 Output per run:
     Processed: grade8_math_textbook.pdf
@@ -149,9 +148,15 @@ def chunk_text(
     overlap_tokens: int,
 ) -> list[tuple[str, int]]:
     """
-    Groups paragraphs into chunks.
+    Groups paragraphs into chunks with proper token-based overlap.
+
     Uses tiktoken cl100k_base encoder for token counting.
     Respects chunk_size_tokens target with overlap_tokens sliding window.
+
+    Args:
+        pages: List of page text strings
+        chunk_size_tokens: Target tokens per chunk
+        overlap_tokens: Number of tokens to overlap between adjacent chunks
 
     Returns list of (chunk_text, token_count) tuples.
     """
@@ -165,30 +170,38 @@ def chunk_text(
             if p:
                 all_paragraphs.append(p)
 
+    if not all_paragraphs:
+        return []
+
     chunks = []
     current_chunk = []
     current_tokens = 0
-    overlap_buffer = []
 
     for para in all_paragraphs:
         para_tokens = len(enc.encode(para))
 
         if current_tokens + para_tokens > chunk_size_tokens and current_chunk:
-            chunk_text = "\n\n".join(current_chunk)
-            chunks.append((chunk_text, current_tokens))
+            chunk_text_str = "\n\n".join(current_chunk)
+            chunks.append((chunk_text_str, current_tokens))
 
-            overlap_text = "\n\n".join(current_chunk[-2:]) if len(current_chunk) >= 2 else "\n\n".join(current_chunk)
-            overlap_tokens_count = len(enc.encode(overlap_text))
-            overlap_buffer = current_chunk[-2:] if len(current_chunk) >= 2 else current_chunk[:]
-            current_chunk = overlap_buffer[:]
-            current_tokens = overlap_tokens_count
+            overlap_paragraphs = []
+            overlap_count = 0
+            for p in reversed(current_chunk):
+                p_tokens = len(enc.encode(p))
+                if overlap_paragraphs and overlap_count + p_tokens > overlap_tokens:
+                    break
+                overlap_paragraphs.insert(0, p)
+                overlap_count += p_tokens
+
+            current_chunk = overlap_paragraphs
+            current_tokens = overlap_count
 
         current_chunk.append(para)
         current_tokens += para_tokens
 
     if current_chunk:
-        chunk_text = "\n\n".join(current_chunk)
-        chunks.append((chunk_text, current_tokens))
+        chunk_text_str = "\n\n".join(current_chunk)
+        chunks.append((chunk_text_str, current_tokens))
 
     return chunks
 
@@ -212,13 +225,11 @@ def normalize_text(text: str) -> set[str]:
 
 def map_subtopic(
     chunk_text: str,
-    grade_id: UUID,
-    subject_id: UUID,
     subtopics: list[Subtopic],
 ) -> UUID | None:
     """
     Attempts to match chunk to a subtopic by keyword overlap.
-    Returns subtopic_id or None if no confident match (confidence < 0.4).
+    Returns subtopic_id or None if no confident match (Jaccard similarity < 0.15).
     Does NOT call any LLM.
     """
     chunk_words = normalize_text(chunk_text)
@@ -372,7 +383,7 @@ def extract_and_ingest(
                 chunks_skipped += 1
                 continue
 
-            subtopic_id = map_subtopic(chunk_text, grade.id, subject.id, subtopics)
+            subtopic_id = map_subtopic(chunk_text, subtopics)
 
             if subtopic_id is None:
                 unmapped_chunks.append({

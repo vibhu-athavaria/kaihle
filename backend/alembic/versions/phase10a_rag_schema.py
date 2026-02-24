@@ -27,7 +27,7 @@ def upgrade() -> None:
         "curriculum_content",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("subtopic_id", UUID(as_uuid=True),
-                  sa.ForeignKey("subtopics.id", ondelete="CASCADE"), nullable=False),
+                  sa.ForeignKey("subtopics.id", ondelete="SET NULL"), nullable=True),
         sa.Column("chunk_index", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("content_source", sa.String(255), nullable=False),
         sa.Column("content_text", sa.Text(), nullable=False),

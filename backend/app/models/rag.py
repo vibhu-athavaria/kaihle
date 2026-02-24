@@ -18,15 +18,16 @@ class CurriculumContent(Base, SerializerMixin):
     One row per chunk. A single subtopic may have multiple chunks.
     Populated by Phase 10B extraction pipeline.
 
-    Design: subtopic_id is the only FK needed because:
-    - subtopic → curriculum_topic_id → CurriculumTopic
-    - CurriculumTopic already has grade_id, subject_id, topic_id, curriculum_id
+    Design: subtopic_id is nullable to allow unmapped chunks during ingestion.
+    Chunks with subtopic_id=NULL are excluded from embedding ingestion and RAG
+    queries until manually mapped. Grade/subject/topic relationships are derived
+    via Subtopic → CurriculumTopic FK chain when subtopic_id is set.
     """
     __tablename__ = "curriculum_content"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    subtopic_id = Column(UUID(as_uuid=True), ForeignKey("subtopics.id", ondelete="CASCADE"),
-                         nullable=False)
+    subtopic_id = Column(UUID(as_uuid=True), ForeignKey("subtopics.id", ondelete="SET NULL"),
+                         nullable=True)
     chunk_index = Column(Integer, nullable=False, default=0)
     content_source = Column(String(255), nullable=False)
     content_text = Column(Text, nullable=False)
