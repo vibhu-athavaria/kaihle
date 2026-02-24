@@ -6,6 +6,7 @@ Tests:
 - CurriculumEmbedding model creation and constraints
 - pgvector extension availability
 - IVFFlat index creation
+- EMBEDDING_DIMENSION consistency between config and schema
 """
 import pytest
 from uuid import uuid4
@@ -13,8 +14,19 @@ from datetime import datetime, timezone
 from sqlalchemy import text, create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models.rag import CurriculumContent, CurriculumEmbedding
+from app.models.rag import CurriculumContent, CurriculumEmbedding, EMBEDDING_DIMENSION
 from app.core.config import settings
+
+
+class TestEmbeddingDimensionConsistency:
+    """Tests to ensure embedding dimension is consistent across config and schema."""
+
+    def test_embedding_dimension_matches_config(self):
+        """Test that model EMBEDDING_DIMENSION matches settings.EMBEDDING_DIMENSIONS."""
+        assert EMBEDDING_DIMENSION == settings.EMBEDDING_DIMENSIONS, (
+            f"Model EMBEDDING_DIMENSION ({EMBEDDING_DIMENSION}) must match "
+            f"settings.EMBEDDING_DIMENSIONS ({settings.EMBEDDING_DIMENSIONS})"
+        )
 
 
 class TestCurriculumContentModel:
@@ -38,7 +50,7 @@ class TestCurriculumContentModel:
         assert content.token_count == 100
 
     def test_curriculum_content_default_chunk_index(self):
-        """Test chunk_index has server default of 0 in DB schema."""
+        """Test chunk_index has default of 0 in model."""
         content = CurriculumContent(
             id=uuid4(),
             subtopic_id=uuid4(),
@@ -60,14 +72,14 @@ class TestCurriculumEmbeddingModel:
             id=uuid4(),
             content_id=content_id,
             subtopic_id=uuid4(),
-            embedding=[0.1] * 768,
+            embedding=[0.1] * EMBEDDING_DIMENSION,
             model_name="text-embedding-004",
             created_at=datetime.now(timezone.utc),
         )
 
         assert embedding.content_id == content_id
         assert embedding.model_name == "text-embedding-004"
-        assert len(embedding.embedding) == 768
+        assert len(embedding.embedding) == EMBEDDING_DIMENSION
 
 
 class TestRAGSchemaIntegration:
@@ -130,6 +142,39 @@ class TestRAGSchemaIntegration:
         assert "subject_id" not in column_names
         assert "grade_id" not in column_names
 
+    def test_curriculum_content_chunk_index_server_default(self, db_session):
+        """Test chunk_index has server_default of 0 at DB level."""
+        row_id = uuid4()
+        subtopic_id = uuid4()
+
+        db_session.execute(
+            text("""
+                INSERT INTO curriculum_content (
+                    id, subtopic_id, content_source, content_text, created_at
+                ) VALUES (:id, :subtopic_id, :content_source, :content_text, :created_at)
+            """),
+            {
+                "id": row_id,
+                "subtopic_id": subtopic_id,
+                "content_source": "test_server_default",
+                "content_text": "test content",
+                "created_at": datetime.now(timezone.utc),
+            },
+        )
+
+        result = db_session.execute(
+            text("SELECT chunk_index FROM curriculum_content WHERE id = :id"),
+            {"id": row_id},
+        ).scalar_one()
+
+        db_session.execute(
+            text("DELETE FROM curriculum_content WHERE id = :id"),
+            {"id": row_id},
+        )
+        db_session.commit()
+
+        assert result == 0, "chunk_index server_default should be 0"
+
     def test_curriculum_embeddings_table_exists(self, db_session):
         """Test that curriculum_embeddings table exists with correct columns."""
         result = db_session.execute(
@@ -151,21 +196,58 @@ class TestRAGSchemaIntegration:
         assert "created_at" in column_names
 
     def test_embedding_column_is_vector_type(self, db_session):
-        """Test that embedding column is vector(768) type."""
+        """Test that embedding column is vector(EMBEDDING_DIMENSION) type."""
         result = db_session.execute(
             text("""
                 SELECT data_type, udt_name
                 FROM information_schema.columns
                 WHERE table_name = 'curriculum_embeddings'
-                AND column_name = 'embedding'
+                  AND column_name = 'embedding'
             """)
         ).fetchone()
 
         assert result is not None
-        assert result[0] == "USER-DEFINED" or result[1] == "vector"
+        data_type, udt_name = result
+        assert data_type == "USER-DEFINED"
+        assert udt_name == "vector"
+
+        type_result = db_session.execute(
+            text("""
+                SELECT format_type(a.atttypid, a.atttypmod) AS formatted_type
+                FROM pg_attribute a
+                JOIN pg_class c ON a.attrelid = c.oid
+                WHERE c.relname = 'curriculum_embeddings'
+                  AND a.attname = 'embedding'
+            """)
+        ).fetchone()
+
+        assert type_result is not None
+        expected_type = f"vector({EMBEDDING_DIMENSION})"
+        assert type_result[0] == expected_type, (
+            f"Embedding column should be {expected_type}, got {type_result[0]}"
+        )
+
+    def test_db_embedding_dimension_matches_config(self, db_session):
+        """Test that the actual DB vector dimension matches settings.EMBEDDING_DIMENSIONS."""
+        type_result = db_session.execute(
+            text("""
+                SELECT format_type(a.atttypid, a.atttypmod) AS formatted_type
+                FROM pg_attribute a
+                JOIN pg_class c ON a.attrelid = c.oid
+                WHERE c.relname = 'curriculum_embeddings'
+                  AND a.attname = 'embedding'
+            """)
+        ).fetchone()
+
+        assert type_result is not None
+        db_dimension = int(type_result[0].split("(")[1].rstrip(")"))
+        assert db_dimension == settings.EMBEDDING_DIMENSIONS, (
+            f"DB embedding dimension ({db_dimension}) must match "
+            f"settings.EMBEDDING_DIMENSIONS ({settings.EMBEDDING_DIMENSIONS})"
+        )
 
     def test_ivfflat_index_exists(self, db_session):
-        """Test that IVFFlat index exists on curriculum_embeddings."""
+        """Test that IVFFlat index exists with expected configuration."""
         result = db_session.execute(
             text("""
                 SELECT indexname, indexdef
@@ -176,7 +258,16 @@ class TestRAGSchemaIntegration:
         ).fetchone()
 
         assert result is not None, "IVFFlat index should exist"
-        assert "ivfflat" in result[1].lower()
+
+        index_def_lower = result[1].lower()
+
+        assert "ivfflat" in index_def_lower, "IVFFlat index method should be used"
+        assert "vector_cosine_ops" in index_def_lower, (
+            "IVFFlat index should be configured with vector_cosine_ops"
+        )
+        assert "lists = 100" in index_def_lower, (
+            "IVFFlat index should be configured with lists = 100"
+        )
 
     def test_curriculum_content_indexes_exist(self, db_session):
         """Test that required indexes exist on curriculum_content."""
