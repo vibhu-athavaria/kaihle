@@ -12,4 +12,4 @@ from .curriculum import Curriculum, Topic, Subtopic, CurriculumTopic, TopicPrere
 from .school import School
 from .role import Role
 from .teacher import Teacher
-# Add other model imports as needed
+from .rag import CurriculumContent, CurriculumEmbedding

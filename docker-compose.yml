@@ -2,9 +2,9 @@
 # Docker Compose configuration for local development
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database with pgvector extension
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: kaihle-db
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-kaihle_db}
@@ -68,8 +68,16 @@ services:
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
       DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC: ${DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC:-5}
       DIAGNOSTIC_STARTING_DIFFICULTY: ${DIAGNOSTIC_STARTING_DIFFICULTY:-3}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-gemini}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-text-embedding-004}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
+      RAG_TOP_K: ${RAG_TOP_K:-5}
+      RAG_MIN_SIMILARITY: ${RAG_MIN_SIMILARITY:-0.72}
+      RAG_CHUNK_SIZE_TOKENS: ${RAG_CHUNK_SIZE_TOKENS:-400}
+      RAG_CHUNK_OVERLAP_TOKENS: ${RAG_CHUNK_OVERLAP_TOKENS:-50}
     volumes:
       - ./backend:/app
+      - ./backend/data/textbooks:/app/data/textbooks
     ports:
       - "8000:8000"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -107,8 +115,16 @@ services:
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
       DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC: ${DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC:-5}
       DIAGNOSTIC_STARTING_DIFFICULTY: ${DIAGNOSTIC_STARTING_DIFFICULTY:-3}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-gemini}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-text-embedding-004}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
+      RAG_TOP_K: ${RAG_TOP_K:-5}
+      RAG_MIN_SIMILARITY: ${RAG_MIN_SIMILARITY:-0.72}
+      RAG_CHUNK_SIZE_TOKENS: ${RAG_CHUNK_SIZE_TOKENS:-400}
+      RAG_CHUNK_OVERLAP_TOKENS: ${RAG_CHUNK_OVERLAP_TOKENS:-50}
     volumes:
       - ./backend:/app
+      - ./backend/data/textbooks:/app/data/textbooks
     command: celery -A app.celery_app worker --loglevel=info --concurrency=4
     networks:
       - kaihle-network
@@ -143,6 +159,13 @@ services:
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
       DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC: ${DIAGNOSTIC_QUESTIONS_PER_SUBTOPIC:-5}
       DIAGNOSTIC_STARTING_DIFFICULTY: ${DIAGNOSTIC_STARTING_DIFFICULTY:-3}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-gemini}
+      GEMINI_EMBEDDING_MODEL: ${GEMINI_EMBEDDING_MODEL:-text-embedding-004}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
+      RAG_TOP_K: ${RAG_TOP_K:-5}
+      RAG_MIN_SIMILARITY: ${RAG_MIN_SIMILARITY:-0.72}
+      RAG_CHUNK_SIZE_TOKENS: ${RAG_CHUNK_SIZE_TOKENS:-400}
+      RAG_CHUNK_OVERLAP_TOKENS: ${RAG_CHUNK_OVERLAP_TOKENS:-50}
     volumes:
       - ./backend:/app
     command: celery -A app.celery_app beat --loglevel=info
