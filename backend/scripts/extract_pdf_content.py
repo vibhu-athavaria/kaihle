@@ -32,7 +32,8 @@ Chunking strategy:
     4. Skip chunks with fewer than 50 tokens (noise/headers)
     5. Attempt subtopic mapping: match chunk text against subtopic names
        using fuzzy keyword match (no LLM call — purely string matching)
-    6. Insert CurriculumContent rows; print summary
+    6. Insert CurriculumContent rows with subtopic_id only
+       (grade/subject/topic relationships derived via Subtopic → CurriculumTopic FK)
 
 Output per run:
     Processed: grade8_math_textbook.pdf
@@ -387,9 +388,6 @@ def extract_and_ingest(
             else:
                 content = CurriculumContent(
                     subtopic_id=subtopic_id,
-                    topic_id=None,
-                    subject_id=subject.id,
-                    grade_id=grade.id,
                     chunk_index=chunk_index,
                     content_source=content_source,
                     content_text=chunk_text,
