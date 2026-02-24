@@ -15,6 +15,9 @@ branch_labels = None
 depends_on = None
 
 EMBEDDING_DIMENSION = 768
+assert isinstance(EMBEDDING_DIMENSION, int) and EMBEDDING_DIMENSION > 0, (
+    "EMBEDDING_DIMENSION must be a positive integer"
+)
 
 
 def upgrade() -> None:
@@ -44,7 +47,11 @@ def upgrade() -> None:
         sa.Column("model_name", sa.String(100), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
     )
-    op.execute(f"ALTER TABLE curriculum_embeddings ADD COLUMN embedding vector({EMBEDDING_DIMENSION}) NOT NULL")
+    op.execute(
+        sa.text(
+            "ALTER TABLE curriculum_embeddings ADD COLUMN embedding vector(:dim) NOT NULL"
+        ).bindparams(dim=EMBEDDING_DIMENSION)
+    )
     op.create_index("idx_ce_subtopic_id", "curriculum_embeddings", ["subtopic_id"])
 
     op.execute("""
