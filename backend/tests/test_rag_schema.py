@@ -25,9 +25,6 @@ class TestCurriculumContentModel:
         content = CurriculumContent(
             id=uuid4(),
             subtopic_id=uuid4(),
-            topic_id=uuid4(),
-            subject_id=uuid4(),
-            grade_id=uuid4(),
             chunk_index=0,
             content_source="test_textbook",
             content_text="Sample content text",
@@ -45,9 +42,6 @@ class TestCurriculumContentModel:
         content = CurriculumContent(
             id=uuid4(),
             subtopic_id=uuid4(),
-            topic_id=uuid4(),
-            subject_id=uuid4(),
-            grade_id=uuid4(),
             content_source="test",
             content_text="text",
             created_at=datetime.now(timezone.utc),
@@ -114,14 +108,27 @@ class TestRAGSchemaIntegration:
 
         assert "id" in column_names
         assert "subtopic_id" in column_names
-        assert "topic_id" in column_names
-        assert "subject_id" in column_names
-        assert "grade_id" in column_names
         assert "chunk_index" in column_names
         assert "content_source" in column_names
         assert "content_text" in column_names
         assert "token_count" in column_names
         assert "created_at" in column_names
+
+    def test_curriculum_content_no_redundant_columns(self, db_session):
+        """Test that curriculum_content does NOT have redundant FK columns."""
+        result = db_session.execute(
+            text("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'curriculum_content'
+            """)
+        ).fetchall()
+
+        column_names = [row[0] for row in result]
+
+        assert "topic_id" not in column_names, "topic_id is redundant - derive from subtopic"
+        assert "subject_id" not in column_names, "subject_id is redundant - derive from subtopic"
+        assert "grade_id" not in column_names, "grade_id is redundant - derive from subtopic"
 
     def test_curriculum_embeddings_table_exists(self, db_session):
         """Test that curriculum_embeddings table exists with correct columns."""
@@ -184,7 +191,6 @@ class TestRAGSchemaIntegration:
         index_names = [row[0] for row in result]
 
         assert "idx_cc_subtopic_id" in index_names
-        assert "idx_cc_subject_grade" in index_names
 
     def test_curriculum_embeddings_subtopic_index_exists(self, db_session):
         """Test that subtopic index exists on curriculum_embeddings."""

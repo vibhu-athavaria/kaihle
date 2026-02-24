@@ -23,12 +23,6 @@ def upgrade() -> None:
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("subtopic_id", UUID(as_uuid=True),
                   sa.ForeignKey("subtopics.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("topic_id", UUID(as_uuid=True),
-                  sa.ForeignKey("topics.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("subject_id", UUID(as_uuid=True),
-                  sa.ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("grade_id", UUID(as_uuid=True),
-                  sa.ForeignKey("grades.id", ondelete="CASCADE"), nullable=False),
         sa.Column("chunk_index", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("content_source", sa.String(255), nullable=False),
         sa.Column("content_text", sa.Text(), nullable=False),
@@ -36,7 +30,6 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False),
     )
     op.create_index("idx_cc_subtopic_id", "curriculum_content", ["subtopic_id"])
-    op.create_index("idx_cc_subject_grade", "curriculum_content", ["subject_id", "grade_id"])
 
     op.create_table(
         "curriculum_embeddings",
