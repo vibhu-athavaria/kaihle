@@ -68,6 +68,18 @@ class Settings(BaseSettings):
     DIAGNOSTIC_STARTING_DIFFICULTY: int = 3
 
     # ======================
+    # RAG Settings (Phase 10A+)
+    # ======================
+    EMBEDDING_PROVIDER: str = "gemini"
+    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
+    EMBEDDING_DIMENSIONS: int = 768
+    RAG_TOP_K: int = 5
+    RAG_MIN_SIMILARITY: float = 0.72
+    RAG_CHUNK_SIZE_TOKENS: int = 400
+    RAG_CHUNK_OVERLAP_TOKENS: int = 50
+    PDF_STORAGE_PATH: str = "/app/data/textbooks"
+
+    # ======================
     # Stripe
     # ======================
     STRIPE_SECRET_KEY: str | None = None
