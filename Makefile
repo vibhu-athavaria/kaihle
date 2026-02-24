@@ -62,3 +62,28 @@ restart-worker:
 # Show status of all containers
 ps:
 	docker compose ps
+
+# ── Phase 10B: PDF Extraction ─────────────────────────────────────────────
+
+extract-pdf:
+	docker compose exec api python scripts/extract_pdf_content.py --file $(file)
+
+extract-pdf-all:
+	docker compose exec api python scripts/extract_pdf_content.py --all
+
+extract-pdf-dry:
+	docker compose exec api python scripts/extract_pdf_content.py --file $(file) --dry-run
+
+# ── Phase 10C: Embedding Ingestion ─────────────────────────────────────────
+
+ingest-embeddings:
+	docker compose exec celery_worker celery -A app.celery_app call tasks.ingest_curriculum_embeddings
+
+ingest-embeddings-check:
+	docker compose exec api python -c \
+		"from app.core.database import SessionLocal; \
+		 from app.models.rag import CurriculumContent, CurriculumEmbedding; \
+		 db = SessionLocal(); \
+		 total = db.query(CurriculumContent).count(); \
+		 embedded = db.query(CurriculumEmbedding).count(); \
+		 print(f'Content rows: {total}, Embedded: {embedded}, Pending: {total-embedded}')"

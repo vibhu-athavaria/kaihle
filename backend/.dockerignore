@@ -50,3 +50,6 @@ Thumbs.db
 Dockerfile
 docker-compose*.yml
 .dockerignore
+
+# Textbook PDFs (large files - mounted as volume instead)
+data/textbooks/*.pdf
