@@ -4,8 +4,12 @@ from datetime import datetime
 from sqlalchemy import Column, String, Integer, Text, ForeignKey, DateTime, Index
 from sqlalchemy.dialects.postgresql import UUID
 from pgvector.sqlalchemy import Vector
+from app.core.config import settings
 from app.core.database import Base
 from app.crud.mixin import SerializerMixin
+
+
+EMBEDDING_DIMENSION = settings.EMBEDDING_DIMENSIONS
 
 
 class CurriculumContent(Base, SerializerMixin):
@@ -39,6 +43,9 @@ class CurriculumEmbedding(Base, SerializerMixin):
     pgvector embeddings for each CurriculumContent chunk.
     One row per CurriculumContent row — linked by content_id.
     Populated by Phase 10C ingestion task.
+    
+    Note: Embedding dimension is sourced from settings.EMBEDDING_DIMENSIONS.
+    Changing dimension requires a full DB migration and re-ingestion.
     """
     __tablename__ = "curriculum_embeddings"
 
@@ -47,7 +54,7 @@ class CurriculumEmbedding(Base, SerializerMixin):
                         ForeignKey("curriculum_content.id", ondelete="CASCADE"),
                         nullable=False, unique=True)
     subtopic_id = Column(UUID(as_uuid=True), ForeignKey("subtopics.id"), nullable=False)
-    embedding = Column(Vector(768), nullable=False)
+    embedding = Column(Vector(EMBEDDING_DIMENSION), nullable=False)
     model_name = Column(String(100), nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 

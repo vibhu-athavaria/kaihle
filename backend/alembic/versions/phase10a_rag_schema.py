@@ -14,6 +14,8 @@ down_revision = 'phase2_difficulty'
 branch_labels = None
 depends_on = None
 
+EMBEDDING_DIMENSION = 768
+
 
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
@@ -42,7 +44,7 @@ def upgrade() -> None:
         sa.Column("model_name", sa.String(100), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
     )
-    op.execute("ALTER TABLE curriculum_embeddings ADD COLUMN embedding vector(768) NOT NULL")
+    op.execute(f"ALTER TABLE curriculum_embeddings ADD COLUMN embedding vector({EMBEDDING_DIMENSION}) NOT NULL")
     op.create_index("idx_ce_subtopic_id", "curriculum_embeddings", ["subtopic_id"])
 
     op.execute("""
@@ -57,4 +59,12 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS idx_ce_embedding_ivfflat")
     op.drop_table("curriculum_embeddings")
     op.drop_table("curriculum_content")
-    op.execute("DROP EXTENSION IF EXISTS vector")
+    result = op.get_bind().execute(
+        sa.text("""
+            SELECT COUNT(*) FROM pg_depend
+            WHERE objid = (SELECT oid FROM pg_extension WHERE extname = 'vector')
+            AND deptype = 'e'
+        """)
+    ).scalar()
+    if result == 1:
+        op.execute("DROP EXTENSION IF EXISTS vector")
