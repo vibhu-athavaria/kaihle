@@ -49,6 +49,20 @@ class TestCurriculumContentModel:
         assert content.content_text == "Sample content text"
         assert content.token_count == 100
 
+    def test_curriculum_content_nullable_subtopic_id(self):
+        """Test CurriculumContent can be created with subtopic_id=None for unmapped chunks."""
+        content = CurriculumContent(
+            id=uuid4(),
+            subtopic_id=None,
+            chunk_index=0,
+            content_source="test_unmapped",
+            content_text="Unmapped content",
+            token_count=50,
+            created_at=datetime.now(timezone.utc),
+        )
+
+        assert content.subtopic_id is None
+
     def test_curriculum_content_default_chunk_index(self):
         """Test chunk_index has default of 0 in model."""
         content = CurriculumContent(
