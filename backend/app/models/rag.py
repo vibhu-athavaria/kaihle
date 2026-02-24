@@ -18,8 +18,9 @@ class CurriculumContent(Base, SerializerMixin):
     One row per chunk. A single subtopic may have multiple chunks.
     Populated by Phase 10B extraction pipeline.
 
-    Note: Only subtopic_id FK is stored. Grade/subject/topic relationships
-    are derived via Subtopic → CurriculumTopic FK chain.
+    Design: subtopic_id is the only FK needed because:
+    - subtopic → curriculum_topic_id → CurriculumTopic
+    - CurriculumTopic already has grade_id, subject_id, topic_id, curriculum_id
     """
     __tablename__ = "curriculum_content"
 
@@ -42,7 +43,7 @@ class CurriculumEmbedding(Base, SerializerMixin):
     pgvector embeddings for each CurriculumContent chunk.
     One row per CurriculumContent row — linked by content_id.
     Populated by Phase 10C ingestion task.
-    
+
     Note: Embedding dimension is sourced from settings.EMBEDDING_DIMENSIONS.
     Changing dimension requires a full DB migration and re-ingestion.
     """

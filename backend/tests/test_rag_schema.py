@@ -126,7 +126,7 @@ class TestRAGSchemaIntegration:
         assert "token_count" in column_names
         assert "created_at" in column_names
 
-    def test_curriculum_content_no_redundant_fk_columns(self, db_session):
+    def test_curriculum_content_no_redundant_columns(self, db_session):
         """Test that curriculum_content does NOT have redundant FK columns."""
         result = db_session.execute(
             text("""
@@ -138,9 +138,9 @@ class TestRAGSchemaIntegration:
 
         column_names = [row[0] for row in result]
 
-        assert "topic_id" not in column_names
-        assert "subject_id" not in column_names
-        assert "grade_id" not in column_names
+        assert "topic_id" not in column_names, "topic_id is redundant - derive from subtopic"
+        assert "subject_id" not in column_names, "subject_id is redundant - derive from subtopic"
+        assert "grade_id" not in column_names, "grade_id is redundant - derive from subtopic"
 
     def test_curriculum_content_chunk_index_server_default(self, db_session):
         """Test chunk_index has server_default of 0 at DB level."""
