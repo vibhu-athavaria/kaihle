@@ -6,6 +6,7 @@ from uuid import UUID
 from typing import Optional
 
 from app.core.database import get_db
+from app.core.security import get_password_hash
 from app.schemas.school_admin import (
     SchoolAdminRequest,
     SchoolAdminResponse,
@@ -22,7 +23,7 @@ from app.crud.student import get_student
 from app.crud.grade import get_grades
 from app.models.user import StudentProfile, User
 from app.models.teacher import Teacher
-from app.models.school_registration import StudentSchoolRegistration
+from app.models.school_registration import StudentSchoolRegistration, RegistrationStatus
 from app.models.assessment import Assessment, AssessmentStatus, AssessmentType
 from app.models.study_plan import StudyPlan
 from app.schemas.teacher import TeacherCreate
@@ -46,7 +47,7 @@ def dashboard(
     # Get pending registrations (not approved)
     pending_registrations = db.query(StudentSchoolRegistration).filter(
         StudentSchoolRegistration.school_id == UUID(school_id),
-        StudentSchoolRegistration.status == "pending"
+        StudentSchoolRegistration.status == RegistrationStatus.PENDING
     ).count()
 
     # Get teacher count for this school
@@ -103,7 +104,7 @@ def create_teacher(
     user_data = {
         "email": teacher.email,
         "username": teacher.email.split("@")[0],
-        "hashed_password": "temporary_hash",  # Would be set via invite flow
+        "hashed_password": get_password_hash("temporary_password"),  # Would be set via invite flow
         "role": UserRole.TEACHER
     }
 

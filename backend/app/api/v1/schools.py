@@ -4,6 +4,7 @@ from typing import List
 from uuid import UUID
 
 from app.core.database import get_db
+from app.core.deps import get_current_user
 from app.core.security import create_access_token
 from app.models.user import User, UserRole
 from app.models.school import School, SchoolStatus
@@ -24,36 +25,10 @@ from app.crud.school import get_school_by_id
 router = APIRouter()
 
 
-def generate_school_code(db: Session) -> str:
-    """
-    Generate a unique 8-character school code.
-    Format: 8 chars, uppercase alphanumeric. Exclude ambiguous chars: 0, O, 1, I, L.
-    Algorithm: uuid4() → base36 encode → first 8 chars → uniqueness check against DB → retry on collision (max 10 attempts)
-    """
-    import random
-    import string
-
-    # Characters to exclude: 0, O, 1, I, L
-    valid_chars = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
-
-    for _ in range(10):  # Max 10 attempts
-        # Generate a random string of 8 characters
-        school_code = ''.join(random.choices(valid_chars, k=8))
-
-        # Check if this code already exists
-        existing_school = db.query(School).filter(School.school_code == school_code).first()
-        if not existing_school:
-            return school_code
-
-    # If we couldn't generate a unique code after 10 attempts, raise an error
-    raise RuntimeError("Could not generate unique school code after 10 attempts")
+from app.api.v1.auth import generate_school_code
 
 
-# Dependency to get current user
-def get_current_user():
-    # This is a placeholder - in a real implementation, you would extract the user from the JWT token
-    # For now, we'll just return a mock user
-    return User(id=UUID('12345678-1234-5678-1234-567812345678'), role=UserRole.SCHOOL_ADMIN)
+# Use get_current_user from deps - JWT authentication
 
 
 # School Grade Endpoints
