@@ -89,7 +89,7 @@ const ManageGrades = () => {
               onClick={() => navigate('/admin/dashboard')}
               className="text-blue-600 hover:text-blue-800 mb-2"
             >
-              <- Back to Dashboard
+              ← Back to Dashboard
             </button>
             <h1 className="text-3xl font-bold text-gray-900">Manage Grades</h1>
           </div>
