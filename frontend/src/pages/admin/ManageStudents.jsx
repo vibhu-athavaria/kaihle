@@ -19,7 +19,7 @@ const ManageStudents = () => {
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesGrade = !filterGrade || student.grade_id === filterGrade;
+    const matchesGrade = !filterGrade || student.grade === filterGrade;
     return matchesSearch && matchesGrade;
   });
 

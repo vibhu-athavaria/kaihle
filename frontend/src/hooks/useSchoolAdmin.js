@@ -7,6 +7,7 @@ export const useSchoolAdmin = (schoolId) => {
   const [stats, setStats] = useState(null);
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
+  const [grades, setGrades] = useState([]);
   const [registrations, setRegistrations] = useState([]);
 
   const fetchDashboard = async () => {
@@ -70,6 +71,19 @@ export const useSchoolAdmin = (schoolId) => {
     try {
       const response = await http.get(`/api/v1/schools/${schoolId}/students`);
       setStudents(response.data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchGrades = async () => {
+    if (!schoolId) return;
+    setLoading(true);
+    try {
+      const response = await http.get(`/api/v1/schools/${schoolId}/grades`);
+      setGrades(response.data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -141,12 +155,14 @@ export const useSchoolAdmin = (schoolId) => {
     stats,
     teachers,
     students,
+    grades,
     registrations,
     fetchDashboard,
     fetchTeachers,
     inviteTeacher,
     deleteTeacher,
     fetchStudents,
+    fetchGrades,
     updateStudentGrade,
     fetchRegistrations,
     approveRegistration,
