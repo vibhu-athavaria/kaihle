@@ -9,13 +9,13 @@ import enum
 from app.crud.mixin import SerializerMixin
 
 
+
 class UserRole(str, enum.Enum):
     PARENT = "parent"
     STUDENT = "student"
     TEACHER = "teacher"
     SCHOOL_ADMIN = "school_admin"
-    ADMIN = "admin"
-
+    SUPER_ADMIN = "super_admin"
 
 class User(Base, SerializerMixin):
     __tablename__ = "users"
@@ -24,7 +24,7 @@ class User(Base, SerializerMixin):
     email = Column(String(255), unique=True, index=True, nullable=True)
     username = Column(String(100), unique=True, index=True, nullable=True)
     hashed_password = Column(String(255), nullable=False)
-    full_name = Column(String(200), nullable=False)
+    full_name = Column(String(200), nullable=True)
     role = Column(Enum(UserRole), nullable=False, index=True)
 
     # Store AI-detected personality traits
@@ -117,3 +117,4 @@ class StudentProfile(Base, SerializerMixin):
     student_badges = relationship("StudentBadge", back_populates="student", cascade="all, delete-orphan")
     course_progress = relationship("StudentCourseProgress", back_populates="student", cascade="all, delete-orphan")
     student_subscriptions = relationship("Subscription", back_populates="student", foreign_keys="Subscription.student_profile_id", cascade="all, delete-orphan")
+    school_registrations = relationship("StudentSchoolRegistration", back_populates="student")

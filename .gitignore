@@ -33,7 +33,7 @@ venv
 .bolt
 .kilocode
 .env.local
-plans
+
 
 
 # Celery Beat schedule database

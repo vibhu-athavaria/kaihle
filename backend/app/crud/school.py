@@ -20,6 +20,11 @@ def get_school_by_admin(db: Session, admin_id: UUID) -> Optional[School]:
     return db.query(School).filter(School.admin_id == admin_id).first()
 
 
+def get_school_by_code(db: Session, school_code: str) -> Optional[School]:
+    """Get school by school code"""
+    return db.query(School).filter(School.school_code == school_code).first()
+
+
 def create_school(db: Session, school: SchoolCreate) -> School:
     """Create a new school"""
     db_school = School(**school.dict())

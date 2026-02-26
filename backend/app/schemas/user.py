@@ -14,7 +14,7 @@ AnswerValue = Union[str, int, List[str]]
 class UserBase(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = None
-    full_name: str
+    full_name: Optional[str] = None
     role: str
 
 
@@ -27,7 +27,7 @@ class UserCreate(UserBase):
     @validator("email", always=True)
     def validate_email(cls, v, values):
         role = values.get("role")
-        if role in [UserRole.ADMIN.value, UserRole.PARENT.value] and not v:
+        if role in [UserRole.SUPER_ADMIN.value, UserRole.PARENT.value] and not v:
             raise ValueError("Email is required for parents and admins")
         return v
 

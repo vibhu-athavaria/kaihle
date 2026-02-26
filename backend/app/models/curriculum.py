@@ -27,6 +27,7 @@ class Grade(Base, SerializerMixin):
     curriculum_topics = relationship("CurriculumTopic", back_populates="grade")
     student_profiles = relationship("StudentProfile", back_populates="grade")
     courses = relationship("Course", back_populates="grade")
+    school_grades = relationship("SchoolGrade", back_populates="grade")
 
 
 class Curriculum(Base, SerializerMixin):
