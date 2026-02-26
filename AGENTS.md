@@ -1,852 +1,382 @@
 # AGENTS.md
-# Kaihle Platform — Engineering & Review Contract
+# Kaihle Engineering Governance Constitution (v2)
 
-This document defines:
+This document defines the **non-negotiable engineering governance** for the Kaihle codebase.
 
-1. System engineering constraints (ALWAYS ACTIVE)
-2. AI review contract behaviour (ONLY when explicitly invoked)
+- It applies to **all contributors** (humans and automated agents).
+- It governs **how** software is designed, implemented, migrated, tested, and operated.
+- It is **architecture-neutral** and **product-neutral**: domain models, endpoints, phases, and data shapes are defined in the **Product Plan** (e.g. `mvp_product_plan.md`), not here.
+- It is a **living governance file**. Section 13 defines how it may evolve.
 
-These rules are mandatory for ALL development on the Kaihle platform.
-KiloCode must read this file in full before writing any code.
-Feature-specific details, phase sequences, and schema definitions live in `project-plan.md`.
-
----
-
-# PART 1 — SYSTEM ENGINEERING CONSTRAINTS (Always Active)
-
-These rules apply to ALL development work at all times,
-regardless of which feature or module is being built.
+If this document and any other document conflict on engineering rules, **this document wins**.
+If this document and the codebase conflict on domain details, the **Product Plan and codebase** win; this file MUST then be updated.
 
 ---
 
-## 1. System Architecture (Non-Negotiable)
+## 1. Scope and Relationship to Other Documents
 
-The Kaihle platform consists of:
+1.1 **Scope**
 
-- **FastAPI Backend** — API layer only. Auth, validation, routing, task enqueueing.
-- **Celery Worker Service** (`celery_worker`) — All async, long-running, and LLM tasks. Consumes queues: `default`, `reports`, `study_plans`.
-- **Manim Worker Service** (`manim_worker`) — Animation rendering only. Consumes ONLY `manim_queue`. Has Manim + LaTeX + FFmpeg installed. `celery_worker` does NOT have Manim installed. These containers are never interchangeable.
-- **PostgreSQL** — Primary persistent storage. All relational data lives here. Uses `pgvector/pgvector:pg16` image (pgvector extension required).
-- **Redis** — Session cache, Celery broker, rate limiting, deduplication, status flags.
-- **AWS S3 / MinIO** — Permanent object storage for all generated media assets (MP4, PNG, JSON). MinIO used in development (`USE_MINIO=true`); AWS S3 used in production (`USE_MINIO=false`). S3 uploads are worker-only. Presigned URL generation is the only S3 operation permitted in the API layer.
-- **React + Vite Frontend** — Client-side only. Communicates with FastAPI exclusively.
-- **LLM Provider** — Google Gemini (primary for enriched content) or configured alternative (see Section 3). Called ONLY from Celery worker tasks. Never from the API layer.
+- This constitution applies to:
+  - All backend services.
+  - All frontend applications.
+  - All background/worker processes.
+  - All data stores, queues, and external service integrations.
+  - All CI/CD pipelines and automation that can modify the codebase or schema.
 
-### Hard Rules
+1.2 **Product Plan Relationship**
 
-1. FastAPI must NEVER call the LLM provider directly.
-2. LLM calls must ONLY occur inside Celery worker tasks.
-3. No long-running tasks inside the API request lifecycle.
-4. Workers must NOT expose HTTP endpoints.
-5. API enqueues tasks; Workers execute them. This separation is absolute.
-6. Assessment question delivery must NEVER involve an LLM call at runtime.
-7. The Assessment Engine is a state machine — treat it as such at all times.
-8. Question generation is a content pipeline — completely separate from assessment delivery.
-9. S3 uploads must NEVER occur from the FastAPI layer. Upload operations belong to Celery worker tasks only. The sole permitted S3 operation in the API layer is `generate_presigned_url` (read-only metadata, no data transfer).
-10. The `manim_worker` container exclusively consumes `manim_queue`. The `celery_worker` container must NEVER consume `manim_queue`. Routing any non-animation task to `manim_queue`, or any animation task to `celery_worker`, is a hard violation. Manim is installed only in `manim_worker`.
+- The **Product Plan** defines:
+  - Domain models, tables, fields, enums, and their semantics.
+  - Endpoints, use cases, and acceptance criteria.
+  - Build phases and delivery sequence.
+- **AGENTS.md** defines:
+  - Programming discipline.
+  - Data, migration, and transaction rules.
+  - Security, observability, performance, and CI failure conditions.
+  - Governance evolution.
 
-Strict separation between API layer, Worker layer, LLM provider, and S3 storage is mandatory.
+- No domain-specific rule (e.g., about a particular table, field, or business entity) MAY appear in this file.
+  - Such rules MUST live in the Product Plan or domain-specific documentation.
 
----
+1.3 **Applicability to Agents**
 
-## 2. Difficulty Scale (Global Standard — Non-Negotiable)
-
-All difficulty values across the entire codebase use Integer 1–5.
-No other scale is permitted. No Float difficulty values. No string enums for difficulty.
-
-| Value | Label    |
-|-------|----------|
-| 1     | Beginner |
-| 2     | Easy     |
-| 3     | Medium   |
-| 4     | Hard     |
-| 5     | Expert   |
-
-This applies universally: all model columns, all API responses,
-all frontend displays, and all scoring logic.
-Any code that stores, compares, or transmits a difficulty value must use this scale.
+- Any coding agent or automation that can generate or modify code, schemas, or configuration:
+  - **MUST** read this file in full before making changes.
+  - **MUST** comply with all MUST/MUST NOT rules.
+  - **MUST** abort rather than violate any rule in this document.
 
 ---
 
-## 3. LLM Provider Layer (Provider-Agnostic)
+## 2. Language and Interpretation
 
-Kaihle supports multiple LLM providers via a unified provider strategy.
-The active provider is controlled entirely by environment variables.
-Business logic (Celery tasks) must NEVER reference a specific provider directly —
-always use the `LLMProvider` abstraction.
+2.1 **Normative Terms**
 
-### 3.1 Supported Providers
+- **MUST / MUST NOT / SHALL / SHALL NOT / REQUIRED / PROHIBITED** are **binding**.
+- **MAY / OPTIONAL** are permissive.
+- **SHOULD / SHOULD NOT / PREFER / AVOID** are strongly recommended but not binding.
 
-| Provider        | Value            | Notes |
-|-----------------|------------------|-------|
-| RunPod          | `runpod`         | Self-hosted. OpenAI-compatible endpoint. |
-| AutoContent API | `autocontentapi` | OpenAI-compatible endpoint. Drop-in swap. |
-| Google Gemini   | `google`         | Primary provider for enriched study plan + media generation tasks. Uses google-generativeai SDK. Multiple specialised models (see Section 3.2). |
+2.2 **Precedence**
 
-**Provider scope by task type:**
-
-| Task | Provider | Model env var |
-|---|---|---|
-| Report generation, question tasks | `LLM_PROVIDER` (any) | `LLM_MODEL` / provider-specific |
-| Study plan generation (`generate_enriched_study_plan`) | Google Gemini | `GEMINI_LLM_MODEL` |
-| Animation scene planning (`generate_animation_manim` Stage 2) | Google Gemini | `GEMINI_LLM_MODEL` |
-| Animation code generation (`generate_animation_manim` Stage 3) | Google Gemini | `GEMINI_FLASH_MODEL` |
-| Animation code fix loop (`generate_animation_manim` Stage 4) | Google Gemini | `GEMINI_FLASH_MODEL` |
-| TTS voiceover (`generate_animation_manim` Stage 5) | Google Gemini TTS | `GEMINI_TTS_VOICE` |
-| Infographic generation (`generate_infographic`) | Google Gemini Imagen 3 | `GEMINI_IMAGE_MODEL` |
-| Curriculum embeddings (`ingest_curriculum_embeddings`) | Google Gemini | `GEMINI_EMBEDDING_MODEL` |
-
-Tasks listed above that call Google Gemini directly **bypass the `LLMProvider` abstraction** — they use `google.generativeai` SDK directly because they require model-specific features (Imagen 3, TTS, embeddings) that the unified `BaseLLMProvider.complete()` interface does not expose. This is the only sanctioned exception to the provider abstraction rule.
-
-### 3.2 Environment Configuration
-
-```env
-# ── General LLM provider (runpod | autocontentapi | google) ──────────
-# Used for report generation and question-related tasks only.
-# Enriched study plan + media generation tasks always use Google Gemini
-# regardless of this setting — see Section 3.1 provider scope table.
-LLM_PROVIDER=runpod
-
-# RunPod (self-hosted, OpenAI-compatible)
-RUNPOD_API_BASE=https://api.runpod.ai/v2/{endpoint_id}/openai/v1
-RUNPOD_API_KEY=your_runpod_api_key
-RUNPOD_MODEL=your_deployed_model_name
-
-# AutoContent API (OpenAI-compatible)
-AUTOCONTENTAPI_BASE_URL=https://api.autocontentapi.com/v1
-AUTOCONTENTAPI_KEY=your_autocontentapi_key
-AUTOCONTENTAPI_MODEL=model_name
-
-# Google Gemini — shared API key for ALL Gemini services (LLM, TTS, Imagen, Embeddings)
-GEMINI_API_KEY=your_gemini_api_key
-
-# Google Gemini — model selection (do not change without coordinated migration plan)
-GEMINI_LLM_MODEL=gemini-2.5-pro          # study plan generation + animation scene planning
-GEMINI_FLASH_MODEL=gemini-2.5-flash      # animation code generation + fix loop (faster/cheaper)
-GEMINI_IMAGE_MODEL=imagen-3.0-generate-002  # infographic PNG generation
-GEMINI_EMBEDDING_MODEL=text-embedding-004   # curriculum content embeddings (768 dimensions)
-GEMINI_TTS_VOICE=Kore                    # Gemini TTS voice for animation voiceover
-
-# Shared LLM settings (applied to LLMProvider abstraction tasks only)
-LLM_MAX_TOKENS=4000
-LLM_TEMPERATURE=0.3
-LLM_TIMEOUT_SECONDS=90
-```
-
-> **Note on `GOOGLE_API_KEY`:** The previous `GOOGLE_API_KEY` variable is superseded by
-> `GEMINI_API_KEY`. If you have existing `.env` files using `GOOGLE_API_KEY`, rename it.
-> The application will raise `ValueError` at startup if `GEMINI_API_KEY` is not set and
-> any Gemini-backed task is registered.
-
-### 3.3 LLM Provider Abstraction
-
-**File: `app/services/llm/provider.py`**
-
-This file must be created and all LLM calls must route through it.
-No Celery task or service may instantiate a provider client directly.
-
-```python
-"""
-LLMProvider — unified interface for all LLM backends.
-
-Usage in Celery tasks:
-    from app.services.llm.provider import get_llm_provider
-    llm = get_llm_provider()
-    response = llm.complete(system_prompt, user_prompt)
-
-Never instantiate a provider client directly in business logic.
-"""
-
-class LLMResponse:
-    content: str
-    prompt_tokens: int
-    completion_tokens: int
-    model: str
-    provider: str
-
-class BaseLLMProvider:
-    def complete(self, system_prompt: str, user_prompt: str) -> LLMResponse:
-        raise NotImplementedError
-
-class RunPodProvider(BaseLLMProvider):
-    """Uses OpenAI-compatible client pointed at RunPod endpoint."""
-    ...
-
-class AutoContentAPIProvider(BaseLLMProvider):
-    """Uses OpenAI-compatible client pointed at AutoContent API endpoint."""
-    ...
-
-class GoogleGeminiProvider(BaseLLMProvider):
-    """Uses google-generativeai SDK."""
-    ...
-
-def get_llm_provider() -> BaseLLMProvider:
-    """
-    Factory function. Reads LLM_PROVIDER from settings.
-    Returns the correct provider instance.
-    Raises ValueError for unknown provider values.
-    """
-    provider = settings.LLM_PROVIDER
-    if provider == "runpod":
-        return RunPodProvider()
-    elif provider == "autocontentapi":
-        return AutoContentAPIProvider()
-    elif provider == "google":
-        return GoogleGeminiProvider()
-    else:
-        raise ValueError(f"Unknown LLM provider: {provider}")
-```
-
-### 3.4 LLM Call Protocol (Mandatory — applies to ALL providers)
-
-Before ANY call to any LLM provider:
-
-1. Generate a deterministic cache key using the format:
-   ```
-   kaihle:llm_cache:{prompt_type}:{hash(system_prompt + user_prompt)}
-   ```
-2. Check Redis for a cached result.
-3. If cached → return immediately. Do NOT call the LLM.
-4. If not cached:
-   - Call LLM via `get_llm_provider().complete(...)`
-   - Log the call (see Section 3.5)
-   - Store result in Redis with appropriate TTL
-   - Update per-student LLM usage tracking in DB
-
-LLM calls without caching are forbidden — **except for the three tasks listed in
-Section 3.4.1, which use S3 as their permanent content cache instead of Redis.**
-
-### 3.4.1 S3-Backed Content Cache (Exception to Section 3.4)
-
-The following three tasks are **exempt from the Redis LLM cache rule** in Section 3.4.
-They use S3 as their permanent content store. Do NOT apply Redis caching to them.
-
-| Task Name | S3 Content Stored |
-|---|---|
-| `tasks.generate_enriched_study_plan` | Multi-modal content spec JSON |
-| `tasks.generate_animation_manim` | Manim Python code + rendered MP4 |
-| `tasks.generate_infographic` | Image generation prompt + rendered PNG |
-
-**The S3-backed cache protocol for these three tasks (replaces the Redis check in 3.4):**
-
-1. Build `prompt_hash` = SHA-256 of canonical prompt inputs.
-   Canonical string: `json.dumps(inputs, sort_keys=True, ensure_ascii=True)`.
-   Required input keys: `grade_code`, `subject_code`, `subtopic_id`, `mastery_band`,
-   `priority`, `rag_content_ids` (sorted list), `learning_style`, `content_type`.
-   Any missing key must raise `KeyError` immediately — do not proceed with partial inputs.
-2. Query `generated_content` table:
-   `WHERE prompt_hash = :hash AND content_type = :type AND status = 'completed'`
-3. If row found → return existing `s3_key`. Do NOT call the LLM. Do NOT upload anything.
-4. If no row found → call LLM/media API → upload result to S3 → insert `GeneratedContent`
-   row with `status = 'completed'` and `s3_key` populated.
-
-**All other LLM calls** (assessment report generation, question-related tasks, etc.) continue
-to use the Redis caching protocol in Section 3.4 unchanged.
-
-### 3.5 LLM Usage Logging (Mandatory)
-
-Every LLM call must produce a structured log entry with at minimum:
-
-```json
-{
-  "timestamp": "ISO8601",
-  "level": "info",
-  "service": "worker",
-  "task": "{celery_task_name}",
-  "student_id": "{uuid}",
-  "provider": "{active_provider}",
-  "model": "{model_name}",
-  "prompt_tokens": 0,
-  "completion_tokens": 0,
-  "cached": false
-}
-```
-
-Never log: raw prompt content, student PII, or API keys of any kind.
-
-### 3.6 Provider Switching
-
-Switching providers requires only changing `LLM_PROVIDER` in `.env`.
-No code changes are required.
-Provider switching must have test coverage verifying all three providers
-can be instantiated and route correctly.
+- If any guideline elsewhere uses softer language (e.g., “should”) and conflicts with a **MUST** here, the rule in this document prevails.
 
 ---
 
-## 4. Assessment Engine Rules (Non-Negotiable)
+## 3. Core Programming Principles
 
-The assessment engine is a state machine.
-These rules govern its behaviour absolutely.
+3.1 **Explicit Over Implicit**
 
-### 4.1 Separation of Concerns
+The following are **PROHIBITED** unless an explicit, documented justification exists in code comments and/or design notes:
 
-```
-Question Generation Pipeline   ←→   Assessment Session Engine
-(Celery batch tasks, offline)        (Runtime state machine, no LLM)
-```
+- Implicit or automatic ORM relationship loading that can trigger unbounded queries.
+- Nullable columns without explicit justification and documented meaning of `NULL`.
+- Implicit cascade behaviors (delete, update) without explicit configuration and tests.
+- Silent fallback behavior (e.g., “if config missing, silently use default”) for critical paths.
+- “Magic” field inference (convention-only behavior without explicit configuration).
+- Wildcard imports (e.g., `from x import *`) in production code.
+- Implicit enum widening (adding values without review or documentation updates).
 
-These are two completely separate systems. They must never be coupled.
+3.2 **Error Handling and Fail-Fast**
 
-### 4.2 Adaptive Questioning Rules
+- Code **MUST**:
+  - Fail fast on invalid state or impossible conditions.
+  - Avoid swallowing exceptions without logging.
+  - Avoid generic `except` blocks without re-raising or structured handling.
+- User-facing errors **MUST** be mapped to explicit, predictable responses without leaking sensitive details.
 
-- The number of questions per subtopic and the starting difficulty are
-  controlled by environment variables. See `project-plan.md` for specifics.
-- Correct answer → next difficulty increases by 1, capped at maximum (5).
-- Incorrect answer → next difficulty decreases by 1, floored at minimum (1).
-- Difficulty is always Integer 1–5. Never Float. Never string.
-- Questions are selected ONE AT A TIME as answers come in. Never pre-selected.
-- Used question IDs are tracked per subtopic per session to prevent repetition.
+3.3 **Side Effects and Purity**
 
-### 4.3 Assessment State Machine Transitions
+- Functions that perform side effects (I/O, DB writes, external calls) **MUST** be explicitly named and documented as such.
+- Pure functions (no side effects) **MUST NOT** reach out to external systems, globals, or mutable shared state.
 
-```
-STARTED → IN_PROGRESS (first answer received)
-IN_PROGRESS → COMPLETED (final question answered)
-IN_PROGRESS → ABANDONED (explicit abandon or timeout)
-```
+3.4 **Configuration**
 
-The session state in Redis and the assessment status in PostgreSQL
-must stay in sync on every transition. Inconsistency is a bug.
-
-### 4.4 Answer Submission Rules
-
-- An assessment question record is created when a question is SERVED, not at session init.
-- The same record is UPDATED when the answer is submitted.
-- Re-answering an already-answered question must return `409 Conflict`.
-- Submitting to a COMPLETED assessment must return `400 Bad Request`.
-- Submitting a question that is not the current active question must return `404 Not Found`.
-- The correct answer, explanation, and correctness flag must NEVER appear in the
-  question-delivery API response. These are report-only fields.
+- All configuration **MUST** be externalized (environment variables, config files) and **MUST NOT** be hardcoded in code.
+- Missing required configuration **MUST** cause startup failure, not silent defaults for critical systems (auth, persistence, external providers).
 
 ---
 
-## 5. Redis Usage (Required)
+## 4. Data and Schema Governance
 
-Redis is mandatory for session state, task status flags, LLM caching, and rate limiting.
+4.1 **Single Source of Truth**
 
-### 5.1 Key Format Convention (Non-Negotiable)
+- Every persisted piece of information **MUST** have exactly one canonical source of truth.
+- Derived or denormalized data **MUST** clearly document:
+  - Its origin.
+  - How and when it is synchronized.
+  - Failure modes when synchronization fails.
 
-All Redis keys must follow this format:
+4.2 **Nullability and Defaults**
 
-```
-kaihle:{service}:{entity}:{identifier}
-```
+- New columns **MUST**:
+  - Be **NOT NULL** by default, unless there is a clear semantic need for `NULL`.
+  - Use explicit defaults only where semantically correct and documented.
+- Introducing a nullable column or nullable behavior **MUST** come with:
+  - Explanation in a migration or code comment.
+  - Tests covering `NULL` behavior.
 
-No arbitrary key names are permitted.
-Every new Redis key must follow this format without exception.
-Feature-specific key definitions are documented in `project-plan.md`.
+4.3 **Constraints and Uniqueness**
 
-### 5.2 Required TTLs
+- Business invariants **MUST** be enforced at the database level wherever possible (e.g., unique constraints, check constraints).
+- Code-level checks **MUST NOT** be the only enforcement of uniqueness or invariants where the database can enforce them.
 
-Every Redis key must have an explicit TTL set at write time.
-Keys without TTL are forbidden — they cause unbounded memory growth.
-TTL values for each key type are defined in `project-plan.md`.
+4.4 **Enum Governance**
 
----
+- Enum values **MUST** be treated as part of the persistent contract.
+- The following rules apply:
+  - Enum values **MUST NOT** be removed while still present in data; removal requires a data migration and compatibility strategy.
+  - Enum values **MUST NOT** be reused (no recycling of deprecated names or numeric codes).
+  - Enum expansion (adding a new value) **MUST**:
+    - Include an update in the Product Plan or equivalent domain documentation.
+    - Include tests for all consumers (backend and frontend) that interpret the enum.
+  - Deprecated enum values **MUST** be explicitly marked as deprecated and handled predictably.
 
-## 6. Database Rules (Non-Negotiable)
+4.5 **Schema References**
 
-1. All columns used in WHERE clauses must be indexed.
-2. No `SELECT *` in production code. Always select explicit columns.
-3. All schema changes must go through Alembic migrations. No manual `ALTER TABLE`.
-4. All migrations must be reversible — include a working `downgrade()`.
-5. Unique constraints must be enforced at the DB level, not just application level.
-6. All primary keys use UUID. No integer sequences for new tables.
-7. All timestamps in UTC with timezone awareness.
-8. No raw SQL strings in application code. Use SQLAlchemy ORM or `text()` with explicit params.
-
-Feature-specific index definitions are documented in `project-plan.md`.
-
----
-
-## 6.1 Import Style (Non-Negotiable)
-
-All imports must be declared at the top of the file. Inline imports are forbidden.
-
-### Allowed Exceptions
-
-The only permitted inline imports are:
-
-1. **Optional dependencies** that may not be installed in all environments:
-   ```python
-   try:
-       import google.generativeai as genai
-       GOOGLE_AVAILABLE = True
-   except ImportError:
-       genai = None
-       GOOGLE_AVAILABLE = False
-   ```
-
-2. **Type-checking imports** to avoid circular dependencies:
-   ```python
-   from typing import TYPE_CHECKING
-
-   if TYPE_CHECKING:
-       from app.models.user import User
-   ```
-
-### Forbidden Patterns
-
-```python
-# FORBIDDEN - inline import inside function
-def my_function():
-    from app.services.llm.provider import get_llm_provider
-    llm = get_llm_provider()
-
-# REQUIRED - import at top of file
-from app.services.llm.provider import get_llm_provider
-
-def my_function():
-    llm = get_llm_provider()
-```
-
-### Rationale
-
-- Imports at the top make dependencies explicit and visible
-- Easier to identify what a module depends on
-- Prevents runtime import errors hidden in rarely-executed code paths
-- Improves IDE support and static analysis
+- Migrations **MUST NOT** embed application-specific logic (e.g., calling business services).
+- Data shape, table, and column specifics **MUST** be described in the Product Plan, not in this document.
 
 ---
 
-## 7. Async & Performance Rules
+## 5. Migration Discipline
 
-1. No blocking I/O in async FastAPI endpoints.
-2. All database access in FastAPI must use async SQLAlchemy (`AsyncSession`).
-3. All Redis access in FastAPI endpoints must use `redis.asyncio`.
-4. Celery tasks use synchronous DB and Redis clients — Celery is not async-native.
-5. Heavy computation must not block the API event loop.
-6. No N+1 query patterns. Use joins or explicit eager loading.
+5.1 **General Rules**
 
-### 7.1 Performance Targets
+- Every structural change to persisted data **MUST** go through a migration.
+- Direct, ad-hoc schema modifications outside migrations are **PROHIBITED**.
 
-All API endpoints must respond within 500ms excluding Celery-dispatched work.
-Feature-specific targets for individual operations are defined in `project-plan.md`.
-Any code path that risks exceeding performance targets must include a comment explaining the risk.
+5.2 **Downgrades and Reversibility**
 
----
+- Every migration **MUST** include a downgrade path unless:
+  - The change is inherently irreversible (e.g., data compaction), and
+  - The migration explicitly documents why it is irreversible and what backup/rollback strategy exists.
+- Data-destructive migrations (drops, truncations, transformations that lose information) **MUST**:
+  - Clearly log and document the behavior.
+  - Be preceded by a backup or equivalent safety mechanism.
 
-## 8. Cost Control
+5.3 **Compatibility Windows**
 
-### 8.1 LLM Cost Controls
+- Column renames, type changes, or restructuring **MUST**:
+  - Provide a compatibility window where old and new representations can safely coexist.
+  - Include explicit migration steps for both backend and frontend, where applicable.
 
-- All LLM calls must be cached — see Section 3.4 for Redis caching (default) and
-  Section 3.4.1 for the S3-backed cache used by the three media generation tasks.
-  There are no uncached LLM calls anywhere in the codebase.
-- LLM calls must never occur during assessment question delivery.
-- LLM timeout must be enforced via `LLM_TIMEOUT_SECONDS`.
-- On LLM timeout: retry up to `max_retries`, then fail the task gracefully.
-- Celery tasks must not loop LLM calls — one call per task invocation where possible.
-- S3 uploads are permanent and billable. Never upload to S3 without first performing
-  the prompt_hash dedup check in `generated_content` (Section 3.4.1). Duplicate uploads
-  are a cost bug.
+5.4 **Default Values and Backfill**
 
-### 8.2 DB Cost Controls
-
-- No unbounded queries. All list queries must have pagination or explicit limits.
-- No query inside a loop. Batch load, then process in memory.
+- Adding non-nullable columns with defaults **MUST** have:
+  - A clear backfill strategy for existing rows.
+  - Tests that verify legacy data behaves correctly pre- and post-migration.
 
 ---
 
-## 9. Logging & Observability
+## 6. Transactions and Persistence
 
-All logs must be structured JSON. Use `structlog` or equivalent.
+6.1 **Transaction Boundaries**
 
-Every log entry must include:
+- All database write operations **MUST** occur within an explicit transactional context.
+- Cross-layer code **MUST NOT** perform partial writes across multiple services without a well-defined transaction or compensation mechanism.
 
-```json
-{
-  "timestamp": "ISO8601",
-  "level": "info | warning | error",
-  "service": "api | worker",
-  "user_id": "uuid or null",
-  "student_id": "uuid or null",
-  "action": "descriptive_action_name",
-  "status": "success | failure | started"
-}
-```
+6.2 **Atomicity**
 
-### 9.1 What Must Be Logged
+- Multi-step changes that must succeed or fail together **MUST** be implemented as a single transaction or as a clearly defined saga/compensation pattern.
+- Implicit or auto-commit behavior for critical writes is **PROHIBITED**.
 
-- Every Celery task: started, completed, failed (with retry count)
-- Every LLM call: provider, model, tokens, cached (true/false)
-- Every assessment state transition
-- Every answer submission (student_id, is_correct, difficulty level)
-- Every Redis cache hit/miss for LLM calls
-- Every S3 upload: task name, s3_key, content_type, file_size_bytes
-- Every S3-backed cache hit (prompt_hash match found — LLM call skipped)
-- Every content reuse event: new_content_id, reused_from_id, subtopic_id (fingerprint match)
-- Every GeneratedContent status transition: PENDING → COMPLETED / FAILED / REUSED
+6.3 **Background Processing and Idempotency**
 
-### 9.2 What Must NEVER Be Logged
-
-- Student passwords or hashed passwords
-- JWT tokens
-- Raw LLM prompt content containing student data
-- API keys of any provider
+- Any write performed in a background process **MUST**:
+  - Be idempotent or guarded by an idempotency key and uniqueness constraints.
+  - Assume that tasks can be retried and potentially executed more than once.
 
 ---
 
-## 10. Fail Fast Philosophy (Non-Negotiable)
+## 7. Concurrency and Idempotency
 
-Over-protective, defensive programming is forbidden.
-The system must fail loudly, immediately, and at the exact point of failure.
+7.1 **Idempotent Endpoints and Operations**
 
-### 10.1 Core Principle
+- All write operations (including APIs, CLI tools, and background jobs) **MUST** be:
+  - Idempotent by design **OR**
+  - Clearly reject duplicate intent with a deterministic, documented error.
 
-If a required condition is not met — raise an exception.
-Do NOT silently handle it, substitute a default, or let execution continue.
+7.2 **Uniqueness and Concurrency**
 
-A function that requires a value must receive that value.
-If it does not, it must raise immediately — not guess, not skip, not log-and-continue.
+- Uniqueness and integrity **MUST** be enforced at the database level to prevent race-condition-induced duplication.
+- Optimistic or pessimistic locking strategies **MUST** be used where concurrent updates can conflict.
 
-A crash with a clear error message is always preferable to corrupted or silent behaviour.
+7.3 **Retries and Failure Handling**
 
-### 10.2 Hard Rules
-
-1. **Required function arguments must be enforced at the call site.**
-   If a function requires a value, the caller must pass it.
-   The function must NOT check for None and silently return early.
-
-   ```python
-   # FORBIDDEN — hides the real bug
-   def get_session(student_id: UUID | None):
-       if not student_id:
-           return None
-
-   # REQUIRED — fails at the right place
-   def get_session(student_id: UUID):
-       ...
-   ```
-
-2. **No silent fallbacks for missing required data.**
-   If a required DB record does not exist, raise `404` or a domain exception.
-   Do NOT return an empty object, `None`, or a default placeholder.
-
-3. **No swallowed exceptions.**
-
-   ```python
-   # FORBIDDEN
-   try:
-       result = some_operation()
-   except Exception:
-       pass
-
-   # REQUIRED — catch only what you handle, re-raise everything else
-   try:
-       result = some_operation()
-   except SpecificException as e:
-       logger.error("specific failure", error=str(e))
-       raise
-   ```
-
-4. **No default substitution for invalid state.**
-   If the system enters an unexpected state, raise immediately.
-   Do NOT attempt to recover silently.
-
-5. **Pydantic validation must be strict.**
-   All required fields are non-optional in schemas.
-   Do NOT use `Optional` for fields that are functionally required.
-   Validation failure must surface as `422` immediately.
-
-6. **Type hints are contracts, not suggestions.**
-   If a function is typed to receive `UUID`, it must receive `UUID`.
-   Functions must not internally guard against `None` or `str`
-   unless the type hint explicitly declares it.
-
-### 10.3 Where Defensive Handling IS Acceptable
-
-The only legitimate cases for defensive handling in Kaihle:
-
-- **LLM provider calls (RunPod, AutoContent API, Google Gemini)**
-  — external systems can fail for reasons outside our control.
-  Catch, log, retry via Celery, then fail the task gracefully after max retries.
-- **Celery task retries**
-  — transient failures are expected. `max_retries` is intentional, not defensive.
-- **Redis cold cache fallback to DB**
-  — explicitly defined in the architecture. Acceptable and documented.
-- **S3 upload/download operations (boto3 / MinIO)**
-  — network and service errors are transient. Catch `ClientError`, log, retry via Celery.
-  `S3Client.NotFoundError` on download is a legitimate failure — mark `GeneratedContent`
-  as FAILED and do not retry.
-- **Gemini media API calls (TTS, Imagen 3)**
-  — external media APIs can fail or apply safety filters. Catch API errors and retry via
-  Celery. Safety filter rejections (deterministic) must mark `GeneratedContent` as FAILED
-  immediately — do not retry a safety block.
-- **RAG embedding API calls (Gemini text-embedding-004)**
-  — rate limit and transient errors are expected at bulk ingestion scale.
-  Catch, log, retry with exponential backoff. Respect the `rate_limit="30/m"` task setting.
-
-Everything else: fail fast, fail loudly.
+- Any operation that may be retried (due to network issues, worker restarts, or explicit retry mechanisms) **MUST** be safe under double execution.
+- Side effects external to the primary data store (emails, external calls, etc.) **MUST**:
+  - Use idempotency keys where supported.
+  - Be logged and guarded to avoid duplicate user-visible actions when retried.
 
 ---
 
-## 11. Security Rules
+## 8. Testing and Quality Gates
 
-1. All input validated via Pydantic schemas before any processing.
-2. JWT tokens must have expiry. Refresh token rotation is required.
-3. Students must not access other students' data. Enforce at service layer, not just route.
-4. Parents must only access data for their own registered children.
-5. File uploads (if any): validate MIME type and enforce max size.
-6. No sensitive data in error responses returned to clients.
-7. All environment secrets loaded via `.env` only. Never hardcoded.
+8.1 **Coverage**
 
----
+- Global test coverage **MUST** be ≥ 90% for the main application modules.
+- New code **MUST** not reduce overall coverage below this threshold.
 
-## 12. Implementation Order (Non-Negotiable)
+8.2 **Test Focus**
 
-Development must follow `project-plan.md` phases sequentially.
-The phase sequence, branch names, and acceptance criteria are defined in `project-plan.md`.
+- Tests **MUST** assert behavior and observable outcomes, not incidental implementation details.
+- Overreliance on fragile implementation-coupled tests is **PROHIBITED**.
 
-Do NOT implement future phases prematurely.
-Do NOT begin a new phase until the current phase is fully closed per the Git Workflow below.
+8.3 **Model and Persistence Tests**
 
----
+For any new persistent model or equivalent construct, the following **MUST** be covered:
 
-## 13. Git Workflow (Non-Negotiable)
+- Creation and basic lifecycle.
+- All uniqueness and integrity constraints.
+- Cascade and relationship behavior (where defined).
+- Failure paths and validation errors.
 
-Every unit of work is developed on its own dedicated branch.
-Work is never done directly on `main`.
+8.4 **Integration and Boundary Tests**
 
-### 13.1 Branch Convention
-
-Create branches from `main` before writing any code:
-
-```bash
-git checkout main
-git pull origin main
-git checkout -b feature/{short-description}
-```
-
-Branch names must be lowercase, hyphenated, and descriptive.
-One branch per logical unit of work. No combined branches.
-
-### 13.2 Work Completion Requirements
-
-A branch is NOT ready to close until ALL of the following are true:
-
-1. **All acceptance criteria met** — as defined in `project-plan.md` for the current phase.
-
-2. **Test coverage ≥ 90%** — enforced by the test runner, not self-assessed.
-
-   Backend:
-   ```bash
-   pytest --cov=app --cov-report=term-missing --cov-fail-under=90
-   ```
-
-   Frontend:
-   ```bash
-   npm run test -- --coverage --coverageThreshold='{"global":{"lines":90}}'
-   ```
-
-   Coverage below 90% blocks closure. Write missing tests before proceeding.
-
-3. **Code is clean and committed:**
-   - No uncommitted changes (`git status` is clean)
-   - No debug code, commented-out blocks, or TODOs in production paths
-   - All new environment variables documented in `.env.example`
-   - Migration files committed alongside their model changes
-
-   Use conventional commit format:
-   ```
-   feat(scope):  new functionality
-   fix(scope):   bug fix
-   chore(scope): config, migration, tooling
-   ```
-
-4. **Branch pushed to origin and confirmed:**
-   ```bash
-   git push origin feature/{short-description}
-   ```
-
-### 13.3 Commit Hygiene
-
-- One logical unit of work per commit where possible.
-- Do not commit broken or untested code at any point.
-- Migration files must always be committed with the model changes they support.
-- Do not bundle unrelated changes into one commit.
+- Integration tests **MUST** exercise real persistence and boundary layers where feasible (database, queues, etc.).
+- Over-mocking of the data layer in tests that are meant to validate integration behavior is **PROHIBITED**.
 
 ---
 
-# PART 2 — AI ENGINEERING REVIEW CONTRACT
-(Activated ONLY when explicitly invoked)
+## 9. Logging and Observability
 
-This contract applies ONLY when the user says:
-- "Full Engineering Review"
-- "Review Mode"
-- Or a similar explicit instruction
+9.1 **Structured Logging**
 
-For normal development, default behaviour applies.
+- All logs from application code and workers **MUST** be structured (e.g., JSON or equivalent) to support querying and correlation.
+- Use of ad-hoc `print` or unstructured logging in production code is **PROHIBITED**.
 
----
+9.2 **Boundary Logging**
 
-## 1. Engineering Philosophy (Non-Negotiable)
+- All interactions with external boundaries **MUST** be logged at least at INFO level:
+  - Database transactions (high level, not every query).
+  - Cache and message broker interactions (high-level operations).
+  - Calls to external services and providers.
+- Sensitive data **MUST NOT** be logged.
 
-### 1.1 DRY
-- Identify duplication aggressively.
-- Consolidate unless doing so increases coupling.
+9.3 **State Transitions**
 
-### 1.2 Testing
-- Prefer strong, explicit assertions over broad ones.
-- Identify missing edge cases and failure modes.
-- Test the unhappy path as rigorously as the happy path.
+- Significant state transitions (status changes, approvals, escalations, impersonation, etc.) **MUST** be logged with:
+  - Actor (user or system).
+  - Previous state.
+  - New state.
+  - Correlation ID for the request or job.
 
-### 1.3 Engineering Balance
-- Avoid under-engineering (no error handling, no edge cases).
-- Avoid premature abstraction (solving problems that don't exist yet).
-- Aim for "engineered enough."
+9.4 **Correlation**
 
-### 1.4 Explicit Over Clever
-- Prefer clarity over terseness.
-- Avoid magic, hidden behaviour, and implicit side effects.
-
-### 1.5 Edge Cases
-- Identify missing validation.
-- Identify unhandled boundary conditions.
-- Identify unhandled failure paths.
+- A correlation ID **MUST** be propagated through all layers for each request or job:
+  - Incoming request → internal services → background work.
+  - Logs **MUST** include this ID.
 
 ---
 
-## 2. Review Structure (Strict Order)
+## 10. Security and Privacy
 
-The review must be conducted in this exact order:
+10.1 **Secrets and Credentials**
 
-1. Architectural Review
-2. Code Quality Review
-3. Test Review
-4. Performance Review
+- Secrets **MUST NOT** be hardcoded in code or stored in version control.
+- All secrets **MUST** be provided via secure configuration mechanisms.
 
-The agent must NOT skip any section.
-The agent must NOT combine sections.
+10.2 **Authentication and Authorization**
 
----
+- All entry points that mutate data or expose non-public information **MUST**:
+  - Require authentication.
+  - Apply role- or permission-based authorization checks at the boundary layer.
+- Silent privilege escalation or implicit role upgrades are **PROHIBITED**.
 
-## 3. Review Modes (User Must Choose)
+10.3 **Sensitive Data Handling**
 
-Before beginning review, the agent MUST ask the user to choose:
+- Sensitive fields (passwords, tokens, secrets, PII beyond what is necessary) **MUST NOT**:
+  - Be logged.
+  - Be returned in API responses or UI views without explicit requirement and masking.
+- Passwords **MUST** be stored only as secure hashes using modern algorithms; no plaintext or reversible encryption.
 
-**Option 1 — BIG CHANGE**
-- Work section by section
-- Maximum 4 issues per section
-- Pause and wait for user response after each section
+10.4 **Code and Query Safety**
 
-**Option 2 — SMALL CHANGE**
-- One issue at a time
-- Fully interactive
-- Pause and wait for user response after each issue
-
-The agent MUST wait for the user's selection before proceeding.
+- Raw query or string formatting that can lead to injection vulnerabilities is **PROHIBITED**.
+- All external inputs **MUST** be validated and sanitized prior to use.
 
 ---
 
-## 4. Issue Reporting Format (Strict)
+## 11. Performance and Scalability Guardrails
 
-For EVERY issue found:
+11.1 **Queries and Data Access**
 
-```
-## Issue X: <Concise Title>
+- N+1 query patterns in hot paths are **PROHIBITED**.
+- All list or search endpoints **MUST**:
+  - Implement pagination or explicit bounds.
+  - Avoid unbounded scans over large datasets.
 
-### Problem
-Concrete description of the issue.
-Reference file names and line numbers where available.
+11.2 **Indexes**
 
-### Options
+- Queries introduced in hot paths **MUST** be backed by appropriate indexes.
+- Introducing a query that scans large tables without an index on filter conditions is **PROHIBITED** without documented justification and monitoring.
 
-A. <Recommended Option>
-- Implementation effort: Low / Medium / High
-- Risk level: Low / Medium / High
-- Impact: description
-- Maintenance burden: description
+11.3 **Blocking Operations**
 
-B. <Alternative Option>
-- Same breakdown as above
-
-C. Do Nothing
-- Explicit analysis of consequences of leaving this unresolved
-
-### Recommendation
-Clear opinion on which option to take.
-Justified using the Engineering Philosophy above.
-
-### Decision Required
-"Regarding Issue X, do you want Option A (recommended) or Option B?"
-```
+- Long-running or blocking operations **MUST NOT** execute in synchronous request/response paths when they can be offloaded to asynchronous or background processing.
+- External calls (to third-party services, AI models, etc.) **MUST** have:
+  - Reasonable timeouts.
+  - Clear failure behavior and fallback where appropriate.
 
 ---
 
-## 5. Section Evaluation Criteria
+## 12. CI, Automation, and Failure Conditions
 
-### 5.1 Architectural Review
-Evaluate:
-- API vs Worker boundary violations
-- Coupling between layers
-- Data flow correctness
-- Assessment engine state machine integrity
-- LLM call location (must be in Worker only)
-- Redis key format compliance
-- Redis TTL compliance (no keys without TTL)
-- Security boundary violations
-- Cost amplification risks
-- S3 upload calls from the API layer (forbidden — workers only, except `generate_presigned_url`)
-- S3-backed cache bypass: media generation tasks must check `generated_content` prompt_hash
-  before calling LLM or media APIs (Section 3.4.1). Missing this check is a cost bug.
-- Manim task routing: `tasks.generate_animation_manim` must be in `manim_queue` only.
-  Any route to `default` or `study_plans` queue is a hard architectural violation.
+12.1 **Non-Negotiable CI Gates**
 
-### 5.2 Code Quality Review
-Evaluate:
-- DRY violations
-- Error handling gaps
-- Unhandled edge cases
-- Over-engineering or under-engineering
-- Difficulty scale violations (Float or string where Integer 1–5 required)
-- Missing provider abstraction in text LLM calls (must use `get_llm_provider()`)
-- Gemini media/embedding SDK called directly when it should route through provider abstraction
-  (only TTS, Imagen, and embedding calls are permitted to bypass — all others are violations)
-- Fail fast violations (swallowed exceptions, silent fallbacks, missing raises)
-- Hidden cost multipliers
-- S3 upload operations in FastAPI route handlers (absolute violation — workers only)
-- Missing prompt_hash dedup check before S3 upload in media generation tasks
-- `tasks.generate_animation_manim` importing or calling Manim outside `manim_worker` context
+A change **MUST NOT** be merged, deployed, or considered successful if any of the following occur:
 
-### 5.3 Test Review
-Evaluate:
-- Coverage gaps (minimum: 90%)
-- Assertion strength (assert specific values, not just truthy/falsy)
-- Missing adaptive difficulty edge case tests
-- Missing LLM caching tests
-- Missing idempotency tests
-- Missing Redis cold cache fallback tests
-- Missing provider switching tests
-- Untested failure modes
+- Test suite fails or coverage **< 90%** for required modules.
+- Linters or formatters fail.
+- Schema drift detected between code and database migration history.
+- Migrations fail to apply in a clean environment.
+- Duplicate or conflicting model or migration files are detected.
+- Static analysis or security checks report high-severity issues that are not explicitly waived with justification.
 
-### 5.4 Performance Review
-Evaluate:
-- N+1 query patterns
-- Blocking async calls
-- Missing Redis usage where required
-- Missing or incorrect DB indexes
-- Queries exceeding performance targets defined in `project-plan.md`
-- Unindexed filter columns
-- LLM calls outside of Worker
+12.2 **Agent Behavior Under Failure**
+
+- Automated agents that encounter any of the failure conditions above **MUST**:
+  - Abort implementation or changes.
+  - Surface the failure, its cause, and the failing command or check.
+  - Refrain from “working around” governance rules by disabling tests, linters, or checks.
 
 ---
 
-## 6. Interaction Constraints
+## 13. Governance Evolution Protocol
 
-- Do NOT assume scope priorities — always ask.
-- Do NOT batch multiple decisions into one question.
-- Always pause after each section (Review Mode 1) or each issue (Review Mode 2).
-- Never skip the structured issue format.
-- Never make changes without explicit user approval.
+13.1 **Change Authority**
+
+- Changes to this document **MUST** be:
+  - Proposed via a formal change request (e.g., RFC or PR description).
+  - Reviewed and approved by at least:
+    - One designated engineering lead, and
+    - One designated product or domain owner.
+
+13.2 **Change Requirements**
+
+- Every change to this file **MUST**:
+  - Bump a visible version marker in the header (e.g., v2 → v2.1).
+  - Include a rationale for the change.
+  - Note whether any Product Plan or documentation updates are required.
+  - Call out any breaking changes in governance expectations.
+
+13.3 **Synchronization with Product Plan**
+
+- Any governance change that affects:
+  - Enum evolution.
+  - Data retention or schema behavior.
+  - Security posture.
+- **MUST** be checked against the Product Plan for consistency and, where necessary, the Product Plan **MUST** be updated accordingly.
+
+13.4 **Agent Re-Read Requirement**
+
+- Whenever this file changes:
+  - Coding agents **MUST** treat the updated version as authoritative.
+  - Agents **MUST** re-read this document fully before generating or modifying code after a governance update.
 
 ---
 
-## 7. Tone
+## 14. Final Principles
 
-- Direct
-- Structured
-- Opinionated but always justified
-- No vague generalities
-- No speculative abstraction
-- Reference specific files, functions, and line numbers wherever possible
+- When in doubt, **do less and be explicit**: introduce the minimum necessary surface area with maximum clarity.
+- If a required behavior is not covered here, the change **MUST** default to the most conservative, safe, and maintainable option and be followed by a governance or documentation update.
