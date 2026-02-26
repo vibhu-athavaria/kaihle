@@ -30,6 +30,14 @@ import AssessmentPage from "./pages/AssessmentPage";
 import AssessmentDiagnosticSummary from "./pages/AssessmentDiagnosticSummary";
 import CoursePage from "./pages/CoursePage";
 
+// Admin pages
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import PendingRegistrations from "./pages/admin/PendingRegistrations";
+import ManageGrades from "./pages/admin/ManageGrades";
+import ManageTeachers from "./pages/admin/ManageTeachers";
+import ManageStudents from "./pages/admin/ManageStudents";
+import StudentDetail from "./pages/admin/StudentDetail";
+
 /* -------------------------------------------------- */
 /* App Shell */
 /* -------------------------------------------------- */
@@ -290,6 +298,56 @@ Remember: Perimeter is measured in units (cm, m, etc.) while area is measured in
                   You are not authorized to access this page.
                 </h1>
               </div>
+            }
+          />
+
+          {/* ---------------- SCHOOL ADMIN ---------------- */}
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute role="school_admin">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/registrations"
+            element={
+              <ProtectedRoute role="school_admin">
+                <PendingRegistrations />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/grades"
+            element={
+              <ProtectedRoute role="school_admin">
+                <ManageGrades />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/teachers"
+            element={
+              <ProtectedRoute role="school_admin">
+                <ManageTeachers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/students"
+            element={
+              <ProtectedRoute role="school_admin">
+                <ManageStudents />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/students/:studentId"
+            element={
+              <ProtectedRoute role="school_admin">
+                <StudentDetail />
+              </ProtectedRoute>
             }
           />
 
