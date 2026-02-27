@@ -1,62 +1,63 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { http } from '../../lib/http';
 import { useAuth } from '../../contexts/AuthContext';
+import { SchoolGrade, Grade } from '../../hooks/useSchoolAdmin';
 
-const ManageGrades = () => {
+const ManageGrades: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const schoolId = user?.school_id;
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [schoolGrades, setSchoolGrades] = useState([]);
-  const [availableGrades, setAvailableGrades] = useState([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [selectedGradeId, setSelectedGradeId] = useState('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [schoolGrades, setSchoolGrades] = useState<SchoolGrade[]>([]);
+  const [availableGrades, setAvailableGrades] = useState<Grade[]>([]);
+  const [showAddModal, setShowAddModal] = useState<boolean>(false);
+  const [selectedGradeId, setSelectedGradeId] = useState<string>('');
 
   useEffect(() => {
     fetchGrades();
   }, [schoolId]);
 
-  const fetchGrades = async () => {
+  const fetchGrades = async (): Promise<void> => {
     if (!schoolId) return;
     setLoading(true);
     try {
-      const response = await http.get(`/api/v1/schools/${schoolId}/grades`);
+      const response = await http.get<SchoolGrade[]>(`/api/v1/schools/${schoolId}/grades`);
       setSchoolGrades(response.data);
 
       // Fetch available curriculum grades
-      const gradesResponse = await http.get('/api/v1/grades');
-      const existingIds = response.data.map(g => g.grade_id);
-      setAvailableGrades(gradesResponse.data.filter(g => !existingIds.includes(g.id)));
-    } catch (err) {
+      const gradesResponse = await http.get<Grade[]>('/api/v1/grades');
+      const existingIds = response.data.map((g: SchoolGrade) => g.grade_id);
+      setAvailableGrades(gradesResponse.data.filter((g: Grade) => !existingIds.includes(g.id)));
+    } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddGrade = async () => {
+  const handleAddGrade = async (): Promise<void> => {
     if (!selectedGradeId) return;
     try {
       await http.post(`/api/v1/schools/${schoolId}/grades`, { grade_id: selectedGradeId });
       setShowAddModal(false);
       setSelectedGradeId('');
       fetchGrades();
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message);
     }
   };
 
-  const handleDeleteGrade = async (gradeId) => {
+  const handleDeleteGrade = async (gradeId: string): Promise<void> => {
     if (!confirm('Are you sure you want to remove this grade? Students assigned to this grade will need to be reassigned.')) {
       return;
     }
     try {
       await http.delete(`/api/v1/schools/${schoolId}/grades/${gradeId}`);
       fetchGrades();
-    } catch (err) {
+    } catch (err: any) {
       if (err.response?.status === 409) {
         setError('Cannot delete grade with students assigned. Please reassign students first.');
       } else {

@@ -1,9 +1,9 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSchoolAdmin } from '../../hooks/useSchoolAdmin';
 import { useAuth } from '../../contexts/AuthContext';
 
-const AdminDashboard = () => {
+const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const schoolId = user?.school_id;

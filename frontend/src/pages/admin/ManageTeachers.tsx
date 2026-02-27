@@ -1,24 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSchoolAdmin } from '../../hooks/useSchoolAdmin';
+import { useSchoolAdmin, InviteTeacherData } from '../../hooks/useSchoolAdmin';
 import { useAuth } from '../../contexts/AuthContext';
 
-const ManageTeachers = () => {
+const ManageTeachers: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const schoolId = user?.school_id;
   const { loading, error, teachers, fetchTeachers, inviteTeacher, deleteTeacher } = useSchoolAdmin(schoolId);
 
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteData, setInviteData] = useState({ name: '', email: '' });
-  const [inviteError, setInviteError] = useState('');
-  const [inviteLoading, setInviteLoading] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState<boolean>(false);
+  const [inviteData, setInviteData] = useState<InviteTeacherData>({ name: '', email: '' });
+  const [inviteError, setInviteError] = useState<string>('');
+  const [inviteLoading, setInviteLoading] = useState<boolean>(false);
 
   useEffect(() => {
     fetchTeachers();
   }, [schoolId]);
 
-  const handleInvite = async (e) => {
+  const handleInvite = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setInviteError('');
     setInviteLoading(true);
@@ -26,20 +26,20 @@ const ManageTeachers = () => {
       await inviteTeacher(inviteData);
       setShowInviteModal(false);
       setInviteData({ name: '', email: '' });
-    } catch (err) {
+    } catch (err: any) {
       setInviteError(err.response?.data?.detail || err.message);
     } finally {
       setInviteLoading(false);
     }
   };
 
-  const handleDelete = async (teacherId) => {
+  const handleDelete = async (teacherId: string): Promise<void> => {
     if (!confirm('Are you sure you want to remove this teacher?')) {
       return;
     }
     try {
       await deleteTeacher(teacherId);
-    } catch (err) {
+    } catch (err: any) {
       alert(err.message);
     }
   };

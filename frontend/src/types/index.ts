@@ -8,6 +8,7 @@ export interface User {
   role: UserRole;
   created_at: string;
   has_completed_assessment?: boolean;
+  school_id?: string;
   student_profile?: {
     id: string;
     registration_completed_at: Date | null;
