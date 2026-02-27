@@ -10,6 +10,12 @@ def get_school(db: Session, school_id: UUID) -> Optional[School]:
     return db.query(School).filter(School.id == school_id).first()
 
 
+# Alias for backward compatibility
+def get_school_by_id(db: Session, school_id: UUID) -> Optional[School]:
+    """Get school by ID (alias for get_school)"""
+    return get_school(db, school_id)
+
+
 def get_schools(db: Session, skip: int = 0, limit: int = 100) -> List[School]:
     """Get all schools with pagination"""
     return db.query(School).offset(skip).limit(limit).all()

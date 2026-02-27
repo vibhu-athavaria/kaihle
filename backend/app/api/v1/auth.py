@@ -75,43 +75,75 @@ def generate_school_code(db: Session) -> str:
 
 @router.post("/register/school-admin", response_model=SchoolAdminRegisterResponse, status_code=201)
 def register_school_admin(request: SchoolAdminRegisterRequest, db: Session = Depends(get_db)):
+    """
+    Register a new school admin and create a pending school.
+
+    This endpoint creates both a user account and a school record in a single
+    atomic transaction. The school will have PENDING_APPROVAL status until
+    approved by a super admin.
+
+    Args:
+        request: School admin registration data including admin details and school info
+        db: Database session
+
+    Returns:
+        SchoolAdminRegisterResponse with user_id, school_id, and status
+
+    Raises:
+        HTTPException: 400 if email already registered, 500 on transaction failure
+    """
     # Check if email is already registered
     if get_user_by_email(db, email=request.admin_email):
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Create school admin user
-    user_create = UserCreate(
-        email=request.admin_email,
-        username=request.admin_email.split("@")[0],  # Use part before @ as username
-        password=request.password,
-        full_name=request.admin_name,
-        role=UserRole.SCHOOL_ADMIN.value
-    )
-    db_user = create_user(db=db, user=user_create)
+    # Use explicit transaction for atomic multi-table operations
+    # This ensures both user and school are created together or not at all
+    try:
+        # Create school admin user
+        user_create = UserCreate(
+            email=request.admin_email,
+            username=request.admin_email.split("@")[0],  # Use part before @ as username
+            password=request.password,
+            full_name=request.admin_name,
+            role=UserRole.SCHOOL_ADMIN.value
+        )
+        db_user = create_user(db=db, user=user_create)
 
-    # Create school with PENDING_APPROVAL status and NULL school_code
-    school_create = SchoolCreate(
-        name=request.school_name,
-        country=request.country,
-        curriculum_id=request.curriculum_id
-    )
+        # Create school with PENDING_APPROVAL status and NULL school_code
+        school_create = SchoolCreate(
+            name=request.school_name,
+            country=request.country,
+            curriculum_id=request.curriculum_id
+        )
 
-    # Create school in database
-    db_school = School(
-        id=uuid.uuid4(),
-        admin_id=db_user.id,
-        name=request.school_name,
-        slug=re.sub(r'[^a-zA-Z0-9-]', '', request.school_name.lower().replace(' ', '-')),
-        school_code=None,  # NULL until approved
-        curriculum_id=request.curriculum_id,
-        country=request.country,
-        timezone="Asia/Makassar",
-        status=SchoolStatus.PENDING_APPROVAL,
-        is_active=True
-    )
-    db.add(db_school)
-    db.commit()
-    db.refresh(db_school)
+        # Create school in database
+        db_school = School(
+            id=uuid.uuid4(),
+            admin_id=db_user.id,
+            name=request.school_name,
+            slug=re.sub(r'[^a-zA-Z0-9-]', '', request.school_name.lower().replace(' ', '-')),
+            school_code=None,  # NULL until approved
+            curriculum_id=request.curriculum_id,
+            country=request.country,
+            timezone="Asia/Makassar",
+            status=SchoolStatus.PENDING_APPROVAL,
+            is_active=True
+        )
+        db.add(db_school)
+        db.commit()
+        db.refresh(db_school)
+        db.refresh(db_user)
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Rollback on any other error
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to complete registration. Please try again."
+        )
 
     # TODO: Send confirmation email "Your school is under review."
 
@@ -124,11 +156,25 @@ def register_school_admin(request: SchoolAdminRegisterRequest, db: Session = Dep
 
 @router.post("/register/student", response_model=StudentRegisterResponse, status_code=201)
 def register_student(request: StudentRegisterRequest, db: Session = Depends(get_db)):
-    # Validate school_code length
-    if len(request.school_code) != 8:
-        raise HTTPException(status_code=422, detail="Invalid school code length. Must be 8 characters.")
+    """
+    Register a new student with a school.
 
-    # Find school by school_code
+    This endpoint creates a user account, student profile, and registration record
+    in a single atomic transaction. The registration will have PENDING status until
+    approved by a school admin.
+
+    Args:
+        request: Student registration data including school code
+        db: Database session
+
+    Returns:
+        StudentRegisterResponse with user_id, school_name, and status
+
+    Raises:
+        HTTPException: 400 if email already registered, 403 if school not active,
+                      422 if invalid school code, 500 on transaction failure
+    """
+    # Find school by school_code (Pydantic already validates length is exactly 8 characters)
     school = get_school_by_code(db, school_code=request.school_code)
 
     # Validate school exists and is active
@@ -145,38 +191,52 @@ def register_student(request: StudentRegisterRequest, db: Session = Depends(get_
     if get_user_by_email(db, email=request.email):
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Create student user
-    user_create = UserCreate(
-        email=request.email,
-        username=request.email.split("@")[0],  # Use part before @ as username
-        password=request.password,
-        full_name=request.full_name,
-        role=UserRole.STUDENT.value
-    )
-    db_user = create_user(db=db, user=user_create)
+    # Use explicit transaction for atomic multi-table operations
+    # This ensures user, profile, and registration are created together or not at all
+    try:
+        # Create student user
+        user_create = UserCreate(
+            email=request.email,
+            username=request.email.split("@")[0],  # Use part before @ as username
+            password=request.password,
+            full_name=request.full_name,
+            role=UserRole.STUDENT.value
+        )
+        db_user = create_user(db=db, user=user_create)
 
-    # Create student profile
-    db_student_profile = StudentProfile(
-        id=uuid.uuid4(),
-        user_id=db_user.id,
-        parent_id=db_user.id,  # For now, student is their own parent
-        school_id=school.id
-    )
-    db.add(db_student_profile)
+        # Create student profile
+        db_student_profile = StudentProfile(
+            id=uuid.uuid4(),
+            user_id=db_user.id,
+            parent_id=db_user.id,  # For now, student is their own parent
+            school_id=school.id
+        )
+        db.add(db_student_profile)
 
-    # Create student registration with PENDING status
-    db_registration = StudentSchoolRegistration(
-        id=uuid.uuid4(),
-        school_id=school.id,
-        student_id=db_student_profile.id,
-        status=RegistrationStatus.PENDING
-    )
-    db.add(db_registration)
+        # Create student registration with PENDING status
+        db_registration = StudentSchoolRegistration(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            student_id=db_student_profile.id,
+            status=RegistrationStatus.PENDING
+        )
+        db.add(db_registration)
 
-    db.commit()
-    db.refresh(db_user)
-    db.refresh(db_student_profile)
-    db.refresh(db_registration)
+        db.commit()
+        db.refresh(db_user)
+        db.refresh(db_student_profile)
+        db.refresh(db_registration)
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        # Rollback on any other error
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to complete registration. Please try again."
+        )
 
     # TODO: Send notification to school admin
 

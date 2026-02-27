@@ -44,7 +44,8 @@ class School(Base, SerializerMixin):
                       Index('idx_schools_admin_id', 'admin_id'))
 
     # Relationships
-    admin = relationship("User", backref="administered_school")
+    admin = relationship("User", foreign_keys=[admin_id], backref="administered_school")
+    approver = relationship("User", foreign_keys=[approved_by], backref="approved_schools")
     teachers = relationship("Teacher", back_populates="school")
     students = relationship("StudentProfile", back_populates="school")
     school_grades = relationship("SchoolGrade", back_populates="school")

@@ -47,7 +47,7 @@ services:
       redis:
         condition: service_started
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://kaihle_user:changeme_in_production@db:5432/kaihle_db}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://kaihle_user:changeme_in_production@db:5432/kaihle_db}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
@@ -94,7 +94,7 @@ services:
       - db
       - redis
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://kaihle_user:changeme_in_production@db:5432/kaihle_db}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://kaihle_user:changeme_in_production@db:5432/kaihle_db}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
@@ -138,7 +138,7 @@ services:
     depends_on:
       - redis
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://kaihle_user:changeme_in_production@db:5432/kaihle_db}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://kaihle_user:changeme_in_production@db:5432/kaihle_db}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}

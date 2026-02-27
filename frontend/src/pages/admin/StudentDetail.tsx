@@ -1,18 +1,39 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { http } from '../../lib/http';
 import { useAuth } from '../../contexts/AuthContext';
 
-const StudentDetail = () => {
+interface StudentDetailData {
+  name: string;
+  email: string;
+  grade: string;
+  diagnostic_status: string;
+  plans_linked: number;
+  plans_total: number;
+  avg_progress_pct: number;
+  classes_enrolled: number;
+}
+
+interface SubtopicProgress {
+  class_subtopic_id: string;
+  subtopic_name: string;
+  status: string;
+  time_spent_minutes: number | null;
+  completed_at: string | null;
+}
+
+type DiagnosticStatus = 'completed' | 'in_progress' | 'not_started';
+
+const StudentDetail: React.FC = () => {
   const navigate = useNavigate();
-  const { studentId } = useParams();
+  const { studentId } = useParams<{ studentId: string }>();
   const { user } = useAuth();
   const schoolId = user?.school_id;
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [student, setStudent] = useState(null);
-  const [progress, setProgress] = useState([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [student, setStudent] = useState<StudentDetailData | null>(null);
+  const [progress, setProgress] = useState<SubtopicProgress[]>([]);
 
   useEffect(() => {
     if (studentId && schoolId) {
@@ -20,23 +41,23 @@ const StudentDetail = () => {
     }
   }, [studentId, schoolId]);
 
-  const fetchStudentDetails = async () => {
+  const fetchStudentDetails = async (): Promise<void> => {
     setLoading(true);
     try {
       const [studentRes, progressRes] = await Promise.all([
-        http.get(`/api/v1/schools/${schoolId}/students/${studentId}`),
-        http.get(`/api/v1/schools/${schoolId}/students/${studentId}/progress`).catch(() => ({ data: { subtopics: [] } }))
+        http.get<StudentDetailData>(`/api/v1/schools/${schoolId}/students/${studentId}`),
+        http.get<{ subtopics: SubtopicProgress[] }>(`/api/v1/schools/${schoolId}/students/${studentId}/progress`).catch(() => ({ data: { subtopics: [] } }))
       ]);
       setStudent(studentRes.data);
       setProgress(progressRes.data.subtopics || []);
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status: string | undefined): JSX.Element => {
     if (!status) {
       return (
         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
@@ -44,12 +65,12 @@ const StudentDetail = () => {
         </span>
       );
     }
-    const statusConfig = {
+    const statusConfig: Record<DiagnosticStatus, { bg: string; text: string; label: string }> = {
       'completed': { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed' },
       'in_progress': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'In Progress' },
       'not_started': { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Not Started' }
     };
-    const config = statusConfig[status] || statusConfig['not_started'];
+    const config = statusConfig[status as DiagnosticStatus] || statusConfig['not_started'];
     return (
       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${config.bg} ${config.text}`}>
         {config.label}

@@ -13,8 +13,10 @@ interface ProtectedRouteProps {
 const LOGIN_ROUTE_BY_ROLE: Record<UserRole, string> = {
   parent: "/parent-login",
   student: "/student-login",
-  admin: "/admin-login",
-  teacher: "/teacher-login",
+  admin: "/signup",
+  teacher: "/signup",
+  school_admin: "/register/school-admin",
+  super_admin: "/signup",
 };
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
@@ -36,8 +38,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     }
   }
 
-  // Still restoring session
-  if (loading) {
+  // Token exists and auth is still loading - wait
+  if (hasToken && loading) {
     return (
       <div className="min-h-screen bg-blue-50 flex items-center justify-center">
         <div className="text-center">
@@ -61,8 +63,18 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
+  // Token exists but user failed to load after auth finished - recover by routing to login
+  if (hasToken && !loading && !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // User must be defined at this point - guard for TypeScript
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
   // Token exists but wrong role (important!)
-  if (user && !allowedRoles.includes(user.role)) {
+  if (!allowedRoles.includes(user.role)) {
     return (
       <Navigate
         to={LOGIN_ROUTE_BY_ROLE[user.role]}

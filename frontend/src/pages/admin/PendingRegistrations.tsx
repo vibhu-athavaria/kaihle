@@ -1,31 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSchoolAdmin } from '../../hooks/useSchoolAdmin';
+import { useSchoolAdmin, Grade } from '../../hooks/useSchoolAdmin';
 import { useAuth } from '../../contexts/AuthContext';
 import GradeSelector from '../../components/admin/GradeSelector';
 
-const PendingRegistrations = () => {
+const PendingRegistrations: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const schoolId = user?.school_id;
   const { loading, error, registrations, grades, fetchRegistrations, approveRegistration, rejectRegistration } = useSchoolAdmin(schoolId);
 
-  const [selectedGrades, setSelectedGrades] = useState({});
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [selectedRegistrationId, setSelectedRegistrationId] = useState(null);
-  const [actionError, setActionError] = useState('');
+  const [selectedGrades, setSelectedGrades] = useState<Record<string, string>>({});
+  const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
+  const [rejectReason, setRejectReason] = useState<string>('');
+  const [selectedRegistrationId, setSelectedRegistrationId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string>('');
 
   useEffect(() => {
     fetchRegistrations();
   }, [schoolId]);
 
-  const handleGradeChange = (registrationId, gradeId) => {
+  const handleGradeChange = (registrationId: string, gradeId: string): void => {
     setSelectedGrades({ ...selectedGrades, [registrationId]: gradeId });
     setActionError('');
   };
 
-  const handleApprove = async (registrationId) => {
+  const handleApprove = async (registrationId: string): Promise<void> => {
     const gradeId = selectedGrades[registrationId];
     if (!gradeId) {
       setActionError('Please select a grade before approving');
@@ -33,24 +33,25 @@ const PendingRegistrations = () => {
     }
     try {
       await approveRegistration(registrationId, gradeId);
-      setSelectedGrades({ ...selectedGrades, [registrationId]: null });
-    } catch (err) {
+      setSelectedGrades({ ...selectedGrades, [registrationId]: '' });
+    } catch (err: any) {
       setActionError(err.message);
     }
   };
 
-  const handleRejectClick = (registrationId) => {
+  const handleRejectClick = (registrationId: string): void => {
     setSelectedRegistrationId(registrationId);
     setShowRejectModal(true);
   };
 
-  const handleRejectConfirm = async () => {
+  const handleRejectConfirm = async (): Promise<void> => {
+    if (!selectedRegistrationId) return;
     try {
       await rejectRegistration(selectedRegistrationId, rejectReason);
       setShowRejectModal(false);
       setRejectReason('');
       setSelectedRegistrationId(null);
-    } catch (err) {
+    } catch (err: any) {
       setActionError(err.message);
     }
   };

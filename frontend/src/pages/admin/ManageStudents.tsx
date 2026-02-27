@@ -1,30 +1,32 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useSchoolAdmin } from '../../hooks/useSchoolAdmin';
+import { useSchoolAdmin, Student } from '../../hooks/useSchoolAdmin';
 import { useAuth } from '../../contexts/AuthContext';
 
-const ManageStudents = () => {
+type DiagnosticStatus = 'completed' | 'in_progress' | 'not_started';
+
+const ManageStudents: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const schoolId = user?.school_id;
   const { loading, error, students, fetchStudents } = useSchoolAdmin(schoolId);
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterGrade, setFilterGrade] = useState('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [filterGrade, setFilterGrade] = useState<string>('');
 
   useEffect(() => {
     fetchStudents();
   }, [schoolId]);
 
-  const filteredStudents = students.filter(student => {
+  const filteredStudents = students.filter((student: Student) => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesGrade = !filterGrade || student.grade === filterGrade;
     return matchesSearch && matchesGrade;
   });
 
-  const getDiagnosticStatusBadge = (status) => {
-    const statusConfig = {
+  const getDiagnosticStatusBadge = (status: DiagnosticStatus): JSX.Element => {
+    const statusConfig: Record<DiagnosticStatus, { bg: string; text: string; label: string }> = {
       'completed': { bg: 'bg-green-100', text: 'text-green-800', label: 'Completed' },
       'in_progress': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'In Progress' },
       'not_started': { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Not Started' }

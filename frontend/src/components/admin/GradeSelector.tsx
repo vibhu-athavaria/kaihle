@@ -1,6 +1,15 @@
 import React from 'react';
+import { Grade } from '../../hooks/useSchoolAdmin';
 
-const GradeSelector = ({
+interface GradeSelectorProps {
+  grades?: Grade[];
+  selectedGradeId?: string | null;
+  onChange: (gradeId: string) => void;
+  placeholder?: string;
+  error?: string;
+}
+
+const GradeSelector: React.FC<GradeSelectorProps> = ({
   grades = [],
   selectedGradeId,
   onChange,

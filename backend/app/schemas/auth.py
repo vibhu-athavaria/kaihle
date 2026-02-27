@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from uuid import UUID
 
@@ -6,7 +6,7 @@ from uuid import UUID
 class UserCreate(BaseModel):
     email: Optional[EmailStr] = None
     username: Optional[str] = None
-    password: str
+    password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
     full_name: Optional[str] = None
     role: str
 
@@ -44,7 +44,7 @@ class UserResponse(BaseModel):
 class SchoolAdminRegisterRequest(BaseModel):
     admin_name: str
     admin_email: EmailStr
-    password: str  # min 8 chars
+    password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
     school_name: str
     country: str
     curriculum_id: UUID
@@ -60,8 +60,8 @@ class SchoolAdminRegisterResponse(BaseModel):
 class StudentRegisterRequest(BaseModel):
     full_name: str
     email: EmailStr
-    password: str  # min 8 chars
-    school_code: str  # 8 chars
+    password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
+    school_code: str = Field(..., min_length=8, max_length=8, description="School code must be exactly 8 characters")
 
 
 class StudentRegisterResponse(BaseModel):
