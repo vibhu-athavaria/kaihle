@@ -13,8 +13,10 @@ interface ProtectedRouteProps {
 const LOGIN_ROUTE_BY_ROLE: Record<UserRole, string> = {
   parent: "/parent-login",
   student: "/student-login",
-  admin: "/admin-login",
-  teacher: "/teacher-login",
+  admin: "/signup",
+  teacher: "/signup",
+  school_admin: "/signup/school-admin",
+  super_admin: "/signup",
 };
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
@@ -61,8 +63,20 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
+  // Token exists but user data not loaded yet - wait
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Verifying session...</p>
+        </div>
+      </div>
+    );
+  }
+
   // Token exists but wrong role (important!)
-  if (user && !allowedRoles.includes(user.role)) {
+  if (!allowedRoles.includes(user.role)) {
     return (
       <Navigate
         to={LOGIN_ROUTE_BY_ROLE[user.role]}
