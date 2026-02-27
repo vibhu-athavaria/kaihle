@@ -9,6 +9,8 @@ import { TrialStatusNotice } from "./components/TrialStatusNotice";
 
 import { Home } from "./pages/Home";
 import { SignUp } from "./pages/SignUp";
+import { SchoolAdminSignUp } from "./pages/SchoolAdminSignUp";
+import { StudentSignUp } from "./pages/StudentSignUp";
 import { ParentLogin } from "./pages/ParentLogin";
 import { StudentLogin } from "./pages/StudentLogin";
 
@@ -62,6 +64,8 @@ const AppContent: React.FC = () => {
           {/* ---------------- PUBLIC ---------------- */}
           <Route path="/" element={user ? <Navigate to={defaultRedirect} /> : <Home />} />
           <Route path="/signup" element={user ? <Navigate to={defaultRedirect} /> : <SignUp />} />
+          <Route path="/register/school-admin" element={user ? <Navigate to={defaultRedirect} /> : <SchoolAdminSignUp />} />
+          <Route path="/register/student" element={user ? <Navigate to={defaultRedirect} /> : <StudentSignUp />} />
 
           <Route
             path="/parent-login"

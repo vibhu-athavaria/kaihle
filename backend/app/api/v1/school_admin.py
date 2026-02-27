@@ -1,11 +1,15 @@
 # School Admin API Endpoints
+# All endpoints require authentication and authorization.
+# Users must be SCHOOL_ADMIN role and associated with the school they are accessing.
 
+import logging
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 from uuid import UUID
 from typing import Optional
 
 from app.core.database import get_db
+from app.core.deps import get_current_user
 from app.core.security import get_password_hash
 from app.schemas.school_admin import (
     SchoolAdminRequest,
@@ -21,23 +25,97 @@ from app.crud.school import get_school
 from app.crud.teacher import get_teachers_by_school, create_teacher as crud_create_teacher, delete_teacher as crud_delete_teacher
 from app.crud.student import get_student
 from app.crud.grade import get_grades
-from app.models.user import StudentProfile, User
+from app.models.user import StudentProfile, User, UserRole
 from app.models.teacher import Teacher
+from app.models.school import School
 from app.models.school_registration import StudentSchoolRegistration, RegistrationStatus
 from app.models.assessment import Assessment, AssessmentStatus, AssessmentType
 from app.models.study_plan import StudyPlan
 from app.schemas.teacher import TeacherCreate
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+def verify_school_admin_access(
+    school_id: str,
+    current_user: User,
+    db: Session
+) -> School:
+    """
+    Verify that the current user is a SCHOOL_ADMIN and has access to the specified school.
+
+    Args:
+        school_id: The UUID of the school to check access for
+        current_user: The authenticated user making the request
+        db: Database session
+
+    Returns:
+        School: The school object if access is granted
+
+    Raises:
+        HTTPException: 403 if user is not authorized, 404 if school not found
+    """
+    # Check if user has SCHOOL_ADMIN role
+    if current_user.role != UserRole.SCHOOL_ADMIN:
+        logger.warning(
+            "Unauthorized access attempt",
+            extra={
+                "user_id": str(current_user.id),
+                "user_role": current_user.role,
+                "school_id": school_id,
+                "reason": "User is not a SCHOOL_ADMIN"
+            }
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Only school administrators can access this endpoint"
+        )
+
+    # Get the school
+    school = get_school(db, school_id)
+    if not school:
+        raise HTTPException(status_code=404, detail="School not found")
+
+    # Verify the user is the admin of this school
+    if school.admin_id != current_user.id:
+        logger.warning(
+            "Unauthorized school access attempt",
+            extra={
+                "user_id": str(current_user.id),
+                "school_id": school_id,
+                "school_admin_id": str(school.admin_id),
+                "reason": "User is not the admin of this school"
+            }
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="You are not authorized to access this school"
+        )
+
+    return school
+
 
 @router.get("/{school_id}/dashboard", response_model=DashboardStats)
 def dashboard(
     school_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    school = get_school(db, school_id)
-    if not school:
-        raise HTTPException(status_code=404, detail="School not found")
+    """
+    Get dashboard statistics for a school.
+    Requires SCHOOL_ADMIN role and must be admin of the specified school.
+    """
+    school = verify_school_admin_access(school_id, current_user, db)
+
+    logger.info(
+        "Dashboard accessed",
+        extra={
+            "user_id": str(current_user.id),
+            "school_id": school_id
+        }
+    )
 
     # Get student count for this school
     student_count = db.query(StudentProfile).filter(
@@ -83,17 +161,23 @@ def dashboard(
 def create_teacher(
     school_id: str,
     teacher: SchoolAdminRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Verify school exists
-    school = get_school(db, school_id)
-    if not school:
-        raise HTTPException(status_code=404, detail="School not found")
+    """
+    Create a new teacher for a school.
+    Requires SCHOOL_ADMIN role and must be admin of the specified school.
+    """
+    school = verify_school_admin_access(school_id, current_user, db)
 
-    # Create teacher user and profile
-    # This is a simplified implementation - in production would handle user creation properly
-    from app.crud.user import create_user
-    from app.models.user import UserRole
+    logger.info(
+        "Creating teacher",
+        extra={
+            "user_id": str(current_user.id),
+            "school_id": school_id,
+            "teacher_email": teacher.email
+        }
+    )
 
     # Check if user with email already exists
     existing_user = db.query(User).filter(User.email == teacher.email).first()
@@ -105,12 +189,21 @@ def create_teacher(
         "email": teacher.email,
         "username": teacher.email.split("@")[0],
         "hashed_password": get_password_hash("temporary_password"),  # Would be set via invite flow
-        "role": UserRole.TEACHER
+        "role": UserRole.TEACHER,
+        "full_name": teacher.name
     }
 
     try:
+        from app.crud.user import create_user
         user = create_user(db, user_data)
     except Exception as e:
+        logger.error(
+            "Failed to create user for teacher",
+            extra={
+                "email": teacher.email,
+                "error": str(e)
+            }
+        )
         raise HTTPException(status_code=400, detail=f"Failed to create user: {str(e)}")
 
     # Create teacher profile
@@ -122,6 +215,14 @@ def create_teacher(
     try:
         db_teacher = crud_create_teacher(db, teacher_data)
     except Exception as e:
+        logger.error(
+            "Failed to create teacher profile",
+            extra={
+                "user_id": str(user.id),
+                "school_id": school_id,
+                "error": str(e)
+            }
+        )
         raise HTTPException(status_code=400, detail=f"Failed to create teacher: {str(e)}")
 
     return TeacherResponse(
@@ -136,12 +237,14 @@ def create_teacher(
 @router.get("/{school_id}/teachers", response_model=list[TeacherResponse])
 def list_teachers(
     school_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Verify school exists
-    school = get_school(db, school_id)
-    if not school:
-        raise HTTPException(status_code=404, detail="School not found")
+    """
+    List all teachers for a school.
+    Requires SCHOOL_ADMIN role and must be admin of the specified school.
+    """
+    school = verify_school_admin_access(school_id, current_user, db)
 
     # Get teachers for this school
     teachers = get_teachers_by_school(db, UUID(school_id))
@@ -164,12 +267,23 @@ def list_teachers(
 def delete_teacher_endpoint(
     school_id: str,
     teacher_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Verify school exists
-    school = get_school(db, school_id)
-    if not school:
-        raise HTTPException(status_code=404, detail="School not found")
+    """
+    Delete a teacher from a school.
+    Requires SCHOOL_ADMIN role and must be admin of the specified school.
+    """
+    school = verify_school_admin_access(school_id, current_user, db)
+
+    logger.info(
+        "Deleting teacher",
+        extra={
+            "user_id": str(current_user.id),
+            "school_id": school_id,
+            "teacher_id": teacher_id
+        }
+    )
 
     # Delete teacher
     success = crud_delete_teacher(db, UUID(teacher_id))
@@ -182,12 +296,14 @@ def delete_teacher_endpoint(
 @router.get("/{school_id}/students", response_model=list[StudentResponse])
 def list_students(
     school_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Verify school exists
-    school = get_school(db, school_id)
-    if not school:
-        raise HTTPException(status_code=404, detail="School not found")
+    """
+    List all students for a school.
+    Requires SCHOOL_ADMIN role and must be admin of the specified school.
+    """
+    school = verify_school_admin_access(school_id, current_user, db)
 
     # Get students for this school
     students = db.query(StudentProfile).options(
@@ -248,12 +364,24 @@ def update_student_grade(
     school_id: str,
     student_id: str,
     grade_id: str = Query(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Verify school exists
-    school = get_school(db, school_id)
-    if not school:
-        raise HTTPException(status_code=404, detail="School not found")
+    """
+    Update a student's grade.
+    Requires SCHOOL_ADMIN role and must be admin of the specified school.
+    """
+    school = verify_school_admin_access(school_id, current_user, db)
+
+    logger.info(
+        "Updating student grade",
+        extra={
+            "user_id": str(current_user.id),
+            "school_id": school_id,
+            "student_id": student_id,
+            "new_grade_id": grade_id
+        }
+    )
 
     # Get student
     student = db.query(StudentProfile).filter(
@@ -275,12 +403,14 @@ def update_student_grade(
 def get_student_detail(
     school_id: str,
     student_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Verify school exists
-    school = get_school(db, school_id)
-    if not school:
-        raise HTTPException(status_code=404, detail="School not found")
+    """
+    Get details for a specific student.
+    Requires SCHOOL_ADMIN role and must be admin of the specified school.
+    """
+    school = verify_school_admin_access(school_id, current_user, db)
 
     # Get student
     student = db.query(StudentProfile).options(
@@ -334,12 +464,14 @@ def get_student_detail(
 def get_student_progress(
     school_id: str,
     student_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    # Verify school exists
-    school = get_school(db, school_id)
-    if not school:
-        raise HTTPException(status_code=404, detail="School not found")
+    """
+    Get progress data for a specific student.
+    Requires SCHOOL_ADMIN role and must be admin of the specified school.
+    """
+    school = verify_school_admin_access(school_id, current_user, db)
 
     # Get student
     student = db.query(StudentProfile).filter(
@@ -360,13 +492,14 @@ def get_student_progress(
 @router.get("/{school_id}/grades", response_model=list[GradeResponse])
 def list_grades(
     school_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """Get grades available for a school."""
-    # Verify school exists
-    school = get_school(db, school_id)
-    if not school:
-        raise HTTPException(status_code=404, detail="School not found")
+    """
+    Get grades available for a school.
+    Requires SCHOOL_ADMIN role and must be admin of the specified school.
+    """
+    school = verify_school_admin_access(school_id, current_user, db)
 
     # Get all active grades
     grades = get_grades(db)

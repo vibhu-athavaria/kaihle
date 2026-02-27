@@ -53,8 +53,23 @@ export interface ChatMessage {
 export interface AuthContextType {
   user: User | null;
   signUpParent: (email: string, password: string, full_name: string) => Promise<void>;
+  signUpSchoolAdmin: (
+    adminName: string,
+    adminEmail: string,
+    password: string,
+    schoolName: string,
+    country: string,
+    curriculumId: string
+  ) => Promise<{ user_id: string; school_id: string; status: string }>;
+  signUpStudent: (
+    fullName: string,
+    email: string,
+    password: string,
+    schoolCode: string
+  ) => Promise<{ user_id: string; school_name: string; status: string }>;
   signInParent: (email: string, password: string) => Promise<void>;
   signInStudent: (username: string, password: string) => Promise<void>;
+  signInSchoolAdmin: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   loading: boolean;
 }

@@ -1,6 +1,6 @@
 
 from fastapi import APIRouter
-from app.api.v1 import auth, badge, users, students, progress, assessments, study_plans, ai_tutor, course, notifications, billing, grades, diagnostic, school_admin
+from app.api.v1 import auth, badge, users, students, progress, assessments, study_plans, ai_tutor, course, notifications, billing, grades, diagnostic, school_admin, schools
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
@@ -16,4 +16,5 @@ api_router.include_router(assessments.router, prefix="/assessments", tags=["asse
 api_router.include_router(billing.router, prefix="/billing", tags=["billing"])
 api_router.include_router(badge.router, prefix="/badges", tags=["badges"])
 api_router.include_router(diagnostic.router, prefix="/diagnostic", tags=["diagnostic"])
-api_router.include_router(school_admin.router, prefix="/schools", tags=["school-admin"])
+api_router.include_router(school_admin.router, prefix="/school-admin", tags=["school-admin"])
+api_router.include_router(schools.router, prefix="/schools", tags=["schools"])

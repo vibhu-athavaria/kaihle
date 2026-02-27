@@ -13,6 +13,19 @@ export const useAuth = () => {
   return context;
 };
 
+// Types for registration responses
+interface SchoolAdminRegisterResponse {
+  user_id: string;
+  school_id: string;
+  status: string;
+}
+
+interface StudentRegisterResponse {
+  user_id: string;
+  school_name: string;
+  status: string;
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -93,6 +106,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  // ---------- SIGNUP (School Admin) ----------
+  const signUpSchoolAdmin = async (
+    adminName: string,
+    adminEmail: string,
+    password: string,
+    schoolName: string,
+    country: string,
+    curriculumId: string
+  ): Promise<SchoolAdminRegisterResponse> => {
+    setLoading(true);
+    try {
+      const response = await http.post<SchoolAdminRegisterResponse>(
+        "/api/v1/auth/register/school-admin",
+        {
+          admin_name: adminName,
+          admin_email: adminEmail,
+          password: password,
+          school_name: schoolName,
+          country: country,
+          curriculum_id: curriculumId,
+        }
+      );
+
+      return response.data;
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to register school";
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ---------- SIGNUP (Student) ----------
+  const signUpStudent = async (
+    fullName: string,
+    email: string,
+    password: string,
+    schoolCode: string
+  ): Promise<StudentRegisterResponse> => {
+    setLoading(true);
+    try {
+      const response = await http.post<StudentRegisterResponse>(
+        "/api/v1/auth/register/student",
+        {
+          full_name: fullName,
+          email: email,
+          password: password,
+          school_code: schoolCode,
+        }
+      );
+
+      return response.data;
+    } catch (error: any) {
+      const errorMessage =
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to register as student";
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // ---------- LOGIN (Parent) ----------
   const signInParent = async (email: string, password: string) => {
     return signInCommon(email, password, "parent");
@@ -104,11 +185,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     return user;
   };
 
+  // ---------- LOGIN (School Admin) ----------
+  const signInSchoolAdmin = async (email: string, password: string) => {
+    return signInCommon(email, password, "school_admin");
+  };
+
   // ---------- COMMON LOGIN HANDLER ----------
   const signInCommon = async (
     identifier: string,
     password: string,
-    role: "parent" | "student"
+    role: "parent" | "student" | "school_admin"
   ) => {
     setLoading(true);
     try {
@@ -148,8 +234,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       value={{
         user,
         signUpParent,
+        signUpSchoolAdmin,
+        signUpStudent,
         signInParent,
         signInStudent,
+        signInSchoolAdmin,
         signOut,
         loading,
       }}

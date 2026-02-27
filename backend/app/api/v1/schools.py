@@ -11,7 +11,7 @@ from app.models.school import School, SchoolStatus
 from app.models.school_grade import SchoolGrade
 from app.models.school_registration import StudentSchoolRegistration, RegistrationStatus
 from app.models.user import StudentProfile
-from app.models.grade import Grade
+from app.models.curriculum import Grade
 from app.schemas.school import (
     School, SchoolCreate, SchoolUpdate, SchoolWithDetails,
     SchoolGradeCreate, SchoolGrade,
@@ -19,7 +19,7 @@ from app.schemas.school import (
     SchoolDashboard
 )
 from app.schemas.auth import Token
-from app.crud.user import get_user_by_id
+from app.crud.user import get_user
 from app.crud.school import get_school_by_id
 
 router = APIRouter()
