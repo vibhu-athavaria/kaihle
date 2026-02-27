@@ -107,7 +107,8 @@ def dashboard(
     Get dashboard statistics for a school.
     Requires SCHOOL_ADMIN role and must be admin of the specified school.
     """
-    school = verify_school_admin_access(school_id, current_user, db)
+    # Verify school admin access (validates role and ownership)
+    verify_school_admin_access(school_id, current_user, db)
 
     logger.info(
         "Dashboard accessed",

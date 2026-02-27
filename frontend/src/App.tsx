@@ -13,6 +13,7 @@ import { SchoolAdminSignUp } from "./pages/SchoolAdminSignUp";
 import { StudentSignUp } from "./pages/StudentSignUp";
 import { ParentLogin } from "./pages/ParentLogin";
 import { StudentLogin } from "./pages/StudentLogin";
+import { SchoolAdminLogin } from "./pages/SchoolAdminLogin";
 
 import { Dashboard } from "./pages/Dashboard";
 import { ParentSettings } from "./pages/ParentSettings";
@@ -74,6 +75,10 @@ const AppContent: React.FC = () => {
           <Route
             path="/student-login"
             element={!user ? <StudentLogin /> : <Navigate to={defaultRedirect} />}
+          />
+          <Route
+            path="/school-admin-login"
+            element={!user ? <SchoolAdminLogin /> : <Navigate to={defaultRedirect} />}
           />
 
           {/* ---------------- PARENT ---------------- */}

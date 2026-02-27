@@ -174,11 +174,7 @@ def register_student(request: StudentRegisterRequest, db: Session = Depends(get_
         HTTPException: 400 if email already registered, 403 if school not active,
                       422 if invalid school code, 500 on transaction failure
     """
-    # Validate school_code length
-    if len(request.school_code) != 8:
-        raise HTTPException(status_code=422, detail="Invalid school code length. Must be 8 characters.")
-
-    # Find school by school_code
+    # Find school by school_code (Pydantic already validates length is exactly 8 characters)
     school = get_school_by_code(db, school_code=request.school_code)
 
     # Validate school exists and is active

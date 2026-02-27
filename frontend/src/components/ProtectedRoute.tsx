@@ -15,7 +15,7 @@ const LOGIN_ROUTE_BY_ROLE: Record<UserRole, string> = {
   student: "/student-login",
   admin: "/signup",
   teacher: "/signup",
-  school_admin: "/signup/school-admin",
+  school_admin: "/register/school-admin",
   super_admin: "/signup",
 };
 
@@ -38,8 +38,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     }
   }
 
-  // Still restoring session
-  if (loading) {
+  // Token exists and auth is still loading - wait
+  if (hasToken && loading) {
     return (
       <div className="min-h-screen bg-blue-50 flex items-center justify-center">
         <div className="text-center">
@@ -63,16 +63,14 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  // Token exists but user data not loaded yet - wait
+  // Token exists but user failed to load after auth finished - recover by routing to login
+  if (hasToken && !loading && !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // User must be defined at this point - guard for TypeScript
   if (!user) {
-    return (
-      <div className="min-h-screen bg-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Verifying session...</p>
-        </div>
-      </div>
-    );
+    return <Navigate to="/login" replace />;
   }
 
   // Token exists but wrong role (important!)
