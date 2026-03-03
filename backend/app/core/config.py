@@ -1,0 +1,29 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    database_url: str = ""
+    redis_url: str = ""
+    jwt_secret_key: str = ""
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
+    resend_api_key: str = ""
+    from_email: str = "no-reply@kaihle.ai"
+    google_api_key: str = ""
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+    youtube_data_api_key: str = ""
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_s3_bucket: str = "kaihle-assets"
+    aws_region: str = "ap-southeast-1"
+    celery_broker_url: str = ""
+    celery_result_backend: str = ""
+    environment: str = "development"
+    log_level: str = "INFO"
+
+
+settings = Settings()

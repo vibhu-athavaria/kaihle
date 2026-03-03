@@ -1,0 +1,21 @@
+{
+  "name": "kaihle-frontend",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:teacher": "pnpm --filter teacher dev",
+    "dev:student": "pnpm --filter student dev",
+    "dev:parent": "pnpm --filter parent dev",
+    "build": "pnpm --filter './apps/*' build",
+    "lint": "pnpm --filter './apps/*' --filter './packages/*' lint",
+    "test": "pnpm --filter './apps/*' test"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.5.0"
+  }
+}
