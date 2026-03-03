@@ -53,3 +53,19 @@ pnpm dev:parent   # Start parent app on port 3003
 ## License
 
 Proprietary — All rights reserved.
+
+---
+
+## GitHub Secrets (for CI/CD)
+
+The following secrets must be set in your GitHub repository Settings → Secrets and variables → Actions:
+
+| Secret | Description |
+|--------|-------------|
+| `RENDER_API_KEY` | Render account API key |
+| `RENDER_BACKEND_SERVICE_ID` | Render service ID for FastAPI backend |
+| `RENDER_TEACHER_SERVICE_ID` | Render service ID for teacher frontend |
+| `RENDER_STUDENT_SERVICE_ID` | Render service ID for student frontend |
+| `RENDER_PARENT_SERVICE_ID` | Render service ID for parent frontend |
+
+Note: These IDs are set up in M6 when Render services are created.
