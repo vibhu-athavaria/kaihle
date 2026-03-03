@@ -1,0 +1,44 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend to Render
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        run: |
+          curl --fail -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+
+  deploy-frontend:
+    name: Deploy Frontend to Render
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy (teacher app)
+        run: |
+          curl --fail -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_TEACHER_SERVICE_ID }}/deploys" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+      - name: Trigger Render deploy (student app)
+        run: |
+          curl --fail -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_STUDENT_SERVICE_ID }}/deploys" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+      - name: Trigger Render deploy (parent app)
+        run: |
+          curl --fail -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_PARENT_SERVICE_ID }}/deploys" \
+            -H "Content-Type: application/json" \
+            -d '{}'

@@ -1,0 +1,218 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [develop]
+
+jobs:
+
+  lint-backend:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+        working-directory: backend
+      - name: Run ruff
+        run: ruff check .
+        working-directory: backend
+      - name: Run mypy
+        run: mypy app/
+        working-directory: backend
+
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: kaihle
+          POSTGRES_PASSWORD: kaihle
+          POSTGRES_DB: kaihle_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://kaihle:kaihle@localhost:5432/kaihle_test
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      JWT_SECRET_KEY: test-secret-key-for-ci-only-not-production
+      JWT_ALGORITHM: HS256
+      RESEND_API_KEY: test-key
+      ENVIRONMENT: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+        working-directory: backend
+      - name: Enable pgvector extension
+        run: |
+          PGPASSWORD=kaihle psql -h localhost -U kaihle -d kaihle_test \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;"
+      - name: Run migrations
+        run: alembic upgrade head
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://kaihle:kaihle@localhost:5432/kaihle_test
+      - name: Run pytest with coverage
+        run: |
+          pytest app/tests/ \
+            --cov=app/services \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=90 \
+            -v
+        working-directory: backend
+      - name: Post coverage comment
+        uses: py-cov-action/python-coverage-comment-action@v3
+        if: github.event_name == 'pull_request'
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COVERAGE_DATA_FILE: backend/coverage.xml
+
+  lint-frontend:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Install dependencies
+        run: pnpm install
+        working-directory: frontend
+      - name: Run prettier check
+        run: pnpm exec prettier --check "**/*.{ts,tsx,json,css}"
+        working-directory: frontend
+      - name: Run eslint
+        run: pnpm lint
+        working-directory: frontend
+
+  test-frontend-unit:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Install dependencies
+        run: pnpm install
+        working-directory: frontend
+      - name: Run Jest tests
+        run: pnpm test -- --coverage --passWithNoTests
+        working-directory: frontend
+
+  test-e2e:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend-unit]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: kaihle
+          POSTGRES_PASSWORD: kaihle
+          POSTGRES_DB: kaihle_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://kaihle:kaihle@localhost:5432/kaihle_test
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      JWT_SECRET_KEY: test-secret-key-for-ci-only-not-production
+      RESEND_API_KEY: test-key
+      ENVIRONMENT: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Install backend dependencies
+        run: pip install uv && uv pip install --system -e ".[dev]"
+        working-directory: backend
+      - name: Run migrations
+        run: alembic upgrade head
+        working-directory: backend
+      - name: Start backend
+        run: uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+        working-directory: backend
+      - name: Install frontend dependencies
+        run: pnpm install
+        working-directory: frontend
+      - name: Build frontend apps
+        run: pnpm build
+        working-directory: frontend
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Wait for backend to be ready
+        run: |
+          for i in {1..30}; do
+            curl -sf http://localhost:8000/health && break
+            sleep 2
+          done
+      - name: Run Playwright tests
+        run: pnpm exec playwright test
+        working-directory: frontend
+      - name: Upload Playwright report on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
