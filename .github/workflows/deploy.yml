@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Trigger Render deploy
         run: |
-          curl -X POST \
+          curl --fail -X POST \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             "https://api.render.com/v1/services/${{ secrets.RENDER_BACKEND_SERVICE_ID }}/deploys" \
             -H "Content-Type: application/json" \
@@ -23,21 +23,21 @@ jobs:
     steps:
       - name: Trigger Render deploy (teacher app)
         run: |
-          curl -X POST \
+          curl --fail -X POST \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             "https://api.render.com/v1/services/${{ secrets.RENDER_TEACHER_SERVICE_ID }}/deploys" \
             -H "Content-Type: application/json" \
             -d '{}'
       - name: Trigger Render deploy (student app)
         run: |
-          curl -X POST \
+          curl --fail -X POST \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             "https://api.render.com/v1/services/${{ secrets.RENDER_STUDENT_SERVICE_ID }}/deploys" \
             -H "Content-Type: application/json" \
             -d '{}'
       - name: Trigger Render deploy (parent app)
         run: |
-          curl -X POST \
+          curl --fail -X POST \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
             "https://api.render.com/v1/services/${{ secrets.RENDER_PARENT_SERVICE_ID }}/deploys" \
             -H "Content-Type: application/json" \
