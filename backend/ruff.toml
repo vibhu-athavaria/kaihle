@@ -1,0 +1,8 @@
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4"]
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+"alembic/versions/*.py" = ["E501"]
