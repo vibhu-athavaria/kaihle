@@ -1,24 +1,26 @@
 """Curriculum-related SQLAlchemy models.
 
 Covers: curricula, subjects, grades, topics, curriculum_subjects,
-curriculum_topics, subtopics, subtopic_prerequisites, curriculum_chunks
+curriculum_topics, subtopics, subtopic_prerequisites, curriculum_chunks, question_bank
 """
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Enum,
     ForeignKey,
     Integer,
     String,
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -236,4 +238,56 @@ class CurriculumChunk(Base, UUIDMixin, TimestampMixin):
 
     __table_args__ = (
         CheckConstraint("chunk_index >= 0", name="chk_chunk_index"),
+    )
+
+
+class QuestionBank(Base, UUIDMixin, TimestampMixin):
+    """Single canonical question store."""
+
+    __tablename__ = "question_bank"
+
+    subtopic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subtopics.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    question_type: Mapped[str] = mapped_column(
+        Enum("MCQ", "TRUE_FALSE", "SHORT_ANSWER", name="question_type"),
+        nullable=False,
+    )
+    options: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # MCQ format: [{"key": "A", "text": "..."}, {"key": "B", "text": "..."}, ...]
+    # NULL for TRUE_FALSE and SHORT_ANSWER
+    correct_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    # MCQ: "A" | TRUE_FALSE: "true"/"false" | SHORT_ANSWER: model answer text
+    explanation: Mapped[str | None] = mapped_column(Text)
+    hints: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # [{"order": 1, "text": "..."}, ...]
+    difficulty_level: Mapped[float | None]
+    bloom_taxonomy_level: Mapped[str | None] = mapped_column(String(50))
+    estimated_time_seconds: Mapped[int | None]
+    learning_objectives: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    canonical_form: Mapped[str] = mapped_column(Text, nullable=False)
+    problem_signature: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
+    source: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="bank"
+    )
+    # 'bank' = from founders 7K import | 'llm' = AI-generated at runtime
+    meta_tags: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "difficulty_level IS NULL OR (difficulty_level BETWEEN 1.0 AND 5.0)",
+            name="chk_qb_difficulty",
+        ),
+        CheckConstraint(
+            "source IN ('bank', 'llm')",
+            name="chk_qb_source",
+        ),
     )
