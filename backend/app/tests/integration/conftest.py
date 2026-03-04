@@ -1,47 +1,28 @@
 """Pytest configuration and fixtures for integration tests."""
 
 import os
+import random
 import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
 
 import pytest_asyncio
-from sqlalchemy import insert
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.models import Base
 from app.models.assessment import Assessment
-from app.models.billing import (
-    SchoolSubscription,
-    SubscriptionInvoice,
-    SubscriptionPlan,
-    TrialExtension,
-)
 from app.models.curriculum import (
     Curriculum,
-    CurriculumChunk,
-    CurriculumSubject,
-    CurriculumTopic,
     Grade,
-    Subtopic,
-    SubtopicPrerequisite,
     Subject,
     Topic,
 )
-from app.models.gap import GapState
-from app.models.lesson_plan import LessonPlan
 from app.models.onboarding import StudentLearningProfile
-from app.models.parent import ParentReportSnapshot
-from app.models.school import Class, ClassEnrollment, School, SchoolCurriculum
-from app.models.study_plan import StudyPlan, StudyPlanQuiz, StudyPlanResource
+from app.models.school import Class, School
 from app.models.user import (
-    AuthToken,
     OnboardingStatus,
-    ParentStudent,
     StudentProfile,
-    TeacherProfile,
     User,
     UserRole,
 )
@@ -66,15 +47,14 @@ async def engine():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
+async def db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     """Create a fresh database session for each test."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    async_session = sessionmaker(
+    async_session = async_sessionmaker(
         engine,
-        class_=AsyncSession,
         expire_on_commit=False,
     )
 
@@ -179,8 +159,6 @@ async def test_subject(db_session: AsyncSession) -> Subject:
 async def test_grade(db_session: AsyncSession) -> Grade:
     """Create a test grade."""
     # Use unique level to avoid constraint violations
-    import random
-
     grade = Grade(
         id=uuid.uuid4(),
         name="Grade 7",

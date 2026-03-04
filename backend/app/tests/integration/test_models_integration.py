@@ -4,40 +4,36 @@ These tests verify that models can be written to and read from the database,
 and that constraints are properly enforced.
 """
 
+import random
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.assessment import Assessment, AssessmentSelectedQuestion, StudentAttempt, StudentResponse
+from app.models.assessment import Assessment, StudentAttempt
 from app.models.billing import (
     SchoolSubscription,
-    SubscriptionInvoice,
     SubscriptionPlan,
-    TrialExtension,
 )
 from app.models.curriculum import (
     Curriculum,
-    CurriculumChunk,
     CurriculumSubject,
     CurriculumTopic,
     Grade,
-    Subtopic,
-    SubtopicPrerequisite,
     Subject,
+    Subtopic,
     Topic,
 )
 from app.models.gap import GapState
-from app.models.lesson_plan import LessonPlan
 from app.models.onboarding import StudentLearningProfile
-from app.models.parent import ParentReportSnapshot
-from app.models.school import Class, ClassEnrollment, School, SchoolCurriculum
-from app.models.study_plan import StudyPlan, StudyPlanQuiz, StudyPlanResource
+from app.models.school import Class, ClassEnrollment, School
+from app.models.study_plan import StudyPlan
 from app.models.user import (
     AuthToken,
+    AuthTokenType,
     OnboardingStatus,
     ParentStudent,
     StudentProfile,
@@ -128,14 +124,12 @@ class TestModelCRUD:
         self, db_session: AsyncSession, test_user: User
     ) -> None:
         """Test AuthToken model can be written and read."""
-        from app.models.user import AuthTokenType
-
         token = AuthToken(
             id=uuid.uuid4(),
             user_id=test_user.id,
             token_hash=f"hash-{uuid.uuid4().hex}",
             type=AuthTokenType.REFRESH,
-            expires_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(UTC),
         )
         db_session.add(token)
         await db_session.commit()
@@ -244,8 +238,6 @@ class TestModelCRUD:
     async def test_grade_crud(self, db_session: AsyncSession) -> None:
         """Test Grade model can be written and read."""
         # Use a unique level to avoid constraint violations
-        import random
-
         level = random.randint(1, 13)
         grade = Grade(
             id=uuid.uuid4(),
@@ -319,8 +311,6 @@ class TestModelCRUD:
         )
         db_session.add(subject)
         await db_session.commit()
-
-        import random
 
         level = random.randint(1, 13)
         grade = Grade(
@@ -487,8 +477,6 @@ class TestModelCRUD:
         db_session.add(subject)
         await db_session.commit()
 
-        import random
-
         level = random.randint(1, 13)
         grade = Grade(
             id=uuid.uuid4(),
@@ -570,8 +558,6 @@ class TestModelCRUD:
         )
         db_session.add(subject)
         await db_session.commit()
-
-        import random
 
         level = random.randint(1, 13)
         grade = Grade(

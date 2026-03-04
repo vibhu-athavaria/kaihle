@@ -2,8 +2,6 @@
 
 import uuid
 
-import pytest
-
 from app.models.assessment import Assessment, AssessmentStatus
 from app.models.onboarding import StudentLearningProfile
 from app.models.user import OnboardingStatus, StudentProfile
@@ -45,10 +43,6 @@ class TestAssessment:
     def test_is_system_generated_column_default(self) -> None:
         """Test that is_system_generated column defaults to False at DB level."""
         col = Assessment.__table__.c.is_system_generated
-        assert col.default is not None
-        # SQLAlchemy represents false() as a clause element
-        from sqlalchemy import false
-
         # The default should be the SQL false() construct
         assert col.default is not None
 
