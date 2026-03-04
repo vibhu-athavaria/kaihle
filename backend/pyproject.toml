@@ -36,6 +36,11 @@ ignore = ["E501"]
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*.py" = ["E501"]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["alembic*"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",

@@ -1,3 +1,3 @@
 export default function App() {
-  return <div className="p-4">Kaihle — Parent App</div>
+  return <div className="p-4">Kaihle — Parent App</div>;
 }
