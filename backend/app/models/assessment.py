@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -224,7 +225,7 @@ class StudentResponse(Base, UUIDMixin):
     hints_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     time_taken_ms: Mapped[int | None]
     answered_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="NOW()", nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     __table_args__ = (

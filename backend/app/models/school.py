@@ -6,7 +6,7 @@ Covers: schools, school_curricula, classes, class_enrollments
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,7 +61,7 @@ class SchoolCurriculum(Base):
         Boolean, nullable=False, default=False
     )
     adopted_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False, server_default="NOW()"
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
 
 
@@ -118,7 +118,7 @@ class ClassEnrollment(Base):
         primary_key=True,
     )
     enrolled_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False, server_default="NOW()"
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True

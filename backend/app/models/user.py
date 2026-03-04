@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     String,
     Text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -152,7 +153,7 @@ class ParentStudent(Base):
         primary_key=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="NOW()", nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     __table_args__ = (
@@ -190,5 +191,5 @@ class AuthToken(Base):
     )
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="NOW()", nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )

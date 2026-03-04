@@ -16,6 +16,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -201,7 +202,7 @@ class SubtopicPrerequisite(Base):
         String(20), nullable=False, default="REQUIRED"
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default="NOW()", nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     __table_args__ = (
