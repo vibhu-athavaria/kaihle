@@ -128,7 +128,7 @@ async def test_curriculum(db_session: AsyncSession) -> Curriculum:
     """Create a test curriculum."""
     curriculum = Curriculum(
         id=uuid.uuid4(),
-        name="Test Curriculum",
+        name=f"Test Curriculum {uuid.uuid4().hex[:8]}",
         code=f"TEST-{uuid.uuid4().hex[:6]}",
         description="Test curriculum description",
         is_active=True,

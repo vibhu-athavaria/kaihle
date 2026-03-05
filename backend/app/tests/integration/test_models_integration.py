@@ -444,7 +444,7 @@ class TestModelCRUD:
 
         curriculum = Curriculum(
             id=uuid.uuid4(),
-            name="Test Curriculum",
+            name=f"Test Curriculum {uuid.uuid4().hex[:8]}",
             code=f"TC-{uuid.uuid4().hex[:6]}",
             is_active=True,
         )
@@ -524,7 +524,7 @@ class TestModelCRUD:
 
         curriculum = Curriculum(
             id=uuid.uuid4(),
-            name="Test Curriculum",
+            name=f"Test Curriculum {uuid.uuid4().hex[:8]}",
             code=f"TC-{uuid.uuid4().hex[:6]}",
             is_active=True,
         )
@@ -600,6 +600,7 @@ class TestModelCRUD:
             plan_id=plan.id,
             student_count=50,
             total_amount=3750.00,
+            start_date=datetime.now(UTC),
         )
         db_session.add(subscription)
         await db_session.commit()
