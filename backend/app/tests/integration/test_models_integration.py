@@ -602,6 +602,7 @@ class TestModelCRUD:
             student_count=50,
             total_amount=3750.00,
             start_date=datetime.utcnow(),
+            end_date=datetime.utcnow(),
         )
         db_session.add(subscription)
         await db_session.commit()
