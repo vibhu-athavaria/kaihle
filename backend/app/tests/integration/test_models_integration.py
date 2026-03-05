@@ -6,7 +6,7 @@ and that constraints are properly enforced.
 
 import random
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pytest
 from sqlalchemy import select
@@ -115,7 +115,7 @@ class TestModelCRUD:
             user_id=test_user.id,
             token_hash=f"hash-{uuid.uuid4().hex}",
             type=AuthTokenType.REFRESH,
-            expires_at=datetime.now(UTC),
+            expires_at=datetime.utcnow(),
         )
         db_session.add(token)
         await db_session.commit()
@@ -556,6 +556,7 @@ class TestModelCRUD:
             subtopic_id=subtopic.id,
             class_id=test_class.id,
             assigned_by=test_teacher.id,
+            assigned_at=datetime.utcnow(),
         )
         db_session.add(plan)
         await db_session.commit()
@@ -600,7 +601,7 @@ class TestModelCRUD:
             plan_id=plan.id,
             student_count=50,
             total_amount=3750.00,
-            start_date=datetime.now(UTC),
+            start_date=datetime.utcnow(),
         )
         db_session.add(subscription)
         await db_session.commit()
