@@ -101,9 +101,7 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
         nullable=False,
         default=AssessmentStatus.DRAFT,
     )
-    is_system_generated: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    is_system_generated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # TRUE = Tier 1 (auto-created on student enrollment by Celery task)
     # FALSE = Tier 2 (manually created by teacher)
     # Determines whether submit triggers onboarding completion check
@@ -111,9 +109,7 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
         UUID(as_uuid=True),
         ForeignKey("curriculum_topics.id", ondelete="SET NULL"),
     )
-    config: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     # {
     #   "num_questions": 10,
     #   "difficulty_range": [1, 4],
@@ -141,9 +137,7 @@ class AssessmentSelectedQuestion(Base):
     )
     order_index: Mapped[int] = mapped_column(nullable=False)
 
-    __table_args__ = (
-        CheckConstraint("order_index >= 0", name="chk_asq_order"),
-    )
+    __table_args__ = (CheckConstraint("order_index >= 0", name="chk_asq_order"),)
 
 
 class StudentAttempt(Base, UUIDMixin, TimestampMixin):
@@ -173,17 +167,11 @@ class StudentAttempt(Base, UUIDMixin, TimestampMixin):
         default=AttemptStatus.NOT_STARTED,
     )
     total_questions: Mapped[int | None]
-    questions_answered: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    questions_answered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     overall_score: Mapped[float | None]
     time_taken_seconds: Mapped[int | None]
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint(
@@ -224,9 +212,7 @@ class StudentResponse(Base, UUIDMixin):
     ai_feedback: Mapped[str | None] = mapped_column(Text)
     hints_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     time_taken_ms: Mapped[int | None]
-    answered_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    answered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
         CheckConstraint(

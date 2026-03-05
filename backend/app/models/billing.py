@@ -69,9 +69,7 @@ class SubscriptionPlan(Base, UUIDMixin, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    price_per_student_annual: Mapped[float] = mapped_column(
-        Numeric(10, 2), nullable=False
-    )
+    price_per_student_annual: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     # Starter: 75.00 | Growth: 100.00 | Scale: 125.00
     max_students: Mapped[int | None]
     # Starter: 100 | Growth: 500 | Scale: NULL (unlimited)
@@ -79,9 +77,7 @@ class SubscriptionPlan(Base, UUIDMixin, TimestampMixin):
     # TRIAL tier only: 15 days. NULL for paid tiers.
     max_curricula: Mapped[int | None]
     # Starter: 1 | Growth: 2 | Scale: NULL (unlimited)
-    features: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    features: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     # {
     #   "parent_portal": true,
     #   "teacher_copilot": true,
@@ -89,9 +85,7 @@ class SubscriptionPlan(Base, UUIDMixin, TimestampMixin):
     #   "sla_guarantee": false,
     #   "dedicated_support": false
     # }
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sort_order: Mapped[int | None]
 
 
@@ -121,16 +115,12 @@ class SchoolSubscription(Base, UUIDMixin, TimestampMixin):
         nullable=False,
         default=SubscriptionStatus.ACTIVE,
     )
-    billing_cycle: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="annual"
-    )
+    billing_cycle: Mapped[str] = mapped_column(String(20), nullable=False, default="annual")
     student_count: Mapped[int] = mapped_column(Integer, nullable=False)
     # agreed headcount at subscription time
     total_amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     # student_count × price_per_student
-    currency: Mapped[str] = mapped_column(
-        String(3), nullable=False, default="USD"
-    )
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
     start_date: Mapped[datetime]
     end_date: Mapped[datetime]
     trial_end_date: Mapped[datetime | None]
@@ -165,17 +155,13 @@ class SubscriptionInvoice(Base, UUIDMixin, TimestampMixin):
         ForeignKey("schools.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    invoice_number: Mapped[str] = mapped_column(
-        String(50), nullable=False, unique=True
-    )
+    invoice_number: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     period_start: Mapped[datetime]
     period_end: Mapped[datetime]
     student_count: Mapped[int] = mapped_column(Integer, nullable=False)
     # headcount at invoice time (may differ from subscription)
     amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    currency: Mapped[str] = mapped_column(
-        String(3), nullable=False, default="USD"
-    )
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
     status: Mapped[str] = mapped_column(
         Enum(
             PaymentStatus.PENDING,
@@ -217,7 +203,5 @@ class TrialExtension(Base, UUIDMixin):
 
     __table_args__ = (
         CheckConstraint("extension_days > 0", name="chk_te_days"),
-        CheckConstraint(
-            "new_trial_end > original_trial_end", name="chk_te_direction"
-        ),
+        CheckConstraint("new_trial_end > original_trial_end", name="chk_te_direction"),
     )

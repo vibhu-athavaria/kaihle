@@ -23,16 +23,12 @@ class School(Base, UUIDMixin, TimestampMixin):
     address: Mapped[str | None] = mapped_column(String(500))
     city: Mapped[str | None] = mapped_column(String(100))
     country: Mapped[str | None] = mapped_column(String(100))
-    timezone: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="Asia/Singapore"
-    )
+    timezone: Mapped[str] = mapped_column(String(50), nullable=False, default="Asia/Singapore")
     contact_email: Mapped[str | None] = mapped_column(String(255))
     contact_phone: Mapped[str | None] = mapped_column(String(50))
     website: Mapped[str | None] = mapped_column(String(255))
     logo_url: Mapped[str | None] = mapped_column(String(500))
-    status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="pending"
-    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
 
     __table_args__ = (
         CheckConstraint(
@@ -57,12 +53,8 @@ class SchoolCurriculum(Base):
         ForeignKey("curricula.id", ondelete="RESTRICT"),
         primary_key=True,
     )
-    is_primary: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    adopted_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
-    )
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    adopted_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
 
 class Class(Base, UUIDMixin, TimestampMixin):
@@ -97,9 +89,7 @@ class Class(Base, UUIDMixin, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     academic_year: Mapped[str] = mapped_column(String(20), nullable=False)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class ClassEnrollment(Base):
@@ -117,9 +107,5 @@ class ClassEnrollment(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    enrolled_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
-    )
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    enrolled_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

@@ -23,8 +23,4 @@ app = FastAPI(
 
 @app.get("/health")
 async def health() -> JSONResponse:
-    return JSONResponse(content={
-        "status": "ok",
-        "environment": settings.environment,
-        "version": "0.1.0"
-    })
+    return JSONResponse(content={"status": "ok", "environment": settings.environment, "version": "0.1.0"})

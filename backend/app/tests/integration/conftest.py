@@ -7,7 +7,6 @@ from collections.abc import AsyncGenerator
 
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.models import Base
@@ -94,9 +93,7 @@ async def test_user(db_session: AsyncSession, test_school: School) -> User:
 
 
 @pytest_asyncio.fixture
-async def test_student_profile(
-    db_session: AsyncSession, test_user: User
-) -> StudentProfile:
+async def test_student_profile(db_session: AsyncSession, test_user: User) -> StudentProfile:
     """Create a test student profile."""
     profile = StudentProfile(
         id=uuid.uuid4(),

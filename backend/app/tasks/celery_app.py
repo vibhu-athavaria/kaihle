@@ -6,8 +6,12 @@ celery_app = Celery(
     "kaihle",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["app.tasks.gap_tasks", "app.tasks.onboarding_tasks",
-             "app.tasks.lesson_plan_tasks", "app.tasks.parent_tasks"],
+    include=[
+        "app.tasks.gap_tasks",
+        "app.tasks.onboarding_tasks",
+        "app.tasks.lesson_plan_tasks",
+        "app.tasks.parent_tasks",
+    ],
 )
 
 celery_app.conf.update(

@@ -57,9 +57,7 @@ class TestModelCRUD:
         db_session.add(school)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(School).where(School.id == school.id)
-        )
+        result = await db_session.execute(select(School).where(School.id == school.id))
         fetched = result.scalar_one()
         assert fetched.name == "Test School"
 
@@ -76,16 +74,12 @@ class TestModelCRUD:
         db_session.add(user)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(User).where(User.id == user.id)
-        )
+        result = await db_session.execute(select(User).where(User.id == user.id))
         fetched = result.scalar_one()
         assert fetched.email == user.email
         assert fetched.role == UserRole.STUDENT
 
-    async def test_student_profile_crud(
-        self, db_session: AsyncSession, test_user: User
-    ) -> None:
+    async def test_student_profile_crud(self, db_session: AsyncSession, test_user: User) -> None:
         """Test StudentProfile model can be written and read."""
         profile = StudentProfile(
             id=uuid.uuid4(),
@@ -95,15 +89,11 @@ class TestModelCRUD:
         db_session.add(profile)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(StudentProfile).where(StudentProfile.id == profile.id)
-        )
+        result = await db_session.execute(select(StudentProfile).where(StudentProfile.id == profile.id))
         fetched = result.scalar_one()
         assert fetched.onboarding_diagnostic_status == OnboardingStatus.PENDING
 
-    async def test_teacher_profile_crud(
-        self, db_session: AsyncSession, test_teacher: User
-    ) -> None:
+    async def test_teacher_profile_crud(self, db_session: AsyncSession, test_teacher: User) -> None:
         """Test TeacherProfile model can be written and read."""
         profile = TeacherProfile(
             id=uuid.uuid4(),
@@ -114,15 +104,11 @@ class TestModelCRUD:
         db_session.add(profile)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(TeacherProfile).where(TeacherProfile.id == profile.id)
-        )
+        result = await db_session.execute(select(TeacherProfile).where(TeacherProfile.id == profile.id))
         fetched = result.scalar_one()
         assert fetched.bio == "Experienced math teacher"
 
-    async def test_auth_token_crud(
-        self, db_session: AsyncSession, test_user: User
-    ) -> None:
+    async def test_auth_token_crud(self, db_session: AsyncSession, test_user: User) -> None:
         """Test AuthToken model can be written and read."""
         token = AuthToken(
             id=uuid.uuid4(),
@@ -134,15 +120,11 @@ class TestModelCRUD:
         db_session.add(token)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(AuthToken).where(AuthToken.id == token.id)
-        )
+        result = await db_session.execute(select(AuthToken).where(AuthToken.id == token.id))
         fetched = result.scalar_one()
         assert fetched.type == AuthTokenType.REFRESH
 
-    async def test_parent_student_crud(
-        self, db_session: AsyncSession, test_school: School
-    ) -> None:
+    async def test_parent_student_crud(self, db_session: AsyncSession, test_school: School) -> None:
         """Test ParentStudent model can be written and read."""
         parent = User(
             id=uuid.uuid4(),
@@ -170,15 +152,11 @@ class TestModelCRUD:
         db_session.add(link)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(ParentStudent).where(ParentStudent.parent_id == parent.id)
-        )
+        result = await db_session.execute(select(ParentStudent).where(ParentStudent.parent_id == parent.id))
         fetched = result.scalar_one()
         assert fetched.student_id == student.id
 
-    async def test_learning_profile_crud(
-        self, db_session: AsyncSession, test_user: User, test_school: School
-    ) -> None:
+    async def test_learning_profile_crud(self, db_session: AsyncSession, test_user: User, test_school: School) -> None:
         """Test StudentLearningProfile model can be written and read."""
         profile = StudentLearningProfile(
             id=uuid.uuid4(),
@@ -191,11 +169,7 @@ class TestModelCRUD:
         db_session.add(profile)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(StudentLearningProfile).where(
-                StudentLearningProfile.id == profile.id
-            )
-        )
+        result = await db_session.execute(select(StudentLearningProfile).where(StudentLearningProfile.id == profile.id))
         fetched = result.scalar_one()
         assert fetched.modality_scores == {"visual": 0.8, "auditory": 0.3}
         assert fetched.interests == ["football", "music"]
@@ -212,9 +186,7 @@ class TestModelCRUD:
         db_session.add(curriculum)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(Curriculum).where(Curriculum.id == curriculum.id)
-        )
+        result = await db_session.execute(select(Curriculum).where(Curriculum.id == curriculum.id))
         fetched = result.scalar_one()
         assert fetched.code == curriculum.code
 
@@ -229,9 +201,7 @@ class TestModelCRUD:
         db_session.add(subject)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(Subject).where(Subject.id == subject.id)
-        )
+        result = await db_session.execute(select(Subject).where(Subject.id == subject.id))
         fetched = result.scalar_one()
         assert fetched.name == "Mathematics"
 
@@ -248,9 +218,7 @@ class TestModelCRUD:
         db_session.add(grade)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(Grade).where(Grade.id == grade.id)
-        )
+        result = await db_session.execute(select(Grade).where(Grade.id == grade.id))
         fetched = result.scalar_one()
         assert fetched.level == level
 
@@ -265,9 +233,7 @@ class TestModelCRUD:
         db_session.add(topic)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(Topic).where(Topic.id == topic.id)
-        )
+        result = await db_session.execute(select(Topic).where(Topic.id == topic.id))
         fetched = result.scalar_one()
         assert fetched.name == "Algebra"
 
@@ -292,15 +258,11 @@ class TestModelCRUD:
         db_session.add(ct)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(CurriculumTopic).where(CurriculumTopic.id == ct.id)
-        )
+        result = await db_session.execute(select(CurriculumTopic).where(CurriculumTopic.id == ct.id))
         fetched = result.scalar_one()
         assert fetched.sequence_order == 1
 
-    async def test_subtopic_crud(
-        self, db_session: AsyncSession, test_curriculum: Curriculum
-    ) -> None:
+    async def test_subtopic_crud(self, db_session: AsyncSession, test_curriculum: Curriculum) -> None:
         """Test Subtopic model can be written and read."""
         # First need a curriculum_topic
         subject = Subject(
@@ -359,9 +321,7 @@ class TestModelCRUD:
         db_session.add(subtopic)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(Subtopic).where(Subtopic.id == subtopic.id)
-        )
+        result = await db_session.execute(select(Subtopic).where(Subtopic.id == subtopic.id))
         fetched = result.scalar_one()
         assert fetched.name == "Linear Equations"
 
@@ -388,15 +348,11 @@ class TestModelCRUD:
         db_session.add(class_)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(Class).where(Class.id == class_.id)
-        )
+        result = await db_session.execute(select(Class).where(Class.id == class_.id))
         fetched = result.scalar_one()
         assert fetched.name == "Grade 7 Math A"
 
-    async def test_class_enrollment_crud(
-        self, db_session: AsyncSession, test_class: Class, test_user: User
-    ) -> None:
+    async def test_class_enrollment_crud(self, db_session: AsyncSession, test_class: Class, test_user: User) -> None:
         """Test ClassEnrollment model can be written and read."""
         enrollment = ClassEnrollment(
             class_id=test_class.id,
@@ -406,17 +362,11 @@ class TestModelCRUD:
         db_session.add(enrollment)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(ClassEnrollment).where(
-                ClassEnrollment.class_id == test_class.id
-            )
-        )
+        result = await db_session.execute(select(ClassEnrollment).where(ClassEnrollment.class_id == test_class.id))
         fetched = result.scalar_one()
         assert fetched.student_id == test_user.id
 
-    async def test_assessment_crud(
-        self, db_session: AsyncSession, test_class: Class, test_teacher: User
-    ) -> None:
+    async def test_assessment_crud(self, db_session: AsyncSession, test_class: Class, test_teacher: User) -> None:
         """Test Assessment model can be written and read."""
         assessment = Assessment(
             id=uuid.uuid4(),
@@ -430,9 +380,7 @@ class TestModelCRUD:
         db_session.add(assessment)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(Assessment).where(Assessment.id == assessment.id)
-        )
+        result = await db_session.execute(select(Assessment).where(Assessment.id == assessment.id))
         fetched = result.scalar_one()
         assert fetched.title == "Math Diagnostic"
         assert fetched.is_system_generated is False
@@ -454,9 +402,7 @@ class TestModelCRUD:
         db_session.add(attempt)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(StudentAttempt).where(StudentAttempt.id == attempt.id)
-        )
+        result = await db_session.execute(select(StudentAttempt).where(StudentAttempt.id == attempt.id))
         fetched = result.scalar_one()
         assert fetched.total_questions == 10
 
@@ -535,9 +481,7 @@ class TestModelCRUD:
         db_session.add(gap)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(GapState).where(GapState.id == gap.id)
-        )
+        result = await db_session.execute(select(GapState).where(GapState.id == gap.id))
         fetched = result.scalar_one()
         assert fetched.mastery_score == 0.5
 
@@ -616,9 +560,7 @@ class TestModelCRUD:
         db_session.add(plan)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(StudyPlan).where(StudyPlan.id == plan.id)
-        )
+        result = await db_session.execute(select(StudyPlan).where(StudyPlan.id == plan.id))
         fetched = result.scalar_one()
         assert fetched.student_id == test_user.id
 
@@ -636,15 +578,11 @@ class TestModelCRUD:
         db_session.add(plan)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(SubscriptionPlan).where(SubscriptionPlan.id == plan.id)
-        )
+        result = await db_session.execute(select(SubscriptionPlan).where(SubscriptionPlan.id == plan.id))
         fetched = result.scalar_one()
         assert fetched.tier == "STARTER"
 
-    async def test_school_subscription_crud(
-        self, db_session: AsyncSession, test_school: School
-    ) -> None:
+    async def test_school_subscription_crud(self, db_session: AsyncSession, test_school: School) -> None:
         """Test SchoolSubscription model can be written and read."""
         plan = SubscriptionPlan(
             id=uuid.uuid4(),
@@ -666,9 +604,7 @@ class TestModelCRUD:
         db_session.add(subscription)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(SchoolSubscription).where(SchoolSubscription.id == subscription.id)
-        )
+        result = await db_session.execute(select(SchoolSubscription).where(SchoolSubscription.id == subscription.id))
         fetched = result.scalar_one()
         assert fetched.student_count == 50
 

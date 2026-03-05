@@ -35,29 +35,19 @@ class StudentLearningProfile(Base, UUIDMixin, TimestampMixin):
         ForeignKey("schools.id", ondelete="CASCADE"),
         nullable=False,
     )
-    modality_scores: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    modality_scores: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     # Expected shape: {"visual": 0.8, "auditory": 0.3,
     #                  "reading_writing": 0.6, "kinesthetic": 0.5}
 
-    work_style: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    work_style: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     # Expected shape: {"prefers_solo": True, "short_sessions": False,
     #                  "task_based": True, "group_learning": False,
     #                  "concept_first": False}
 
-    interests: Mapped[list[str] | None] = mapped_column(
-        ARRAY(Text), nullable=True
-    )
+    interests: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     # e.g. ["football", "music", "gaming"]
     # Stored lowercase. Top 2 injected into quiz generation prompts.
 
-    questionnaire_version: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="v1"
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    questionnaire_version: Mapped[str] = mapped_column(String(10), nullable=False, default="v1")
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # NULL means questionnaire not yet submitted. Non-null means complete.

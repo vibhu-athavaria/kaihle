@@ -39,18 +39,12 @@ class LessonPlan(Base, UUIDMixin):
         nullable=False,
     )
     week_start: Mapped[date] = mapped_column(Date, nullable=False)
-    focus_subtopic_ids: Mapped[list[uuid.UUID]] = mapped_column(
-        ARRAY(UUID(as_uuid=True)), nullable=False, default=list
-    )
+    focus_subtopic_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False, default=list)
     # Top 2 subtopic_ids with lowest class-average mastery this week
-    gap_summary: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    gap_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     # Snapshot at generation time:
     # {"subtopic_id": {"name": "...", "class_avg": 0.32, "group_a_count": 8, ...}}
-    generated_plan: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    generated_plan: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     # Full lesson plan structure
     teacher_edits: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # Teacher's modifications. UI merges generated_plan + teacher_edits for display.
@@ -68,6 +62,4 @@ class LessonPlan(Base, UUIDMixin):
     generated_at: Mapped[datetime]
     updated_at: Mapped[datetime | None]
 
-    __table_args__ = (
-        UniqueConstraint("class_id", "week_start", name="lp_class_week_unique"),
-    )
+    __table_args__ = (UniqueConstraint("class_id", "week_start", name="lp_class_week_unique"),)

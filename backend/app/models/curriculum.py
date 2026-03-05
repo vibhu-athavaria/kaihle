@@ -35,9 +35,7 @@ class Curriculum(Base, UUIDMixin, TimestampMixin):
     code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text)
     country: Mapped[str | None] = mapped_column(String(100))
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class Subject(Base, UUIDMixin, TimestampMixin):
@@ -50,9 +48,7 @@ class Subject(Base, UUIDMixin, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text)
     icon: Mapped[str | None] = mapped_column(String(50))
     color: Mapped[str | None] = mapped_column(String(7))
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class Grade(Base, UUIDMixin, TimestampMixin):
@@ -61,17 +57,11 @@ class Grade(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "grades"
 
     name: Mapped[str] = mapped_column(String(50), nullable=False)
-    level: Mapped[int] = mapped_column(
-        Integer, nullable=False, unique=True
-    )
+    level: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    __table_args__ = (
-        CheckConstraint("level BETWEEN 1 AND 13", name="grades_level_range"),
-    )
+    __table_args__ = (CheckConstraint("level BETWEEN 1 AND 13", name="grades_level_range"),)
 
 
 class Topic(Base, UUIDMixin, TimestampMixin):
@@ -83,9 +73,7 @@ class Topic(Base, UUIDMixin, TimestampMixin):
     canonical_code: Mapped[str | None] = mapped_column(String(50))
     description: Mapped[str | None] = mapped_column(Text)
     keywords: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class CurriculumSubject(Base, TimestampMixin):
@@ -103,9 +91,7 @@ class CurriculumSubject(Base, TimestampMixin):
         ForeignKey("subjects.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    is_core: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_core: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sort_order: Mapped[int | None]
 
 
@@ -138,12 +124,8 @@ class CurriculumTopic(Base, UUIDMixin, TimestampMixin):
     sequence_order: Mapped[int | None]
     learning_objectives: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     recommended_weeks: Mapped[int | None]
-    is_required: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -172,9 +154,7 @@ class Subtopic(Base, UUIDMixin, TimestampMixin):
     difficulty_level: Mapped[int | None]
     estimated_minutes: Mapped[int | None]
     sequence_order: Mapped[int | None]
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
 
     __table_args__ = (
@@ -200,12 +180,8 @@ class SubtopicPrerequisite(Base):
         ForeignKey("subtopics.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    importance: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="REQUIRED"
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    importance: Mapped[str] = mapped_column(String(20), nullable=False, default="REQUIRED")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -236,9 +212,7 @@ class CurriculumChunk(Base, UUIDMixin, TimestampMixin):
     page_number: Mapped[int | None]
     embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
 
-    __table_args__ = (
-        CheckConstraint("chunk_index >= 0", name="chk_chunk_index"),
-    )
+    __table_args__ = (CheckConstraint("chunk_index >= 0", name="chk_chunk_index"),)
 
 
 class QuestionBank(Base, UUIDMixin, TimestampMixin):
@@ -269,17 +243,11 @@ class QuestionBank(Base, UUIDMixin, TimestampMixin):
     estimated_time_seconds: Mapped[int | None]
     learning_objectives: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     canonical_form: Mapped[str] = mapped_column(Text, nullable=False)
-    problem_signature: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
-    source: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="bank"
-    )
+    problem_signature: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    source: Mapped[str] = mapped_column(String(10), nullable=False, default="bank")
     # 'bank' = from founders 7K import | 'llm' = AI-generated at runtime
     meta_tags: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     __table_args__ = (
         CheckConstraint(

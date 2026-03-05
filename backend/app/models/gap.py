@@ -46,19 +46,11 @@ class GapState(Base, UUIDMixin, TimestampMixin):
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_correct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_attempted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    needs_review: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    needs_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_assessed_at: Mapped[datetime | None]
 
     __table_args__ = (
-        CheckConstraint(
-            "mastery_score BETWEEN 0.0 AND 1.0", name="chk_gs_mastery"
-        ),
-        CheckConstraint(
-            "confidence BETWEEN 0.0 AND 1.0", name="chk_gs_confidence"
-        ),
-        CheckConstraint(
-            "total_correct <= total_attempted", name="chk_gs_counts"
-        ),
+        CheckConstraint("mastery_score BETWEEN 0.0 AND 1.0", name="chk_gs_mastery"),
+        CheckConstraint("confidence BETWEEN 0.0 AND 1.0", name="chk_gs_confidence"),
+        CheckConstraint("total_correct <= total_attempted", name="chk_gs_counts"),
     )
