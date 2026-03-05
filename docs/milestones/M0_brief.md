@@ -35,7 +35,6 @@ Working local dev environment, CI/CD pipeline, auth system, multi-tenant model, 
 - User management API (SchoolAdmin)
 - Grade + class management + enrollment API (fires Tier 1 Celery task on enroll)
 - Structured logging + health check endpoints
-- **Student onboarding flow (NEW v2.1):**
   - Learning profile questionnaire API + scoring logic
   - Tier 1 auto-diagnostic Celery trigger on enrollment
   - Onboarding completion tracking service
