@@ -41,7 +41,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app.api.v1.routes import auth
+from app.api.v1.routes import auth, schools
 from app.core.config import settings
 
 # Import CurrentUser type for documentation
@@ -61,7 +61,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Register API routers
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(schools.router, prefix="/api/v1")
 
 
 @app.get("/health")
