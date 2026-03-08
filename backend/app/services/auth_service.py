@@ -38,7 +38,8 @@ class AuthService:
         last_name: str,
     ) -> RegisterResponse:
         """
-        Create a new user. Does NOT issue tokens — admin must activate account.
+        Create a new user. Does NOT issue tokens — user is created as inactive
+        and must be activated by an admin before they can log in.
         Raises ValueError if email already exists in school.
         """
         # Check uniqueness: email must be unique within school (or globally for KaihleAdmin)
@@ -57,7 +58,7 @@ class AuthService:
             school_id=school_id,
             first_name=first_name,
             last_name=last_name,
-            is_active=True,
+            is_active=False,
         )
         self.db.add(user)
         await self.db.flush()
