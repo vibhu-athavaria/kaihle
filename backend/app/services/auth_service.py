@@ -71,7 +71,7 @@ class AuthService:
         Raises ValueError on invalid credentials or inactive account.
         """
         user = await self._get_active_user_by_email(email)
-        if not verify_password(password, user.hashed_password):
+        if not user.hashed_password or not verify_password(password, user.hashed_password):
             raise ValueError("Invalid credentials")
 
         access_token = create_access_token(user.id, user.school_id, user.role)
@@ -95,9 +95,7 @@ class AuthService:
         Generate and email a magic link.
         Always returns successfully — even if email not found (security).
         """
-        user = await self.db.scalar(
-            select(User).where(User.email == email, User.is_active.is_(True))  # type: ignore[call]
-        )
+        user = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not user:
             return  # Silent — do not reveal whether email exists
 
@@ -129,8 +127,8 @@ class AuthService:
             select(AuthToken).where(
                 AuthToken.user_id == user_id,
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "MAGIC_LINK",  # type: ignore[comparison]
-                AuthToken.used_at.is_(None),  # type: ignore[call]
+                AuthToken.type == "MAGIC_LINK",
+                AuthToken.used_at.is_(None),
                 AuthToken.expires_at > datetime.now(UTC),
             )
         )
@@ -170,8 +168,8 @@ class AuthService:
         auth_token = await self.db.scalar(
             select(AuthToken).where(
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "REFRESH",  # type: ignore[comparison]
-                AuthToken.used_at.is_(None),  # type: ignore[call]
+                AuthToken.type == "REFRESH",
+                AuthToken.used_at.is_(None),
                 AuthToken.expires_at > datetime.now(UTC),
             )
         )
@@ -191,7 +189,7 @@ class AuthService:
         auth_token = await self.db.scalar(
             select(AuthToken).where(
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "REFRESH",  # type: ignore[comparison]
+                AuthToken.type == "REFRESH",
             )
         )
         if auth_token:
