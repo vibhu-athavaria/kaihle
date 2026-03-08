@@ -34,7 +34,7 @@ TEST_DATABASE_URL = os.environ.get(
 
 
 @pytest_asyncio.fixture(scope="session")
-async def engine():
+async def engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create a test database engine."""
     engine = create_async_engine(
         TEST_DATABASE_URL,

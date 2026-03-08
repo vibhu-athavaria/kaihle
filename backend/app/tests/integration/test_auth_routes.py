@@ -1,6 +1,7 @@
 """Integration tests for authentication API routes."""
 
 import uuid
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -60,12 +61,12 @@ async def user(db_session: AsyncSession, school: School) -> User:
 
 
 @pytest_asyncio.fixture
-async def client(db_session: AsyncSession) -> AsyncClient:
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create an async test client."""
     from app.core.database import get_db
 
     # Override the get_db dependency
-    async def override_get_db():
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
@@ -83,7 +84,7 @@ async def client(db_session: AsyncSession) -> AsyncClient:
 
 
 @pytest.mark.asyncio
-async def test_register_creates_user_returns_user_id_email_role(client: AsyncClient, school: School):
+async def test_register_creates_user_returns_user_id_email_role(client: AsyncClient, school: School) -> None:
     """Test that POST /auth/register creates user and returns user_id, email, role."""
     response = await client.post(
         "/api/v1/auth/register",
@@ -106,7 +107,7 @@ async def test_register_creates_user_returns_user_id_email_role(client: AsyncCli
 
 
 @pytest.mark.asyncio
-async def test_register_duplicate_email_returns_409(client: AsyncClient, user: User):
+async def test_register_duplicate_email_returns_409(client: AsyncClient, user: User) -> None:
     """Test that registering with duplicate email returns 409."""
     response = await client.post(
         "/api/v1/auth/register",
@@ -129,7 +130,7 @@ async def test_register_duplicate_email_returns_409(client: AsyncClient, user: U
 
 
 @pytest.mark.asyncio
-async def test_login_correct_credentials_returns_valid_jwt(client: AsyncClient, user: User):
+async def test_login_correct_credentials_returns_valid_jwt(client: AsyncClient, user: User) -> None:
     """Test that login with correct credentials returns valid JWT."""
     response = await client.post(
         "/api/v1/auth/login",
@@ -155,7 +156,7 @@ async def test_login_correct_credentials_returns_valid_jwt(client: AsyncClient, 
 
 
 @pytest.mark.asyncio
-async def test_login_wrong_password_returns_401(client: AsyncClient, user: User):
+async def test_login_wrong_password_returns_401(client: AsyncClient, user: User) -> None:
     """Test that login with wrong password returns 401."""
     response = await client.post(
         "/api/v1/auth/login",
@@ -170,7 +171,7 @@ async def test_login_wrong_password_returns_401(client: AsyncClient, user: User)
 
 
 @pytest.mark.asyncio
-async def test_login_nonexistent_email_returns_401(client: AsyncClient):
+async def test_login_nonexistent_email_returns_401(client: AsyncClient) -> None:
     """Test that login with nonexistent email returns 401."""
     response = await client.post(
         "/api/v1/auth/login",
@@ -184,7 +185,7 @@ async def test_login_nonexistent_email_returns_401(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_login_inactive_user_returns_401(db_session: AsyncSession, client: AsyncClient, school: School):
+async def test_login_inactive_user_returns_401(db_session: AsyncSession, client: AsyncClient, school: School) -> None:
     """Test that login with inactive user returns 401."""
     from app.core.security import hash_password
 
@@ -218,7 +219,9 @@ async def test_login_inactive_user_returns_401(db_session: AsyncSession, client:
 
 
 @pytest.mark.asyncio
-async def test_magic_link_full_flow_send_verify_returns_jwt(client: AsyncClient, user: User, db_session: AsyncSession):
+async def test_magic_link_full_flow_send_verify_returns_jwt(
+    client: AsyncClient, user: User, db_session: AsyncSession
+) -> None:
     """Test full magic link flow - send → verify → returns JWT."""
     # Directly create and store a magic link token (bypassing email sending)
     magic_link_jwt = create_magic_link_token(user.id)
@@ -239,7 +242,7 @@ async def test_magic_link_full_flow_send_verify_returns_jwt(client: AsyncClient,
 
 
 @pytest.mark.asyncio
-async def test_magic_link_expired_returns_401(client: AsyncClient, user: User, db_session: AsyncSession):
+async def test_magic_link_expired_returns_401(client: AsyncClient, user: User, db_session: AsyncSession) -> None:
     """Test that expired magic link returns 401."""
     # Create an expired magic link token in the database
     token = create_magic_link_token(user.id, expires_in_minutes=-1)  # Already expired
@@ -263,7 +266,7 @@ async def test_magic_link_expired_returns_401(client: AsyncClient, user: User, d
 
 
 @pytest.mark.asyncio
-async def test_magic_link_used_twice_returns_401(client: AsyncClient, user: User, db_session: AsyncSession):
+async def test_magic_link_used_twice_returns_401(client: AsyncClient, user: User, db_session: AsyncSession) -> None:
     """Test that using magic link twice returns 401."""
     # Create and use a magic link token
     token = create_magic_link_token(user.id)
@@ -288,7 +291,7 @@ async def test_magic_link_used_twice_returns_401(client: AsyncClient, user: User
 
 
 @pytest.mark.asyncio
-async def test_magic_link_invalid_token_returns_401(client: AsyncClient):
+async def test_magic_link_invalid_token_returns_401(client: AsyncClient) -> None:
     """Test that invalid magic link token returns 401."""
     response = await client.get(
         "/api/v1/auth/magic-link/verify",
@@ -299,7 +302,7 @@ async def test_magic_link_invalid_token_returns_401(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_magic_link_nonexistent_email_returns_success(client: AsyncClient):
+async def test_magic_link_nonexistent_email_returns_success(client: AsyncClient) -> None:
     """Test that requesting magic link for nonexistent email returns success (security)."""
     response = await client.post(
         "/api/v1/auth/magic-link",
@@ -318,7 +321,7 @@ async def test_magic_link_nonexistent_email_returns_success(client: AsyncClient)
 @pytest.mark.asyncio
 async def test_refresh_with_valid_token_returns_new_access_token(
     client: AsyncClient, user: User, db_session: AsyncSession
-):
+) -> None:
     """Test that refresh with valid token returns new access token."""
     # Create a valid refresh token
     raw_refresh, hashed_refresh = generate_refresh_token()
@@ -341,7 +344,9 @@ async def test_refresh_with_valid_token_returns_new_access_token(
 
 
 @pytest.mark.asyncio
-async def test_refresh_with_expired_token_returns_401(client: AsyncClient, user: User, db_session: AsyncSession):
+async def test_refresh_with_expired_token_returns_401(
+    client: AsyncClient, user: User, db_session: AsyncSession
+) -> None:
     """Test that refresh with expired token returns 401."""
     # Create an expired refresh token
     raw_refresh, hashed_refresh = generate_refresh_token()
@@ -363,7 +368,7 @@ async def test_refresh_with_expired_token_returns_401(client: AsyncClient, user:
 
 
 @pytest.mark.asyncio
-async def test_refresh_with_used_token_returns_401(client: AsyncClient, user: User, db_session: AsyncSession):
+async def test_refresh_with_used_token_returns_401(client: AsyncClient, user: User, db_session: AsyncSession) -> None:
     """Test that refresh with used token returns 401."""
     # Create a used refresh token
     raw_refresh, hashed_refresh = generate_refresh_token()
@@ -386,7 +391,7 @@ async def test_refresh_with_used_token_returns_401(client: AsyncClient, user: Us
 
 
 @pytest.mark.asyncio
-async def test_refresh_with_invalid_token_returns_401(client: AsyncClient):
+async def test_refresh_with_invalid_token_returns_401(client: AsyncClient) -> None:
     """Test that refresh with invalid token returns 401."""
     response = await client.post(
         "/api/v1/auth/refresh",
@@ -402,7 +407,7 @@ async def test_refresh_with_invalid_token_returns_401(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_logout_marks_token_as_used(client: AsyncClient, user: User, db_session: AsyncSession):
+async def test_logout_marks_token_as_used(client: AsyncClient, user: User, db_session: AsyncSession) -> None:
     """Test that logout marks refresh token as used."""
     # Create a valid refresh token
     raw_refresh, hashed_refresh = generate_refresh_token()
@@ -432,7 +437,7 @@ async def test_logout_marks_token_as_used(client: AsyncClient, user: User, db_se
 
 
 @pytest.mark.asyncio
-async def test_logout_invalid_token_still_returns_200(client: AsyncClient):
+async def test_logout_invalid_token_still_returns_200(client: AsyncClient) -> None:
     """Test that logout with invalid token still returns 200 (idempotent)."""
     response = await client.post(
         "/api/v1/auth/logout",
@@ -448,7 +453,7 @@ async def test_logout_invalid_token_still_returns_200(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_sql_injection_in_email_returns_422(client: AsyncClient, school: School):
+async def test_sql_injection_in_email_returns_422(client: AsyncClient, school: School) -> None:
     """Test that SQL injection in email field returns 422 (Pydantic rejects)."""
     response = await client.post(
         "/api/v1/auth/register",
@@ -466,7 +471,7 @@ async def test_sql_injection_in_email_returns_422(client: AsyncClient, school: S
 
 
 @pytest.mark.asyncio
-async def test_login_with_sql_injection_email_returns_401(client: AsyncClient):
+async def test_login_with_sql_injection_email_returns_401(client: AsyncClient) -> None:
     """Test that SQL injection in login email returns 401 or 422.
 
     Note: Pydantic's EmailStr validation may catch this at the validation layer (422),
