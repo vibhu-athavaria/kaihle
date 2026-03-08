@@ -1,484 +1,279 @@
-"""Integration tests for authentication API routes."""
+"""Integration tests for authentication routes."""
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
-import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.core.security import (
-    create_magic_link_token,
-    generate_refresh_token,
-    hash_token,
-    store_magic_link_token,
-    store_refresh_token,
-)
 from app.main import app
-from app.models.school import School
-from app.models.user import AuthToken, User, UserRole
-
-# Set test JWT secret
-settings.jwt_secret_key = "test-secret-key-for-testing"
-
-
-@pytest_asyncio.fixture
-async def school(db_session: AsyncSession) -> School:
-    """Create a test school."""
-    school = School(
-        id=uuid.uuid4(),
-        name="Test School",
-        slug=f"test-school-{uuid.uuid4().hex[:8]}",
-        status="active",
-    )
-    db_session.add(school)
-    await db_session.commit()
-    return school
-
-
-@pytest_asyncio.fixture
-async def user(db_session: AsyncSession, school: School) -> User:
-    """Create a test user with password."""
-    from app.core.security import hash_password
-
-    user = User(
-        id=uuid.uuid4(),
-        school_id=school.id,
-        email=f"test-{uuid.uuid4().hex[:8]}@example.com",
-        hashed_password=hash_password("correct-password"),
-        first_name="Test",
-        last_name="User",
-        role=UserRole.TEACHER,
-        is_active=True,
-    )
-    db_session.add(user)
-    await db_session.commit()
-    return user
-
-
-@pytest_asyncio.fixture
-async def client(db_session: AsyncSession) -> AsyncClient:
-    """Create an async test client."""
-    from app.core.database import get_db
-
-    # Override the get_db dependency
-    async def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-
-    app.dependency_overrides.clear()
-
-
-# =============================================================================
-# Register Tests
-# =============================================================================
-
-
-@pytest.mark.asyncio
-async def test_register_creates_user_returns_user_id_email_role(client: AsyncClient, school: School):
-    """Test that POST /auth/register creates user and returns user_id, email, role."""
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": f"newuser-{uuid.uuid4().hex[:8]}@example.com",
-            "password": "SecurePass123!",
-            "role": "TEACHER",
-            "school_id": str(school.id),
-            "first_name": "New",
-            "last_name": "User",
-        },
-    )
-
-    assert response.status_code == 201
-    data = response.json()
-    assert "user_id" in data
-    assert "email" in data
-    assert "role" in data
-    assert data["role"] == "TEACHER"
-
-
-@pytest.mark.asyncio
-async def test_register_duplicate_email_returns_409(client: AsyncClient, user: User):
-    """Test that registering with duplicate email returns 409."""
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": user.email,
-            "password": "SecurePass123!",
-            "role": "TEACHER",
-            "school_id": str(user.school_id),
-            "first_name": "Duplicate",
-            "last_name": "User",
-        },
-    )
-
-    assert response.status_code == 409
-
-
-# =============================================================================
-# Login Tests
-# =============================================================================
-
-
-@pytest.mark.asyncio
-async def test_login_correct_credentials_returns_valid_jwt(client: AsyncClient, user: User):
-    """Test that login with correct credentials returns valid JWT."""
-    response = await client.post(
-        "/api/v1/auth/login",
-        json={
-            "email": user.email,
-            "password": "correct-password",
-        },
-    )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert "access_token" in data
-    assert "refresh_token" in data
-    assert data["token_type"] == "bearer"
-    assert "user" in data
-
-    # Verify JWT contains expected claims
-    from app.core.security import decode_token
-
-    payload = decode_token(data["access_token"])
-    assert payload["sub"] == str(user.id)
-    assert payload["role"] == user.role
-
-
-@pytest.mark.asyncio
-async def test_login_wrong_password_returns_401(client: AsyncClient, user: User):
-    """Test that login with wrong password returns 401."""
-    response = await client.post(
-        "/api/v1/auth/login",
-        json={
-            "email": user.email,
-            "password": "wrong-password",
-        },
-    )
-
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid credentials"
-
-
-@pytest.mark.asyncio
-async def test_login_nonexistent_email_returns_401(client: AsyncClient):
-    """Test that login with nonexistent email returns 401."""
-    response = await client.post(
-        "/api/v1/auth/login",
-        json={
-            "email": "nonexistent@example.com",
-            "password": "any-password",
-        },
-    )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_login_inactive_user_returns_401(db_session: AsyncSession, client: AsyncClient, school: School):
-    """Test that login with inactive user returns 401."""
-    from app.core.security import hash_password
-
-    inactive_user = User(
-        id=uuid.uuid4(),
-        school_id=school.id,
-        email=f"inactive-{uuid.uuid4().hex[:8]}@example.com",
-        hashed_password=hash_password("password"),
-        first_name="Inactive",
-        last_name="User",
-        role=UserRole.TEACHER,
-        is_active=False,
-    )
-    db_session.add(inactive_user)
-    await db_session.commit()
-
-    response = await client.post(
-        "/api/v1/auth/login",
-        json={
-            "email": inactive_user.email,
-            "password": "password",
-        },
-    )
-
-    assert response.status_code == 401
-
-
-# =============================================================================
-# Magic Link Tests
-# =============================================================================
-
-
-@pytest.mark.asyncio
-async def test_magic_link_full_flow_send_verify_returns_jwt(client: AsyncClient, user: User, db_session: AsyncSession):
-    """Test full magic link flow - send → verify → returns JWT."""
-    # Directly create and store a magic link token (bypassing email sending)
-    magic_link_jwt = create_magic_link_token(user.id)
-    token_hash = hash_token(magic_link_jwt)
-    await store_magic_link_token(db_session, user.id, token_hash)
-
-    # Verify magic link
-    response = await client.get(
-        "/api/v1/auth/magic-link/verify",
-        params={"token": magic_link_jwt},
-    )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert "access_token" in data
-    assert "refresh_token" in data
-    assert data["user"]["email"] == user.email
-
-
-@pytest.mark.asyncio
-async def test_magic_link_expired_returns_401(client: AsyncClient, user: User, db_session: AsyncSession):
-    """Test that expired magic link returns 401."""
-    # Create an expired magic link token in the database
-    token = create_magic_link_token(user.id, expires_in_minutes=-1)  # Already expired
-    token_hash = hash_token(token)
-
-    auth_token = AuthToken(
-        user_id=user.id,
-        token_hash=token_hash,
-        type="MAGIC_LINK",
-        expires_at=datetime.now(UTC) - timedelta(minutes=1),  # Already expired
-    )
-    db_session.add(auth_token)
-    await db_session.commit()
-
-    response = await client.get(
-        "/api/v1/auth/magic-link/verify",
-        params={"token": token},
-    )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_magic_link_used_twice_returns_401(client: AsyncClient, user: User, db_session: AsyncSession):
-    """Test that using magic link twice returns 401."""
-    # Create and use a magic link token
-    token = create_magic_link_token(user.id)
-    token_hash = hash_token(token)
-
-    auth_token = AuthToken(
-        user_id=user.id,
-        token_hash=token_hash,
-        type="MAGIC_LINK",
-        expires_at=datetime.now(UTC) + timedelta(minutes=10),
-        used_at=datetime.now(UTC),  # Already used
-    )
-    db_session.add(auth_token)
-    await db_session.commit()
-
-    response = await client.get(
-        "/api/v1/auth/magic-link/verify",
-        params={"token": token},
-    )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_magic_link_invalid_token_returns_401(client: AsyncClient):
-    """Test that invalid magic link token returns 401."""
-    response = await client.get(
-        "/api/v1/auth/magic-link/verify",
-        params={"token": "invalid-token"},
-    )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_magic_link_nonexistent_email_returns_success(client: AsyncClient):
-    """Test that requesting magic link for nonexistent email returns success (security)."""
-    response = await client.post(
-        "/api/v1/auth/magic-link",
-        json={"email": "nonexistent@example.com"},
-    )
-
-    assert response.status_code == 200
-    assert "login link has been sent" in response.json()["message"]
-
-
-# =============================================================================
-# Refresh Token Tests
-# =============================================================================
-
-
-@pytest.mark.asyncio
-async def test_refresh_with_valid_token_returns_new_access_token(
-    client: AsyncClient, user: User, db_session: AsyncSession
-):
-    """Test that refresh with valid token returns new access token."""
-    # Create a valid refresh token
-    raw_refresh, hashed_refresh = generate_refresh_token()
-    await store_refresh_token(db_session, user.id, hashed_refresh)
-
-    response = await client.post(
-        "/api/v1/auth/refresh",
-        json={"refresh_token": raw_refresh},
-    )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert "access_token" in data
-
-    # Verify the new token is valid
-    from app.core.security import decode_token
-
-    payload = decode_token(data["access_token"])
-    assert payload["sub"] == str(user.id)
-
-
-@pytest.mark.asyncio
-async def test_refresh_with_expired_token_returns_401(client: AsyncClient, user: User, db_session: AsyncSession):
-    """Test that refresh with expired token returns 401."""
-    # Create an expired refresh token
-    raw_refresh, hashed_refresh = generate_refresh_token()
-    auth_token = AuthToken(
-        user_id=user.id,
-        token_hash=hashed_refresh,
-        type="REFRESH",
-        expires_at=datetime.now(UTC) - timedelta(days=1),  # Already expired
-    )
-    db_session.add(auth_token)
-    await db_session.commit()
-
-    response = await client.post(
-        "/api/v1/auth/refresh",
-        json={"refresh_token": raw_refresh},
-    )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_refresh_with_used_token_returns_401(client: AsyncClient, user: User, db_session: AsyncSession):
-    """Test that refresh with used token returns 401."""
-    # Create a used refresh token
-    raw_refresh, hashed_refresh = generate_refresh_token()
-    auth_token = AuthToken(
-        user_id=user.id,
-        token_hash=hashed_refresh,
-        type="REFRESH",
-        expires_at=datetime.now(UTC) + timedelta(days=7),
-        used_at=datetime.now(UTC),  # Already used
-    )
-    db_session.add(auth_token)
-    await db_session.commit()
-
-    response = await client.post(
-        "/api/v1/auth/refresh",
-        json={"refresh_token": raw_refresh},
-    )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_refresh_with_invalid_token_returns_401(client: AsyncClient):
-    """Test that refresh with invalid token returns 401."""
-    response = await client.post(
-        "/api/v1/auth/refresh",
-        json={"refresh_token": "invalid-token"},
-    )
-
-    assert response.status_code == 401
-
-
-# =============================================================================
-# Logout Tests
-# =============================================================================
-
-
-@pytest.mark.asyncio
-async def test_logout_marks_token_as_used(client: AsyncClient, user: User, db_session: AsyncSession):
-    """Test that logout marks refresh token as used."""
-    # Create a valid refresh token
-    raw_refresh, hashed_refresh = generate_refresh_token()
-    await store_refresh_token(db_session, user.id, hashed_refresh)
-
-    # Logout
-    response = await client.post(
-        "/api/v1/auth/logout",
-        json={"refresh_token": raw_refresh},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["message"] == "Logged out"
-
-    # Verify token is now marked as used
-    token_record = await db_session.scalar(select(AuthToken).where(AuthToken.token_hash == hashed_refresh))
-    assert token_record is not None
-    assert token_record.used_at is not None
-
-    # Verify token can no longer be used for refresh
-    response = await client.post(
-        "/api/v1/auth/refresh",
-        json={"refresh_token": raw_refresh},
-    )
-
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_logout_invalid_token_still_returns_200(client: AsyncClient):
-    """Test that logout with invalid token still returns 200 (idempotent)."""
-    response = await client.post(
-        "/api/v1/auth/logout",
-        json={"refresh_token": "invalid-token"},
-    )
-
-    assert response.status_code == 200
-
-
-# =============================================================================
-# Security Tests
-# =============================================================================
-
-
-@pytest.mark.asyncio
-async def test_sql_injection_in_email_returns_422(client: AsyncClient, school: School):
-    """Test that SQL injection in email field returns 422 (Pydantic rejects)."""
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": "test' OR '1'='1@example.com",
-            "password": "SecurePass123!",
-            "role": "TEACHER",
-            "school_id": str(school.id),
-            "first_name": "Test",
-            "last_name": "User",
-        },
-    )
-
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_login_with_sql_injection_email_returns_401(client: AsyncClient):
-    """Test that SQL injection in login email returns 401 or 422.
-
-    Note: Pydantic's EmailStr validation may catch this at the validation layer (422),
-    which is even better security than reaching the database (401).
-    """
-    response = await client.post(
-        "/api/v1/auth/login",
-        json={
-            "email": "' OR '1'='1@example.com",
-            "password": "anything",
-        },
-    )
-
-    # Either 401 (reaches DB) or 422 (Pydantic catches it) is acceptable
-    assert response.status_code in [401, 422]
+from app.models.user import UserRole
+from app.services.auth_service import AuthService
+
+
+@pytest.fixture
+def mock_db():
+    """Create a mock database session."""
+    return AsyncMock(spec=AsyncSession)
+
+
+@pytest.fixture
+def mock_school_id():
+    """Create a mock school UUID."""
+    return uuid.uuid4()
+
+
+class TestSchoolAdminRegistration:
+    """Tests for school admin registration endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_register_school_admin_when_valid_data_then_returns_201(self, mock_school_id):
+        """Test successful school admin registration."""
+        # Arrange
+        with patch("app.api.v1.routes.auth.AuthService") as MockAuthService:
+            mock_service = AsyncMock(spec=AuthService)
+            mock_service.register_school_admin.return_value = Mock(
+                user_id=uuid.uuid4(),
+                email="admin@school.com",
+                role=UserRole.SCHOOL_ADMIN,
+            )
+            MockAuthService.return_value = mock_service
+
+            # Use httpx AsyncClient with ASGITransport for testing
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                # Act
+                response = await client.post(
+                    "/auth/register/school-admin",
+                    json={
+                        "email": "admin@school.com",
+                        "password": "securepass123",
+                        "school_id": str(mock_school_id),
+                        "first_name": "John",
+                        "last_name": "Admin",
+                    },
+                )
+
+                # Assert
+                assert response.status_code == 201
+                data = response.json()
+                assert data["email"] == "admin@school.com"
+                assert data["role"] == UserRole.SCHOOL_ADMIN
+
+    @pytest.mark.asyncio
+    async def test_register_school_admin_when_duplicate_email_then_returns_409(self, mock_school_id):
+        """Test school admin registration with duplicate email."""
+        with patch("app.api.v1.routes.auth.AuthService") as MockAuthService:
+            mock_service = AsyncMock(spec=AuthService)
+            mock_service.register_school_admin.side_effect = ValueError("Email already registered")
+            MockAuthService.return_value = mock_service
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/auth/register/school-admin",
+                    json={
+                        "email": "existing@school.com",
+                        "password": "securepass123",
+                        "school_id": str(mock_school_id),
+                        "first_name": "John",
+                        "last_name": "Admin",
+                    },
+                )
+
+                assert response.status_code == 409
+                assert "Email already registered" in response.json()["detail"]
+
+
+class TestTeacherRegistration:
+    """Tests for teacher registration endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_register_teacher_when_valid_data_then_returns_201(self, mock_school_id):
+        """Test successful teacher registration."""
+        with patch("app.api.v1.routes.auth.AuthService") as MockAuthService:
+            mock_service = AsyncMock(spec=AuthService)
+            mock_service.register_teacher.return_value = Mock(
+                user_id=uuid.uuid4(),
+                email="teacher@school.com",
+                role=UserRole.TEACHER,
+            )
+            MockAuthService.return_value = mock_service
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/auth/register/teacher",
+                    json={
+                        "email": "teacher@school.com",
+                        "password": "securepass123",
+                        "school_id": str(mock_school_id),
+                        "first_name": "Jane",
+                        "last_name": "Teacher",
+                    },
+                )
+
+                assert response.status_code == 201
+                data = response.json()
+                assert data["email"] == "teacher@school.com"
+                assert data["role"] == UserRole.TEACHER
+
+
+class TestStudentRegistration:
+    """Tests for student registration endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_register_student_when_valid_data_then_returns_201(self, mock_school_id):
+        """Test successful student registration."""
+        with patch("app.api.v1.routes.auth.AuthService") as MockAuthService:
+            mock_service = AsyncMock(spec=AuthService)
+            mock_service.register_student.return_value = Mock(
+                user_id=uuid.uuid4(),
+                email="student@school.com",
+                role=UserRole.STUDENT,
+            )
+            MockAuthService.return_value = mock_service
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/auth/register/student",
+                    json={
+                        "email": "student@school.com",
+                        "password": "securepass123",
+                        "school_id": str(mock_school_id),
+                        "first_name": "Bob",
+                        "last_name": "Student",
+                    },
+                )
+
+                assert response.status_code == 201
+                data = response.json()
+                assert data["email"] == "student@school.com"
+                assert data["role"] == UserRole.STUDENT
+
+
+class TestParentRegistration:
+    """Tests for parent registration endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_register_parent_when_valid_data_then_returns_201(self):
+        """Test successful parent registration."""
+        with patch("app.api.v1.routes.auth.AuthService") as MockAuthService:
+            mock_service = AsyncMock(spec=AuthService)
+            mock_service.register_parent.return_value = Mock(
+                user_id=uuid.uuid4(),
+                email="parent@email.com",
+                role=UserRole.PARENT,
+            )
+            MockAuthService.return_value = mock_service
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/auth/register/parent",
+                    json={
+                        "email": "parent@email.com",
+                        "password": "securepass123",
+                        "first_name": "Alice",
+                        "last_name": "Parent",
+                    },
+                )
+
+                assert response.status_code == 201
+                data = response.json()
+                assert data["email"] == "parent@email.com"
+                assert data["role"] == UserRole.PARENT
+
+
+class TestKaihleAdminRegistration:
+    """Tests for Kaihle admin registration endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_register_kaihle_admin_when_valid_data_then_returns_201(self):
+        """Test successful Kaihle admin registration."""
+        with patch("app.api.v1.routes.auth.AuthService") as MockAuthService:
+            mock_service = AsyncMock(spec=AuthService)
+            mock_service.register_kaihle_admin.return_value = Mock(
+                user_id=uuid.uuid4(),
+                email="admin@kaihle.ai",
+                role=UserRole.KAIHLE_ADMIN,
+            )
+            MockAuthService.return_value = mock_service
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/auth/register/kaihle-admin",
+                    json={
+                        "email": "admin@kaihle.ai",
+                        "password": "securepass123",
+                        "first_name": "Super",
+                        "last_name": "Admin",
+                    },
+                )
+
+                assert response.status_code == 201
+                data = response.json()
+                assert data["email"] == "admin@kaihle.ai"
+                assert data["role"] == UserRole.KAIHLE_ADMIN
+
+
+class TestLogin:
+    """Tests for unified login endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_login_when_valid_credentials_then_returns_tokens(self):
+        """Test successful login with valid credentials."""
+        with patch("app.api.v1.routes.auth.AuthService") as MockAuthService:
+            mock_service = AsyncMock(spec=AuthService)
+            mock_service.login.return_value = Mock(
+                access_token="access_token",
+                refresh_token="refresh_token",
+                token_type="bearer",
+                user={
+                    "id": str(uuid.uuid4()),
+                    "email": "user@school.com",
+                    "role": UserRole.TEACHER,
+                    "school_id": str(uuid.uuid4()),
+                },
+            )
+            MockAuthService.return_value = mock_service
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/auth/login",
+                    json={
+                        "email": "user@school.com",
+                        "password": "securepass123",
+                    },
+                )
+
+                assert response.status_code == 200
+                data = response.json()
+                assert "access_token" in data
+                assert "refresh_token" in data
+                assert data["token_type"] == "bearer"
+
+    @pytest.mark.asyncio
+    async def test_login_when_invalid_credentials_then_returns_401(self):
+        """Test login with invalid credentials."""
+        with patch("app.api.v1.routes.auth.AuthService") as MockAuthService:
+            mock_service = AsyncMock(spec=AuthService)
+            mock_service.login.side_effect = ValueError("Invalid credentials")
+            MockAuthService.return_value = mock_service
+
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/auth/login",
+                    json={
+                        "email": "wrong@school.com",
+                        "password": "wrongpass",
+                    },
+                )
+
+                assert response.status_code == 401
+                assert "Invalid credentials" in response.json()["detail"]

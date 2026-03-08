@@ -18,8 +18,8 @@ from app.core.security import (
     store_refresh_token,
     verify_password,
 )
-from app.models.user import AuthToken, User
-from app.schemas.auth import LoginResponse, RegisterResponse, TokenResponse
+from app.models.user import AuthToken, User, UserRole
+from app.schemas.auth import LoginResponse, RegisterResponse
 
 
 class AuthService:
@@ -28,7 +28,98 @@ class AuthService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def register(
+    async def register_school_admin(
+        self,
+        email: str,
+        password: str,
+        school_id: uuid.UUID,
+        first_name: str,
+        last_name: str,
+    ) -> RegisterResponse:
+        """Register a new school administrator."""
+        return await self._register(
+            email=email,
+            password=password,
+            role=UserRole.SCHOOL_ADMIN,
+            school_id=school_id,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+    async def register_teacher(
+        self,
+        email: str,
+        password: str,
+        school_id: uuid.UUID,
+        first_name: str,
+        last_name: str,
+    ) -> RegisterResponse:
+        """Register a new teacher."""
+        return await self._register(
+            email=email,
+            password=password,
+            role=UserRole.TEACHER,
+            school_id=school_id,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+    async def register_student(
+        self,
+        email: str,
+        password: str,
+        school_id: uuid.UUID,
+        grade_id: uuid.UUID | None,
+        first_name: str,
+        last_name: str,
+    ) -> RegisterResponse:
+        """Register a new student."""
+        user = await self._register(
+            email=email,
+            password=password,
+            role=UserRole.STUDENT,
+            school_id=school_id,
+            first_name=first_name,
+            last_name=last_name,
+        )
+        # TODO: Create student profile with grade_id if provided
+        return user
+
+    async def register_parent(
+        self,
+        email: str,
+        password: str,
+        first_name: str,
+        last_name: str,
+    ) -> RegisterResponse:
+        """Register a new parent."""
+        return await self._register(
+            email=email,
+            password=password,
+            role=UserRole.PARENT,
+            school_id=None,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+    async def register_kaihle_admin(
+        self,
+        email: str,
+        password: str,
+        first_name: str,
+        last_name: str,
+    ) -> RegisterResponse:
+        """Register a new Kaihle administrator."""
+        return await self._register(
+            email=email,
+            password=password,
+            role=UserRole.KAIHLE_ADMIN,
+            school_id=None,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+    async def _register(
         self,
         email: str,
         password: str,
@@ -38,8 +129,8 @@ class AuthService:
         last_name: str,
     ) -> RegisterResponse:
         """
-        Create a new user. Does NOT issue tokens — admin must activate account.
-        Raises ValueError if email already exists in school.
+        Internal registration method.
+        Raises ValueError if email already exists.
         """
         # Check uniqueness: email must be unique within school (or globally for KaihleAdmin)
         stmt = select(User).where(User.email == email)
@@ -70,7 +161,7 @@ class AuthService:
         Raises ValueError on invalid credentials or inactive account.
         """
         user = await self._get_active_user_by_email(email)
-        if not verify_password(password, user.hashed_password):
+        if not user.hashed_password or not verify_password(password, user.hashed_password):
             raise ValueError("Invalid credentials")
 
         access_token = create_access_token(user.id, user.school_id, user.role)
@@ -90,13 +181,8 @@ class AuthService:
         )
 
     async def send_magic_link(self, email: str, base_url: str) -> None:
-        """
-        Generate and email a magic link.
-        Always returns successfully — even if email not found (security).
-        """
-        user = await self.db.scalar(
-            select(User).where(User.email == email, User.is_active.is_(True))  # type: ignore[call]
-        )
+        """Generate and email a magic link."""
+        user = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not user:
             return  # Silent — do not reveal whether email exists
 
@@ -108,10 +194,7 @@ class AuthService:
         await self._send_magic_link_email(user.email, user.first_name, token, base_url)
 
     async def verify_magic_link(self, token: str) -> LoginResponse:
-        """
-        Validate magic link token, mark as used, return JWT pair.
-        Raises InvalidTokenError if token is invalid, expired, or already used.
-        """
+        """Validate magic link token, mark as used, return JWT pair."""
         try:
             payload = decode_token(token)
         except InvalidTokenError:
@@ -128,8 +211,8 @@ class AuthService:
             select(AuthToken).where(
                 AuthToken.user_id == user_id,
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "MAGIC_LINK",  # type: ignore[comparison]
-                AuthToken.used_at.is_(None),  # type: ignore[call]
+                AuthToken.type == "MAGIC_LINK",
+                AuthToken.used_at.is_(None),
                 AuthToken.expires_at > datetime.now(UTC),
             )
         )
@@ -160,17 +243,14 @@ class AuthService:
             },
         )
 
-    async def refresh_access_token(self, raw_refresh_token: str) -> TokenResponse:
-        """
-        Exchange a valid refresh token for a new access token.
-        Raises InvalidTokenError if token is invalid, expired, or already used.
-        """
+    async def refresh_access_token(self, raw_refresh_token: str) -> str:
+        """Exchange a valid refresh token for a new access token."""
         token_hash = hash_token(raw_refresh_token)
         auth_token = await self.db.scalar(
             select(AuthToken).where(
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "REFRESH",  # type: ignore[comparison]
-                AuthToken.used_at.is_(None),  # type: ignore[call]
+                AuthToken.type == "REFRESH",
+                AuthToken.used_at.is_(None),
                 AuthToken.expires_at > datetime.now(UTC),
             )
         )
@@ -182,7 +262,7 @@ class AuthService:
             raise InvalidTokenError("User not found")
 
         new_access = create_access_token(user.id, user.school_id, user.role)
-        return TokenResponse(access_token=new_access)
+        return new_access
 
     async def logout(self, raw_refresh_token: str) -> None:
         """Mark refresh token as used (invalidate session)."""
@@ -190,7 +270,7 @@ class AuthService:
         auth_token = await self.db.scalar(
             select(AuthToken).where(
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "REFRESH",  # type: ignore[comparison]
+                AuthToken.type == "REFRESH",
             )
         )
         if auth_token:
