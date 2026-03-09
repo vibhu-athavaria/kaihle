@@ -20,8 +20,9 @@ def _check_school_access(school_id: uuid.UUID, current_user: CurrentUser) -> Non
     if current_user.role == UserRole.KAIHLE_ADMIN:
         return
     # SchoolAdmin can only access their own school
-    if current_user.role != UserRole.SCHOOL_ADMIN or current_user.school_id != school_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    if current_user.role == UserRole.SCHOOL_ADMIN and current_user.school_id == school_id:
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

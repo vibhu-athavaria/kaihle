@@ -120,9 +120,7 @@ class UserService:
     async def get_user(self, school_id: uuid.UUID, user_id: uuid.UUID) -> User:
         """Get a user by ID, ensuring they belong to the specified school."""
         # Fetch user with both user_id and school_id in single query
-        user = await self.db.scalar(
-            select(User).where(User.id == user_id, User.school_id == school_id)
-        )
+        user = await self.db.scalar(select(User).where(User.id == user_id, User.school_id == school_id))
         if not user:
             raise ValueError("User not found")
         return user
