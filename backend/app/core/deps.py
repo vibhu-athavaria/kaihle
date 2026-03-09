@@ -92,12 +92,12 @@ async def get_current_user(
     return user
 
 
-def require_role(*allowed_roles: str) -> Callable[..., Any]:
+def require_role(*allowed_roles: UserRole) -> Callable[..., Any]:
     """
     Factory function that returns a dependency for role-based access control.
 
     Args:
-        *allowed_roles: Variable number of role strings (e.g., UserRole.TEACHER)
+        *allowed_roles: Variable number of UserRole values that are allowed
 
     Returns:
         A dependency function that checks if the current user has an allowed role
@@ -109,10 +109,12 @@ def require_role(*allowed_roles: str) -> Callable[..., Any]:
     async def role_checker(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> CurrentUser:
-        if current_user.role not in allowed_roles:
+        # Convert allowed_roles to strings for comparison with User.role (which is str)
+        allowed_role_values = tuple(role.value if hasattr(role, "value") else role for role in allowed_roles)
+        if current_user.role not in allowed_role_values:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied. Required roles: {', '.join(allowed_roles)}",
+                detail=f"Access denied. Required roles: {', '.join(str(r) for r in allowed_roles)}",
             )
         return current_user
 
