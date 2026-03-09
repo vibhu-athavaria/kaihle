@@ -1,6 +1,7 @@
 """Unit tests for UserService."""
 
 import uuid
+from typing import Any, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -8,10 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.schemas.user import UserInvite, UserUpdate
+from app.services.user_service import UserService
 
 
 @pytest.fixture
-def mock_db():
+def mock_db() -> Generator[MagicMock, None, None]:
     """Create a mock database session."""
     session = MagicMock(spec=AsyncSession)
     session.add = MagicMock()
@@ -23,21 +25,19 @@ def mock_db():
 
 
 @pytest.fixture
-def user_service(mock_db):
+def user_service(mock_db: MagicMock) -> UserService:
     """Create a UserService with mock database."""
-    from app.services.user_service import UserService
-
     return UserService(mock_db)
 
 
 @pytest.fixture
-def school_id():
+def school_id() -> uuid.UUID:
     """Create a test school UUID."""
     return uuid.uuid4()
 
 
 @pytest.fixture
-def user_invite_data():
+def user_invite_data() -> UserInvite:
     """Create test UserInvite data."""
     return UserInvite(
         email="newteacher@school.com",
@@ -53,19 +53,18 @@ class TestInviteUser:
 
     @pytest.mark.asyncio
     async def test_invite_user_when_valid_teacher_then_user_created(
-        self, user_service, mock_db, school_id, user_invite_data
-    ):
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID, user_invite_data: UserInvite
+    ) -> None:
         """Test inviting a valid teacher creates user and profile."""
         # Arrange
         mock_db.scalar = AsyncMock(return_value=None)  # No existing user
 
         # Act
-        with (
-            patch("app.services.user_service.create_magic_link_token") as mock_token,
-            patch("app.services.user_service.hash_token") as mock_hash,
-            patch("app.services.user_service.store_magic_link_token") as mock_store,
-            patch("app.services.user_service.UserService._send_welcome_email"),
-        ):
+        with patch("app.services.user_service.create_magic_link_token") as mock_token, \
+             patch("app.services.user_service.hash_token") as mock_hash, \
+             patch("app.services.user_service.store_magic_link_token") as mock_store, \
+             patch("app.services.user_service.UserService._send_welcome_email"):
+
             mock_token.return_value = "test_token_123"
             mock_hash.return_value = "hashed_token"
             mock_store.return_value = MagicMock()
@@ -84,7 +83,9 @@ class TestInviteUser:
         mock_db.flush.assert_called()
 
     @pytest.mark.asyncio
-    async def test_invite_user_when_invalid_role_then_raises_value_error(self, user_service, mock_db, school_id):
+    async def test_invite_user_when_invalid_role_then_raises_value_error(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test that inviting user with invalid role raises ValueError."""
         # Arrange
         invalid_data = UserInvite(
@@ -100,8 +101,8 @@ class TestInviteUser:
 
     @pytest.mark.asyncio
     async def test_invite_user_when_duplicate_email_then_raises_value_error(
-        self, user_service, mock_db, school_id, user_invite_data
-    ):
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID, user_invite_data: UserInvite
+    ) -> None:
         """Test that duplicate email in same school raises ValueError."""
         # Arrange
         existing_user = User(
@@ -116,7 +117,9 @@ class TestInviteUser:
             await user_service.invite_user(school_id, user_invite_data, "https://app.kaihle.com")
 
     @pytest.mark.asyncio
-    async def test_invite_user_when_school_admin_role_then_creates_user(self, user_service, mock_db, school_id):
+    async def test_invite_user_when_school_admin_role_then_creates_user(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test that school admin can be invited."""
         # Arrange
         admin_data = UserInvite(
@@ -128,12 +131,11 @@ class TestInviteUser:
         mock_db.scalar = AsyncMock(return_value=None)
 
         # Act
-        with (
-            patch("app.services.user_service.create_magic_link_token") as mock_token,
-            patch("app.services.user_service.hash_token") as mock_hash,
-            patch("app.services.user_service.store_magic_link_token") as mock_store,
-            patch("app.services.user_service.UserService._send_welcome_email"),
-        ):
+        with patch("app.services.user_service.create_magic_link_token") as mock_token, \
+             patch("app.services.user_service.hash_token") as mock_hash, \
+             patch("app.services.user_service.store_magic_link_token") as mock_store, \
+             patch("app.services.user_service.UserService._send_welcome_email"):
+
             mock_token.return_value = "test_token_123"
             mock_hash.return_value = "hashed_token"
             mock_store.return_value = MagicMock()
@@ -144,7 +146,9 @@ class TestInviteUser:
         assert result.role == "SCHOOL_ADMIN"
 
     @pytest.mark.asyncio
-    async def test_invite_user_when_parent_role_then_creates_user(self, user_service, mock_db, school_id):
+    async def test_invite_user_when_parent_role_then_creates_user(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test that parent can be invited."""
         # Arrange
         parent_data = UserInvite(
@@ -156,12 +160,11 @@ class TestInviteUser:
         mock_db.scalar = AsyncMock(return_value=None)
 
         # Act
-        with (
-            patch("app.services.user_service.create_magic_link_token") as mock_token,
-            patch("app.services.user_service.hash_token") as mock_hash,
-            patch("app.services.user_service.store_magic_link_token") as mock_store,
-            patch("app.services.user_service.UserService._send_welcome_email"),
-        ):
+        with patch("app.services.user_service.create_magic_link_token") as mock_token, \
+             patch("app.services.user_service.hash_token") as mock_hash, \
+             patch("app.services.user_service.store_magic_link_token") as mock_store, \
+             patch("app.services.user_service.UserService._send_welcome_email"):
+
             mock_token.return_value = "test_token_123"
             mock_hash.return_value = "hashed_token"
             mock_store.return_value = MagicMock()
@@ -172,7 +175,9 @@ class TestInviteUser:
         assert result.role == "PARENT"
 
     @pytest.mark.asyncio
-    async def test_invite_user_when_student_role_then_raises_value_error(self, user_service, mock_db, school_id):
+    async def test_invite_user_when_student_role_then_raises_value_error(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test that student cannot be invited via user invitation (must use enrollment flow)."""
         # Arrange
         student_data = UserInvite(
@@ -188,8 +193,8 @@ class TestInviteUser:
 
     @pytest.mark.asyncio
     async def test_invite_user_when_teacher_with_subjects_then_creates_teacher_profile(
-        self, user_service, mock_db, school_id
-    ):
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test that teacher with subjects gets TeacherProfile created."""
         # Arrange
         teacher_data = UserInvite(
@@ -201,9 +206,9 @@ class TestInviteUser:
         )
         mock_db.scalar = AsyncMock(return_value=None)
 
-        created_user = None
+        created_user: User | None = None
 
-        def capture_add(obj):
+        def capture_add(obj: Any) -> None:
             nonlocal created_user
             if isinstance(obj, User):
                 created_user = obj
@@ -211,12 +216,11 @@ class TestInviteUser:
         mock_db.add = MagicMock(side_effect=capture_add)
 
         # Act
-        with (
-            patch("app.services.user_service.create_magic_link_token") as mock_token,
-            patch("app.services.user_service.hash_token") as mock_hash,
-            patch("app.services.user_service.store_magic_link_token") as mock_store,
-            patch("app.services.user_service.UserService._send_welcome_email"),
-        ):
+        with patch("app.services.user_service.create_magic_link_token") as mock_token, \
+             patch("app.services.user_service.hash_token") as mock_hash, \
+             patch("app.services.user_service.store_magic_link_token") as mock_store, \
+             patch("app.services.user_service.UserService._send_welcome_email"):
+
             mock_token.return_value = "test_token_123"
             mock_hash.return_value = "hashed_token"
             mock_store.return_value = MagicMock()
@@ -232,28 +236,16 @@ class TestListUsers:
     """Tests for UserService.list_users method."""
 
     @pytest.mark.asyncio
-    async def test_list_users_when_no_filter_then_returns_all_active_users(self, user_service, mock_db, school_id):
+    async def test_list_users_when_no_filter_then_returns_all_active_users(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test listing all active users in a school."""
         # Arrange
         users = [
-            User(
-                id=uuid.uuid4(),
-                email="user1@school.com",
-                first_name="User",
-                last_name="One",
-                role="TEACHER",
-                school_id=school_id,
-                is_active=True,
-            ),
-            User(
-                id=uuid.uuid4(),
-                email="user2@school.com",
-                first_name="User",
-                last_name="Two",
-                role="SCHOOL_ADMIN",
-                school_id=school_id,
-                is_active=True,
-            ),
+            User(id=uuid.uuid4(), email="user1@school.com", first_name="User", last_name="One",
+                 role="TEACHER", school_id=school_id, is_active=True),
+            User(id=uuid.uuid4(), email="user2@school.com", first_name="User", last_name="Two",
+                 role="SCHOOL_ADMIN", school_id=school_id, is_active=True),
         ]
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = users
@@ -268,19 +260,14 @@ class TestListUsers:
         assert total == 2
 
     @pytest.mark.asyncio
-    async def test_list_users_when_role_filter_then_returns_filtered_users(self, user_service, mock_db, school_id):
+    async def test_list_users_when_role_filter_then_returns_filtered_users(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test listing users with role filter."""
         # Arrange
         teachers = [
-            User(
-                id=uuid.uuid4(),
-                email="teacher1@school.com",
-                first_name="Teacher",
-                last_name="One",
-                role="TEACHER",
-                school_id=school_id,
-                is_active=True,
-            ),
+            User(id=uuid.uuid4(), email="teacher1@school.com", first_name="Teacher", last_name="One",
+                 role="TEACHER", school_id=school_id, is_active=True),
         ]
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = teachers
@@ -295,19 +282,14 @@ class TestListUsers:
         assert result_users[0].role == "TEACHER"
 
     @pytest.mark.asyncio
-    async def test_list_users_when_pagination_then_returns_correct_page(self, user_service, mock_db, school_id):
+    async def test_list_users_when_pagination_then_returns_correct_page(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test pagination parameters are applied correctly."""
         # Arrange
         users = [
-            User(
-                id=uuid.uuid4(),
-                email=f"user{i}@school.com",
-                first_name="User",
-                last_name=str(i),
-                role="TEACHER",
-                school_id=school_id,
-                is_active=True,
-            )
+            User(id=uuid.uuid4(), email=f"user{i}@school.com", first_name="User", last_name=str(i),
+                 role="TEACHER", school_id=school_id, is_active=True)
             for i in range(20)
         ]
         mock_result = MagicMock()
@@ -327,7 +309,9 @@ class TestGetUser:
     """Tests for UserService.get_user method."""
 
     @pytest.mark.asyncio
-    async def test_get_user_when_exists_then_returns_user(self, user_service, mock_db, school_id):
+    async def test_get_user_when_exists_then_returns_user(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test getting an existing user."""
         # Arrange
         user_id = uuid.uuid4()
@@ -349,7 +333,9 @@ class TestGetUser:
         assert result.id == user_id
 
     @pytest.mark.asyncio
-    async def test_get_user_when_not_exists_then_raises_not_found(self, user_service, mock_db, school_id):
+    async def test_get_user_when_not_exists_then_raises_not_found(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test getting non-existent user raises ValueError."""
         # Arrange
         user_id = uuid.uuid4()
@@ -360,7 +346,9 @@ class TestGetUser:
             await user_service.get_user(school_id, user_id)
 
     @pytest.mark.asyncio
-    async def test_get_user_when_wrong_school_then_raises_not_found(self, user_service, mock_db, school_id):
+    async def test_get_user_when_wrong_school_then_raises_not_found(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test getting user from different school raises ValueError."""
         # Arrange
         user_id = uuid.uuid4()
@@ -385,7 +373,9 @@ class TestUpdateUser:
     """Tests for UserService.update_user method."""
 
     @pytest.mark.asyncio
-    async def test_update_user_when_valid_data_then_updates_user(self, user_service, mock_db, school_id):
+    async def test_update_user_when_valid_data_then_updates_user(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test updating user with valid data."""
         # Arrange
         user_id = uuid.uuid4()
@@ -410,7 +400,9 @@ class TestUpdateUser:
         mock_db.flush.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_update_user_when_not_exists_then_raises_not_found(self, user_service, mock_db, school_id):
+    async def test_update_user_when_not_exists_then_raises_not_found(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test updating non-existent user raises ValueError."""
         # Arrange
         user_id = uuid.uuid4()
@@ -427,7 +419,9 @@ class TestDeactivateUser:
     """Tests for UserService.deactivate_user method."""
 
     @pytest.mark.asyncio
-    async def test_deactivate_user_when_active_then_sets_inactive(self, user_service, mock_db, school_id):
+    async def test_deactivate_user_when_active_then_sets_inactive(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test deactivating a user sets is_active to False."""
         # Arrange
         user_id = uuid.uuid4()
@@ -450,7 +444,9 @@ class TestDeactivateUser:
         mock_db.flush.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_deactivate_user_when_not_exists_then_raises_not_found(self, user_service, mock_db, school_id):
+    async def test_deactivate_user_when_not_exists_then_raises_not_found(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
         """Test deactivating non-existent user raises ValueError."""
         # Arrange
         user_id = uuid.uuid4()
