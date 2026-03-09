@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user, require_role
+from app.models.user import UserRole
 from app.schemas.school import (
     SchoolCreate,
     SchoolListResponse,
@@ -37,7 +38,7 @@ def _school_to_response(school: Any) -> SchoolResponse:
 @router.post("", response_model=SchoolResponse, status_code=status.HTTP_201_CREATED)
 async def create_school(
     body: SchoolCreate,
-    _: CurrentUser = Depends(require_role("KAIHLE_ADMIN")),
+    _: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> SchoolResponse:
     """Create a new school. KaihleAdmin only."""
@@ -53,7 +54,7 @@ async def create_school(
 async def list_schools(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    _: CurrentUser = Depends(require_role("KAIHLE_ADMIN")),
+    _: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> SchoolListResponse:
     """List all schools with pagination. KaihleAdmin only."""
@@ -106,7 +107,7 @@ async def get_school(
 async def update_school(
     school_id: uuid.UUID,
     body: SchoolUpdate,
-    _: CurrentUser = Depends(require_role("KAIHLE_ADMIN")),
+    _: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> SchoolResponse:
     """Update a school. KaihleAdmin only."""
