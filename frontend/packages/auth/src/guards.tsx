@@ -41,11 +41,7 @@ type OnboardingStatus = {
 };
 
 /**
-<<<<<<< HEAD
  * OnboardingRoute — for STUDENT role only.
-=======
- * OnboardingRoute (NEW v2.1) — for STUDENT role only.
->>>>>>> 3d458ef (feat(M0-3-T5): implement login UI for all three apps)
  * Redirects to /student/onboarding if onboarding is not complete.
  *
  * Uses the /api/v1/onboarding/status endpoint to determine completion.

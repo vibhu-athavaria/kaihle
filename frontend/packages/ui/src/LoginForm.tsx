@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -93,6 +93,8 @@ export function LoginForm({
             onClick={() => {
               setMode("magic");
               setError(null);
+              setMagicSent(false);
+              magicForm.reset();
             }}
             className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
               mode === "magic"
