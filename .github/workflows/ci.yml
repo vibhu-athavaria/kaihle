@@ -24,6 +24,9 @@ jobs:
       - name: Run ruff
         run: ruff check .
         working-directory: backend
+      - name: Run ruff-format
+        run: ruff format --check .
+        working-directory: backend
       - name: Run mypy
         run: mypy app/
         working-directory: backend
@@ -119,6 +122,27 @@ jobs:
       # - name: Run eslint
       #   run: pnpm lint
       #   working-directory: frontend
+
+  check-yaml:
+    name: Check YAML Files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check YAML syntax
+        run: |
+          for f in $(find .github -name "*.yml" -o -name "*.yaml"); do
+            python3 -c "import yaml; yaml.safe_load(open('$f'))" || exit 1
+          done
+
+  actionlint:
+    name: Lint GitHub Actions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run actionlint
+        uses: rhysd/actionlint@v1.7.4
+        with:
+          glob: ".github/**/*.yml"
 
   test-frontend-unit:
     name: Frontend Unit Tests
