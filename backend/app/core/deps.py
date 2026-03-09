@@ -2,7 +2,7 @@
 
 import uuid
 from collections.abc import Callable
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, TypeVar, cast
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -97,7 +97,7 @@ def require_role(*allowed_roles: str) -> Callable[..., Any]:
     Factory function that returns a dependency for role-based access control.
 
     Args:
-        *allowed_roles: Variable number of role strings that are allowed
+        *allowed_roles: Variable number of role strings (e.g., UserRole.TEACHER)
 
     Returns:
         A dependency function that checks if the current user has an allowed role
@@ -119,14 +119,19 @@ def require_role(*allowed_roles: str) -> Callable[..., Any]:
     return role_checker
 
 
-def require_school_match(school_id: uuid.UUID) -> Callable[..., Any]:
+def require_school_match(
+    school_id_getter: uuid.UUID | Callable[[], uuid.UUID],
+) -> Callable[..., Any]:
     """
     Factory function that returns a dependency to enforce school_id match.
 
     KAIHLE_ADMIN role bypasses this check.
 
     Args:
-        school_id: The school_id that the user must match
+        school_id_getter: Either a static UUID, or a callable that returns the school_id.
+                          When using a callable, it will be called with no arguments to get
+                          the school_id at runtime (useful for extracting from path parameters).
+                          Example: lambda: school_id_from_request
 
     Returns:
         A dependency function that checks if the user's school matches
@@ -135,6 +140,9 @@ def require_school_match(school_id: uuid.UUID) -> Callable[..., Any]:
         HTTPException 403: If user's school doesn't match (except for KAIHLE_ADMIN)
     """
 
+    # Determine if school_id_getter is a callable (for dynamic extraction) or static UUID
+    is_dynamic = callable(school_id_getter) and not isinstance(school_id_getter, uuid.UUID)
+
     async def school_checker(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> CurrentUser:
@@ -142,8 +150,14 @@ def require_school_match(school_id: uuid.UUID) -> Callable[..., Any]:
         if current_user.role == UserRole.KAIHLE_ADMIN:
             return current_user
 
+        # Get the school_id to check against
+        if is_dynamic:
+            target_school_id = cast(Callable[[], uuid.UUID], school_id_getter)()
+        else:
+            target_school_id = cast(uuid.UUID, school_id_getter)
+
         # Check school match
-        if current_user.school_id != school_id:
+        if current_user.school_id != target_school_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied to this school's data",
