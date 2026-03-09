@@ -6,6 +6,10 @@ on:
   push:
     branches: [develop]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   lint-backend:
@@ -16,10 +20,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip'
       - name: Install uv
         run: pip install uv
       - name: Install dependencies
         run: uv pip install --system -e ".[dev]"
+        working-directory: backend
+      - name: Run alembic check
+        run: alembic check
         working-directory: backend
       - name: Run ruff
         run: ruff check .
@@ -34,6 +42,7 @@ jobs:
   test-backend:
     name: Backend Tests
     runs-on: ubuntu-latest
+    needs: [lint-backend]
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -109,11 +118,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: 'pnpm'
       - uses: pnpm/action-setup@v4
         with:
           version: 9
       - name: Install dependencies
         run: pnpm install
+        working-directory: frontend
+      - name: TypeScript type check
+        run: pnpm exec tsc --noEmit
         working-directory: frontend
       - name: Run prettier check
         run: pnpm exec prettier --check "**/*.{ts,tsx,json,css}"
@@ -147,6 +160,7 @@ jobs:
   test-frontend-unit:
     name: Frontend Unit Tests
     runs-on: ubuntu-latest
+    needs: [lint-frontend]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -169,7 +183,7 @@ jobs:
   test-e2e:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
-    needs: [test-backend, test-frontend-unit]
+    needs: [lint-backend, lint-frontend, test-backend, test-frontend-unit]
     services:
       postgres:
         image: pgvector/pgvector:pg16
