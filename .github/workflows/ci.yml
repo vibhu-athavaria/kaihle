@@ -12,32 +12,42 @@ concurrency:
 
 jobs:
 
+  # ─── BACKEND ──────────────────────────────────────────────────────────────
+
   lint-backend:
-    name: Backend Lint
+    name: Backend Lint & Type Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: 'pip'
+          cache: "pip"
+
       - name: Install uv
         run: pip install uv
+
       - name: Install dependencies
         run: uv pip install --system -e ".[dev]"
         working-directory: backend
-      - name: Run ruff
+
+      # ruff check: does NOT auto-fix — surfaces violations explicitly
+      - name: Run ruff lint
         run: ruff check .
         working-directory: backend
-      - name: Run ruff-format
+
+      # ruff format --check: fails if formatting differs from pre-commit's ruff-format
+      - name: Run ruff format check
         run: ruff format --check .
         working-directory: backend
+
       - name: Run mypy
         run: mypy app/
         working-directory: backend
 
   test-backend:
-    name: Backend Tests
+    name: Backend Tests (unit + integration)
     runs-on: ubuntu-latest
     needs: [lint-backend]
     services:
@@ -74,23 +84,29 @@ jobs:
       ENVIRONMENT: test
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
+
       - name: Install uv
         run: pip install uv
+
       - name: Install dependencies
         run: uv pip install --system -e ".[dev]"
         working-directory: backend
+
       - name: Enable pgvector extension
         run: |
           PGPASSWORD=kaihle psql -h localhost -U kaihle -d kaihle_test \
             -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
       - name: Run migrations
         run: alembic upgrade head
         working-directory: backend
-        env:
-          DATABASE_URL: postgresql+asyncpg://kaihle:kaihle@localhost:5432/kaihle_test
+
+      # Runs ALL tests (unit + integration) with 90% coverage gate
       - name: Run pytest with coverage
         run: |
           pytest app/tests/ \
@@ -100,6 +116,7 @@ jobs:
             --cov-fail-under=90 \
             -v
         working-directory: backend
+
       - name: Post coverage comment
         uses: py-cov-action/python-coverage-comment-action@v3
         if: github.event_name == 'pull_request'
@@ -107,51 +124,70 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COVERAGE_DATA_FILE: backend/coverage.xml
 
+  # ─── FRONTEND ─────────────────────────────────────────────────────────────
+
   lint-frontend:
-    name: Frontend Lint
+    name: Frontend Lint & Type Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # pnpm MUST be installed before setup-node so the cache key can be resolved
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: 'pnpm'
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "PNPM_STORE_DIR=$(pnpm store path --silent)" >> $GITHUB_ENV
-      - name: Setup PATH
-        run: |
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-        shell: bash
+          cache: "pnpm"          # works correctly now that pnpm is already installed
+
       - name: Install dependencies
         run: pnpm install
         working-directory: frontend
+
       - name: TypeScript type check
         run: pnpm exec tsc --noEmit
         working-directory: frontend
+
       - name: Run prettier check
         run: pnpm exec prettier --check "**/*.{ts,tsx,json,css}"
         working-directory: frontend
-      # ESLint disabled - requires full monorepo ESLint setup (see M0-1-T1)
+
+      # ESLint disabled — requires full monorepo ESLint setup (see M0-1-T1)
       # - name: Run eslint
       #   run: pnpm lint
       #   working-directory: frontend
 
-  check-yaml:
-    name: Check YAML Files
+  test-frontend-unit:
+    name: Frontend Unit Tests
     runs-on: ubuntu-latest
+    needs: [lint-frontend]
     steps:
       - uses: actions/checkout@v4
-      - name: Check YAML syntax
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+        working-directory: frontend
+
+      # No "|| true" — real test failures will correctly fail this job
+      - name: Run Jest tests
         run: |
-          for f in $(find .github -name "*.yml" -o -name "*.yaml"); do
-            python3 -c "import yaml; yaml.safe_load(open('$f'))" || exit 1
-          done
+          pnpm --filter parent exec jest --passWithNoTests --coverage
+          pnpm --filter student exec jest --passWithNoTests --coverage
+          pnpm --filter teacher exec jest --passWithNoTests --coverage
+        working-directory: frontend
+
+  # ─── YAML / INFRA ─────────────────────────────────────────────────────────
 
   actionlint:
     name: Lint GitHub Actions
@@ -163,33 +199,14 @@ jobs:
         with:
           glob: ".github/**/*.yml"
 
-  test-frontend-unit:
-    name: Frontend Unit Tests
-    runs-on: ubuntu-latest
-    needs: [lint-frontend]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - name: Install dependencies
-        run: pnpm install
-        working-directory: frontend
-      - name: Run Jest tests
-        # Run jest directly for each app to avoid pnpm filter argument issues
-        run: |
-          cd apps/parent && npx jest --passWithNoTests --coverage || true
-          cd ../student && npx jest --passWithNoTests --coverage || true
-          cd ../teacher && npx jest --passWithNoTests --coverage || true
-        working-directory: frontend
+  # check-yaml removed — actionlint is a strict superset of basic YAML parsing
+
+  # ─── E2E ──────────────────────────────────────────────────────────────────
 
   test-e2e:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
-    needs: [lint-backend, lint-frontend, test-backend, test-frontend-unit]
+    needs: [test-backend, test-frontend-unit]   # only run after all unit tests pass
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -223,42 +240,56 @@ jobs:
       ENVIRONMENT: test
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+          cache: "pip"
+
       - uses: pnpm/action-setup@v4
         with:
           version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
       - name: Install backend dependencies
         run: pip install uv && uv pip install --system -e ".[dev]"
         working-directory: backend
+
       - name: Run migrations
         run: alembic upgrade head
         working-directory: backend
+
       - name: Start backend
         run: uvicorn app.main:app --host 0.0.0.0 --port 8000 &
         working-directory: backend
+
       - name: Install frontend dependencies
         run: pnpm install
         working-directory: frontend
+
       - name: Build frontend apps
         run: pnpm build
         working-directory: frontend
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
         working-directory: frontend
+
       - name: Wait for backend to be ready
         run: |
           for i in {1..30}; do
             curl -sf http://localhost:8000/health && break
             sleep 2
           done
+
       - name: Run Playwright tests
         run: pnpm exec playwright test
         working-directory: frontend
+
       - name: Upload Playwright report on failure
         uses: actions/upload-artifact@v4
         if: failure()
