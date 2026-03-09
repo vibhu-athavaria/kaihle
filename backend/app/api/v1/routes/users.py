@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user
+from app.models.user import UserRole
 from app.schemas.user import UserInvite, UserListResponse, UserResponse, UserUpdate
 from app.services.user_service import UserService
 
@@ -15,9 +16,11 @@ router = APIRouter(prefix="/schools/{school_id}/users", tags=["users"])
 
 def _check_school_access(school_id: uuid.UUID, current_user: CurrentUser) -> None:
     """KaihleAdmin can access any school. SchoolAdmin can only access own school."""
-    if current_user.role == "KAIHLE_ADMIN":
+    # KaihleAdmin can access any school
+    if current_user.role == UserRole.KAIHLE_ADMIN:
         return
-    if current_user.role != "SCHOOL_ADMIN" or current_user.school_id != school_id:
+    # SchoolAdmin can only access their own school
+    if current_user.role != UserRole.SCHOOL_ADMIN or current_user.school_id != school_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
 

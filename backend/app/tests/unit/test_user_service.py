@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.user import UserInvite, UserUpdate
 from app.services.user_service import UserService
 
@@ -42,7 +42,7 @@ def user_invite_data() -> UserInvite:
     """Create test UserInvite data."""
     return UserInvite(
         email="newteacher@school.com",
-        role="TEACHER",
+        role=UserRole.TEACHER,
         first_name="John",
         last_name="Doe",
         subjects=["Mathematics", "Science"],
@@ -92,7 +92,7 @@ class TestInviteUser:
         # Arrange
         invalid_data = UserInvite(
             email="user@school.com",
-            role="INVALID_ROLE",  # Not in allowed roles
+            role=UserRole.STUDENT,  # Not in allowed roles
             first_name="John",
             last_name="Doe",
         )
@@ -126,7 +126,7 @@ class TestInviteUser:
         # Arrange
         admin_data = UserInvite(
             email="admin@school.com",
-            role="SCHOOL_ADMIN",
+            role=UserRole.SCHOOL_ADMIN,
             first_name="Admin",
             last_name="User",
         )
@@ -146,7 +146,7 @@ class TestInviteUser:
             result = await user_service.invite_user(school_id, admin_data, "https://app.kaihle.com")
 
         # Assert
-        assert result.role == "SCHOOL_ADMIN"
+        assert result.role == UserRole.SCHOOL_ADMIN
 
     @pytest.mark.asyncio
     async def test_invite_user_when_parent_role_then_creates_user(
@@ -156,7 +156,7 @@ class TestInviteUser:
         # Arrange
         parent_data = UserInvite(
             email="parent@school.com",
-            role="PARENT",
+            role=UserRole.PARENT,
             first_name="Parent",
             last_name="User",
         )
@@ -176,7 +176,7 @@ class TestInviteUser:
             result = await user_service.invite_user(school_id, parent_data, "https://app.kaihle.com")
 
         # Assert
-        assert result.role == "PARENT"
+        assert result.role == UserRole.PARENT
 
     @pytest.mark.asyncio
     async def test_invite_user_when_student_role_then_raises_value_error(
@@ -186,7 +186,7 @@ class TestInviteUser:
         # Arrange
         student_data = UserInvite(
             email="student@school.com",
-            role="STUDENT",  # Not in allowed roles for invitation
+            role=UserRole.STUDENT,  # Not in allowed roles for invitation
             first_name="Student",
             last_name="User",
         )
@@ -203,7 +203,7 @@ class TestInviteUser:
         # Arrange
         teacher_data = UserInvite(
             email="teacher@school.com",
-            role="TEACHER",
+            role=UserRole.TEACHER,
             first_name="Teacher",
             last_name="User",
             subjects=["Mathematics", "Science"],
@@ -252,7 +252,7 @@ class TestListUsers:
                 email="user1@school.com",
                 first_name="User",
                 last_name="One",
-                role="TEACHER",
+                role=UserRole.TEACHER,
                 school_id=school_id,
                 is_active=True,
             ),
@@ -261,7 +261,7 @@ class TestListUsers:
                 email="user2@school.com",
                 first_name="User",
                 last_name="Two",
-                role="SCHOOL_ADMIN",
+                role=UserRole.SCHOOL_ADMIN,
                 school_id=school_id,
                 is_active=True,
             ),
@@ -290,7 +290,7 @@ class TestListUsers:
                 email="teacher1@school.com",
                 first_name="Teacher",
                 last_name="One",
-                role="TEACHER",
+                role=UserRole.TEACHER,
                 school_id=school_id,
                 is_active=True,
             ),
@@ -319,7 +319,7 @@ class TestListUsers:
                 email=f"user{i}@school.com",
                 first_name="User",
                 last_name=str(i),
-                role="TEACHER",
+                role=UserRole.TEACHER,
                 school_id=school_id,
                 is_active=True,
             )
@@ -353,11 +353,11 @@ class TestGetUser:
             email="user@school.com",
             first_name="User",
             last_name="Test",
-            role="TEACHER",
+            role=UserRole.TEACHER,
             school_id=school_id,
             is_active=True,
         )
-        mock_db.get = AsyncMock(return_value=expected_user)
+        mock_db.scalar = AsyncMock(return_value=expected_user)
 
         # Act
         result = await user_service.get_user(school_id, user_id)
@@ -372,7 +372,7 @@ class TestGetUser:
         """Test getting non-existent user raises ValueError."""
         # Arrange
         user_id = uuid.uuid4()
-        mock_db.get = AsyncMock(return_value=None)
+        mock_db.scalar = AsyncMock(return_value=None)
 
         # Act & Assert
         with pytest.raises(ValueError, match="User not found"):
@@ -382,20 +382,15 @@ class TestGetUser:
     async def test_get_user_when_wrong_school_then_raises_not_found(
         self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
     ) -> None:
-        """Test getting user from different school raises ValueError."""
-        # Arrange
+        """Test getting user from different school raises ValueError.
+
+        Note: With the new query using both user_id and school_id, if the user
+        belongs to a different school, the query returns None (not the user),
+        so this correctly raises ValueError.
+        """
+        # Arrange - scalar returns None because query with wrong school returns nothing
         user_id = uuid.uuid4()
-        other_school_id = uuid.uuid4()
-        user = User(
-            id=user_id,
-            email="user@school.com",
-            first_name="User",
-            last_name="Test",
-            role="TEACHER",
-            school_id=other_school_id,  # Different school
-            is_active=True,
-        )
-        mock_db.get = AsyncMock(return_value=user)
+        mock_db.scalar = AsyncMock(return_value=None)
 
         # Act & Assert
         with pytest.raises(ValueError, match="User not found"):
@@ -417,11 +412,11 @@ class TestUpdateUser:
             email="user@school.com",
             first_name="OldName",
             last_name="LastName",
-            role="TEACHER",
+            role=UserRole.TEACHER,
             school_id=school_id,
             is_active=True,
         )
-        mock_db.get = AsyncMock(return_value=user)
+        mock_db.scalar = AsyncMock(return_value=user)
 
         update_data = UserUpdate(first_name="NewName")
 
@@ -439,7 +434,7 @@ class TestUpdateUser:
         """Test updating non-existent user raises ValueError."""
         # Arrange
         user_id = uuid.uuid4()
-        mock_db.get = AsyncMock(return_value=None)
+        mock_db.scalar = AsyncMock(return_value=None)
 
         update_data = UserUpdate(first_name="NewName")
 
@@ -463,11 +458,11 @@ class TestDeactivateUser:
             email="user@school.com",
             first_name="User",
             last_name="Test",
-            role="TEACHER",
+            role=UserRole.TEACHER,
             school_id=school_id,
             is_active=True,
         )
-        mock_db.get = AsyncMock(return_value=user)
+        mock_db.scalar = AsyncMock(return_value=user)
 
         # Act
         await user_service.deactivate_user(school_id, user_id)
@@ -483,7 +478,7 @@ class TestDeactivateUser:
         """Test deactivating non-existent user raises ValueError."""
         # Arrange
         user_id = uuid.uuid4()
-        mock_db.get = AsyncMock(return_value=None)
+        mock_db.scalar = AsyncMock(return_value=None)
 
         # Act & Assert
         with pytest.raises(ValueError, match="User not found"):

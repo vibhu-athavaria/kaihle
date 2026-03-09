@@ -4,12 +4,14 @@ import uuid
 
 from pydantic import BaseModel, EmailStr
 
+from app.models.user import UserRole
+
 
 class UserInvite(BaseModel):
     """Schema for inviting a new user to a school."""
 
     email: EmailStr
-    role: str  # TEACHER | SCHOOL_ADMIN | PARENT
+    role: UserRole  # TEACHER | SCHOOL_ADMIN | PARENT
     first_name: str
     last_name: str
     subjects: list[str] | None = None  # for TEACHER role only
@@ -28,7 +30,7 @@ class UserResponse(BaseModel):
 
     id: uuid.UUID
     email: str
-    role: str
+    role: str  # Using str for response compatibility
     first_name: str
     last_name: str
     is_active: bool
