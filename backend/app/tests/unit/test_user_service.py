@@ -1,7 +1,8 @@
 """Unit tests for UserService."""
 
 import uuid
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -60,11 +61,12 @@ class TestInviteUser:
         mock_db.scalar = AsyncMock(return_value=None)  # No existing user
 
         # Act
-        with patch("app.services.user_service.create_magic_link_token") as mock_token, \
-             patch("app.services.user_service.hash_token") as mock_hash, \
-             patch("app.services.user_service.store_magic_link_token") as mock_store, \
-             patch("app.services.user_service.UserService._send_welcome_email"):
-
+        with (
+            patch("app.services.user_service.create_magic_link_token") as mock_token,
+            patch("app.services.user_service.hash_token") as mock_hash,
+            patch("app.services.user_service.store_magic_link_token") as mock_store,
+            patch("app.services.user_service.UserService._send_welcome_email"),
+        ):
             mock_token.return_value = "test_token_123"
             mock_hash.return_value = "hashed_token"
             mock_store.return_value = MagicMock()
@@ -131,11 +133,12 @@ class TestInviteUser:
         mock_db.scalar = AsyncMock(return_value=None)
 
         # Act
-        with patch("app.services.user_service.create_magic_link_token") as mock_token, \
-             patch("app.services.user_service.hash_token") as mock_hash, \
-             patch("app.services.user_service.store_magic_link_token") as mock_store, \
-             patch("app.services.user_service.UserService._send_welcome_email"):
-
+        with (
+            patch("app.services.user_service.create_magic_link_token") as mock_token,
+            patch("app.services.user_service.hash_token") as mock_hash,
+            patch("app.services.user_service.store_magic_link_token") as mock_store,
+            patch("app.services.user_service.UserService._send_welcome_email"),
+        ):
             mock_token.return_value = "test_token_123"
             mock_hash.return_value = "hashed_token"
             mock_store.return_value = MagicMock()
@@ -160,11 +163,12 @@ class TestInviteUser:
         mock_db.scalar = AsyncMock(return_value=None)
 
         # Act
-        with patch("app.services.user_service.create_magic_link_token") as mock_token, \
-             patch("app.services.user_service.hash_token") as mock_hash, \
-             patch("app.services.user_service.store_magic_link_token") as mock_store, \
-             patch("app.services.user_service.UserService._send_welcome_email"):
-
+        with (
+            patch("app.services.user_service.create_magic_link_token") as mock_token,
+            patch("app.services.user_service.hash_token") as mock_hash,
+            patch("app.services.user_service.store_magic_link_token") as mock_store,
+            patch("app.services.user_service.UserService._send_welcome_email"),
+        ):
             mock_token.return_value = "test_token_123"
             mock_hash.return_value = "hashed_token"
             mock_store.return_value = MagicMock()
@@ -216,11 +220,12 @@ class TestInviteUser:
         mock_db.add = MagicMock(side_effect=capture_add)
 
         # Act
-        with patch("app.services.user_service.create_magic_link_token") as mock_token, \
-             patch("app.services.user_service.hash_token") as mock_hash, \
-             patch("app.services.user_service.store_magic_link_token") as mock_store, \
-             patch("app.services.user_service.UserService._send_welcome_email"):
-
+        with (
+            patch("app.services.user_service.create_magic_link_token") as mock_token,
+            patch("app.services.user_service.hash_token") as mock_hash,
+            patch("app.services.user_service.store_magic_link_token") as mock_store,
+            patch("app.services.user_service.UserService._send_welcome_email"),
+        ):
             mock_token.return_value = "test_token_123"
             mock_hash.return_value = "hashed_token"
             mock_store.return_value = MagicMock()
@@ -242,10 +247,24 @@ class TestListUsers:
         """Test listing all active users in a school."""
         # Arrange
         users = [
-            User(id=uuid.uuid4(), email="user1@school.com", first_name="User", last_name="One",
-                 role="TEACHER", school_id=school_id, is_active=True),
-            User(id=uuid.uuid4(), email="user2@school.com", first_name="User", last_name="Two",
-                 role="SCHOOL_ADMIN", school_id=school_id, is_active=True),
+            User(
+                id=uuid.uuid4(),
+                email="user1@school.com",
+                first_name="User",
+                last_name="One",
+                role="TEACHER",
+                school_id=school_id,
+                is_active=True,
+            ),
+            User(
+                id=uuid.uuid4(),
+                email="user2@school.com",
+                first_name="User",
+                last_name="Two",
+                role="SCHOOL_ADMIN",
+                school_id=school_id,
+                is_active=True,
+            ),
         ]
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = users
@@ -266,8 +285,15 @@ class TestListUsers:
         """Test listing users with role filter."""
         # Arrange
         teachers = [
-            User(id=uuid.uuid4(), email="teacher1@school.com", first_name="Teacher", last_name="One",
-                 role="TEACHER", school_id=school_id, is_active=True),
+            User(
+                id=uuid.uuid4(),
+                email="teacher1@school.com",
+                first_name="Teacher",
+                last_name="One",
+                role="TEACHER",
+                school_id=school_id,
+                is_active=True,
+            ),
         ]
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = teachers
@@ -288,8 +314,15 @@ class TestListUsers:
         """Test pagination parameters are applied correctly."""
         # Arrange
         users = [
-            User(id=uuid.uuid4(), email=f"user{i}@school.com", first_name="User", last_name=str(i),
-                 role="TEACHER", school_id=school_id, is_active=True)
+            User(
+                id=uuid.uuid4(),
+                email=f"user{i}@school.com",
+                first_name="User",
+                last_name=str(i),
+                role="TEACHER",
+                school_id=school_id,
+                is_active=True,
+            )
             for i in range(20)
         ]
         mock_result = MagicMock()

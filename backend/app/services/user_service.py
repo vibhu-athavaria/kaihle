@@ -3,6 +3,7 @@
 import secrets
 import uuid
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,8 @@ from app.core.security import (
 )
 from app.models.user import TeacherProfile, User
 from app.schemas.user import UserInvite, UserUpdate
+
+logger = structlog.get_logger()
 
 
 class UserService:
@@ -151,7 +154,11 @@ class UserService:
                     """,
                 }
             )
-        except Exception:
-            # In test environment or if Resend fails, we still want to succeed
-            # because the token is already stored in the database
-            pass
+        except Exception as e:
+            # Log the error but don't fail user creation if email fails
+            logger.error(
+                "failed_to_send_welcome_email",
+                user_id=str(user.id),
+                email=user.email,
+                error=str(e),
+            )

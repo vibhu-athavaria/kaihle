@@ -72,6 +72,7 @@ class User(Base, TimestampMixin):
             UserRole.PARENT,
             UserRole.KAIHLE_ADMIN,
             name="user_role",
+            native_enum=False,
         ),
         nullable=False,
     )
@@ -102,6 +103,7 @@ class StudentProfile(Base, TimestampMixin):
             OnboardingStatus.IN_PROGRESS,
             OnboardingStatus.COMPLETED,
             name="onboarding_status",
+            native_enum=False,
         ),
         nullable=False,
         default=OnboardingStatus.PENDING,
@@ -168,6 +170,7 @@ class AuthToken(Base):
             AuthTokenType.MAGIC_LINK,
             AuthTokenType.REFRESH,
             name="auth_token_type",
+            native_enum=False,
         ),
         nullable=False,
     )

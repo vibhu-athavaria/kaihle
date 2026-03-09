@@ -2,8 +2,7 @@
 
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -16,7 +15,6 @@ from app.core.security import create_access_token
 from app.main import app
 from app.models.school import School
 from app.models.user import TeacherProfile, User, UserRole
-
 
 # Set test JWT secret
 settings.jwt_secret_key = "test-secret-key-for-testing"
@@ -87,10 +85,19 @@ async def teacher(db_session: AsyncSession, school: School) -> User:
 @pytest_asyncio.fixture
 async def kaihle_admin(db_session: AsyncSession) -> User:
     """Create a KaihleAdmin user."""
-    # KaihleAdmin doesn't need a school
+    # Create a dummy school for KaihleAdmin (required by FK)
+    school = School(
+        id=uuid.uuid4(),
+        name="Kaihle HQ",
+        slug=f"kaihle-hq-{uuid.uuid4().hex[:8]}",
+        status="active",
+    )
+    db_session.add(school)
+    await db_session.flush()
+
     user = User(
         id=uuid.uuid4(),
-        school_id=uuid.uuid4(),  # Dummy school_id
+        school_id=school.id,
         email=f"kaihle-admin-{uuid.uuid4().hex[:8]}@kaihle.com",
         first_name="Kaihle",
         last_name="Admin",
@@ -165,8 +172,7 @@ class TestInviteUser:
         }
 
         # Act
-        with patch("app.services.user_service.resend") as mock_resend:
-            mock_resend.Emails = AsyncMock()
+        with patch("app.services.user_service.UserService._send_welcome_email"):
             response = await client.post(
                 f"/api/v1/schools/{school.id}/users",
                 json=payload,
@@ -183,9 +189,7 @@ class TestInviteUser:
         assert data["school_id"] == str(school.id)
 
         # Verify TeacherProfile was created
-        result = await db_session.execute(
-            select(TeacherProfile).where(TeacherProfile.user_id == uuid.UUID(data["id"]))
-        )
+        result = await db_session.execute(select(TeacherProfile).where(TeacherProfile.user_id == uuid.UUID(data["id"])))
         profile = result.scalar_one_or_none()
         assert profile is not None
 
@@ -253,8 +257,7 @@ class TestInviteUser:
         }
 
         # Act
-        with patch("app.services.user_service.resend") as mock_resend:
-            mock_resend.Emails = AsyncMock()
+        with patch("app.services.user_service.UserService._send_welcome_email"):
             response = await client.post(
                 f"/api/v1/schools/{school.id}/users",
                 json=payload,
@@ -265,9 +268,7 @@ class TestInviteUser:
         assert response.status_code == 201
 
     @pytest.mark.asyncio
-    async def test_invite_user_when_teacher_then_403(
-        self, client: AsyncClient, teacher: User, school: School
-    ) -> None:
+    async def test_invite_user_when_teacher_then_403(self, client: AsyncClient, teacher: User, school: School) -> None:
         """Test that Teacher cannot invite users."""
         # Arrange
         headers = auth_header(teacher)
