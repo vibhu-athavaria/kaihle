@@ -6,6 +6,10 @@ on:
   push:
     branches: [develop]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
   lint-backend:
@@ -16,6 +20,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip'
       - name: Install uv
         run: pip install uv
       - name: Install dependencies
@@ -24,6 +29,9 @@ jobs:
       - name: Run ruff
         run: ruff check .
         working-directory: backend
+      - name: Run ruff-format
+        run: ruff format --check .
+        working-directory: backend
       - name: Run mypy
         run: mypy app/
         working-directory: backend
@@ -31,6 +39,7 @@ jobs:
   test-backend:
     name: Backend Tests
     runs-on: ubuntu-latest
+    needs: [lint-backend]
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -106,11 +115,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - uses: pnpm/action-setup@v4
+          cache: 'pnpm'
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
         with:
           version: 9
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "PNPM_STORE_DIR=$(pnpm store path --silent)" >> $GITHUB_ENV
+      - name: Setup PATH
+        run: |
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+        shell: bash
       - name: Install dependencies
         run: pnpm install
+        working-directory: frontend
+      - name: TypeScript type check
+        run: pnpm exec tsc --noEmit
         working-directory: frontend
       - name: Run prettier check
         run: pnpm exec prettier --check "**/*.{ts,tsx,json,css}"
@@ -120,9 +142,31 @@ jobs:
       #   run: pnpm lint
       #   working-directory: frontend
 
+  check-yaml:
+    name: Check YAML Files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check YAML syntax
+        run: |
+          for f in $(find .github -name "*.yml" -o -name "*.yaml"); do
+            python3 -c "import yaml; yaml.safe_load(open('$f'))" || exit 1
+          done
+
+  actionlint:
+    name: Lint GitHub Actions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run actionlint
+        uses: rhysd/actionlint@v1.7.4
+        with:
+          glob: ".github/**/*.yml"
+
   test-frontend-unit:
     name: Frontend Unit Tests
     runs-on: ubuntu-latest
+    needs: [lint-frontend]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -145,7 +189,7 @@ jobs:
   test-e2e:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
-    needs: [test-backend, test-frontend-unit]
+    needs: [lint-backend, lint-frontend, test-backend, test-frontend-unit]
     services:
       postgres:
         image: pgvector/pgvector:pg16

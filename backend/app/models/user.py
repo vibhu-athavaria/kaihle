@@ -5,6 +5,7 @@ Covers: users, student_profiles, teacher_profiles, parent_student, auth_tokens
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
@@ -23,7 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, TimestampMixin
 
 
-class UserRole:
+class UserRole(StrEnum):
     """User role constants."""
 
     STUDENT = "STUDENT"

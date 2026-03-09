@@ -97,7 +97,7 @@ def require_role(*allowed_roles: UserRole) -> Callable[..., Any]:
     Factory function that returns a dependency for role-based access control.
 
     Args:
-        *allowed_roles: Variable number of UserRole values that are allowed
+        *allowed_roles: Variable number of UserRole enum values that are allowed
 
     Returns:
         A dependency function that checks if the current user has an allowed role
