@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Cache
+.cache/
+.vite/
+
+# Package manager lock files (we use pnpm)
+pnpm-lock.yaml
+
+# IDE
+.idea/
+.vscode/

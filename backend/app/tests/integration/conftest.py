@@ -1,6 +1,17 @@
 """Pytest configuration and fixtures for integration tests."""
 
 import os
+
+# Set test environment variables BEFORE importing app modules
+# This is critical because app.core.database creates engine at import time
+# ruff: noqa: E402
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://kaihle:kaihle@localhost:5432/kaihle_test",
+)
+os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-integration-tests")
+
 import random
 import uuid
 from collections.abc import AsyncGenerator
@@ -26,14 +37,8 @@ from app.models.user import (
     UserRole,
 )
 
-# Use test database URL from environment or default
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL",
-    "postgresql+asyncpg://kaihle:kaihle@localhost:5433/kaihle_test",
-)
 
-
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create a test database engine."""
     engine = create_async_engine(

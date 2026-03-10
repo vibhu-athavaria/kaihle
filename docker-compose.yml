@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: kaihle
       POSTGRES_DB: kaihle
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql

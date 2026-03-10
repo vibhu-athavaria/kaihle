@@ -25,7 +25,7 @@ repos:
     hooks:
       - id: pytest-unit
         name: pytest unit tests
-        entry: bash -c "cd backend && pytest app/tests/unit/ -v --tb=short"
+        entry: bash -c "cd backend && pytest app/tests/unit/ -v --tb=short --cov=app/services --cov-fail-under=80"
         language: system
         types: [python]
         pass_filenames: false
@@ -39,13 +39,14 @@ repos:
     hooks:
       - id: prettier
         types_or: [ts, tsx, json, css]
+        exclude: "^frontend/dist/"
 
-  # TypeScript: type check (matches CI's `tsc --noEmit`) — was missing before
+  # TypeScript: type check (matches CI's per-app tsc --noEmit)
   - repo: local
     hooks:
       - id: tsc-check
         name: TypeScript type check (frontend)
-        entry: bash -c "cd frontend && pnpm exec tsc --noEmit"
+        entry: bash -c "cd frontend && pnpm --filter parent exec tsc --noEmit && pnpm --filter student exec tsc --noEmit && pnpm --filter teacher exec tsc --noEmit"
         language: system
         files: \.(ts|tsx)$
         pass_filenames: false

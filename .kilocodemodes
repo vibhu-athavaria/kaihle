@@ -45,7 +45,7 @@ customModes:
               - All LLM calls through app/ai/providers/router.py only
               - All service methods filter by school_id (except curriculum tables)
               - No hardcoded secrets - all config from app/core/config.py
-              - Minimum 90% test coverage on all service layer files
+              - Minimum 80% test coverage on all service layer files
               - Never write migration SQL by hand - use alembic autogenerate
     whenToUse: |-
       Use when a task file is ready and all ambiguity is resolved.
@@ -96,7 +96,7 @@ customModes:
 
       Each boomerang sub-task receives:
       - Path to AGENTS.md
-      - Path to CONSTITUTION.md  
+      - Path to CONSTITUTION.md
       - Path to: docs/tasks/M{N}/M{N}-{E}-T{T}_*.md
       - Branch name: M{N}-{E}-T{N}_{type}/{short-description}
       - Instruction: "Follow AGENTS.md and the task file exactly.

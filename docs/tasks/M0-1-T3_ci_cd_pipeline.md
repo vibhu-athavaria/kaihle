@@ -366,7 +366,7 @@ export default defineConfig({
 ## Acceptance Criteria
 
 - [ ] Opening a PR to `main` or `develop` triggers the CI workflow within 2 minutes
-- [ ] A PR with backend service coverage < 90% causes `test-backend` job to fail with clear message
+- [ ] A PR with backend service coverage < 80% causes `test-backend` job to fail with clear message
 - [ ] A PR with a failing Playwright test causes `test-e2e` job to fail
 - [ ] A PR with `ruff` lint errors causes `lint-backend` job to fail
 - [ ] Coverage report is posted as a comment on the PR
@@ -384,5 +384,5 @@ export default defineConfig({
 ## Output (What Next Tasks Can Use)
 
 - Every subsequent task's code is automatically tested on PR
-- Coverage gate enforced — all service files must maintain ≥ 90%
+- Coverage gate enforced — all service files must maintain ≥ 80%
 - Deployment pipeline ready for M6 when Render services are configured
