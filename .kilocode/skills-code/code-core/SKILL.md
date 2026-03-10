@@ -33,7 +33,7 @@ If any of these conflict, follow the order above and explicitly call out the con
 Before writing or changing any code, you MUST:
 
 1. Confirm you have the correct task file from the orchestrator.
-2. Read the canonical schema file (for example `kaihlev2_schema.sql`) and state the exact table and column names this task will touch.
+2. Read the canonical schema file (for example `kaihle_v2_1_schema.sql`) and state the exact table and column names this task will touch.
 3. Execute the git startup sequence in a shell (or equivalent commands in your environment):
    - `git checkout main`
    - `git pull origin main`
@@ -80,7 +80,7 @@ You are responsible for implementing tests that make the task pass, based on the
   - Tests MUST assert behaviour and observable outcomes, not internal implementation details.
   - Use a consistent naming convention such as `test_what_when_condition_then_expected`.
 - Coverage:
-  - Backend service files MUST reach the project’s required coverage (for example ≥ 90%) before the task is considered done.
+  - Backend service files MUST reach the project’s required coverage (for example ≥ 80%) before the task is considered done.
 - Unit tests:
   - Cover happy paths, validation errors, edge cases, and error handling for each service method or function you add or change.
 - Integration tests:

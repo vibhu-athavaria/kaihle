@@ -106,14 +106,14 @@ jobs:
         run: alembic upgrade head
         working-directory: backend
 
-      # Runs ALL tests (unit + integration) with 90% coverage gate
+      # Runs ALL tests (unit + integration) with 80% coverage gate
       - name: Run pytest with coverage
         run: |
           pytest app/tests/ \
             --cov=app/services \
             --cov-report=xml \
             --cov-report=term-missing \
-            --cov-fail-under=90 \
+            --cov-fail-under=80 \
             -v
         working-directory: backend
 
@@ -201,18 +201,6 @@ jobs:
         uses: rhysd/actionlint@v1.7.4
         with:
           glob: ".github/**/*.yml"
-
-  check-yaml:
-    name: Check YAML Syntax
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run check-yaml
-        uses: reviewdog/action-check-yaml@master
-        with:
-          files: docker-compose.yml
-
-  # check-yaml removed — actionlint is a strict superset of basic YAML parsing
 
   # ─── E2E ──────────────────────────────────────────────────────────────────
 

@@ -25,7 +25,7 @@ repos:
     hooks:
       - id: pytest-unit
         name: pytest unit tests
-        entry: bash -c "cd backend && pytest app/tests/unit/ -v --tb=short"
+        entry: bash -c "cd backend && pytest app/tests/unit/ -v --tb=short --cov=app/services --cov-fail-under=80"
         language: system
         types: [python]
         pass_filenames: false
