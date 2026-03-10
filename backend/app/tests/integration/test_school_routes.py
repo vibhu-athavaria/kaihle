@@ -8,6 +8,7 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db
 from app.core.security import create_access_token
 from app.main import app
 from app.models.school import School
@@ -15,13 +16,19 @@ from app.models.user import User, UserRole
 
 
 @pytest_asyncio.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    """Create an async HTTP client."""
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """Create an async HTTP client with overridden database dependency."""
     from httpx import ASGITransport
+
+    # Override the get_db dependency to use the test's db_session
+    app.dependency_overrides[get_db] = lambda: db_session
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+    # Clean up the override
+    app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture
