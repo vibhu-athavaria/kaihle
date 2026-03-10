@@ -8,6 +8,7 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import create_access_token
 from app.main import app
 from app.models.school import School
 from app.models.user import User, UserRole
@@ -96,8 +97,9 @@ async def other_school(db_session: AsyncSession) -> School:
 
 
 def auth_header(user: User) -> dict[str, str]:
-    """Generate Authorization header for a user."""
-    return {"Authorization": f"Bearer mock:{user.id}:{user.email}:{user.role}:{user.school_id}"}
+    """Generate Authorization header with real JWT for a user."""
+    token = create_access_token(user.id, user.school_id, user.role)
+    return {"Authorization": f"Bearer {token}"}
 
 
 class TestCreateSchool:
