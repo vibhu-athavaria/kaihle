@@ -43,7 +43,7 @@ jobs:
         working-directory: backend
 
       - name: Run mypy
-        run: mypy app/ --exclude app/tests/
+        run: mypy app/
         working-directory: backend
 
   test-backend:

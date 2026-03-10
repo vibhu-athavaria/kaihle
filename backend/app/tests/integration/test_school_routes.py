@@ -1,6 +1,7 @@
 """Integration tests for school management routes."""
 
 import uuid
+from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
@@ -13,7 +14,7 @@ from app.models.user import User, UserRole
 
 
 @pytest_asyncio.fixture
-async def client():
+async def client() -> AsyncGenerator[AsyncClient, None]:
     """Create an async HTTP client."""
     from httpx import ASGITransport
 
@@ -94,7 +95,7 @@ async def other_school(db_session: AsyncSession) -> School:
     return school
 
 
-def auth_header(user: User) -> dict:
+def auth_header(user: User) -> dict[str, str]:
     """Generate Authorization header for a user."""
     return {"Authorization": f"Bearer mock:{user.id}:{user.email}:{user.role}:{user.school_id}"}
 
@@ -103,7 +104,7 @@ class TestCreateSchool:
     """Tests for POST /api/v1/admin/schools"""
 
     @pytest.mark.asyncio
-    async def test_create_school_when_kaihle_admin_then_201(self, client: AsyncClient, kaihle_admin_user: User):
+    async def test_create_school_when_kaihle_admin_then_201(self, client: AsyncClient, kaihle_admin_user: User) -> None:
         """Test that KaihleAdmin can create a school."""
         # Arrange
         headers = auth_header(kaihle_admin_user)
@@ -128,7 +129,7 @@ class TestCreateSchool:
         assert data["is_active"] is True
 
     @pytest.mark.asyncio
-    async def test_create_school_when_teacher_then_403(self, client: AsyncClient, teacher_user: User):
+    async def test_create_school_when_teacher_then_403(self, client: AsyncClient, teacher_user: User) -> None:
         """Test that Teacher cannot create a school."""
         # Arrange
         headers = auth_header(teacher_user)
@@ -146,7 +147,7 @@ class TestCreateSchool:
     @pytest.mark.asyncio
     async def test_create_school_when_duplicate_slug_then_409(
         self, client: AsyncClient, kaihle_admin_user: User, test_school: School
-    ):
+    ) -> None:
         """Test that duplicate slug returns 409."""
         # Arrange
         headers = auth_header(kaihle_admin_user)
@@ -163,7 +164,7 @@ class TestCreateSchool:
         assert "already exists" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_create_school_when_unauthenticated_then_401(self, client: AsyncClient):
+    async def test_create_school_when_unauthenticated_then_401(self, client: AsyncClient) -> None:
         """Test that unauthenticated request returns 401."""
         # Arrange
         payload = {
@@ -184,7 +185,7 @@ class TestListSchools:
     @pytest.mark.asyncio
     async def test_list_schools_when_kaihle_admin_then_returns_paginated_list(
         self, client: AsyncClient, kaihle_admin_user: User, db_session: AsyncSession
-    ):
+    ) -> None:
         """Test that KaihleAdmin can list schools with pagination."""
         # Arrange - Create some schools
         for i in range(5):
@@ -213,7 +214,7 @@ class TestListSchools:
         assert data["total"] >= 5
 
     @pytest.mark.asyncio
-    async def test_list_schools_when_teacher_then_403(self, client: AsyncClient, teacher_user: User):
+    async def test_list_schools_when_teacher_then_403(self, client: AsyncClient, teacher_user: User) -> None:
         """Test that Teacher cannot list schools."""
         # Arrange
         headers = auth_header(teacher_user)
@@ -225,7 +226,7 @@ class TestListSchools:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_list_schools_when_school_admin_then_403(self, client: AsyncClient, school_admin_user: User):
+    async def test_list_schools_when_school_admin_then_403(self, client: AsyncClient, school_admin_user: User) -> None:
         """Test that SchoolAdmin cannot list all schools."""
         # Arrange
         headers = auth_header(school_admin_user)
@@ -243,7 +244,7 @@ class TestGetSchool:
     @pytest.mark.asyncio
     async def test_get_school_when_kaihle_admin_then_200(
         self, client: AsyncClient, kaihle_admin_user: User, test_school: School
-    ):
+    ) -> None:
         """Test that KaihleAdmin can get any school."""
         # Arrange
         headers = auth_header(kaihle_admin_user)
@@ -260,7 +261,7 @@ class TestGetSchool:
     @pytest.mark.asyncio
     async def test_get_school_when_school_admin_own_school_then_200(
         self, client: AsyncClient, school_admin_user: User, test_school: School
-    ):
+    ) -> None:
         """Test that SchoolAdmin can get their own school."""
         # Arrange
         headers = auth_header(school_admin_user)
@@ -279,7 +280,7 @@ class TestGetSchool:
         client: AsyncClient,
         school_admin_user: User,
         other_school: School,
-    ):
+    ) -> None:
         """Test that SchoolAdmin cannot get other schools."""
         # Arrange
         headers = auth_header(school_admin_user)
@@ -291,7 +292,9 @@ class TestGetSchool:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_get_school_when_teacher_then_403(self, client: AsyncClient, teacher_user: User, test_school: School):
+    async def test_get_school_when_teacher_then_403(
+        self, client: AsyncClient, teacher_user: User, test_school: School
+    ) -> None:
         """Test that Teacher cannot get school details."""
         # Arrange
         headers = auth_header(teacher_user)
@@ -303,7 +306,7 @@ class TestGetSchool:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_get_school_when_not_exists_then_404(self, client: AsyncClient, kaihle_admin_user: User):
+    async def test_get_school_when_not_exists_then_404(self, client: AsyncClient, kaihle_admin_user: User) -> None:
         """Test that getting non-existent school returns 404."""
         # Arrange
         headers = auth_header(kaihle_admin_user)
@@ -322,7 +325,7 @@ class TestUpdateSchool:
     @pytest.mark.asyncio
     async def test_update_school_when_kaihle_admin_then_200(
         self, client: AsyncClient, kaihle_admin_user: User, test_school: School
-    ):
+    ) -> None:
         """Test that KaihleAdmin can update a school."""
         # Arrange
         headers = auth_header(kaihle_admin_user)
@@ -348,7 +351,7 @@ class TestUpdateSchool:
     @pytest.mark.asyncio
     async def test_update_school_when_school_admin_then_403(
         self, client: AsyncClient, school_admin_user: User, test_school: School
-    ):
+    ) -> None:
         """Test that SchoolAdmin cannot update a school."""
         # Arrange
         headers = auth_header(school_admin_user)
@@ -367,7 +370,7 @@ class TestUpdateSchool:
     @pytest.mark.asyncio
     async def test_update_school_when_teacher_then_403(
         self, client: AsyncClient, teacher_user: User, test_school: School
-    ):
+    ) -> None:
         """Test that Teacher cannot update a school."""
         # Arrange
         headers = auth_header(teacher_user)
@@ -384,7 +387,7 @@ class TestUpdateSchool:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_update_school_when_not_exists_then_404(self, client: AsyncClient, kaihle_admin_user: User):
+    async def test_update_school_when_not_exists_then_404(self, client: AsyncClient, kaihle_admin_user: User) -> None:
         """Test that updating non-existent school returns 404."""
         # Arrange
         headers = auth_header(kaihle_admin_user)
@@ -404,7 +407,7 @@ class TestUpdateSchool:
     @pytest.mark.asyncio
     async def test_update_school_when_deactivate_then_status_updated(
         self, client: AsyncClient, kaihle_admin_user: User, test_school: School
-    ):
+    ) -> None:
         """Test that deactivating a school updates is_active."""
         # Arrange
         headers = auth_header(kaihle_admin_user)

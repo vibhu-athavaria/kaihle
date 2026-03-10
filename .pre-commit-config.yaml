@@ -9,12 +9,12 @@ repos:
         args: [--fix]           # auto-fixes imports + lint violations locally
       - id: ruff-format         # format check (matches CI's `ruff format --check`)
 
-  # Mypy: type checks (matches CI's `mypy app/` but excludes tests)
+  # Mypy: type checks (matches CI's `mypy app/`)
   - repo: local
     hooks:
       - id: mypy
         name: mypy (backend type check)
-        entry: bash -c "cd backend && mypy app/ --exclude app/tests/"
+        entry: bash -c "cd backend && mypy app/"
         language: system
         types: [python]
         pass_filenames: false

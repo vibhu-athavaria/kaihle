@@ -12,7 +12,7 @@ from app.services.school_service import SchoolService
 
 
 @pytest.fixture
-def mock_db():
+def mock_db() -> MagicMock:
     """Create a mock database session."""
     session = MagicMock(spec=AsyncSession)
     session.add = MagicMock()
@@ -21,7 +21,7 @@ def mock_db():
 
 
 @pytest.fixture
-def school_service(mock_db):
+def school_service(mock_db: MagicMock) -> SchoolService:
     """Create a SchoolService with mock database."""
     return SchoolService(mock_db)
 
@@ -30,7 +30,9 @@ class TestCreateSchool:
     """Tests for SchoolService.create_school method."""
 
     @pytest.mark.asyncio
-    async def test_create_school_when_valid_data_then_school_created(self, school_service, mock_db):
+    async def test_create_school_when_valid_data_then_school_created(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test creating a school with valid data."""
         # Arrange
         data = SchoolCreate(
@@ -54,7 +56,9 @@ class TestCreateSchool:
         mock_db.flush.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_create_school_when_default_timezone_then_uses_utc(self, school_service, mock_db):
+    async def test_create_school_when_default_timezone_then_uses_utc(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test that default timezone is UTC per schema."""
         # Arrange
         data = SchoolCreate(
@@ -70,7 +74,9 @@ class TestCreateSchool:
         assert school.timezone == "UTC"
 
     @pytest.mark.asyncio
-    async def test_create_school_when_duplicate_slug_then_raises_value_error(self, school_service, mock_db):
+    async def test_create_school_when_duplicate_slug_then_raises_value_error(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test that duplicate slug raises ValueError."""
         # Arrange
         data = SchoolCreate(
@@ -89,7 +95,9 @@ class TestListSchools:
     """Tests for SchoolService.list_schools method."""
 
     @pytest.mark.asyncio
-    async def test_list_schools_when_paginated_then_returns_correct_page(self, school_service, mock_db):
+    async def test_list_schools_when_paginated_then_returns_correct_page(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test listing schools with pagination."""
         # Arrange
         schools = [School(name=f"School {i}", slug=f"school-{i}") for i in range(5)]
@@ -106,7 +114,9 @@ class TestListSchools:
         assert total == 10
 
     @pytest.mark.asyncio
-    async def test_list_schools_when_page_2_then_correct_offset(self, school_service, mock_db):
+    async def test_list_schools_when_page_2_then_correct_offset(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test that page 2 uses correct offset."""
         # Arrange
         mock_result = MagicMock()
@@ -126,7 +136,9 @@ class TestGetSchool:
     """Tests for SchoolService.get_school method."""
 
     @pytest.mark.asyncio
-    async def test_get_school_when_exists_then_returns_school(self, school_service, mock_db):
+    async def test_get_school_when_exists_then_returns_school(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test getting an existing school."""
         # Arrange
         school_id = uuid.uuid4()
@@ -145,7 +157,9 @@ class TestGetSchool:
         assert result.name == "Test School"
 
     @pytest.mark.asyncio
-    async def test_get_school_when_not_exists_then_raises_not_found(self, school_service, mock_db):
+    async def test_get_school_when_not_exists_then_raises_not_found(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test getting a non-existent school raises ValueError."""
         # Arrange
         school_id = uuid.uuid4()
@@ -160,7 +174,9 @@ class TestUpdateSchool:
     """Tests for SchoolService.update_school method."""
 
     @pytest.mark.asyncio
-    async def test_update_school_when_valid_then_fields_updated(self, school_service, mock_db):
+    async def test_update_school_when_valid_then_fields_updated(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test updating a school with valid data."""
         # Arrange
         school_id = uuid.uuid4()
@@ -191,7 +207,9 @@ class TestUpdateSchool:
         mock_db.flush.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_update_school_when_deactivate_then_status_suspended(self, school_service, mock_db):
+    async def test_update_school_when_deactivate_then_status_suspended(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test deactivating a school sets status to suspended."""
         # Arrange
         school_id = uuid.uuid4()
@@ -212,7 +230,9 @@ class TestUpdateSchool:
         assert result.status == "suspended"
 
     @pytest.mark.asyncio
-    async def test_update_school_when_activate_then_status_active(self, school_service, mock_db):
+    async def test_update_school_when_activate_then_status_active(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test activating a school sets status to active."""
         # Arrange
         school_id = uuid.uuid4()
@@ -233,7 +253,9 @@ class TestUpdateSchool:
         assert result.status == "active"
 
     @pytest.mark.asyncio
-    async def test_update_school_when_not_exists_then_raises_not_found(self, school_service, mock_db):
+    async def test_update_school_when_not_exists_then_raises_not_found(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
         """Test updating a non-existent school raises ValueError."""
         # Arrange
         school_id = uuid.uuid4()
