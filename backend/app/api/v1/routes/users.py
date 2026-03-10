@@ -15,13 +15,18 @@ router = APIRouter(prefix="/schools/{school_id}/users", tags=["users"])
 
 
 def _check_school_access(school_id: uuid.UUID, current_user: CurrentUser) -> None:
-    """KaihleAdmin can access any school. SchoolAdmin can only access own school."""
+    """
+    KaihleAdmin can access any school.
+    SchoolAdmin can only access own school.
+    Teachers and Parents cannot manage users (403).
+    """
     # KaihleAdmin can access any school
     if current_user.role == UserRole.KAIHLE_ADMIN:
         return
     # SchoolAdmin can only access their own school
     if current_user.role == UserRole.SCHOOL_ADMIN and current_user.school_id == school_id:
         return
+
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
 

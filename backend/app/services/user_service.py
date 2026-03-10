@@ -105,6 +105,7 @@ class UserService:
             User.is_active.is_(True),
         )
         if role:
+            # Convert to string for type-safe comparison with User.role column
             stmt = stmt.where(User.role == role)
 
         offset = (page - 1) * page_size
