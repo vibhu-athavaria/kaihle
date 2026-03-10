@@ -17,9 +17,11 @@ import uuid
 from collections.abc import AsyncGenerator
 
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.main import app
 from app.models import Base
 from app.models.assessment import Assessment
 from app.models.curriculum import (
@@ -65,6 +67,25 @@ async def db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     async with async_session() as session:
         yield session
         await session.rollback()
+
+
+@pytest_asyncio.fixture
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """Create an async HTTP client for testing API endpoints."""
+
+    # Override database dependency
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    from app.core.database import get_db
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture
