@@ -29,7 +29,7 @@ from app.models.user import (
 # Use test database URL from environment or default
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://kaihle:kaihle@localhost:5433/kaihle_test",
+    "postgresql+asyncpg://kaihle:kaihle@localhost:5432/kaihle_test",
 )
 
 
