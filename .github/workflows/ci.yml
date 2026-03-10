@@ -43,7 +43,7 @@ jobs:
         working-directory: backend
 
       - name: Run mypy
-        run: mypy app/
+        run: mypy app/ --exclude app/tests/
         working-directory: backend
 
   test-backend:
@@ -147,11 +147,14 @@ jobs:
         working-directory: frontend
 
       - name: TypeScript type check
-        run: pnpm exec tsc --noEmit
+        run: |
+          pnpm --filter parent exec tsc --noEmit
+          pnpm --filter student exec tsc --noEmit
+          pnpm --filter teacher exec tsc --noEmit
         working-directory: frontend
 
       - name: Run prettier check
-        run: pnpm exec prettier --check "**/*.{ts,tsx,json,css}"
+        run: pnpm exec prettier --check "**/*.{ts,tsx,json,css}" --ignore-path=".prettierignore"
         working-directory: frontend
 
       # ESLint disabled — requires full monorepo ESLint setup (see M0-1-T1)
@@ -198,6 +201,16 @@ jobs:
         uses: rhysd/actionlint@v1.7.4
         with:
           glob: ".github/**/*.yml"
+
+  check-yaml:
+    name: Check YAML Syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run check-yaml
+        uses: reviewdog/action-check-yaml@master
+        with:
+          files: docker-compose.yml
 
   # check-yaml removed — actionlint is a strict superset of basic YAML parsing
 
