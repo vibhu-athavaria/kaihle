@@ -20,16 +20,28 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Password utilities
 # ---------------------------------------------------------------------------
 
+# Bcrypt has a 72-byte limit - truncate passwords to be safe
+MAX_PASSWORD_LENGTH = 72
+
+
+def _normalize_password(plain: str) -> str:
+    """Normalize password for bcrypt (truncate if too long)."""
+    if len(plain.encode("utf-8")) > MAX_PASSWORD_LENGTH:
+        return plain[:MAX_PASSWORD_LENGTH]
+    return plain
+
 
 def hash_password(plain: str) -> str:
     """Hash a plain-text password using bcrypt."""
-    result: str = pwd_context.hash(plain)
+    normalized = _normalize_password(plain)
+    result: str = pwd_context.hash(normalized)
     return result
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Return True if plain matches hashed."""
-    result: bool = pwd_context.verify(plain, hashed)
+    normalized = _normalize_password(plain)
+    result: bool = pwd_context.verify(normalized, hashed)
     return result
 
 
