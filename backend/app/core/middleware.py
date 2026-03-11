@@ -1,97 +1,90 @@
-"""Request logging middleware.
-
-Produces one structured JSON log line per HTTP request containing:
-timestamp, level, event, service, request_id, method, path,
-status_code, duration_ms, user_id, and school_id.
-
-The request_id is injected into structlog contextvars so every log
-line emitted during the request lifecycle carries it automatically.
-"""
+"""Request logging middleware for structured logging."""
 
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 
 import structlog
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.requests import Request
-from starlette.responses import Response
+from fastapi import Request, Response
+from jose import JWTError, jwt
+from starlette.middleware.base import BaseHTTPMiddleware
+from structlog.contextvars import bind_contextvars, clear_contextvars
 
-from app.core.security import InvalidTokenError, decode_token
+from app.core.config import settings
 
-SERVICE_NAME = "kaihle-api"
+logger = structlog.get_logger()
 
-
-def _extract_identity_from_request(request: Request) -> tuple[str | None, str | None]:
-    """Extract user_id and school_id from the Authorization header JWT.
-
-    Returns (user_id, school_id) as strings, or (None, None) if the token
-    is absent, malformed, or invalid.  This function MUST NOT raise — the
-    logging middleware must never block a request.
-    """
-    auth_header = request.headers.get("authorization")
-    if not auth_header:
-        return None, None
-
-    parts = auth_header.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        return None, None
-
-    try:
-        payload = decode_token(parts[1])
-        user_id = payload.get("sub")
-        school_id = payload.get("school_id")
-        return user_id, school_id
-    except InvalidTokenError:
-        # Token decoding failed (expired, tampered, malformed) — non-fatal for logging.
-        return None, None
+# Health check endpoints that should not be logged at INFO level
+HEALTH_ENDPOINTS = {"/health", "/ready"}
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    """ASGI middleware that logs every completed HTTP request as structured JSON."""
+    """Middleware that logs every request with structured JSON output.
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    Generates a unique request_id per request and extracts user context
+    from JWT tokens for authenticated requests. Never raises exceptions.
+    Health check endpoints are logged at DEBUG only to reduce noise.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        """Process request and log completion with timing and context."""
         request_id = str(uuid.uuid4())
-        start_time = time.monotonic()
+        bind_contextvars(request_id=request_id)
 
-        # Bind request_id into structlog contextvars so all downstream log
-        # calls within this request automatically include it.
-        structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(request_id=request_id)
+        start_time = time.time()
+        status_code = 500
+        is_health_endpoint = request.url.path in HEALTH_ENDPOINTS
 
-        user_id, school_id = _extract_identity_from_request(request)
-
-        # Extract identity from request before calling the handler.
         try:
             response = await call_next(request)
+            status_code = response.status_code
+            return response
         except Exception:
-            # If the handler raises an unhandled exception, still log the
-            # request before re-raising so we never swallow observability.
-            duration_ms = round((time.monotonic() - start_time) * 1000, 2)
-            log = structlog.get_logger()
-            log.error(
-                "request_completed",
-                service=SERVICE_NAME,
-                method=request.method,
-                path=request.url.path,
-                status_code=500,
-                duration_ms=duration_ms,
-                user_id=user_id,
-                school_id=school_id,
-            )
+            status_code = 500
             raise
+        finally:
+            duration_ms = round((time.time() - start_time) * 1000)
+            user_id, school_id = self._extract_user_context(request)
 
-        duration_ms = round((time.monotonic() - start_time) * 1000, 2)
+            log_data = {
+                "service": "kaihle-api",
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": status_code,
+                "duration_ms": duration_ms,
+                "user_id": user_id,
+                "school_id": school_id,
+            }
 
-        log = structlog.get_logger()
-        log.info(
-            "request_completed",
-            service=SERVICE_NAME,
-            method=request.method,
-            path=request.url.path,
-            status_code=response.status_code,
-            duration_ms=duration_ms,
-            user_id=user_id,
-            school_id=school_id,
-        )
+            if is_health_endpoint:
+                logger.debug("request_completed", **log_data)
+            else:
+                logger.info("request_completed", **log_data)
+            clear_contextvars()
 
-        return response
+    def _extract_user_context(self, request: Request) -> tuple[str | None, str | None]:
+        """Extract user_id and school_id from JWT token if present.
+
+        Returns (None, None) if token is missing, invalid, or verification fails.
+        Never raises exceptions.
+        """
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return (None, None)
+
+        token = auth_header[7:]
+
+        if not settings.jwt_secret_key:
+            return (None, None)
+
+        try:
+            payload = jwt.decode(
+                token,
+                key=settings.jwt_secret_key,
+                algorithms=[settings.jwt_algorithm],
+            )
+            user_id = payload.get("sub")
+            school_id = payload.get("school_id")
+            return (user_id, school_id)
+        except JWTError:
+            return (None, None)

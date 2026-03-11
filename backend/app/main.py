@@ -39,9 +39,8 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 
-from app.api.v1.routes import auth, schools, users
+from app.api.v1.routes import auth, health, schools, users
 from app.core.config import settings
 
 # Import CurrentUser type for documentation
@@ -53,6 +52,7 @@ from app.core.middleware import RequestLoggingMiddleware
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
+    configure_logging(log_level=settings.log_level)
     yield
     # Shutdown
 
@@ -67,8 +67,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Register request logging middleware — must be added before routers so it
-# wraps every request including those handled by route handlers.
+# Request logging middleware - must be first to capture all requests
 app.add_middleware(RequestLoggingMiddleware)
 
 # Register API routers
@@ -77,6 +76,5 @@ app.include_router(schools.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 
 
-@app.get("/health")
-async def health() -> JSONResponse:
-    return JSONResponse(content={"status": "ok", "environment": settings.environment, "version": "0.1.0"})
+# Register health routes at root level (no /api/v1 prefix)
+app.include_router(health.router)
