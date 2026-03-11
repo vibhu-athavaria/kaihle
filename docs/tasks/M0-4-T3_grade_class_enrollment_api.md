@@ -5,16 +5,16 @@
 ---
 
 ## User Story
-As a School Admin, I want to create grades and classes, assign teachers, and enroll students so the school is operationally set up in Kaihle.
+As a School Admin, I want to create subject classes for each grade, assign teachers. I want to view all classes and enroll students so the school is operationally set up in Kaihle.
 
 ---
 
 ## Files to Create / Modify
 
 ```
-backend/app/services/school_service.py        # add grade/class/enrollment methods
-backend/app/api/v1/routes/schools.py          # add grade/class/enrollment routes
-backend/app/schemas/school.py                 # GradeCreate, ClassCreate, EnrollRequest schemas
+backend/app/services/school_service.py        # add class/enrollment methods
+backend/app/api/v1/routes/schools.py          # add class/enrollment routes
+backend/app/schemas/school.py                 #  ClassCreate, EnrollRequest schemas
 backend/app/tasks/onboarding_tasks.py         # import here to fire Celery task on enroll
 backend/tests/integration/test_enrollment.py
 ```
@@ -23,17 +23,6 @@ backend/tests/integration/test_enrollment.py
 
 ## API Endpoints
 
-### Grades
-```
-POST   /api/v1/schools/{school_id}/grades
-  Body:  { name: str, level: int }         # level 1–13
-  Auth:  SchoolAdmin | KaihleAdmin
-  Returns: Grade object
-
-GET    /api/v1/schools/{school_id}/grades
-  Auth:  Teacher | SchoolAdmin | KaihleAdmin
-  Returns: list[Grade] ordered by level
-```
 
 ### Classes
 ```
@@ -69,7 +58,6 @@ GET    /api/v1/schools/{school_id}/classes/{class_id}/students
 ```python
 for student_id in student_ids:
     # 1. Validate student belongs to this school
-    # 2. Check subscription student limit (billing.check_student_limit)
     # 3. Skip if already enrolled (no error, count as skipped)
     # 4. Insert class_enrollments row
     # 5. CRITICAL (v2.1): if student_profiles.onboarding_diagnostic_status == 'PENDING':
@@ -86,9 +74,6 @@ Teacher role: `WHERE classes.teacher_id = current_user.id AND classes.school_id 
 ## Schemas
 
 ```python
-class GradeCreate(BaseModel):
-    name: str
-    level: int = Field(ge=1, le=13)
 
 class ClassCreate(BaseModel):
     name: str
@@ -106,7 +91,6 @@ class EnrollRequest(BaseModel):
 
 ## Acceptance Criteria
 
-- [ ] SchoolAdmin creates a grade → stored with correct `school_id`
 - [ ] SchoolAdmin creates a class, assigns teacher → teacher can see it via GET
 - [ ] Teacher GET returns own classes only (not other teachers')
 - [ ] Enroll 3 students → 3 `class_enrollments` rows created
@@ -114,7 +98,7 @@ class EnrollRequest(BaseModel):
 - [ ] Student already enrolled → counted as skipped, not error
 - [ ] Student from different school → 400 Bad Request
 - [ ] SchoolAdmin cannot manage classes in a different school → 403
-- [ ] `level` outside 1–13 → 422 Unprocessable Entity
+
 
 ---
 
@@ -122,7 +106,7 @@ class EnrollRequest(BaseModel):
 
 ```python
 # test_grade_class_enrollment.py
-test_create_grade_when_school_admin_then_grade_stored()
+
 test_create_class_when_valid_then_teacher_can_list()
 test_list_classes_when_teacher_then_only_own_classes_returned()
 test_enroll_students_when_valid_then_enrollment_rows_created()
@@ -131,4 +115,5 @@ test_enroll_students_when_onboarding_in_progress_then_celery_task_not_fired()
 test_enroll_students_when_already_enrolled_then_skipped_not_error()
 test_enroll_students_when_wrong_school_then_400()
 test_enroll_when_different_school_admin_then_403()
+
 ```
