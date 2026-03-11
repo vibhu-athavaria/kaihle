@@ -191,6 +191,9 @@ async def create_class(
             detail="Only SchoolAdmin or KaihleAdmin can create classes",
         )
 
+    # Check school access
+    _check_school_access(school_id, current_user)
+
     service = SchoolService(db)
     try:
         class_ = await service.create_class(school_id, body)
