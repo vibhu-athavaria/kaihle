@@ -41,8 +41,8 @@ def _extract_identity_from_request(request: Request) -> tuple[str | None, str | 
         user_id = payload.get("sub")
         school_id = payload.get("school_id")
         return user_id, school_id
-    except (InvalidTokenError, Exception):
-        # Any failure decoding the token is non-fatal for logging purposes.
+    except InvalidTokenError:
+        # Token decoding failed (expired, tampered, malformed) — non-fatal for logging.
         return None, None
 
 
