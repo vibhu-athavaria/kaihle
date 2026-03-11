@@ -40,13 +40,20 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+<<<<<<< HEAD
 from app.api.v1.routes import auth, health, onboarding, schools, users
+=======
+from app.api.v1.routes import auth, onboarding, schools, users
+>>>>>>> a4ba5a9 (Merge: add missing route files from main and register onboarding router)
 from app.core.config import settings
 
 # Import CurrentUser type for documentation
 from app.core.deps import CurrentUser  # noqa: F401
+<<<<<<< HEAD
 from app.core.logging import configure_logging
 from app.core.middleware import RequestLoggingMiddleware
+=======
+>>>>>>> a4ba5a9 (Merge: add missing route files from main and register onboarding router)
 
 
 @asynccontextmanager
@@ -67,6 +74,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+<<<<<<< HEAD
 # Request logging middleware - must be first to capture all requests
 app.add_middleware(RequestLoggingMiddleware)
 
@@ -78,3 +86,15 @@ app.include_router(onboarding.router, prefix="/api/v1")
 
 # Register health routes at root level (no /api/v1 prefix)
 app.include_router(health.router)
+=======
+# Register API routers
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(onboarding.router, prefix="/api/v1")
+app.include_router(schools.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
+
+
+@app.get("/health")
+async def health() -> JSONResponse:
+    return JSONResponse(content={"status": "ok", "environment": settings.environment, "version": "0.1.0"})
+>>>>>>> a4ba5a9 (Merge: add missing route files from main and register onboarding router)
