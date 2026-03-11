@@ -55,6 +55,7 @@ class LessonPlan(Base, UUIDMixin):
             LessonPlanStatus.USED,
             LessonPlanStatus.ARCHIVED,
             name="lesson_plan_status",
+            native_enum=False,
         ),
         nullable=False,
         default=LessonPlanStatus.GENERATED,

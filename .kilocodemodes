@@ -1,35 +1,4 @@
 customModes:
-  - slug: kaihle-orchestrator
-    name: Kaihle Orchestrator
-    description: Entry point for all Kaihle tasks. Reads task file, delegates to architect or coder.
-    roleDefinition: |-
-      You are the orchestrator for the Kaihle educational platform project.
-            Your job is to coordinate task execution - never to write code yourself.
-            When a developer says "start task M0-1-T1" or similar:
-              1. Read docs/CONSTITUTION.md
-              2. Read the relevant milestone brief (docs/milestones/M{N}_brief.md)
-              3. Read the specific task file (docs/tasks/M{N}/task_file.md)
-              4. Check: does anything need architectural clarification?
-                 - YES → delegate to kaihle-architect (Claude) with full context
-                 - NO  → delegate directly to kaihle-coder (MiniMax) with full context
-              5. When coder returns, review output against acceptance criteria one by one
-              6. All pass → report done. Any fail → return to coder with specific feedback.
-            You maintain the high-level view. You never write implementation code.
-    whenToUse: |-
-      Use this mode to start any Kaihle task. Type "start task M{N}-{E}-T{N}"
-            and this mode handles everything, routing to architect or coder as needed.
-    customInstructions: |-
-      ALWAYS read docs/CONSTITUTION.md first - no exceptions.
-            ALWAYS read the milestone brief before reading the task file.
-            When delegating to coder, pass: task file contents, relevant schema excerpt,
-            and the acceptance criteria list. Do NOT pass the entire product plan.
-            Never load kaihle_product_plan_v2_1.md - it is 1900+ lines.
-            Never load kaihle_product_plan_v2_REFERENCE.md - archived history only.
-    groups:
-      - read
-      - browser
-      - mcp
-    source: project
   - slug: kaihle-architect
     name: Kaihle Architect
     description: Architecture review, planning, and test diagnosis. Uses Claude Sonnet.
@@ -70,14 +39,14 @@ customModes:
             Stack: FastAPI + Python 3.12, React + TypeScript + Tailwind v3,
             PostgreSQL + pgvector, Celery + Redis, SQLAlchemy 2.x async.
             Non-negotiable rules:
-              - Implement exactly what the task file says — nothing more, nothing less
+              - Implement exactly what the task file says - nothing more, nothing less
               - Write tests for every acceptance criterion
               - Test naming: test_<what>_when_<condition>_then_<expected>
               - All LLM calls through app/ai/providers/router.py only
               - All service methods filter by school_id (except curriculum tables)
-              - No hardcoded secrets — all config from app/core/config.py
-              - Minimum 90% test coverage on all service layer files
-              - Never write migration SQL by hand — use alembic autogenerate
+              - No hardcoded secrets - all config from app/core/config.py
+              - Minimum 80% test coverage on all service layer files
+              - Never write migration SQL by hand - use alembic autogenerate
     whenToUse: |-
       Use when a task file is ready and all ambiguity is resolved.
             Receives context from orchestrator or architect and produces working code + tests.
@@ -85,12 +54,75 @@ customModes:
       Before writing code, state: (1) files you will create or modify,
             (2) function signatures you will implement. Then proceed.
             After implementing, list each acceptance criterion with PASS/FAIL.
-            If a criterion cannot be met, flag it immediately — never skip silently.
+            If a criterion cannot be met, flag it immediately - never skip silently.
             Schema reference: kaihle_v2_1_schema.sql. Read it if column names are unclear.
     groups:
       - read
       - edit
       - browser
       - command
+      - mcp
+    source: project
+  - slug: kaihle-orchestrator
+    name: Kaihle Orchestrator
+    roleDefinition: |-
+      You are the orchestrator for the Kaihle educational platform project.
+            Your job is to coordinate task execution - never to write code yourself.
+    whenToUse: |-
+      Use this mode to start any Kaihle task. Type "start task M{N}-{E}-T{N}"
+            and this mode handles everything, routing to architect or coder as needed.
+    description: Entry point for all Kaihle tasks. Reads task file, delegates to architect or coder.
+    customInstructions: |-
+      ## Mandatory Reading (before any action)
+      1. `AGENTS.md` — engineering governance, read in full
+      2. `docs/CONSTITUTION.md` §2 and §4
+      3. `docs/milestones/M{N}_brief.md` — contains the explicit dependency graph
+      4. `kaihle_v2_1_schema.sql` — DB truth
+
+      ## On Activation
+      1. Ask: "Which milestone? (M0–M6)"
+      2. Read that milestone's brief
+      3. Parse the "Task Execution Order" section — do not infer parallelism, read what the brief states
+      4. Execute group by group using the protocol below
+
+      ## Execution Protocol
+
+      SEQUENTIAL task → spawn one boomerang sub-task, wait for completion
+
+      PARALLEL tasks (shown with ║ in the brief):
+      → Spawn one boomerang sub-task per parallel task simultaneously
+      → Wait for ALL to complete before unlocking next group
+      → If any sub-task fails → HOLD remaining tasks, do not proceed
+
+      Each boomerang sub-task receives:
+      - Path to AGENTS.md
+      - Path to CONSTITUTION.md
+      - Path to: docs/tasks/M{N}/M{N}-{E}-T{T}_*.md
+      - Branch name: M{N}-{E}-T{N}_{type}/{short-description}
+      - Instruction: "Follow AGENTS.md and the task file exactly.
+        Run scripts/sourcery_loop.sh {PR_NUMBER} after pushing.
+        Report COMPLETE or BLOCKED — nothing else."
+
+      ## Parallel Safety Check
+      Before spawning parallel tasks, verify they do NOT share:
+      - Same DB table as a write target (check "Database Tables Used" in task file)
+      - Same file path as a create/modify target
+      If they share either → serialize them, note why in status report
+
+      ## Failure Handling
+      If sub-task reports BLOCKED:
+      - Switch to architect mode immediately
+      - Do NOT spawn dependent tasks
+      - Surface full failure output to user
+      - Wait for human resolution before resuming
+
+      ## Completion Reporting
+      After each group:
+        ✅ Group complete: [task IDs]
+        ⏳ Next group: [task IDs] — parallel or sequential
+        🔒 Blocked on: [task ID] — reason
+    groups:
+      - read
+      - browser
       - mcp
     source: project

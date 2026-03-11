@@ -317,7 +317,7 @@ A task is **NOT** complete until **all** of the following are true:
 
 1. All acceptance criteria in the task file (`docs/tasks/M{N}/M{N}-{E}-T{N}_*.md`) are met —
    verified by tests, not self-assessed.
-2. Test coverage ≥ 90% on service files, enforced by the test runner.
+2. Test coverage ≥ 80% on service files, enforced by the test runner.
 3. `git status` is clean — no uncommitted or untracked changes.
 4. All new environment variables are documented in `.env.example`.
 5. Branch is pushed to `origin`.

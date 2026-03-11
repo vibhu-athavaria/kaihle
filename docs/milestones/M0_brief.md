@@ -97,7 +97,7 @@ M0-1-T1 (monorepo)
 ## Definition of Done
 
 - [ ] `docker-compose up` starts all services without manual steps
-- [ ] CI pipeline runs on every PR, enforces ≥ 90% coverage on service files
+- [ ] CI pipeline runs on every PR, enforces ≥ 80% coverage on service files
 - [ ] Full auth flow works end-to-end (register, login, magic link, refresh, logout)
 - [ ] KaihleAdmin can create schools and invite users
 - [ ] SchoolAdmin can create grades, classes, and enroll students

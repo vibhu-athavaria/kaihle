@@ -1,12 +1,17 @@
 name: Deploy
 
 on:
-  push:
+  # Only runs after CI passes on main — never deploys broken code
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
 
 jobs:
   deploy-backend:
     name: Deploy Backend to Render
+    # Double-check: only deploy if the CI run that triggered us actually passed
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Render deploy
@@ -19,6 +24,7 @@ jobs:
 
   deploy-frontend:
     name: Deploy Frontend to Render
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Render deploy (teacher app)
@@ -28,6 +34,7 @@ jobs:
             "https://api.render.com/v1/services/${{ secrets.RENDER_TEACHER_SERVICE_ID }}/deploys" \
             -H "Content-Type: application/json" \
             -d '{}'
+
       - name: Trigger Render deploy (student app)
         run: |
           curl --fail -X POST \
@@ -35,6 +42,7 @@ jobs:
             "https://api.render.com/v1/services/${{ secrets.RENDER_STUDENT_SERVICE_ID }}/deploys" \
             -H "Content-Type: application/json" \
             -d '{}'
+
       - name: Trigger Render deploy (parent app)
         run: |
           curl --fail -X POST \

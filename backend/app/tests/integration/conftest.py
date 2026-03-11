@@ -1,14 +1,27 @@
 """Pytest configuration and fixtures for integration tests."""
 
 import os
+
+# Set test environment variables BEFORE importing app modules
+# This is critical because app.core.database creates engine at import time
+# ruff: noqa: E402
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://kaihle:kaihle@localhost:5432/kaihle_test",
+)
+os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-integration-tests")
+
 import random
 import uuid
 from collections.abc import AsyncGenerator
 
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.main import app
 from app.models import Base
 from app.models.assessment import Assessment
 from app.models.curriculum import (
@@ -26,20 +39,15 @@ from app.models.user import (
     UserRole,
 )
 
-# Use test database URL from environment or default
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL",
-    "postgresql+asyncpg://kaihle:kaihle@localhost:5433/kaihle_test",
-)
 
-
-@pytest_asyncio.fixture(scope="session")
-async def engine():
+@pytest_asyncio.fixture(scope="function")
+async def engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create a test database engine."""
     engine = create_async_engine(
         TEST_DATABASE_URL,
         echo=False,
         poolclass=NullPool,
+        connect_args={"ssl": False},
     )
     yield engine
     await engine.dispose()
@@ -60,6 +68,25 @@ async def db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     async with async_session() as session:
         yield session
         await session.rollback()
+
+
+@pytest_asyncio.fixture
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """Create an async HTTP client for testing API endpoints."""
+
+    # Override database dependency
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    from app.core.database import get_db
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture

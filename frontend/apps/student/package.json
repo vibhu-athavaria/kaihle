@@ -16,7 +16,9 @@
     "zustand": "^4.5.0",
     "axios": "^1.7.0",
     "react-hook-form": "^7.52.0",
-    "zod": "^3.23.0"
+    "zod": "^3.23.0",
+    "@kaihle/auth": "workspace:*",
+    "@kaihle/ui": "workspace:*"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",

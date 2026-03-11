@@ -5,6 +5,7 @@ Covers: users, student_profiles, teacher_profiles, parent_student, auth_tokens
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
@@ -23,7 +24,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base, TimestampMixin
 
 
-class UserRole:
+class UserRole(StrEnum):
     """User role constants."""
 
     STUDENT = "STUDENT"
@@ -71,6 +72,7 @@ class User(Base, TimestampMixin):
             UserRole.PARENT,
             UserRole.KAIHLE_ADMIN,
             name="user_role",
+            native_enum=False,
         ),
         nullable=False,
     )
@@ -101,6 +103,7 @@ class StudentProfile(Base, TimestampMixin):
             OnboardingStatus.IN_PROGRESS,
             OnboardingStatus.COMPLETED,
             name="onboarding_status",
+            native_enum=False,
         ),
         nullable=False,
         default=OnboardingStatus.PENDING,
@@ -167,9 +170,15 @@ class AuthToken(Base):
             AuthTokenType.MAGIC_LINK,
             AuthTokenType.REFRESH,
             name="auth_token_type",
+            native_enum=False,
         ),
         nullable=False,
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    @property
+    def is_used(self) -> bool:
+        """Return True if token has been used."""
+        return self.used_at is not None

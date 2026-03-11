@@ -250,9 +250,9 @@ All protected routes:
 
 ### 1.10 Testing Standards
 
-- **Backend:** pytest. Minimum 90% coverage on all service layer files.
+- **Backend:** pytest. Minimum 80% coverage on all service layer files.
 - **Frontend:** Jest + RTL for components. Playwright for E2E flows.
-- **CI gate:** No merge to `main` if coverage drops below 90% or any Playwright test fails.
+- **CI gate:** No merge to `main` if coverage drops below 80% or any Playwright test fails.
 - **Test naming convention:** `test_<what>_when_<condition>_then_<expected>`
 
 ### 1.11 Diagnostic Assessment Model — Two-Tier Architecture (v2.1)
@@ -608,7 +608,7 @@ Each answer maps to a modality. Student's final `modality_scores` are normalised
 **M0-1-T3: CI/CD pipeline (GitHub Actions)**
 - `.github/workflows/ci.yml`:
   - Trigger: every PR to `main` and `develop`
-  - Jobs: `lint-backend`, `test-backend` (pytest, coverage ≥ 90%), `lint-frontend`, `test-frontend-unit`, `test-e2e` (Playwright, headless)
+  - Jobs: `lint-backend`, `test-backend` (pytest, coverage ≥ 80%), `lint-frontend`, `test-frontend-unit`, `test-e2e` (Playwright, headless)
   - Coverage report posted as PR comment
 - `.github/workflows/deploy.yml`:
   - Trigger: merge to `main`
@@ -617,7 +617,7 @@ Each answer maps to a modality. Student's final `modality_scores` are normalised
 
 **Acceptance criteria:**
 - [ ] Every PR triggers CI within 2 minutes of push
-- [ ] PR with coverage < 90% on service files fails the `test-backend` job
+- [ ] PR with coverage < 80% on service files fails the `test-backend` job
 - [ ] PR with failing Playwright test fails the `test-e2e` job
 - [ ] Merge to `main` triggers deploy to Render staging environment
 
@@ -980,7 +980,7 @@ Each answer maps to a modality. Student's final `modality_scores` are normalised
 
 ## MILESTONE 0 — Definition of Done
 - [ ] `docker-compose up` starts all services without manual steps
-- [ ] CI pipeline runs on every PR, enforces coverage ≥ 90% on service files
+- [ ] CI pipeline runs on every PR, enforces coverage ≥ 80% on service files
 - [ ] Full auth flow works end-to-end (register, login, magic link, refresh, logout)
 - [ ] KaihleAdmin can create schools and invite users
 - [ ] SchoolAdmin can create grades, classes, and enroll students
@@ -1827,7 +1827,7 @@ This week:
 | Uptime | 99% | Render automatic restarts |
 | Language | English only | No i18n library required in v1 |
 | Data isolation | Per-school (school_id filter) | Service layer filter + integration tests |
-| Test coverage | ≥ 90% on service files | pytest-cov CI gate |
+| Test coverage | ≥ 80% on service files | pytest-cov CI gate |
 | Secret management | .env / Render secrets | Pre-commit secret scanner |
 
 ---

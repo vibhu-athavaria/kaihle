@@ -1,30 +1,86 @@
 repos:
+  # ─── BACKEND ────────────────────────────────────────────────────────────────
+
+  # Ruff: lint + import sorting (replaces isort/flake8)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.0
+    rev: v0.9.4
     hooks:
       - id: ruff
-        args: [--fix]
-      - id: ruff-format
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+        args: [--fix]           # auto-fixes imports + lint violations locally
+      - id: ruff-format         # format check (matches CI's `ruff format --check`)
+
+  # Mypy: type checks (matches CI's `mypy app/`)
+  - repo: local
     hooks:
       - id: mypy
-        args: [--ignore-missing-imports]
+        name: mypy (backend type check)
+        entry: bash -c "cd backend && mypy app/"
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
+
+  # Backend unit tests only (integration tests need Postgres/Redis — run in CI)
+  - repo: local
+    hooks:
+      - id: pytest-unit
+        name: pytest unit tests
+        entry: bash -c "cd backend && pytest app/tests/unit/ -v --tb=short --cov=app/services --cov-fail-under=80"
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
+
+  # ─── FRONTEND ───────────────────────────────────────────────────────────────
+
+  # Prettier: formatting check (matches CI's `prettier --check`)
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v3.1.0
     hooks:
       - id: prettier
         types_or: [ts, tsx, json, css]
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+        exclude: "^frontend/dist/"
+
+  # TypeScript: type check (matches CI's per-app tsc --noEmit)
+  - repo: local
     hooks:
-      - id: check-yaml
-        args: [--unsafe]  # Allow non-strict YAML for GitHub Actions
-        types: [yaml]
-        files: ^\.github/
+      - id: tsc-check
+        name: TypeScript type check (frontend)
+        entry: bash -c "cd frontend && pnpm --filter parent exec tsc --noEmit && pnpm --filter student exec tsc --noEmit && pnpm --filter teacher exec tsc --noEmit"
+        language: system
+        files: \.(ts|tsx)$
+        pass_filenames: false
+        require_serial: true
+
+  # Frontend unit tests (Jest) — no || true, real failures surface here
+  - repo: local
+    hooks:
+      - id: jest-unit
+        name: jest unit tests (frontend)
+        entry: bash -c "
+          cd frontend &&
+          pnpm --filter parent exec jest --passWithNoTests &&
+          pnpm --filter student exec jest --passWithNoTests &&
+          pnpm --filter teacher exec jest --passWithNoTests"
+        language: system
+        files: \.(ts|tsx)$
+        pass_filenames: false
+        require_serial: true
+
+  # ─── INFRA / YAML ───────────────────────────────────────────────────────────
+
+  # actionlint: validates GitHub Actions YAML (catches syntax + semantic errors)
+  # This replaces the basic check-yaml — actionlint is strictly a superset
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.4
     hooks:
       - id: actionlint
         types: [yaml]
-        files: ^\.github/
+
+  # General YAML syntax check for non-Actions YAML files (docker-compose, etc.)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+        types: [yaml]
+        exclude: ^\.github/   # actionlint already covers .github/ — no duplication
