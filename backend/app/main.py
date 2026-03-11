@@ -46,6 +46,8 @@ from app.core.config import settings
 
 # Import CurrentUser type for documentation
 from app.core.deps import CurrentUser  # noqa: F401
+from app.core.logging import configure_logging
+from app.core.middleware import RequestLoggingMiddleware
 
 
 @asynccontextmanager
@@ -55,11 +57,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
 
 
+# Configure structured logging before app creation so all startup logs
+# are captured in JSON format.
+configure_logging()
+
 app = FastAPI(
     title="Kaihle API",
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Register request logging middleware — must be added before routers so it
+# wraps every request including those handled by route handlers.
+app.add_middleware(RequestLoggingMiddleware)
 
 # Register API routers
 app.include_router(auth.router, prefix="/api/v1")
