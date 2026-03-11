@@ -45,6 +45,7 @@ async def engine() -> AsyncGenerator[AsyncEngine, None]:
         TEST_DATABASE_URL,
         echo=False,
         poolclass=NullPool,
+        connect_args={"ssl": False},
     )
     yield engine
     await engine.dispose()
