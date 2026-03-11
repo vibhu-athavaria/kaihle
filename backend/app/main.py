@@ -42,8 +42,6 @@ from fastapi import FastAPI
 
 from app.api.v1.routes import auth, health, schools, users
 from app.core.config import settings
-from app.core.logging import configure_logging
-from app.core.middleware import RequestLoggingMiddleware
 
 # Import CurrentUser type for documentation
 from app.core.deps import CurrentUser  # noqa: F401

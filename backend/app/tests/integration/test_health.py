@@ -1,6 +1,7 @@
 """Integration tests for health check endpoints."""
 
 import os
+from collections.abc import AsyncGenerator
 
 # Set test environment variables BEFORE importing app modules
 # This is critical because app.core.database creates engine at import time
@@ -21,7 +22,7 @@ from app.main import app  # noqa: E402
 
 
 @pytest.fixture
-async def client():
+async def client() -> AsyncGenerator[AsyncClient, None]:
     """Create an async HTTP client for testing."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -32,7 +33,7 @@ class TestHealthEndpoint:
     """Tests for GET /health endpoint."""
 
     @pytest.mark.asyncio
-    async def test_health_when_all_services_up_then_200_ok(self, client):
+    async def test_health_when_all_services_up_then_200_ok(self, client: AsyncClient) -> None:
         """Health endpoint returns 200 with all services connected."""
         with (
             patch("app.api.v1.routes.health._check_database", new_callable=AsyncMock) as mock_db,
@@ -51,7 +52,7 @@ class TestHealthEndpoint:
             assert data["redis"] == "connected"
 
     @pytest.mark.asyncio
-    async def test_health_when_db_down_then_503_with_db_error(self, client):
+    async def test_health_when_db_down_then_503_with_db_error(self, client: AsyncClient) -> None:
         """Health endpoint returns 503 when database is unreachable."""
         with (
             patch("app.api.v1.routes.health._check_database", new_callable=AsyncMock) as mock_db,
@@ -69,7 +70,7 @@ class TestHealthEndpoint:
             assert data["redis"] == "connected"
 
     @pytest.mark.asyncio
-    async def test_health_when_redis_down_then_503_with_redis_error(self, client):
+    async def test_health_when_redis_down_then_503_with_redis_error(self, client: AsyncClient) -> None:
         """Health endpoint returns 503 when Redis is unreachable."""
         with (
             patch("app.api.v1.routes.health._check_database", new_callable=AsyncMock) as mock_db,
@@ -87,7 +88,7 @@ class TestHealthEndpoint:
             assert data["redis"] == "error"
 
     @pytest.mark.asyncio
-    async def test_health_when_no_auth_token_then_200_not_401(self, client):
+    async def test_health_when_no_auth_token_then_200_not_401(self, client: AsyncClient) -> None:
         """Health endpoint does not require authentication."""
         with (
             patch("app.api.v1.routes.health._check_database", new_callable=AsyncMock) as mock_db,
@@ -107,7 +108,7 @@ class TestReadyEndpoint:
     """Tests for GET /ready endpoint."""
 
     @pytest.mark.asyncio
-    async def test_ready_when_all_services_up_then_200_ok(self, client):
+    async def test_ready_when_all_services_up_then_200_ok(self, client: AsyncClient) -> None:
         """Ready endpoint returns 200 when all services are connected."""
         with (
             patch("app.api.v1.routes.health._check_database", new_callable=AsyncMock) as mock_db,
@@ -123,7 +124,7 @@ class TestReadyEndpoint:
             assert data["ready"] is True
 
     @pytest.mark.asyncio
-    async def test_ready_when_db_down_then_503(self, client):
+    async def test_ready_when_db_down_then_503(self, client: AsyncClient) -> None:
         """Ready endpoint returns 503 when database is down."""
         with (
             patch("app.api.v1.routes.health._check_database", new_callable=AsyncMock) as mock_db,
@@ -139,7 +140,7 @@ class TestReadyEndpoint:
             assert data["ready"] is False
 
     @pytest.mark.asyncio
-    async def test_ready_when_no_auth_token_then_200_not_401(self, client):
+    async def test_ready_when_no_auth_token_then_200_not_401(self, client: AsyncClient) -> None:
         """Ready endpoint does not require authentication."""
         with (
             patch("app.api.v1.routes.health._check_database", new_callable=AsyncMock) as mock_db,

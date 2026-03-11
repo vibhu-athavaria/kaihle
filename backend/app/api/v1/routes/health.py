@@ -1,6 +1,6 @@
 """Health check endpoints for monitoring and readiness probes."""
 
-import redis.asyncio as redis  # type: ignore[import-untyped]
+import redis.asyncio as redis
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import text

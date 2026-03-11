@@ -2,7 +2,7 @@
 
 import time
 import uuid
-from typing import Any
+from collections.abc import Awaitable, Callable
 
 import structlog
 from fastapi import Request, Response
@@ -26,7 +26,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     Health check endpoints are logged at DEBUG only to reduce noise.
     """
 
-    async def dispatch(self, request: Request, call_next: Any) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         """Process request and log completion with timing and context."""
         request_id = str(uuid.uuid4())
         bind_contextvars(request_id=request_id)
