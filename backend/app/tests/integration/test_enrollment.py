@@ -631,6 +631,7 @@ async def test_get_class_students_when_other_teacher_then_403(
         is_active=True,
     )
     db_session.add(other_teacher)
+    await db_session.flush()  # Ensure other_teacher is in DB before other_class references it
 
     other_class = Class(
         id=uuid.uuid4(),
