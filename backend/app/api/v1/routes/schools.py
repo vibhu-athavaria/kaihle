@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user, require_role
+from app.models.school import Class
 from app.models.user import UserRole
 from app.schemas.school import (
     ClassCreate,
@@ -137,7 +138,7 @@ async def update_school(
 # ===========================================
 
 
-def _class_to_response(class_: Any) -> ClassResponse:
+def _class_to_response(class_: Class) -> ClassResponse:
     """Convert Class model to ClassResponse schema."""
     return ClassResponse(
         id=class_.id,
@@ -189,9 +190,6 @@ async def create_class(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only SchoolAdmin or KaihleAdmin can create classes",
         )
-
-    # Check school access
-    _check_school_access(school_id, current_user)
 
     service = SchoolService(db)
     try:

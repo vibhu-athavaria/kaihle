@@ -53,7 +53,7 @@ class SchoolListResponse(BaseModel):
 class ClassCreate(BaseModel):
     """Schema for creating a new class."""
 
-    name: str
+    name: str = Field(..., max_length=255)
     grade_id: uuid.UUID
     subject_id: uuid.UUID
     curriculum_id: uuid.UUID

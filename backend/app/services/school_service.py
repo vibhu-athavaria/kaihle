@@ -146,12 +146,13 @@ class SchoolService:
         Raises:
             ValueError: If the teacher doesn't belong to this school
         """
-        # Verify teacher belongs to this school
+        # Verify teacher belongs to this school and is active
         result = await self.db.execute(
             select(User).where(
                 User.id == data.teacher_id,
                 User.school_id == school_id,
                 User.role == UserRole.TEACHER,
+                User.is_active.is_(True),
             )
         )
         teacher = result.scalar_one_or_none()
@@ -186,7 +187,10 @@ class SchoolService:
         Returns:
             List of Class models
         """
-        query = select(Class).where(Class.school_id == school_id)
+        query = select(Class).where(
+            Class.school_id == school_id,
+            Class.is_active.is_(True),
+        )
 
         # Filter by teacher if provided (for teacher role)
         if teacher_id:
@@ -296,9 +300,11 @@ class SchoolService:
                 self.db.add(enrollment)
                 enrolled += 1
 
-                # 5. CRITICAL (v2.1): Check onboarding status and trigger diagnostics
+                # 5. Check onboarding status and trigger diagnostics
                 # Only trigger if status is PENDING (not IN_PROGRESS or COMPLETED)
                 result = await self.db.execute(select(StudentProfile).where(StudentProfile.user_id == student_id))
+                # Note: scalar_one_or_none() returns Any due to SQLAlchemy type stubs limitations
+                # The cast clarifies the expected type for the type checker
                 student_profile = cast(StudentProfile | None, result.scalar_one_or_none())
                 if student_profile and student_profile.onboarding_diagnostic_status == OnboardingStatus.PENDING:
                     # Trigger onboarding diagnostics task
@@ -330,7 +336,7 @@ class SchoolService:
             .join(ClassEnrollment, ClassEnrollment.student_id == User.id)
             .where(
                 ClassEnrollment.class_id == class_id,
-                ClassEnrollment.is_active == True,  # noqa: E712
+                ClassEnrollment.is_active.is_(True),
             )
             .order_by(User.last_name, User.first_name)
         )
