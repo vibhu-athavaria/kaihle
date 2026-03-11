@@ -60,7 +60,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         user_id, school_id = _extract_identity_from_request(request)
 
-        # Set request_id header for downstream consumers / response correlation.
+        # Extract identity from request before calling the handler.
         try:
             response = await call_next(request)
         except Exception:
