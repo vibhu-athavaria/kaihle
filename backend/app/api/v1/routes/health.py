@@ -1,5 +1,7 @@
 """Health check endpoints for monitoring and readiness probes."""
 
+import logging
+
 import redis.asyncio as redis
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
@@ -13,6 +15,8 @@ router = APIRouter(tags=["health"])
 
 VERSION = "2.1.0"
 
+logger = logging.getLogger(__name__)
+
 
 async def _check_database(db: AsyncSession) -> str:
     """Check database connectivity by running SELECT 1.
@@ -23,6 +27,7 @@ async def _check_database(db: AsyncSession) -> str:
         await db.execute(text("SELECT 1"))
         return "connected"
     except Exception:
+        logger.error("database_health_check_failed", exc_info=True)
         return "error"
 
 
@@ -37,6 +42,7 @@ async def _check_redis() -> str:
         await redis_client.ping()
         return "connected"
     except Exception:
+        logger.error("redis_health_check_failed", exc_info=True)
         return "error"
     finally:
         if redis_client:
