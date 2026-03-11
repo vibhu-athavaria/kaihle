@@ -6,9 +6,11 @@ from typing import Any
 
 import structlog
 from fastapi import Request, Response
-from jose import jwt
+from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from structlog.contextvars import bind_contextvars, clear_contextvars
+
+from app.core.config import settings
 
 logger = structlog.get_logger()
 
@@ -63,25 +65,26 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     def _extract_user_context(self, request: Request) -> tuple[str | None, str | None]:
         """Extract user_id and school_id from JWT token if present.
 
-        Returns (None, None) if token is missing or invalid.
+        Returns (None, None) if token is missing, invalid, or verification fails.
         Never raises exceptions.
         """
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return (None, None)
 
-        token = auth_header[7:]  # Remove "Bearer " prefix
+        token = auth_header[7:]
+
+        if not settings.jwt_secret_key:
+            return (None, None)
 
         try:
-            # Decode without verification - safe for logging only
             payload = jwt.decode(
                 token,
-                key="",  # No key needed for unverified decode
-                options={"verify_signature": False, "verify_exp": False},
+                key=settings.jwt_secret_key,
+                algorithms=[settings.jwt_algorithm],
             )
             user_id = payload.get("sub")
             school_id = payload.get("school_id")
             return (user_id, school_id)
-        except Exception:
-            # Never raise - logging must not block requests
+        except JWTError:
             return (None, None)
