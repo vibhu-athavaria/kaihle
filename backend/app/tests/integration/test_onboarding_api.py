@@ -8,6 +8,7 @@ Tests cover:
 """
 
 import uuid
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import pytest
@@ -22,7 +23,7 @@ from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
 
 
 @pytest_asyncio.fixture
-async def client():
+async def client() -> AsyncGenerator[AsyncClient, None]:
     """Create an async test client."""
     from httpx import ASGITransport, AsyncClient
 
@@ -74,7 +75,7 @@ async def test_teacher(db_session: AsyncSession, test_school: School) -> User:
 
 
 @pytest_asyncio.fixture
-async def test_class_with_student(
+async def test_class_with_student(  # type: ignore[no-untyped-def]
     db_session: AsyncSession,
     test_school: School,
     test_grade,
@@ -110,8 +111,8 @@ async def test_class_with_student(
     return class_
 
 
-@pytest_asyncio.fixture
-def mock_auth_headers(test_student: User):
+@pytest_asyncio.fixture  # type: ignore[type-var]
+def mock_auth_headers(test_student: User) -> dict[str, Any]:
     """Create mock auth headers for testing.
 
     In a real scenario, these would be JWT tokens. For integration testing,
@@ -128,7 +129,7 @@ class TestGetQuestionnaire:
     @pytest.mark.asyncio
     async def test_get_questionnaire_when_called_then_returns_10_questions(
         self, client: AsyncClient, test_student: User
-    ):
+    ) -> None:
         """Test that questionnaire endpoint returns all 10 questions."""
         # Set up auth context in app state
         # Note: In real implementation, auth middleware would handle this
@@ -143,7 +144,9 @@ class TestSubmitQuestionnaire:
     """Tests for POST /api/v1/onboarding/questionnaire/submit."""
 
     @pytest.mark.asyncio
-    async def test_submit_api_when_valid_body_then_profile_stored(self, client: AsyncClient, test_student: User):
+    async def test_submit_api_when_valid_body_then_profile_stored(
+        self, client: AsyncClient, test_student: User
+    ) -> None:
         """Test that submitting valid responses stores the profile."""
         submit_data = {
             "responses": [
@@ -165,7 +168,9 @@ class TestSubmitQuestionnaire:
         assert response.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_submit_api_when_resubmitted_then_profile_updated(self, client: AsyncClient, test_student: User):
+    async def test_submit_api_when_resubmitted_then_profile_updated(
+        self, client: AsyncClient, test_student: User
+    ) -> None:
         """Test that re-submitting updates existing profile."""
         submit_data = {
             "responses": [
@@ -195,7 +200,7 @@ class TestGetLearningProfile:
         self,
         client: AsyncClient,
         test_student: User,
-    ):
+    ) -> None:
         """Test that student can retrieve their own profile."""
         response = await client.get("/api/v1/onboarding/learning-profile")
 
@@ -209,7 +214,7 @@ class TestGetLearningProfile:
         test_teacher: User,
         test_student: User,
         test_class_with_student: Class,
-    ):
+    ) -> None:
         """Test that teacher can retrieve profiles of students in their classes."""
         response = await client.get(f"/api/v1/onboarding/learning-profile?student_id={test_student.id}")
 
@@ -220,7 +225,7 @@ class TestGetLearningProfile:
     async def test_get_learning_profile_when_student_requests_other_student_then_403(
         self,
         client: AsyncClient,
-    ):
+    ) -> None:
         """Test that student cannot retrieve another student's profile."""
         other_student_id = uuid.uuid4()
         response = await client.get(f"/api/v1/onboarding/learning-profile?student_id={other_student_id}")
@@ -235,7 +240,7 @@ class TestGetOnboardingStatus:
     @pytest.mark.asyncio
     async def test_get_onboarding_status_when_not_complete_then_returns_pending(
         self, client: AsyncClient, test_student: User
-    ):
+    ) -> None:
         """Test that status endpoint returns pending for new students."""
         response = await client.get("/api/v1/onboarding/status")
 
@@ -248,7 +253,7 @@ async def test_full_onboarding_flow(
     db_session: AsyncSession,
     test_school: School,
     test_student: User,
-):
+) -> None:
     """Test the complete onboarding flow end-to-end.
 
     This test uses the service layer directly since auth middleware

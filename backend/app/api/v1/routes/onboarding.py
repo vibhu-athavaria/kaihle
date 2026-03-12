@@ -48,7 +48,7 @@ def get_current_user(request: Request) -> dict[str, Any]:
     Raises:
         HTTPException: If user is not authenticated.
     """
-    user = getattr(request.state, "user", None)
+    user: dict[str, Any] | None = getattr(request.state, "user", None)
     if not user:
         # For development, allow testing without auth
         # In production, this should raise 401

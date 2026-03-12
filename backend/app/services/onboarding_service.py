@@ -7,7 +7,7 @@ This module handles:
 """
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import structlog
@@ -104,7 +104,9 @@ class OnboardingService:
         result = await self.db.execute(
             select(StudentLearningProfile).where(StudentLearningProfile.student_id == student_id)
         )
-        learning_profile = result.scalar_one_or_none()
+        learning_profile: StudentLearningProfile | None = cast(
+            StudentLearningProfile | None, result.scalar_one_or_none()
+        )
 
         if not learning_profile:
             # Need to get school_id from user record
@@ -122,12 +124,14 @@ class OnboardingService:
             )
             self.db.add(learning_profile)
 
+        # At this point, learning_profile is guaranteed to be StudentLearningProfile
         # Calculate scores from responses
         modality_scores = self._calculate_modality_scores(responses)
         work_style = self._calculate_work_style(responses)
         interests = self._extract_interests(responses)
 
         # Update profile
+        assert learning_profile is not None
         learning_profile.modality_scores = modality_scores
         learning_profile.work_style = work_style
         learning_profile.interests = interests
@@ -267,7 +271,7 @@ class OnboardingService:
 
         # Check diagnostic completion
         result = await self.db.execute(select(StudentProfile).where(StudentProfile.user_id == student_id))
-        student_profile = result.scalar_one_or_none()
+        student_profile = cast(StudentProfile | None, result.scalar_one_or_none())
 
         diagnostics_complete = (
             student_profile is not None and student_profile.onboarding_diagnostic_status == OnboardingStatus.COMPLETED

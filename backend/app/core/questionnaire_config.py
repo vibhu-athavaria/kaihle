@@ -4,7 +4,7 @@ This module defines the v1 questionnaire structure used to collect
 student learning preferences during onboarding.
 """
 
-from typing import Any
+from typing import Any, cast
 
 # Questionnaire version identifier
 QUESTIONNAIRE_VERSION = "v1"
@@ -163,7 +163,7 @@ def get_question_by_id(question_id: str) -> dict[str, Any] | None:
     """
     for question in QUESTIONNAIRE_V1["questions"]:
         if question["id"] == question_id:
-            return question
+            return cast(dict[str, Any], question)
     return None
 
 
@@ -183,5 +183,5 @@ def get_option_by_key(question_id: str, option_key: str) -> dict[str, Any] | Non
 
     for option in question.get("options", []):
         if option["key"] == option_key:
-            return option
+            return cast(dict[str, Any], option)
     return None
