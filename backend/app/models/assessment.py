@@ -75,10 +75,12 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
         ForeignKey("classes.id", ondelete="CASCADE"),
         nullable=False,
     )
-    created_by: Mapped[uuid.UUID] = mapped_column(
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
+        # NULL for system-generated Tier 1 diagnostics (is_system_generated=TRUE).
+        # Non-NULL for teacher-created assessments (is_system_generated=FALSE).
     )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     assessment_type: Mapped[str] = mapped_column(
