@@ -1,15 +1,16 @@
 """Health check endpoints for monitoring and readiness probes."""
 
 import logging
+from typing import Any
 
-import redis.asyncio as redis
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
+from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.database import get_db
+from app.core.redis import get_redis
 
 router = APIRouter(tags=["health"])
 
@@ -31,22 +32,13 @@ async def _check_database(db: AsyncSession) -> str:
         return "error"
 
 
-async def _check_redis() -> str:
-    """Check Redis connectivity by running ping.
-
-    Returns "connected" on success, "error" on failure.
-    """
-    redis_client = None
+async def _check_redis(redis_client: Redis[Any] = Depends(get_redis)) -> str:
     try:
-        redis_client = redis.from_url(settings.redis_url)
         await redis_client.ping()
         return "connected"
     except Exception:
         logger.error("redis_health_check_failed", exc_info=True)
         return "error"
-    finally:
-        if redis_client:
-            await redis_client.close()
 
 
 @router.get("/health")
