@@ -196,7 +196,7 @@ async def test_trigger_when_class_has_subject_then_assessment_created(
 
 
 @pytest.mark.asyncio
-async def test_trigger_when_already_triggered_then_no_duplicates(
+async def test_trigger_when_already_triggered_then_returns_existing_no_duplicates(
     db_session: AsyncSession,
     test_school: School,
     test_curriculum: Curriculum,
@@ -204,7 +204,7 @@ async def test_trigger_when_already_triggered_then_no_duplicates(
     test_subject: Subject,
     test_teacher: User,
 ) -> None:
-    """Re-triggering for same student+class creates no duplicate assessments."""
+    """Re-triggering for same student+class returns existing assessment without duplicating."""
     class_, topics, questions = await _setup_full_class(
         db_session, test_school, test_curriculum, test_grade, test_subject, test_teacher
     )
@@ -212,16 +212,17 @@ async def test_trigger_when_already_triggered_then_no_duplicates(
 
     service = AssessmentService(db_session)
 
-    # First call
-    created_first = await service.create_system_diagnostic(student.id, class_.id)
+    # First call — creates new
+    result_first = await service.create_system_diagnostic(student.id, class_.id)
     await db_session.commit()
 
-    # Second call (idempotent)
-    created_second = await service.create_system_diagnostic(student.id, class_.id)
+    # Second call — returns existing
+    result_second = await service.create_system_diagnostic(student.id, class_.id)
     await db_session.commit()
 
-    assert len(created_first) == 1
-    assert len(created_second) == 0
+    assert len(result_first) == 1
+    assert len(result_second) == 1
+    assert result_first[0].id == result_second[0].id
 
     # Verify only 1 assessment in DB for this class
     result = await db_session.execute(

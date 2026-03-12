@@ -108,8 +108,8 @@ class TestAssessmentServiceCreateSystemDiagnostic:
             await service.create_system_diagnostic(student.id, class_.id)
 
     @pytest.mark.asyncio
-    async def test_when_diagnostic_already_exists_then_no_duplicate(self, service: AssessmentService) -> None:
-        """Returns empty list when assessment already exists for this class (idempotent)."""
+    async def test_when_diagnostic_already_exists_then_returns_existing(self, service: AssessmentService) -> None:
+        """Returns existing assessment when one already exists for this class (idempotent)."""
         school_id = uuid.uuid4()
         class_ = _make_class(school_id, uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
         student = _make_student(school_id)
@@ -124,7 +124,8 @@ class TestAssessmentServiceCreateSystemDiagnostic:
 
         result = await service.create_system_diagnostic(student.id, class_.id)
 
-        assert result == []
+        assert len(result) == 1
+        assert result[0].id == existing_assessment.id
         service.db.add.assert_not_called()  # type: ignore[attr-defined]
 
 

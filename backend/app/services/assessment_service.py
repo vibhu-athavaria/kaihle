@@ -38,17 +38,17 @@ class AssessmentService:
         student_id: uuid.UUID,
         class_id: uuid.UUID,
     ) -> list[Assessment]:
-        """Create one Tier 1 DIAGNOSTIC assessment per subject for the student's class.
+        """Create or retrieve Tier 1 DIAGNOSTIC assessments for the student's class.
 
         This is idempotent — safe to call multiple times. Already-existing system-generated
-        assessments for this class+student are skipped, not duplicated.
+        assessments for this class are returned without creating duplicates.
 
         Args:
             student_id: The student user ID.
             class_id: The class UUID the student is enrolled in.
 
         Returns:
-            List of newly created Assessment rows (empty if all already existed).
+            List of Assessment rows (newly created or previously existing).
 
         Raises:
             ValueError: If the class or student record is not found.
@@ -67,38 +67,33 @@ class AssessmentService:
         if student.school_id != class_.school_id:
             raise ValueError(f"Student school_id {student.school_id} does not match class school_id {class_.school_id}")
 
-        # 3. Each class is for one subject. Build the list of (subject_id,) to process.
-        #    A class has exactly one subject, but check idempotency per-class.
-        subjects_to_process = [(class_.subject_id,)]
-
-        created: list[Assessment] = []
-        for (subject_id,) in subjects_to_process:
-            assessment = await self._create_subject_diagnostic_if_not_exists(
-                class_=class_,
-                subject_id=subject_id,
-                student_id=student_id,
-            )
-            if assessment is not None:
-                created.append(assessment)
+        # 3. Each class is for one subject.
+        assessments: list[Assessment] = []
+        assessment = await self._create_subject_diagnostic_if_not_exists(
+            class_=class_,
+            subject_id=class_.subject_id,
+            student_id=student_id,
+        )
+        assessments.append(assessment)
 
         logger.info(
-            "system_diagnostics_created",
+            "system_diagnostics_processed",
             student_id=str(student_id),
             class_id=str(class_id),
-            new_assessments=len(created),
+            assessment_count=len(assessments),
         )
-        return created
+        return assessments
 
     async def _create_subject_diagnostic_if_not_exists(
         self,
         class_: Class,
         subject_id: uuid.UUID,
         student_id: uuid.UUID,
-    ) -> Assessment | None:
-        """Create a single system diagnostic for a subject if one doesn't already exist.
+    ) -> Assessment:
+        """Create a single system diagnostic for a subject, or return existing one.
 
         Idempotency check: if an is_system_generated=TRUE assessment already exists
-        for this class_id, skip and return None.
+        for this class_id, return the existing assessment without creating a duplicate.
 
         Args:
             class_: The Class ORM object.
@@ -106,7 +101,7 @@ class AssessmentService:
             student_id: The student this diagnostic is for.
 
         Returns:
-            The created Assessment, or None if already existed.
+            The existing or newly created Assessment.
         """
         # Idempotency: check if system-generated assessment already exists for this class
         existing = await self.db.execute(
@@ -115,13 +110,15 @@ class AssessmentService:
                 Assessment.is_system_generated.is_(True),
             )
         )
-        if existing.scalar_one_or_none() is not None:
+        existing_assessment = existing.scalar_one_or_none()
+        if existing_assessment is not None:
             logger.debug(
                 "system_diagnostic_already_exists",
                 class_id=str(class_.id),
                 subject_id=str(subject_id),
+                assessment_id=str(existing_assessment.id),
             )
-            return None
+            return existing_assessment
 
         # Load subject name for assessment title
         subject_result = await self.db.execute(select(Subject).where(Subject.id == subject_id))
