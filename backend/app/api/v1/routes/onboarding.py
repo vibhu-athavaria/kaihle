@@ -74,7 +74,8 @@ async def get_onboarding_status(
     """
     current_user = get_current_user(request)
 
-    if current_user.get("role") != UserRole.STUDENT:
+    role_str = current_user.get("role")
+    if role_str is None or UserRole(role_str) != UserRole.STUDENT:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only students can access onboarding status",
@@ -106,7 +107,8 @@ async def get_questionnaire(
     """
     current_user = get_current_user(request)
 
-    if current_user.get("role") != UserRole.STUDENT:
+    role_str = current_user.get("role")
+    if role_str is None or UserRole(role_str) != UserRole.STUDENT:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only students can access the questionnaire",
@@ -147,7 +149,8 @@ async def submit_questionnaire(
     """
     current_user = get_current_user(request)
 
-    if current_user.get("role") != UserRole.STUDENT:
+    role_str = current_user.get("role")
+    if role_str is None or UserRole(role_str) != UserRole.STUDENT:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only students can submit the questionnaire",
@@ -203,7 +206,15 @@ async def get_learning_profile(
     """
     current_user = get_current_user(request)
     user_id = current_user["id"]
-    user_role = current_user.get("role")
+    user_role_str = current_user.get("role")
+
+    if user_role_str is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User role not found",
+        )
+
+    user_role = UserRole(user_role_str)
 
     service = OnboardingService(db)
 

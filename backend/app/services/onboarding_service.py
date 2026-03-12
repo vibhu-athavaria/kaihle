@@ -113,7 +113,10 @@ class OnboardingService:
             from app.models.user import User
 
             user_result = await self.db.execute(select(User).where(User.id == student_id))
-            user = user_result.scalar_one()
+            user = user_result.scalar_one_or_none()
+
+            if user is None:
+                raise ValueError(f"User not found for user_id={student_id}")
 
             learning_profile = StudentLearningProfile(
                 student_id=student_id,
