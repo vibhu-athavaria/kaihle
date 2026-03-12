@@ -40,7 +40,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.v1.routes import auth, health, schools, users
+from app.api.v1.routes import auth, health, onboarding, schools, users
 from app.core.config import settings
 
 # Import CurrentUser type for documentation
@@ -74,7 +74,7 @@ app.add_middleware(RequestLoggingMiddleware)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(schools.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
-
+app.include_router(onboarding.router, prefix="/api/v1")
 
 # Register health routes at root level (no /api/v1 prefix)
 app.include_router(health.router)
