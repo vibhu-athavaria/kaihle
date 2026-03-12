@@ -1,6 +1,8 @@
 """Integration tests for Tier 1 diagnostic trigger (M0-6-T2).
 
-Tests exercise the real DB through AssessmentService.create_system_diagnostic().
+Tests exercise the real DB through:
+- AssessmentService.create_class_diagnostic() — assessment created at class creation
+- AssessmentService.create_diagnostic_attempt() — student attempt at enrollment
 """
 
 import uuid
@@ -29,13 +31,12 @@ from app.models.curriculum import (
 )
 from app.models.school import Class, School
 from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
-from app.services.assessment_service import AssessmentService
+from app.services.assessment_service import MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT, AssessmentService
+
+# ── Helpers ──────────────────────────────────────────────────────────────
 
 
-async def _create_question(
-    db: AsyncSession,
-    subtopic_id: uuid.UUID,
-) -> QuestionBank:
+async def _create_question(db: AsyncSession, subtopic_id: uuid.UUID) -> QuestionBank:
     """Helper to create a question in the bank."""
     q = QuestionBank(
         id=uuid.uuid4(),
@@ -53,28 +54,6 @@ async def _create_question(
     return q
 
 
-async def _create_curriculum_topic(
-    db: AsyncSession,
-    curriculum_id: uuid.UUID,
-    subject_id: uuid.UUID,
-    grade_id: uuid.UUID,
-    topic_id: uuid.UUID,
-) -> CurriculumTopic:
-    """Helper to create a curriculum topic binding."""
-    ct = CurriculumTopic(
-        id=uuid.uuid4(),
-        curriculum_id=curriculum_id,
-        subject_id=subject_id,
-        grade_id=grade_id,
-        topic_id=topic_id,
-        is_required=True,
-        is_active=True,
-    )
-    db.add(ct)
-    await db.flush()
-    return ct
-
-
 async def _setup_full_class(
     db: AsyncSession,
     school: School,
@@ -85,8 +64,7 @@ async def _setup_full_class(
     num_topics: int = 3,
     questions_per_topic: int = 3,
 ) -> tuple[Class, list[CurriculumTopic], list[QuestionBank]]:
-    """Set up a class with curriculum topics and questions."""
-    # Link subject to curriculum
+    """Set up a class with curriculum topics, subtopics, and questions."""
     cs = CurriculumSubject(
         curriculum_id=curriculum.id,
         subject_id=subject.id,
@@ -94,7 +72,6 @@ async def _setup_full_class(
     )
     db.add(cs)
 
-    # Create class
     class_ = Class(
         id=uuid.uuid4(),
         school_id=school.id,
@@ -109,22 +86,26 @@ async def _setup_full_class(
     db.add(class_)
     await db.flush()
 
-    # Create topics, curriculum_topics, subtopics and questions
     topics = []
     questions = []
     for i in range(num_topics):
-        topic = Topic(
-            id=uuid.uuid4(),
-            name=f"Topic {i + 1}",
-            is_active=True,
-        )
+        topic = Topic(id=uuid.uuid4(), name=f"Topic {i + 1}", is_active=True)
         db.add(topic)
         await db.flush()
 
-        ct = await _create_curriculum_topic(db, curriculum.id, subject.id, grade.id, topic.id)
+        ct = CurriculumTopic(
+            id=uuid.uuid4(),
+            curriculum_id=curriculum.id,
+            subject_id=subject.id,
+            grade_id=grade.id,
+            topic_id=topic.id,
+            is_required=True,
+            is_active=True,
+        )
+        db.add(ct)
+        await db.flush()
         topics.append(ct)
 
-        # Create subtopic
         subtopic = Subtopic(
             id=uuid.uuid4(),
             curriculum_topic_id=ct.id,
@@ -166,8 +147,11 @@ async def _create_student_with_profile(db: AsyncSession, school: School) -> tupl
     return student, profile
 
 
+# ── create_class_diagnostic tests ────────────────────────────────────────
+
+
 @pytest.mark.asyncio
-async def test_trigger_when_class_has_subject_then_assessment_created(
+async def test_create_class_diagnostic_when_new_class_then_assessment_created(
     db_session: AsyncSession,
     test_school: School,
     test_curriculum: Curriculum,
@@ -175,28 +159,26 @@ async def test_trigger_when_class_has_subject_then_assessment_created(
     test_subject: Subject,
     test_teacher: User,
 ) -> None:
-    """Creates an ACTIVE is_system_generated assessment for the class subject."""
+    """Creates an ACTIVE is_system_generated assessment with question pool."""
     class_, topics, questions = await _setup_full_class(
         db_session, test_school, test_curriculum, test_grade, test_subject, test_teacher
     )
-    student, profile = await _create_student_with_profile(db_session, test_school)
 
     service = AssessmentService(db_session)
-    created = await service.create_system_diagnostic(student.id, class_.id)
+    assessment = await service.create_class_diagnostic(class_.id)
     await db_session.commit()
 
-    assert len(created) == 1
-    assessment = created[0]
     assert assessment.is_system_generated is True
     assert assessment.status == AssessmentStatus.ACTIVE
     assert assessment.assessment_type == AssessmentType.DIAGNOSTIC
     assert assessment.created_by is None
     assert assessment.curriculum_topic_id is None
     assert assessment.class_id == class_.id
+    assert assessment.config["max_questions_per_attempt"] == MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT
 
 
 @pytest.mark.asyncio
-async def test_trigger_when_already_triggered_then_returns_existing_no_duplicates(
+async def test_create_class_diagnostic_when_called_twice_then_no_duplicate(
     db_session: AsyncSession,
     test_school: School,
     test_curriculum: Curriculum,
@@ -204,39 +186,29 @@ async def test_trigger_when_already_triggered_then_returns_existing_no_duplicate
     test_subject: Subject,
     test_teacher: User,
 ) -> None:
-    """Re-triggering for same student+class returns existing assessment without duplicating."""
-    class_, topics, questions = await _setup_full_class(
+    """Re-calling for same class returns existing assessment, no duplicate."""
+    class_, _, _ = await _setup_full_class(
         db_session, test_school, test_curriculum, test_grade, test_subject, test_teacher
     )
-    student, profile = await _create_student_with_profile(db_session, test_school)
 
     service = AssessmentService(db_session)
-
-    # First call — creates new
-    result_first = await service.create_system_diagnostic(student.id, class_.id)
+    first = await service.create_class_diagnostic(class_.id)
     await db_session.commit()
+    second = await service.create_class_diagnostic(class_.id)
 
-    # Second call — returns existing
-    result_second = await service.create_system_diagnostic(student.id, class_.id)
-    await db_session.commit()
+    assert first.id == second.id
 
-    assert len(result_first) == 1
-    assert len(result_second) == 1
-    assert result_first[0].id == result_second[0].id
-
-    # Verify only 1 assessment in DB for this class
     result = await db_session.execute(
         select(Assessment).where(
             Assessment.class_id == class_.id,
             Assessment.is_system_generated.is_(True),
         )
     )
-    assessments = result.scalars().all()
-    assert len(assessments) == 1
+    assert len(result.scalars().all()) == 1
 
 
 @pytest.mark.asyncio
-async def test_trigger_when_created_then_student_attempt_exists(
+async def test_create_class_diagnostic_when_3_topics_then_questions_span_all(
     db_session: AsyncSession,
     test_school: School,
     test_curriculum: Curriculum,
@@ -244,40 +216,7 @@ async def test_trigger_when_created_then_student_attempt_exists(
     test_subject: Subject,
     test_teacher: User,
 ) -> None:
-    """Each assessment has a matching student_attempts row with status NOT_STARTED."""
-    class_, topics, questions = await _setup_full_class(
-        db_session, test_school, test_curriculum, test_grade, test_subject, test_teacher
-    )
-    student, profile = await _create_student_with_profile(db_session, test_school)
-
-    service = AssessmentService(db_session)
-    created = await service.create_system_diagnostic(student.id, class_.id)
-    await db_session.commit()
-
-    assert len(created) == 1
-    assessment = created[0]
-
-    result = await db_session.execute(
-        select(StudentAttempt).where(
-            StudentAttempt.assessment_id == assessment.id,
-            StudentAttempt.student_id == student.id,
-        )
-    )
-    attempt = result.scalar_one_or_none()
-    assert attempt is not None
-    assert attempt.status == AttemptStatus.NOT_STARTED
-
-
-@pytest.mark.asyncio
-async def test_trigger_when_class_has_subject_then_questions_span_all_topics(
-    db_session: AsyncSession,
-    test_school: School,
-    test_curriculum: Curriculum,
-    test_grade: Grade,
-    test_subject: Subject,
-    test_teacher: User,
-) -> None:
-    """Questions span all curriculum_topics for the subject+grade."""
+    """Question pool spans all curriculum_topics for the subject+grade."""
     class_, topics, questions = await _setup_full_class(
         db_session,
         test_school,
@@ -288,26 +227,21 @@ async def test_trigger_when_class_has_subject_then_questions_span_all_topics(
         num_topics=3,
         questions_per_topic=2,
     )
-    student, profile = await _create_student_with_profile(db_session, test_school)
 
     service = AssessmentService(db_session)
-    created = await service.create_system_diagnostic(student.id, class_.id)
+    assessment = await service.create_class_diagnostic(class_.id)
     await db_session.commit()
 
-    assessment = created[0]
-
-    # Get selected questions
     result = await db_session.execute(
         select(AssessmentSelectedQuestion).where(AssessmentSelectedQuestion.assessment_id == assessment.id)
     )
     selected = result.scalars().all()
-
-    # 3 topics × 2 questions each = 6 total (all used since < 20)
+    # 3 topics × 2 questions = 6 (all used since < pool size)
     assert len(selected) == 6
 
 
 @pytest.mark.asyncio
-async def test_trigger_when_question_bank_has_5_questions_then_uses_all_5(
+async def test_create_class_diagnostic_when_few_questions_then_uses_all(
     db_session: AsyncSession,
     test_school: School,
     test_curriculum: Curriculum,
@@ -315,8 +249,8 @@ async def test_trigger_when_question_bank_has_5_questions_then_uses_all_5(
     test_subject: Subject,
     test_teacher: User,
 ) -> None:
-    """Uses all available questions when bank has fewer than MAX_DIAGNOSTIC_QUESTIONS."""
-    class_, topics, questions = await _setup_full_class(
+    """Uses all available questions when bank has fewer than pool size."""
+    class_, _, _ = await _setup_full_class(
         db_session,
         test_school,
         test_curriculum,
@@ -326,23 +260,22 @@ async def test_trigger_when_question_bank_has_5_questions_then_uses_all_5(
         num_topics=1,
         questions_per_topic=5,
     )
-    student, profile = await _create_student_with_profile(db_session, test_school)
 
     service = AssessmentService(db_session)
-    created = await service.create_system_diagnostic(student.id, class_.id)
+    assessment = await service.create_class_diagnostic(class_.id)
     await db_session.commit()
-
-    assessment = created[0]
 
     result = await db_session.execute(
         select(AssessmentSelectedQuestion).where(AssessmentSelectedQuestion.assessment_id == assessment.id)
     )
-    selected = result.scalars().all()
-    assert len(selected) == 5
+    assert len(result.scalars().all()) == 5
+
+
+# ── create_diagnostic_attempt tests ──────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_trigger_when_assessment_created_then_is_system_generated_true(
+async def test_create_attempt_when_enrolled_then_attempt_created(
     db_session: AsyncSession,
     test_school: School,
     test_curriculum: Curriculum,
@@ -350,21 +283,26 @@ async def test_trigger_when_assessment_created_then_is_system_generated_true(
     test_subject: Subject,
     test_teacher: User,
 ) -> None:
-    """Assessment is created with is_system_generated=TRUE."""
+    """Creates a NOT_STARTED attempt linked to the class diagnostic."""
     class_, _, _ = await _setup_full_class(
         db_session, test_school, test_curriculum, test_grade, test_subject, test_teacher
     )
     student, profile = await _create_student_with_profile(db_session, test_school)
 
     service = AssessmentService(db_session)
-    created = await service.create_system_diagnostic(student.id, class_.id)
+    assessment = await service.create_class_diagnostic(class_.id)
     await db_session.commit()
 
-    assert created[0].is_system_generated is True
+    attempt = await service.create_diagnostic_attempt(student.id, class_.id)
+    await db_session.commit()
+
+    assert attempt.status == AttemptStatus.NOT_STARTED
+    assert attempt.assessment_id == assessment.id
+    assert attempt.student_id == student.id
 
 
 @pytest.mark.asyncio
-async def test_trigger_when_assessment_created_then_created_by_is_null(
+async def test_create_attempt_when_called_twice_then_returns_existing(
     db_session: AsyncSession,
     test_school: School,
     test_curriculum: Curriculum,
@@ -372,14 +310,76 @@ async def test_trigger_when_assessment_created_then_created_by_is_null(
     test_subject: Subject,
     test_teacher: User,
 ) -> None:
-    """Assessment is created with created_by=NULL (system-created, no teacher owner)."""
+    """Re-enrolling same student returns existing attempt, no duplicate."""
     class_, _, _ = await _setup_full_class(
         db_session, test_school, test_curriculum, test_grade, test_subject, test_teacher
     )
-    student, profile = await _create_student_with_profile(db_session, test_school)
+    student, _ = await _create_student_with_profile(db_session, test_school)
 
     service = AssessmentService(db_session)
-    created = await service.create_system_diagnostic(student.id, class_.id)
+    await service.create_class_diagnostic(class_.id)
     await db_session.commit()
 
-    assert created[0].created_by is None
+    first = await service.create_diagnostic_attempt(student.id, class_.id)
+    await db_session.commit()
+    second = await service.create_diagnostic_attempt(student.id, class_.id)
+
+    assert first.id == second.id
+
+    result = await db_session.execute(
+        select(StudentAttempt).where(
+            StudentAttempt.student_id == student.id,
+        )
+    )
+    assert len(result.scalars().all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_attempt_when_multiple_students_then_separate_attempts(
+    db_session: AsyncSession,
+    test_school: School,
+    test_curriculum: Curriculum,
+    test_grade: Grade,
+    test_subject: Subject,
+    test_teacher: User,
+) -> None:
+    """Multiple students get separate attempts for the same class diagnostic."""
+    class_, _, _ = await _setup_full_class(
+        db_session, test_school, test_curriculum, test_grade, test_subject, test_teacher
+    )
+    student_a, _ = await _create_student_with_profile(db_session, test_school)
+    student_b, _ = await _create_student_with_profile(db_session, test_school)
+
+    service = AssessmentService(db_session)
+    assessment = await service.create_class_diagnostic(class_.id)
+    await db_session.commit()
+
+    attempt_a = await service.create_diagnostic_attempt(student_a.id, class_.id)
+    attempt_b = await service.create_diagnostic_attempt(student_b.id, class_.id)
+    await db_session.commit()
+
+    assert attempt_a.id != attempt_b.id
+    assert attempt_a.assessment_id == assessment.id
+    assert attempt_b.assessment_id == assessment.id
+
+
+@pytest.mark.asyncio
+async def test_create_attempt_when_no_diagnostic_exists_then_raises(
+    db_session: AsyncSession,
+    test_school: School,
+    test_curriculum: Curriculum,
+    test_grade: Grade,
+    test_subject: Subject,
+    test_teacher: User,
+) -> None:
+    """Raises ValueError if diagnostic assessment was not created for the class."""
+    class_, _, _ = await _setup_full_class(
+        db_session, test_school, test_curriculum, test_grade, test_subject, test_teacher
+    )
+    student, _ = await _create_student_with_profile(db_session, test_school)
+
+    service = AssessmentService(db_session)
+    # Deliberately skip create_class_diagnostic
+
+    with pytest.raises(ValueError, match="No system-generated diagnostic found"):
+        await service.create_diagnostic_attempt(student.id, class_.id)

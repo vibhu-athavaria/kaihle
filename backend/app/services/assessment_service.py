@@ -1,10 +1,18 @@
 """Assessment service for creating and managing assessments.
 
 Handles system-generated (Tier 1) and teacher-created (Tier 2) assessments.
+
+Design:
+- Assessment = "what is being tested" (questions, config, type) — created once per class.
+- StudentAttempt = "who is taking it" — created per student enrollment.
+- Tier 1 diagnostics use a question pool of MAX_DIAGNOSTIC_POOL (60) questions,
+  but each student answers at most MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT (20)
+  via adaptive selection at the attempt/UI layer.
 """
 
 import random
 import uuid
+from typing import cast
 
 import structlog
 from sqlalchemy import select
@@ -24,7 +32,13 @@ from app.models.user import User
 
 logger = structlog.get_logger()
 
-MAX_DIAGNOSTIC_QUESTIONS = 20
+# Total questions selected into assessment_selected_questions at class creation.
+# This is the pool from which adaptive question selection draws at attempt time.
+MAX_DIAGNOSTIC_POOL = 60
+
+# Maximum questions a student actually answers in one diagnostic attempt.
+# Stored in assessment config; enforced by the student-facing API.
+MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT = 20
 
 
 class AssessmentService:
@@ -33,77 +47,30 @@ class AssessmentService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def create_system_diagnostic(
-        self,
-        student_id: uuid.UUID,
-        class_id: uuid.UUID,
-    ) -> list[Assessment]:
-        """Create or retrieve Tier 1 DIAGNOSTIC assessments for the student's class.
+    # ── Class-level: create diagnostic assessment ────────────────────────
 
-        This is idempotent — safe to call multiple times. Already-existing system-generated
-        assessments for this class are returned without creating duplicates.
+    async def create_class_diagnostic(self, class_id: uuid.UUID) -> Assessment:
+        """Create or retrieve a Tier 1 DIAGNOSTIC assessment for a class.
+
+        Called when a class is created. Selects a pool of up to MAX_DIAGNOSTIC_POOL
+        questions spanning all curriculum topics for the class's subject+grade.
+        Idempotent — returns existing assessment if one already exists.
 
         Args:
-            student_id: The student user ID.
-            class_id: The class UUID the student is enrolled in.
+            class_id: The class UUID.
 
         Returns:
-            List of Assessment rows (newly created or previously existing).
+            The existing or newly created Assessment.
 
         Raises:
-            ValueError: If the class or student record is not found.
+            ValueError: If the class is not found.
         """
-        # 1. Load class — get school_id, curriculum_id, grade_id, subject_id
         result = await self.db.execute(select(Class).where(Class.id == class_id))
         class_ = result.scalar_one_or_none()
         if class_ is None:
             raise ValueError(f"Class not found: class_id={class_id}")
 
-        # 2. Verify student belongs to this school
-        result = await self.db.execute(select(User).where(User.id == student_id))
-        student = result.scalar_one_or_none()
-        if student is None:
-            raise ValueError(f"Student not found: student_id={student_id}")
-        if student.school_id != class_.school_id:
-            raise ValueError(f"Student school_id {student.school_id} does not match class school_id {class_.school_id}")
-
-        # 3. Each class is for one subject.
-        assessments: list[Assessment] = []
-        assessment = await self._create_subject_diagnostic_if_not_exists(
-            class_=class_,
-            subject_id=class_.subject_id,
-            student_id=student_id,
-        )
-        assessments.append(assessment)
-
-        logger.info(
-            "system_diagnostics_processed",
-            student_id=str(student_id),
-            class_id=str(class_id),
-            assessment_count=len(assessments),
-        )
-        return assessments
-
-    async def _create_subject_diagnostic_if_not_exists(
-        self,
-        class_: Class,
-        subject_id: uuid.UUID,
-        student_id: uuid.UUID,
-    ) -> Assessment:
-        """Create a single system diagnostic for a subject, or return existing one.
-
-        Idempotency check: if an is_system_generated=TRUE assessment already exists
-        for this class_id, return the existing assessment without creating a duplicate.
-
-        Args:
-            class_: The Class ORM object.
-            subject_id: Subject for which to create the diagnostic.
-            student_id: The student this diagnostic is for.
-
-        Returns:
-            The existing or newly created Assessment.
-        """
-        # Idempotency: check if system-generated assessment already exists for this class
+        # Idempotency: check if system-generated assessment already exists
         existing = await self.db.execute(
             select(Assessment).where(
                 Assessment.class_id == class_.id,
@@ -113,44 +80,40 @@ class AssessmentService:
         existing_assessment = existing.scalar_one_or_none()
         if existing_assessment is not None:
             logger.debug(
-                "system_diagnostic_already_exists",
+                "class_diagnostic_already_exists",
                 class_id=str(class_.id),
-                subject_id=str(subject_id),
                 assessment_id=str(existing_assessment.id),
             )
             return existing_assessment
 
         # Load subject name for assessment title
-        subject_result = await self.db.execute(select(Subject).where(Subject.id == subject_id))
+        subject_result = await self.db.execute(select(Subject).where(Subject.id == class_.subject_id))
         subject = subject_result.scalar_one_or_none()
         subject_name = subject.name if subject else "Unknown Subject"
 
-        # Build assessment title using class name for grade context
         title = f"Onboarding Diagnostic — {subject_name} ({class_.name})"
 
-        # Create assessment row (created_by=NULL for system-generated)
         assessment = Assessment(
             id=uuid.uuid4(),
             class_id=class_.id,
             created_by=None,  # NULL = system-created, no teacher owner
             title=title,
             assessment_type=AssessmentType.DIAGNOSTIC,
-            status=AssessmentStatus.ACTIVE,  # immediately active
+            status=AssessmentStatus.ACTIVE,  # immediately active for students
             is_system_generated=True,
             curriculum_topic_id=None,  # broad sweep, not topic-specific
-            config={},
+            config={"max_questions_per_attempt": MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT},
         )
         self.db.add(assessment)
-        await self.db.flush()  # get assessment.id before inserting questions
+        await self.db.flush()
 
-        # Select questions spanning all curriculum_topics
+        # Select question pool spanning all curriculum_topics
         question_ids = await self._select_questions_for_diagnostic(
             curriculum_id=class_.curriculum_id,
-            subject_id=subject_id,
+            subject_id=class_.subject_id,
             grade_id=class_.grade_id,
         )
 
-        # Insert assessment_selected_questions bridge rows
         for order_index, question_id in enumerate(question_ids):
             bridge = AssessmentSelectedQuestion(
                 assessment_id=assessment.id,
@@ -159,24 +122,112 @@ class AssessmentService:
             )
             self.db.add(bridge)
 
-        # Create student_attempt row
+        logger.info(
+            "class_diagnostic_created",
+            class_id=str(class_.id),
+            assessment_id=str(assessment.id),
+            pool_size=len(question_ids),
+            max_per_attempt=MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT,
+        )
+        return assessment
+
+    # ── Student-level: create attempt on enrollment ──────────────────────
+
+    async def create_diagnostic_attempt(
+        self,
+        student_id: uuid.UUID,
+        class_id: uuid.UUID,
+    ) -> StudentAttempt:
+        """Create a student attempt for the class's Tier 1 diagnostic assessment.
+
+        Called when a student is enrolled in a class. The diagnostic assessment
+        must already exist for the class (created at class creation time).
+        Idempotent — returns existing attempt if one already exists for this
+        student+assessment combination.
+
+        Args:
+            student_id: The student user ID.
+            class_id: The class UUID.
+
+        Returns:
+            The existing or newly created StudentAttempt.
+
+        Raises:
+            ValueError: If class, student, or diagnostic assessment is not found,
+                        or if student does not belong to the class's school.
+        """
+        # Load class
+        result = await self.db.execute(select(Class).where(Class.id == class_id))
+        class_ = result.scalar_one_or_none()
+        if class_ is None:
+            raise ValueError(f"Class not found: class_id={class_id}")
+
+        # Verify student exists and belongs to the same school
+        result = await self.db.execute(select(User).where(User.id == student_id))
+        student = result.scalar_one_or_none()
+        if student is None:
+            raise ValueError(f"Student not found: student_id={student_id}")
+        if student.school_id != class_.school_id:
+            raise ValueError(f"Student school_id {student.school_id} does not match class school_id {class_.school_id}")
+
+        # Find the system-generated diagnostic for this class
+        result = await self.db.execute(
+            select(Assessment).where(
+                Assessment.class_id == class_.id,
+                Assessment.is_system_generated.is_(True),
+            )
+        )
+        assessment = result.scalar_one_or_none()
+        if assessment is None:
+            raise ValueError(
+                f"No system-generated diagnostic found for class_id={class_id}. "
+                f"Ensure create_class_diagnostic() was called first."
+            )
+
+        # Idempotency: check if attempt already exists for this student+assessment
+        result = await self.db.execute(
+            select(StudentAttempt).where(
+                StudentAttempt.assessment_id == assessment.id,
+                StudentAttempt.student_id == student_id,
+            )
+        )
+        existing_attempt = cast(StudentAttempt | None, result.scalar_one_or_none())
+        if existing_attempt is not None:
+            logger.debug(
+                "diagnostic_attempt_already_exists",
+                student_id=str(student_id),
+                assessment_id=str(assessment.id),
+                attempt_id=str(existing_attempt.id),
+            )
+            return existing_attempt
+
+        # Count questions in the pool for total_questions
+        q_count_result = await self.db.execute(
+            select(AssessmentSelectedQuestion.question_id).where(
+                AssessmentSelectedQuestion.assessment_id == assessment.id
+            )
+        )
+        pool_size = len(q_count_result.all())
+
         attempt = StudentAttempt(
             id=uuid.uuid4(),
             assessment_id=assessment.id,
             student_id=student_id,
             status=AttemptStatus.NOT_STARTED,
-            total_questions=len(question_ids),
+            total_questions=pool_size,
         )
         self.db.add(attempt)
 
         logger.info(
-            "system_diagnostic_created",
-            class_id=str(class_.id),
-            subject_id=str(subject_id),
+            "diagnostic_attempt_created",
+            student_id=str(student_id),
             assessment_id=str(assessment.id),
-            question_count=len(question_ids),
+            attempt_id=str(attempt.id),
+            pool_size=pool_size,
         )
-        return assessment
+        return attempt
+
+    # ── Question selection ───────────────────────────────────────────────
 
     async def _select_questions_for_diagnostic(
         self,
@@ -184,10 +235,11 @@ class AssessmentService:
         subject_id: uuid.UUID,
         grade_id: uuid.UUID,
     ) -> list[uuid.UUID]:
-        """Select up to MAX_DIAGNOSTIC_QUESTIONS questions spread across curriculum topics.
+        """Select up to MAX_DIAGNOSTIC_POOL questions spread across curriculum topics.
 
         Strategy: distribute questions evenly across all active curriculum topics
-        for the curriculum+subject+grade combination. If total available < 20, use all.
+        for the curriculum+subject+grade combination. If total available < pool size,
+        use all available.
 
         Args:
             curriculum_id: The curriculum UUID.
@@ -195,9 +247,8 @@ class AssessmentService:
             grade_id: The grade UUID.
 
         Returns:
-            Ordered list of question UUIDs to include in the assessment.
+            Ordered list of question UUIDs to include in the assessment pool.
         """
-        # Load all active curriculum topics for this curriculum+subject+grade
         topics_result = await self.db.execute(
             select(CurriculumTopic).where(
                 CurriculumTopic.curriculum_id == curriculum_id,
@@ -217,9 +268,9 @@ class AssessmentService:
             )
             return []
 
-        # Distribute question budget evenly across topics
-        per_topic = max(1, MAX_DIAGNOSTIC_QUESTIONS // len(topics))
-        remainder = MAX_DIAGNOSTIC_QUESTIONS - (per_topic * len(topics))
+        # Distribute pool budget evenly across topics
+        per_topic = max(1, MAX_DIAGNOSTIC_POOL // len(topics))
+        remainder = MAX_DIAGNOSTIC_POOL - (per_topic * len(topics))
 
         selected: list[uuid.UUID] = []
 
@@ -231,10 +282,10 @@ class AssessmentService:
             topic_questions = await self._sample_questions_for_topic(topic.id, n)
             selected.extend(topic_questions)
 
-            if len(selected) >= MAX_DIAGNOSTIC_QUESTIONS:
+            if len(selected) >= MAX_DIAGNOSTIC_POOL:
                 break
 
-        return selected[:MAX_DIAGNOSTIC_QUESTIONS]
+        return selected[:MAX_DIAGNOSTIC_POOL]
 
     async def _sample_questions_for_topic(
         self,
@@ -250,7 +301,6 @@ class AssessmentService:
         Returns:
             List of sampled question UUIDs.
         """
-        # QuestionBank links to Subtopic which links to CurriculumTopic
         result = await self.db.execute(
             select(QuestionBank.id)
             .join(Subtopic, QuestionBank.subtopic_id == Subtopic.id)
@@ -265,6 +315,5 @@ class AssessmentService:
         if not question_ids:
             return []
 
-        # Random sample, capped at n
         sample_size = min(n, len(question_ids))
         return random.sample(question_ids, sample_size)

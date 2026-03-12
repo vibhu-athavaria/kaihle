@@ -1,9 +1,12 @@
 """Onboarding Celery tasks.
 
 M0-6-T2: Tier 1 Auto-Diagnostic Trigger.
-Fired when a student is enrolled in a class. Creates system-generated
-DIAGNOSTIC assessments for the student's subject, with questions spanning
-all curriculum topics for the grade+curriculum.
+
+Two entry points:
+- create_class_diagnostic_task: fired when a class is created.
+  Creates a system-generated DIAGNOSTIC assessment with a pool of 60 questions.
+- trigger_onboarding_diagnostics: fired when a student is enrolled in a class.
+  Creates a StudentAttempt for the class's diagnostic and updates onboarding status.
 """
 
 import structlog
@@ -18,24 +21,93 @@ logger = structlog.get_logger()
     bind=True,
     max_retries=3,
     default_retry_delay=30,
+    name="app.tasks.onboarding_tasks.create_class_diagnostic_task",
+)
+def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:  # type: ignore[no-untyped-def]
+    """Create a Tier 1 DIAGNOSTIC assessment for a newly created class.
+
+    Fired when a class is created. Selects a pool of up to 60 questions
+    spanning all curriculum topics for the class's subject+grade.
+    Idempotent — safe to call multiple times.
+
+    Args:
+        class_id: The class UUID as string.
+
+    Returns:
+        Dict with assessment_id and class_id.
+    """
+    import asyncio
+    import uuid as _uuid
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.core.config import settings
+    from app.services.assessment_service import AssessmentService
+
+    logger.info("create_class_diagnostic_task_started", class_id=class_id)
+
+    async def _run() -> dict[str, object]:
+        engine = create_async_engine(settings.database_url, echo=False)
+        async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+        async with async_session() as db:
+            async with db.begin():
+                service = AssessmentService(db)
+                assessment = await service.create_class_diagnostic(
+                    class_id=_uuid.UUID(class_id),
+                )
+
+            return {
+                "assessment_id": str(assessment.id),
+                "class_id": class_id,
+            }
+
+    try:
+        loop = asyncio.new_event_loop()
+        try:
+            run_result = loop.run_until_complete(_run())
+        finally:
+            loop.close()
+
+        logger.info(
+            "create_class_diagnostic_task_completed",
+            class_id=class_id,
+            assessment_id=run_result["assessment_id"],
+        )
+        return run_result
+
+    except Exception as exc:
+        logger.error(
+            "create_class_diagnostic_task_failed",
+            class_id=class_id,
+            error=str(exc),
+            exc_info=True,
+        )
+        raise self.retry(exc=exc)
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    bind=True,
+    max_retries=3,
+    default_retry_delay=30,
     name="app.tasks.onboarding_tasks.trigger_onboarding_diagnostics",
 )
 def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict[str, object]:  # type: ignore[no-untyped-def]
-    """Create Tier 1 DIAGNOSTIC assessments on student enrollment.
+    """Create a StudentAttempt for the class diagnostic on student enrollment.
 
-    Fired on student enrollment. Creates one DIAGNOSTIC assessment for the
-    class subject for this student. Marks is_system_generated=TRUE on each.
+    Fired on student enrollment. The class must already have a system-generated
+    diagnostic assessment (created by create_class_diagnostic_task).
     Idempotent — safe to call multiple times for the same student+class.
 
-    After all subjects are processed, sets student_profiles.onboarding_diagnostic_status
-    to IN_PROGRESS (only if currently PENDING — does not regress from IN_PROGRESS or COMPLETED).
+    After creating the attempt, sets student_profiles.onboarding_diagnostic_status
+    to IN_PROGRESS (only if currently PENDING — does not regress).
 
     Args:
         student_id: The student UUID as string.
         class_id: The class UUID as string.
 
     Returns:
-        Dict with created_count and student_id.
+        Dict with attempt_id and student_id.
     """
     import asyncio
     import uuid as _uuid
@@ -62,13 +134,13 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
                 student_uuid = _uuid.UUID(student_id)
                 class_uuid = _uuid.UUID(class_id)
 
-                created = await service.create_system_diagnostic(
+                attempt = await service.create_diagnostic_attempt(
                     student_id=student_uuid,
                     class_id=class_uuid,
                 )
 
                 # Update onboarding_diagnostic_status to IN_PROGRESS
-                # only if currently PENDING — never regress from IN_PROGRESS or COMPLETED
+                # only if currently PENDING — never regress
                 profile_result = await db.execute(select(StudentProfile).where(StudentProfile.user_id == student_uuid))
                 student_profile = profile_result.scalar_one_or_none()
 
@@ -84,7 +156,7 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
                         new_status=OnboardingStatus.IN_PROGRESS,
                     )
 
-            return {"created_count": len(created), "student_id": student_id}
+            return {"attempt_id": str(attempt.id), "student_id": student_id}
 
     try:
         loop = asyncio.new_event_loop()
@@ -97,7 +169,7 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
             "trigger_onboarding_diagnostics_completed",
             student_id=student_id,
             class_id=class_id,
-            created_count=run_result["created_count"],
+            attempt_id=run_result["attempt_id"],
         )
         return run_result
 
