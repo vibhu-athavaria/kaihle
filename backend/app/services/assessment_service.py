@@ -12,7 +12,6 @@ Design:
 
 import random
 import uuid
-from typing import cast
 
 import structlog
 from sqlalchemy import select
@@ -28,7 +27,7 @@ from app.models.assessment import (
 )
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subject, Subtopic
 from app.models.school import Class
-from app.models.user import User
+from app.models.user import User, UserRole
 
 logger = structlog.get_logger()
 
@@ -39,6 +38,33 @@ MAX_DIAGNOSTIC_POOL = 60
 # Maximum questions a student actually answers in one diagnostic attempt.
 # Stored in assessment config; enforced by the student-facing API.
 MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT = 20
+
+
+def _make_system_assessment(class_id: uuid.UUID, title: str) -> Assessment:
+    """Construct a system-generated Assessment.
+
+    Enforces the constraint: created_by MUST be NULL if and only if
+    is_system_generated is TRUE. This is documented in migration 002 as
+    enforced at the service layer.
+
+    Args:
+        class_id: The class this assessment belongs to.
+        title: Human-readable title.
+
+    Returns:
+        An unsaved Assessment instance with is_system_generated=True and created_by=None.
+    """
+    return Assessment(
+        id=uuid.uuid4(),
+        class_id=class_id,
+        created_by=None,  # NULL ↔ is_system_generated=True; enforced here
+        title=title,
+        assessment_type=AssessmentType.DIAGNOSTIC,
+        status=AssessmentStatus.ACTIVE,  # immediately active for students
+        is_system_generated=True,
+        curriculum_topic_id=None,  # broad sweep, not topic-specific
+        config={"max_questions_per_attempt": MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT},
+    )
 
 
 class AssessmentService:
@@ -93,16 +119,9 @@ class AssessmentService:
 
         title = f"Onboarding Diagnostic — {subject_name} ({class_.name})"
 
-        assessment = Assessment(
-            id=uuid.uuid4(),
+        assessment = _make_system_assessment(
             class_id=class_.id,
-            created_by=None,  # NULL = system-created, no teacher owner
             title=title,
-            assessment_type=AssessmentType.DIAGNOSTIC,
-            status=AssessmentStatus.ACTIVE,  # immediately active for students
-            is_system_generated=True,
-            curriculum_topic_id=None,  # broad sweep, not topic-specific
-            config={"max_questions_per_attempt": MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT},
         )
         self.db.add(assessment)
         await self.db.flush()
@@ -157,27 +176,29 @@ class AssessmentService:
                         or if student does not belong to the class's school.
         """
         # Load class
-        result = await self.db.execute(select(Class).where(Class.id == class_id))
-        class_ = result.scalar_one_or_none()
+        class_result = await self.db.execute(select(Class).where(Class.id == class_id))
+        class_ = class_result.scalar_one_or_none()
         if class_ is None:
             raise ValueError(f"Class not found: class_id={class_id}")
 
-        # Verify student exists and belongs to the same school
-        result = await self.db.execute(select(User).where(User.id == student_id))
-        student = result.scalar_one_or_none()
+        # Verify student exists, has STUDENT role, and belongs to the same school
+        user_result = await self.db.execute(select(User).where(User.id == student_id))
+        student: User | None = user_result.scalar_one_or_none()
         if student is None:
             raise ValueError(f"Student not found: student_id={student_id}")
+        if student.role != UserRole.STUDENT:
+            raise ValueError(f"User student_id={student_id} has role '{student.role}', expected STUDENT")
         if student.school_id != class_.school_id:
             raise ValueError(f"Student school_id {student.school_id} does not match class school_id {class_.school_id}")
 
         # Find the system-generated diagnostic for this class
-        result = await self.db.execute(
+        assessment_result = await self.db.execute(
             select(Assessment).where(
                 Assessment.class_id == class_.id,
                 Assessment.is_system_generated.is_(True),
             )
         )
-        assessment = result.scalar_one_or_none()
+        assessment = assessment_result.scalar_one_or_none()
         if assessment is None:
             raise ValueError(
                 f"No system-generated diagnostic found for class_id={class_id}. "
@@ -191,7 +212,7 @@ class AssessmentService:
                 StudentAttempt.student_id == student_id,
             )
         )
-        existing_attempt = cast(StudentAttempt | None, result.scalar_one_or_none())
+        existing_attempt = result.scalar_one_or_none()
         if existing_attempt is not None:
             logger.debug(
                 "diagnostic_attempt_already_exists",
@@ -237,9 +258,10 @@ class AssessmentService:
     ) -> list[uuid.UUID]:
         """Select up to MAX_DIAGNOSTIC_POOL questions spread across curriculum topics.
 
-        Strategy: distribute questions evenly across all active curriculum topics
-        for the curriculum+subject+grade combination. If total available < pool size,
-        use all available.
+        Strategy: fetch all questions for the curriculum+subject+grade in a single
+        query grouped by curriculum_topic_id, then distribute evenly in Python.
+        Uses a deterministic seed derived from curriculum+subject+grade so the same
+        class always produces the same question pool.
 
         Args:
             curriculum_id: The curriculum UUID.
@@ -249,71 +271,57 @@ class AssessmentService:
         Returns:
             Ordered list of question UUIDs to include in the assessment pool.
         """
-        topics_result = await self.db.execute(
-            select(CurriculumTopic).where(
+        # Single query: fetch all active questions with their topic, for this
+        # curriculum+subject+grade combination. Eliminates N+1 per topic.
+        rows = await self.db.execute(
+            select(CurriculumTopic.id, QuestionBank.id)
+            .join(Subtopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
+            .join(QuestionBank, QuestionBank.subtopic_id == Subtopic.id)
+            .where(
                 CurriculumTopic.curriculum_id == curriculum_id,
                 CurriculumTopic.subject_id == subject_id,
                 CurriculumTopic.grade_id == grade_id,
                 CurriculumTopic.is_active.is_(True),
+                Subtopic.is_active.is_(True),
+                QuestionBank.is_active.is_(True),
             )
         )
-        topics = list(topics_result.scalars().all())
 
-        if not topics:
+        # Group question IDs by topic ID
+        questions_by_topic: dict[uuid.UUID, list[uuid.UUID]] = {}
+        for topic_id, question_id in rows.all():
+            questions_by_topic.setdefault(topic_id, []).append(question_id)
+
+        if not questions_by_topic:
             logger.warning(
-                "no_curriculum_topics_found",
+                "no_questions_found_for_diagnostic",
                 curriculum_id=str(curriculum_id),
                 subject_id=str(subject_id),
                 grade_id=str(grade_id),
             )
             return []
 
+        # Deterministic seed derived from curriculum+subject+grade so the same
+        # class always produces the same question pool order.
+        seed = int(curriculum_id) ^ int(subject_id) ^ int(grade_id)
+        rng = random.Random(seed)  # noqa: S311 — not used for cryptography
+
         # Distribute pool budget evenly across topics
+        topics = list(questions_by_topic.keys())
         per_topic = max(1, MAX_DIAGNOSTIC_POOL // len(topics))
         remainder = MAX_DIAGNOSTIC_POOL - (per_topic * len(topics))
 
         selected: list[uuid.UUID] = []
-
-        for topic in topics:
+        for topic_id in topics:
             n = per_topic + (1 if remainder > 0 else 0)
             if remainder > 0:
                 remainder -= 1
 
-            topic_questions = await self._sample_questions_for_topic(topic.id, n)
-            selected.extend(topic_questions)
+            pool = questions_by_topic[topic_id]
+            sample_size = min(n, len(pool))
+            selected.extend(rng.sample(pool, sample_size))
 
             if len(selected) >= MAX_DIAGNOSTIC_POOL:
                 break
 
         return selected[:MAX_DIAGNOSTIC_POOL]
-
-    async def _sample_questions_for_topic(
-        self,
-        curriculum_topic_id: uuid.UUID,
-        n: int,
-    ) -> list[uuid.UUID]:
-        """Sample up to n active questions from subtopics under a curriculum topic.
-
-        Args:
-            curriculum_topic_id: The curriculum topic UUID.
-            n: Maximum number of questions to sample.
-
-        Returns:
-            List of sampled question UUIDs.
-        """
-        result = await self.db.execute(
-            select(QuestionBank.id)
-            .join(Subtopic, QuestionBank.subtopic_id == Subtopic.id)
-            .where(
-                Subtopic.curriculum_topic_id == curriculum_topic_id,
-                QuestionBank.is_active.is_(True),
-                Subtopic.is_active.is_(True),
-            )
-        )
-        question_ids = [row[0] for row in result.all()]
-
-        if not question_ids:
-            return []
-
-        sample_size = min(n, len(question_ids))
-        return random.sample(question_ids, sample_size)

@@ -275,11 +275,10 @@ class TestSelectQuestionsForDiagnostic:
         topic = _make_topic(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
         question_ids = [uuid.uuid4() for _ in range(5)]
 
-        mock_topics = MagicMock()
-        mock_topics.scalars.return_value.all.return_value = [topic]
-        mock_questions = MagicMock(all=MagicMock(return_value=[(qid,) for qid in question_ids]))
-
-        service.db.execute = AsyncMock(side_effect=[mock_topics, mock_questions])  # type: ignore[method-assign]
+        # New consolidated query: single call returning (topic_id, question_id) pairs
+        mock_result = MagicMock()
+        mock_result.all.return_value = [(topic.id, qid) for qid in question_ids]
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
 
         result = await service._select_questions_for_diagnostic(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
 
@@ -311,12 +310,10 @@ class TestSelectQuestionsForDiagnostic:
         qids_a = [uuid.uuid4() for _ in range(3)]
         qids_b = [uuid.uuid4() for _ in range(3)]
 
-        mock_topics = MagicMock()
-        mock_topics.scalars.return_value.all.return_value = [topic_a, topic_b]
-        mock_q_a = MagicMock(all=MagicMock(return_value=[(qid,) for qid in qids_a]))
-        mock_q_b = MagicMock(all=MagicMock(return_value=[(qid,) for qid in qids_b]))
-
-        service.db.execute = AsyncMock(side_effect=[mock_topics, mock_q_a, mock_q_b])  # type: ignore[method-assign]
+        # New consolidated query: single call returning (topic_id, question_id) pairs
+        mock_result = MagicMock()
+        mock_result.all.return_value = [(topic_a.id, qid) for qid in qids_a] + [(topic_b.id, qid) for qid in qids_b]
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
 
         result = await service._select_questions_for_diagnostic(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
 
@@ -328,29 +325,8 @@ class TestSelectQuestionsForDiagnostic:
 # ── Sample questions for topic ───────────────────────────────────────────
 
 
-class TestSampleQuestionsForTopic:
-    """Tests for _sample_questions_for_topic."""
-
-    @pytest.mark.asyncio
-    async def test_when_no_questions_then_returns_empty(self, service: AssessmentService) -> None:
-        mock_result = MagicMock(all=MagicMock(return_value=[]))
-        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
-
-        result = await service._sample_questions_for_topic(uuid.uuid4(), 5)
-
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_when_questions_exist_then_returns_capped_at_n(self, service: AssessmentService) -> None:
-        question_ids = [uuid.uuid4() for _ in range(10)]
-        mock_result = MagicMock(all=MagicMock(return_value=[(qid,) for qid in question_ids]))
-        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
-
-        result = await service._sample_questions_for_topic(uuid.uuid4(), 3)
-
-        assert len(result) == 3
-        for qid in result:
-            assert qid in question_ids
+# Removed tests for private method _sample_questions_for_topic.
+# Functionality is tested through _select_questions_for_diagnostic.
 
 
 # ── Onboarding status update logic ──────────────────────────────────────
