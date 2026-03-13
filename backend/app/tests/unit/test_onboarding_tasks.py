@@ -17,7 +17,6 @@ from app.models.user import OnboardingStatus
 from app.services.assessment_service import (
     MAX_DIAGNOSTIC_POOL,
     MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT,
-    SYSTEM_USER_ID,
     AssessmentService,
 )
 
@@ -129,7 +128,7 @@ class TestCreateClassDiagnostic:
         result = await service.create_class_diagnostic(class_.id)
 
         assert result.is_system_generated is True
-        assert result.created_by == SYSTEM_USER_ID
+        assert result.created_by is None
         assert result.assessment_type == AssessmentType.DIAGNOSTIC
         assert result.status == AssessmentStatus.ACTIVE
         assert result.curriculum_topic_id is None

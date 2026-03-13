@@ -39,17 +39,12 @@ MAX_DIAGNOSTIC_POOL = 60
 # Stored in assessment config; enforced by the student-facing API.
 MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT = 20
 
-# System user ID used for system-generated assessments.
-# This is a placeholder - in production, this would be a real system user.
-SYSTEM_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
-
 
 def _make_system_assessment(class_id: uuid.UUID, title: str) -> Assessment:
     """Construct a system-generated Assessment.
 
-    System-generated assessments use a fixed system user ID to satisfy the
-    NOT NULL constraint on created_by. The is_system_generated flag
-    distinguishes system-created from teacher-created assessments.
+    System-generated assessments have created_by=NULL, distinguished by
+    the is_system_generated=True flag.
 
     Args:
         class_id: The class this assessment belongs to.
@@ -61,7 +56,7 @@ def _make_system_assessment(class_id: uuid.UUID, title: str) -> Assessment:
     return Assessment(
         id=uuid.uuid4(),
         class_id=class_id,
-        created_by=SYSTEM_USER_ID,
+        created_by=None,
         title=title,
         assessment_type=AssessmentType.DIAGNOSTIC,
         status=AssessmentStatus.ACTIVE,  # immediately active for students
