@@ -39,25 +39,29 @@ MAX_DIAGNOSTIC_POOL = 60
 # Stored in assessment config; enforced by the student-facing API.
 MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT = 20
 
+# System user ID used for system-generated assessments.
+# This is a placeholder - in production, this would be a real system user.
+SYSTEM_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
+
 
 def _make_system_assessment(class_id: uuid.UUID, title: str) -> Assessment:
     """Construct a system-generated Assessment.
 
-    Enforces the constraint: created_by MUST be NULL if and only if
-    is_system_generated is TRUE. This is documented in migration 002 as
-    enforced at the service layer.
+    System-generated assessments use a fixed system user ID to satisfy the
+    NOT NULL constraint on created_by. The is_system_generated flag
+    distinguishes system-created from teacher-created assessments.
 
     Args:
         class_id: The class this assessment belongs to.
         title: Human-readable title.
 
     Returns:
-        An unsaved Assessment instance with is_system_generated=True and created_by=None.
+        An unsaved Assessment instance with is_system_generated=True.
     """
     return Assessment(
         id=uuid.uuid4(),
         class_id=class_id,
-        created_by=None,  # NULL ↔ is_system_generated=True; enforced here
+        created_by=SYSTEM_USER_ID,
         title=title,
         assessment_type=AssessmentType.DIAGNOSTIC,
         status=AssessmentStatus.ACTIVE,  # immediately active for students
@@ -91,6 +95,7 @@ class AssessmentService:
         Raises:
             ValueError: If the class is not found.
         """
+        # Load class
         result = await self.db.execute(select(Class).where(Class.id == class_id))
         class_ = result.scalar_one_or_none()
         if class_ is None:
@@ -112,10 +117,9 @@ class AssessmentService:
             )
             return existing_assessment
 
-        # Load subject name for assessment title
-        subject_result = await self.db.execute(select(Subject).where(Subject.id == class_.subject_id))
-        subject = subject_result.scalar_one_or_none()
-        subject_name = subject.name if subject else "Unknown Subject"
+        # Load subject name for assessment title (single query, not N+1)
+        subject_result = await self.db.execute(select(Subject.name).where(Subject.id == class_.subject_id))
+        subject_name = subject_result.scalar_one_or_none() or "Unknown Subject"
 
         title = f"Onboarding Diagnostic — {subject_name} ({class_.name})"
 

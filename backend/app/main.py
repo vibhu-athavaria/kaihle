@@ -53,10 +53,16 @@ from app.core.middleware import RequestLoggingMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan handler.
+
+    Initializes Redis on startup and closes connections on shutdown.
+    """
     # Startup
     configure_logging(log_level=settings.log_level)
+    app.state.redis = Redis.from_url(settings.redis_url)
     yield
     # Shutdown
+    await app.state.redis.aclose()
 
 
 # Configure structured logging before app creation so all startup logs
@@ -68,17 +74,6 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    app.state.redis = Redis.from_url(settings.redis_url)
-
-
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    await app.state.redis.aclose()
-
 
 # Request logging middleware - must be first to capture all requests
 app.add_middleware(RequestLoggingMiddleware)
