@@ -9,12 +9,34 @@ Two entry points:
   Creates a StudentAttempt for the class's diagnostic and updates onboarding status.
 """
 
+import asyncio
+import uuid as _uuid
+
 import structlog
 from sqlalchemy import select
 
 from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger()
+
+
+def _parse_uuid(value: str, param_name: str) -> _uuid.UUID:
+    """Parse a string as UUID and raise ValueError if invalid.
+
+    Args:
+        value: The string to parse as UUID.
+        param_name: Name of the parameter (for error message).
+
+    Returns:
+        The parsed UUID.
+
+    Raises:
+        ValueError: If the string is not a valid UUID.
+    """
+    try:
+        return _uuid.UUID(value)
+    except ValueError:
+        raise ValueError(f"Invalid UUID for {param_name}: {value}")
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]
@@ -36,15 +58,19 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:  # t
     Returns:
         Dict with assessment_id and class_id.
     """
-    import asyncio
-    import uuid as _uuid
-
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.core.config import settings
     from app.services.assessment_service import AssessmentService
 
     logger.info("create_class_diagnostic_task_started", class_id=class_id)
+
+    # Validate UUID before attempting async operation
+    try:
+        class_uuid = _parse_uuid(class_id, "class_id")
+    except ValueError as exc:
+        logger.error("invalid_class_id_uuid", class_id=class_id, error=str(exc))
+        raise
 
     async def _run() -> dict[str, object]:
         engine = create_async_engine(settings.database_url, echo=False)
@@ -54,7 +80,7 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:  # t
             async with db.begin():
                 service = AssessmentService(db)
                 assessment = await service.create_class_diagnostic(
-                    class_id=_uuid.UUID(class_id),
+                    class_id=class_uuid,
                 )
 
             return {
@@ -63,11 +89,7 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:  # t
             }
 
     try:
-        loop = asyncio.new_event_loop()
-        try:
-            run_result = loop.run_until_complete(_run())
-        finally:
-            loop.close()
+        run_result = asyncio.run(_run())
 
         logger.info(
             "create_class_diagnostic_task_completed",
@@ -109,9 +131,6 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
     Returns:
         Dict with attempt_id and student_id.
     """
-    import asyncio
-    import uuid as _uuid
-
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.core.config import settings
@@ -124,6 +143,14 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
         class_id=class_id,
     )
 
+    # Validate UUIDs before attempting async operation
+    try:
+        student_uuid = _parse_uuid(student_id, "student_id")
+        class_uuid = _parse_uuid(class_id, "class_id")
+    except ValueError as exc:
+        logger.error("invalid_uuid", student_id=student_id, class_id=class_id, error=str(exc))
+        raise
+
     async def _run() -> dict[str, object]:
         engine = create_async_engine(settings.database_url, echo=False)
         async_session = async_sessionmaker(engine, expire_on_commit=False)
@@ -131,8 +158,6 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
         async with async_session() as db:
             async with db.begin():
                 service = AssessmentService(db)
-                student_uuid = _uuid.UUID(student_id)
-                class_uuid = _uuid.UUID(class_id)
 
                 attempt = await service.create_diagnostic_attempt(
                     student_id=student_uuid,
@@ -159,11 +184,7 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
             return {"attempt_id": str(attempt.id), "student_id": student_id}
 
     try:
-        loop = asyncio.new_event_loop()
-        try:
-            run_result = loop.run_until_complete(_run())
-        finally:
-            loop.close()
+        run_result = asyncio.run(_run())
 
         logger.info(
             "trigger_onboarding_diagnostics_completed",

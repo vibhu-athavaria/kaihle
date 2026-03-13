@@ -2,14 +2,13 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.redis import get_redis
 
 router = APIRouter(tags=["health"])
 
@@ -31,9 +30,18 @@ async def _check_database(db: AsyncSession) -> str:
         return "error"
 
 
-async def _check_redis(redis_client: Redis = Depends(get_redis)) -> str:
+async def _check_redis(request: Request) -> str:
+    """Check Redis connectivity.
+
+    Returns "connected" on success, "error" on failure.
+    Handles case where Redis is not initialized (e.g., startup failed).
+    """
     try:
-        await redis_client.ping()
+        redis: Redis | None = getattr(request.app.state, "redis", None)  # type: ignore[type-arg]
+        if redis is None:
+            logger.warning("redis_not_initialized")
+            return "error"
+        await redis.ping()
         return "connected"
     except Exception:
         logger.error("redis_health_check_failed", exc_info=True)
@@ -41,13 +49,13 @@ async def _check_redis(redis_client: Redis = Depends(get_redis)) -> str:
 
 
 @router.get("/health")
-async def health_check(db: AsyncSession = Depends(get_db)) -> JSONResponse:
+async def health_check(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """Health check endpoint for monitoring and uptime checks.
 
     Returns 200 OK when healthy, 503 when degraded.
     """
     db_status = await _check_database(db)
-    redis_status = await _check_redis()
+    redis_status = await _check_redis(request)
 
     is_healthy = db_status == "connected" and redis_status == "connected"
     status_code = status.HTTP_200_OK if is_healthy else status.HTTP_503_SERVICE_UNAVAILABLE
@@ -65,14 +73,14 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> JSONResponse:
 
 
 @router.get("/ready")
-async def readiness_check(db: AsyncSession = Depends(get_db)) -> JSONResponse:
+async def readiness_check(request: Request, db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """Readiness probe endpoint for Render.
 
     Returns 200 only when both DB and Redis are connected.
     Returns 503 otherwise.
     """
     db_status = await _check_database(db)
-    redis_status = await _check_redis()
+    redis_status = await _check_redis(request)
 
     is_ready = db_status == "connected" and redis_status == "connected"
     status_code = status.HTTP_200_OK if is_ready else status.HTTP_503_SERVICE_UNAVAILABLE
