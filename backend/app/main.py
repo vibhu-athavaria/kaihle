@@ -39,6 +39,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
 from app.api.v1.routes import auth, health, onboarding, schools, users
@@ -81,6 +82,15 @@ async def shutdown_event() -> None:
 
 # Request logging middleware - must be first to capture all requests
 app.add_middleware(RequestLoggingMiddleware)
+
+# CORS middleware for frontend apps
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3001", "http://localhost:3002", "http://localhost:3003"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Register API routers
 app.include_router(auth.router, prefix="/api/v1")

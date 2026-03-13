@@ -24,6 +24,19 @@ export default defineConfig({
       command: "pnpm dev:teacher",
       url: "http://localhost:3001",
       reuseExistingServer: !process.env.CI,
+      timeout: 120000,
+    },
+    {
+      command: "pnpm dev:student",
+      url: "http://localhost:3002",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000,
+    },
+    {
+      command: "pnpm dev:parent",
+      url: "http://localhost:3003",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000,
     },
   ],
 });
