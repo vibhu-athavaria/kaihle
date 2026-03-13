@@ -70,7 +70,9 @@ Always:
 Never:
 - Introduce wildcard imports, implicit ORM loading that can cause N+1 queries, or undeclared cascades.
 - Introduce nullable columns or enum changes without clear justification and tests.
-- Bypass tests, linters, or CI gates just to “get it to pass”.
+- Bypass tests, linters, or CI gates just to "get it to pass".
+- Use inline `# type: ignore` comments in production code. Instead, configure mypy in `mypy.ini`
+  by adding a `[mypy-<module>.*]` section with `ignore_missing_imports = true` and/or `ignore_errors = true`.
 
 ## Tests and quality
 

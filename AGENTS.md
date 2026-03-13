@@ -70,6 +70,14 @@ comments or design notes:
   ```
   Direct execution outside Docker Compose is permitted only for tests or one-off scripts.
 
+### Type Checking
+
+- Inline `# type: ignore` comments **MUST NOT** be used in production code.
+- Type checking issues **MUST** be resolved by configuring mypy in `mypy.ini` or the
+  relevant section of this document, not by adding inline ignores.
+- When a third-party library lacks type stubs, add an `[mypy-<module>.*]` section in
+  `mypy.ini` with `ignore_missing_imports = true` and/or `ignore_errors = true`.
+
 ### Frontend Design Governance
 
 - All frontend work **MUST** treat `CONSTITUTION.md` as the single source of truth for

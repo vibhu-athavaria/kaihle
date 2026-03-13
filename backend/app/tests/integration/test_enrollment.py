@@ -316,11 +316,12 @@ async def test_enroll_students_when_valid_then_enrollment_rows_created(
     }
 
     # Act
-    response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
-        json=enroll_data,
-        headers=headers,
-    )
+    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+        response = await client.post(
+            f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
+            json=enroll_data,
+            headers=headers,
+        )
 
     # Assert
     assert response.status_code == 200
