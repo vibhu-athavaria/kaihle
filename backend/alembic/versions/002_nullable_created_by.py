@@ -5,7 +5,7 @@ are created by the Celery task trigger_onboarding_diagnostics() on student enrol
 They have no teacher owner. created_by NULL explicitly means system-created.
 NULL is only valid when is_system_generated=TRUE; enforced at service layer.
 
-Revision ID: 002_assessment_created_by_nullable
+Revision ID: 002_nullable_created_by
 Revises: 001_initial_schema
 Create Date: 2026-03-12
 
@@ -16,7 +16,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "002_assessment_created_by_nullable"
+revision: str = "002_nullable_created_by"
 down_revision: str | None = "001_initial_schema"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
