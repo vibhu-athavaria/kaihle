@@ -11,7 +11,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.questionnaire_config import get_option_by_key
@@ -346,39 +346,13 @@ class OnboardingService:
         enrollment = result.scalar_one_or_none()
         return enrollment is not None
 
-    async def get_diagnostic_onboarding_status(
-        self,
-        student_id: UUID,
-    ) -> str:
-        """Get the diagnostic onboarding status from class_enrollments.
+    async def check_and_update_onboarding_complete(self, student_id: UUID) -> bool:
+        """Check if all Tier 1 diagnostics are completed and update status.
 
-        Args:
-            student_id: The student user ID.
-
-        Returns:
-            One of 'PENDING', 'IN_PROGRESS', 'COMPLETED'.
-        """
-        result = await self.db.execute(
-            select(ClassEnrollment.onboarding_diagnostic_status).where(
-                ClassEnrollment.student_id == student_id,
-                ClassEnrollment.is_active.is_(True),
-            )
-        )
-        statuses = result.scalars().all()
-
-        if not statuses:
-            return OnboardingStatus.PENDING
-        if all(s == OnboardingStatus.COMPLETED for s in statuses):
-            return OnboardingStatus.COMPLETED
-        if any(s != OnboardingStatus.PENDING for s in statuses):
-            return OnboardingStatus.IN_PROGRESS
-        return OnboardingStatus.PENDING
-
-    async def get_diagnostic_status_by_class(
-        self,
-        student_id: UUID,
-    ) -> list[dict[str, Any]]:
-        """Get per-class diagnostic status breakdown.
+        This method is called after every Tier 1 student attempt submission.
+        It checks if ALL system-generated (Tier 1) assessments have COMPLETED
+        attempts, and if so, updates the student's onboarding_diagnostic_status
+        to COMPLETED.
 
         Args:
             student_id: The student user ID.
@@ -491,9 +465,6 @@ class OnboardingService:
 
         if not attempt or attempt.status != "COMPLETED":
             return False
-
-        # Update the class_enrollment status to COMPLETED
-        from sqlalchemy import update
 
         await self.db.execute(
             update(ClassEnrollment)

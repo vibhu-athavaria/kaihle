@@ -519,3 +519,128 @@ class TestVerifyTeacherStudentRelationship:
         result = await service.verify_teacher_student_relationship(teacher_id, student_id)
 
         assert result is False
+
+
+@pytest.mark.asyncio
+class TestCheckAndUpdateOnboardingComplete:
+    """Tests for check_and_update_onboarding_complete method."""
+
+    async def test_when_2_of_3_complete_then_returns_false(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that when 2 of 3 Tier 1 diagnostics are complete, returns False."""
+        from app.models.assessment import Assessment, StudentAttempt
+
+        # Create mock Tier 1 assessments and attempts
+        assessment1 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
+        assessment2 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
+        assessment3 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
+
+        # 2 completed, 1 in progress
+        attempt1 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
+        attempt2 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
+        attempt3 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="IN_PROGRESS")
+
+        # First query returns tier1_rows (empty or with data)
+        # Second query returns attempts
+        mock_result_assessments = MagicMock()
+        mock_result_assessments.all.return_value = [assessment1, assessment2, assessment3]
+
+        mock_result_attempts = MagicMock()
+        mock_result_attempts.scalars.return_value.all.return_value = [attempt1, attempt2, attempt3]
+
+        service.db.execute = AsyncMock(side_effect=[mock_result_assessments, mock_result_attempts])  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id)
+
+        assert result is False
+
+    async def test_when_all_3_complete_then_returns_true_and_status_updated(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that when all 3 Tier 1 diagnostics are complete, returns True and updates status."""
+        from app.models.assessment import Assessment, StudentAttempt
+        from app.models.user import OnboardingStatus, StudentProfile
+
+        # Create mock Tier 1 assessments
+        assessment1 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
+        assessment2 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
+        assessment3 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
+
+        # All 3 completed
+        attempt1 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
+        attempt2 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
+        attempt3 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
+
+        # Student profile in IN_PROGRESS status
+        student_profile = MagicMock(spec=StudentProfile)
+        student_profile.onboarding_diagnostic_status = OnboardingStatus.IN_PROGRESS
+
+        # Mock results
+        mock_result_assessments = MagicMock()
+        mock_result_assessments.all.return_value = [assessment1, assessment2, assessment3]
+
+        mock_result_attempts = MagicMock()
+        mock_result_attempts.scalars.return_value.all.return_value = [attempt1, attempt2, attempt3]
+
+        mock_result_profile = MagicMock()
+        mock_result_profile.scalar_one_or_none.return_value = student_profile
+
+        service.db.execute = AsyncMock(side_effect=[mock_result_assessments, mock_result_attempts, mock_result_profile])  # type: ignore[method-assign]
+        service.db.commit = AsyncMock()  # type: ignore[method-assign]
+        service.db.refresh = AsyncMock()  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id)
+
+        assert result is True
+        assert student_profile.onboarding_diagnostic_status == OnboardingStatus.COMPLETED
+
+    async def test_when_already_completed_then_idempotent(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that calling when already COMPLETED returns True without updating."""
+        from app.models.assessment import Assessment, StudentAttempt
+        from app.models.user import OnboardingStatus, StudentProfile
+
+        # Create mock Tier 1 assessments
+        assessment1 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
+
+        # All completed
+        attempt1 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
+
+        # Student profile already COMPLETED
+        student_profile = MagicMock(spec=StudentProfile)
+        student_profile.onboarding_diagnostic_status = OnboardingStatus.COMPLETED
+
+        # Mock results
+        mock_result_assessments = MagicMock()
+        mock_result_assessments.all.return_value = [assessment1]
+
+        mock_result_attempts = MagicMock()
+        mock_result_attempts.scalars.return_value.all.return_value = [attempt1]
+
+        mock_result_profile = MagicMock()
+        mock_result_profile.scalar_one_or_none.return_value = student_profile
+
+        service.db.execute = AsyncMock(side_effect=[mock_result_assessments, mock_result_attempts, mock_result_profile])  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id)
+
+        # Should return True but NOT update (idempotent)
+        assert result is True
+        # Status should remain COMPLETED (not changed)
+        assert student_profile.onboarding_diagnostic_status == OnboardingStatus.COMPLETED
+
+    async def test_when_no_tier1_assessments_then_returns_false(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that when no Tier 1 assessments exist, returns False (no crash)."""
+        # First query returns empty
+        mock_result = MagicMock()
+        mock_result.all.return_value = []
+
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id)
+
+        assert result is False
