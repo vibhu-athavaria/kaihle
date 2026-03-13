@@ -1,8 +1,8 @@
-from typing import Any, cast
+from typing import cast
 
 from fastapi import Request
 from redis.asyncio import Redis
 
 
-def get_redis(request: Request) -> Redis[Any]:
-    return cast(Redis[Any], request.app.state.redis)
+def get_redis(request: Request) -> Redis:
+    return cast(Redis, request.app.state.redis)

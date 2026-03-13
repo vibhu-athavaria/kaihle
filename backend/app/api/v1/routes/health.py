@@ -1,7 +1,6 @@
 """Health check endpoints for monitoring and readiness probes."""
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
@@ -32,7 +31,7 @@ async def _check_database(db: AsyncSession) -> str:
         return "error"
 
 
-async def _check_redis(redis_client: Redis[Any] = Depends(get_redis)) -> str:
+async def _check_redis(redis_client: Redis = Depends(get_redis)) -> str:
     try:
         await redis_client.ping()
         return "connected"

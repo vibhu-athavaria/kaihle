@@ -34,16 +34,16 @@ jobs:
 
       # ruff check: does NOT auto-fix — surfaces violations explicitly
       - name: Run ruff lint
-        run: ruff check .
+        run: uv run ruff check .
         working-directory: backend
 
       # ruff format --check: fails if formatting differs from pre-commit's ruff-format
       - name: Run ruff format check
-        run: ruff format --check .
+        run: uv run ruff format --check .
         working-directory: backend
 
       - name: Run mypy
-        run: mypy app/
+        run: uv run mypy app/
         working-directory: backend
 
   test-backend:
@@ -103,13 +103,13 @@ jobs:
             -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Run migrations
-        run: alembic upgrade head
+        run: uv run alembic upgrade head
         working-directory: backend
 
       # Runs ALL tests (unit + integration) with 80% coverage gate
       - name: Run pytest with coverage
         run: |
-          pytest app/tests/ \
+          uv run pytest app/tests/ \
             --cov=app/services \
             --cov-report=xml \
             --cov-report=term-missing \
@@ -255,11 +255,11 @@ jobs:
         working-directory: backend
 
       - name: Run migrations
-        run: alembic upgrade head
+        run: uv run alembic upgrade head
         working-directory: backend
 
       - name: Start backend
-        run: uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+        run: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 &
         working-directory: backend
 
       - name: Install frontend dependencies
