@@ -29,7 +29,7 @@ jobs:
         run: pip install uv
 
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+        run: uv sync --system --all-extras
         working-directory: backend
 
       # ruff check: does NOT auto-fix — surfaces violations explicitly
@@ -94,7 +94,7 @@ jobs:
         run: pip install uv
 
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+        run: uv sync --system --all-extras
         working-directory: backend
 
       - name: Enable pgvector extension
@@ -251,7 +251,7 @@ jobs:
           cache-dependency-path: "frontend/pnpm-lock.yaml"
 
       - name: Install backend dependencies
-        run: pip install uv && uv pip install --system -e ".[dev]"
+        run: pip install uv && uv sync --system --all-extras
         working-directory: backend
 
       - name: Run migrations
