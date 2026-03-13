@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "serper-search": {
+      "command": "npx",
+      "args": ["-y", "serper-mcp"],
+      "env": {
+        "SERPER_API_KEY": "your-serper-api-key-here"
+      }
+    }
+  }
+}

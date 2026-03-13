@@ -22,3 +22,7 @@ dist/
 
 .coverage
 *coverage.xml
+
+# .gitignore
+.kilocode/mcp.json
+mcp.json
