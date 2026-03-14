@@ -529,7 +529,7 @@ class TestCheckAndUpdateOnboardingComplete:
         self, service: OnboardingService, student_id: uuid.UUID
     ) -> None:
         """Test that when 2 of 3 Tier 1 diagnostics are complete, returns False."""
-        from app.models.assessment import Assessment, StudentAttempt
+        from app.models.assessment import Assessment, AttemptStatus, StudentAttempt
 
         # Create mock Tier 1 assessments and attempts
         assessment1 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
@@ -537,9 +537,9 @@ class TestCheckAndUpdateOnboardingComplete:
         assessment3 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
 
         # 2 completed, 1 in progress
-        attempt1 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
-        attempt2 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
-        attempt3 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="IN_PROGRESS")
+        attempt1 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status=AttemptStatus.COMPLETED)
+        attempt2 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status=AttemptStatus.COMPLETED)
+        attempt3 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status=AttemptStatus.IN_PROGRESS)
 
         # First query returns tier1_rows (empty or with data)
         # Second query returns attempts
@@ -559,7 +559,7 @@ class TestCheckAndUpdateOnboardingComplete:
         self, service: OnboardingService, student_id: uuid.UUID
     ) -> None:
         """Test that when all 3 Tier 1 diagnostics are complete, returns True and updates status."""
-        from app.models.assessment import Assessment, StudentAttempt
+        from app.models.assessment import Assessment, AttemptStatus, StudentAttempt
         from app.models.user import OnboardingStatus, StudentProfile
 
         # Create mock Tier 1 assessments
@@ -568,9 +568,9 @@ class TestCheckAndUpdateOnboardingComplete:
         assessment3 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
 
         # All 3 completed
-        attempt1 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
-        attempt2 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
-        attempt3 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
+        attempt1 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status=AttemptStatus.COMPLETED)
+        attempt2 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status=AttemptStatus.COMPLETED)
+        attempt3 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status=AttemptStatus.COMPLETED)
 
         # Student profile in IN_PROGRESS status
         student_profile = MagicMock(spec=StudentProfile)
@@ -599,14 +599,14 @@ class TestCheckAndUpdateOnboardingComplete:
         self, service: OnboardingService, student_id: uuid.UUID
     ) -> None:
         """Test that calling when already COMPLETED returns True without updating."""
-        from app.models.assessment import Assessment, StudentAttempt
+        from app.models.assessment import Assessment, AttemptStatus, StudentAttempt
         from app.models.user import OnboardingStatus, StudentProfile
 
         # Create mock Tier 1 assessments
         assessment1 = MagicMock(spec=Assessment, id=uuid.uuid4(), is_system_generated=True)
 
         # All completed
-        attempt1 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status="COMPLETED")
+        attempt1 = MagicMock(spec=StudentAttempt, id=uuid.uuid4(), status=AttemptStatus.COMPLETED)
 
         # Student profile already COMPLETED
         student_profile = MagicMock(spec=StudentProfile)

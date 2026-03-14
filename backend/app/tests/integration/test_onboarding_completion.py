@@ -15,7 +15,7 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.assessment import Assessment, AssessmentStatus, StudentAttempt
+from app.models.assessment import Assessment, AssessmentStatus, AttemptStatus, StudentAttempt
 from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import Class, School
@@ -205,7 +205,7 @@ async def tier1_attempts_in_progress(
 ) -> list[StudentAttempt]:
     """Create 3 attempts for Tier 1 assessments - 2 COMPLETED, 1 IN_PROGRESS."""
     attempts = []
-    statuses = ["COMPLETED", "COMPLETED", "IN_PROGRESS"]
+    statuses = [AttemptStatus.COMPLETED, AttemptStatus.COMPLETED, AttemptStatus.IN_PROGRESS]
 
     for i, assessment in enumerate(tier1_assessments):
         attempt = StudentAttempt(
@@ -214,7 +214,7 @@ async def tier1_attempts_in_progress(
             student_id=student.id,
             status=statuses[i],
             total_questions=10,
-            questions_answered=statuses[i] == "COMPLETED" and 10 or 5,
+            questions_answered=statuses[i] == AttemptStatus.COMPLETED and 10 or 5,
         )
         db_session.add(attempt)
         attempts.append(attempt)
@@ -237,7 +237,7 @@ async def tier1_attempts_all_completed(
             id=uuid.uuid4(),
             assessment_id=assessment.id,
             student_id=student.id,
-            status="COMPLETED",
+            status=AttemptStatus.COMPLETED,
             total_questions=10,
             questions_answered=10,
             overall_score=0.75,
