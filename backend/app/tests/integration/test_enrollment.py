@@ -405,7 +405,7 @@ async def test_enroll_students_when_onboarding_in_progress_then_celery_task_not_
     # Act
     with patch("app.services.school_service.trigger_onboarding_diagnostics") as mock_task:
         response = await client.post(
-            f"/api/v1/schools/{test_school.id}/classes/{test_class.id}/enroll",
+            f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
             json=enroll_data,
             headers=headers,
         )

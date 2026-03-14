@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.security import InvalidTokenError, decode_token
 from app.models.onboarding import StudentLearningProfile
 from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
+from app.services.onboarding_service import OnboardingService
 
 # HTTPBearer for extracting Bearer token
 security = HTTPBearer()
@@ -208,8 +209,6 @@ async def require_onboarding_complete(
         )
 
     # Check onboarding diagnostic status using class_enrollments (v2.1)
-    from app.services.onboarding_service import OnboardingService
-
     service = OnboardingService(db)
     diagnostics_status = await service.get_diagnostic_onboarding_status(current_user.id)
 

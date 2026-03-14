@@ -442,14 +442,6 @@ class OnboardingService:
             return False
 
         # Update the class_enrollment status to COMPLETED
-        await self.db.execute(
-            select(ClassEnrollment).where(
-                ClassEnrollment.class_id == class_id,
-                ClassEnrollment.student_id == student_id,
-                ClassEnrollment.onboarding_diagnostic_status != OnboardingStatus.COMPLETED,
-            )
-        )
-        # Use an update statement to set the status
         from sqlalchemy import update
 
         await self.db.execute(
