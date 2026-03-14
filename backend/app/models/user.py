@@ -97,17 +97,9 @@ class StudentProfile(Base, TimestampMixin):
         ForeignKey("grades.id", ondelete="SET NULL"),
     )
     age: Mapped[int | None]
-    onboarding_diagnostic_status: Mapped[str] = mapped_column(
-        Enum(
-            OnboardingStatus.PENDING,
-            OnboardingStatus.IN_PROGRESS,
-            OnboardingStatus.COMPLETED,
-            name="onboarding_status",
-            native_enum=False,
-        ),
-        nullable=False,
-        default=OnboardingStatus.PENDING,
-    )
+    # Note: onboarding_diagnostic_status moved to class_enrollments (v2.1)
+    # A student is fully diagnostically onboarded when ALL active class_enrollments
+    # have onboarding_diagnostic_status = 'COMPLETED'
 
 
 class TeacherProfile(Base, TimestampMixin):

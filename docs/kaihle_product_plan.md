@@ -265,7 +265,8 @@ All protected routes:
 - Marked with `is_system_generated = TRUE` on the `assessments` table
 - Covers ALL topics for that subject at the student's grade level (broad sweep)
 - The student is required to complete all Tier 1 assessments before accessing any other part of the student app — this is an onboarding gate enforced by middleware
-- Status tracked in `student_profiles.onboarding_diagnostic_status`: `PENDING` → `IN_PROGRESS` → `COMPLETED`
+- Status tracked per class enrollment in `class_enrollments.onboarding_diagnostic_status`: `PENDING` → `IN_PROGRESS` → `COMPLETED`
+- A student is considered fully diagnostically onboarded when ALL active `class_enrollments` rows have status = `COMPLETED`
 - Triggered by: `POST /api/v1/schools/{school_id}/classes/{class_id}/enroll` completing successfully
 - Handled by Celery task: `trigger_onboarding_diagnostics(student_id, class_id)`
 
@@ -394,7 +395,7 @@ class_enrollments       Student ↔ class membership
 users                   Single table for all roles
                         school_id NULL only for KAIHLE_ADMIN
 student_profiles        Extended student data
-                        NEW v2.1: onboarding_diagnostic_status onboarding_status_enum DEFAULT 'PENDING'
+                        v2.1: onboarding_diagnostic_status moved to class_enrollments (per-class tracking)
 teacher_profiles        Extended teacher data
 parent_student          Parent ↔ student links (many-to-many)
 auth_tokens             JWT refresh tokens + magic links

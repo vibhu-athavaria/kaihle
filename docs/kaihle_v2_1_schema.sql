@@ -545,11 +545,9 @@ CREATE TABLE student_profiles (
     -- grade_id: current grade. Also derivable via class_enrollments → classes.
     -- Stored here for fast access without join (e.g. Parent Portal header).
     age                             INT,
-    onboarding_diagnostic_status    onboarding_status NOT NULL DEFAULT 'PENDING',
-    -- PENDING:     student enrolled, Tier 1 diagnostics not yet created
-    -- IN_PROGRESS: Tier 1 diagnostics created, not all completed
-    -- COMPLETED:   all Tier 1 diagnostics completed AND learning profile submitted
-    -- NOTE: learning_profile data is now in student_learning_profiles table (normalised)
+    -- NOTE: onboarding_diagnostic_status REMOVED in v2.1 - moved to class_enrollments
+    -- A student is fully diagnostically onboarded when ALL active class_enrollments
+    -- have onboarding_diagnostic_status = 'COMPLETED'
     created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at                      TIMESTAMPTZ,
     CONSTRAINT sp_user_unique UNIQUE (user_id)
@@ -561,8 +559,8 @@ COMMENT ON TABLE student_profiles IS
      A student enrolled in a Cambridge class takes Cambridge diagnostics.
      No redundant curriculum storage.
      v2.1: replaced has_completed_onboarding BOOLEAN + learning_profile JSONB
-     with onboarding_diagnostic_status (normalised enum) and separate
-     student_learning_profiles table.';
+     with separate student_learning_profiles table.
+     onboarding_diagnostic_status moved to class_enrollments table (per-class tracking).';
 
 -- ---------------------------------------------------------------------------
 
@@ -669,11 +667,16 @@ CREATE INDEX idx_classes_active     ON classes (school_id, is_active);
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE class_enrollments (
-    class_id    UUID    NOT NULL REFERENCES classes (id)  ON DELETE CASCADE,
-    student_id  UUID    NOT NULL REFERENCES users (id)    ON DELETE CASCADE,
-    enrolled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+    class_id                       UUID    NOT NULL REFERENCES classes (id)  ON DELETE CASCADE,
+    student_id                     UUID    NOT NULL REFERENCES users (id)    ON DELETE CASCADE,
+    enrolled_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    is_active                      BOOLEAN NOT NULL DEFAULT TRUE,
     -- is_active=FALSE: student left mid-term. Historical data preserved.
+    onboarding_diagnostic_status   onboarding_status NOT NULL DEFAULT 'PENDING',
+    -- PENDING:     student enrolled, Tier 1 diagnostic not yet completed for this class
+    -- IN_PROGRESS: Tier 1 diagnostic created for this class, not yet completed
+    -- COMPLETED:   Tier 1 diagnostic completed for this class
+    -- A student is fully diagnostically onboarded when ALL active enrollments are COMPLETED
     PRIMARY KEY (class_id, student_id)
 );
 
@@ -681,10 +684,12 @@ COMMENT ON TABLE class_enrollments IS
     'Many-to-many: students enrolled in classes.
      A student has one enrollment per subject (Math, Science, English = 3 enrollments).
      is_active=FALSE preserves historical data when a student withdraws.
-     Count of active enrollments per school enforced against subscription.max_students.';
+     Count of active enrollments per school enforced against subscription.max_students.
+     v2.1: Added onboarding_diagnostic_status to track diagnostic completion per class.';
 
 CREATE INDEX idx_enrollments_student ON class_enrollments (student_id);
 CREATE INDEX idx_enrollments_active  ON class_enrollments (class_id, is_active);
+CREATE INDEX idx_enrollments_onboarding_status ON class_enrollments (student_id, onboarding_diagnostic_status);
 
 -- =============================================================================
 -- SECTION 4: ASSESSMENTS
@@ -728,7 +733,7 @@ COMMENT ON TABLE assessments IS
      curriculum_topic_id: present for TOPIC_SPECIFIC/PROGRESS_CHECK, NULL for DIAGNOSTIC/FINAL.
      is_system_generated=TRUE: Tier 1 onboarding diagnostic — created by Celery task
        trigger_onboarding_diagnostics() on student enrollment. Blocks dashboard access
-       until student_profiles.onboarding_diagnostic_status = COMPLETED.';
+       until class_enrollments.onboarding_diagnostic_status = COMPLETED for all active enrollments.';
 
 CREATE INDEX idx_assessments_class  ON assessments (class_id);
 CREATE INDEX idx_assessments_status ON assessments (status);
@@ -1210,9 +1215,15 @@ CREATE TABLE alembic_version (
 -- COLUMN CHANGED — student_profiles:
 --   REMOVED: has_completed_onboarding BOOLEAN DEFAULT FALSE
 --   REMOVED: learning_profile JSONB
---   ADDED:   onboarding_diagnostic_status onboarding_status DEFAULT 'PENDING'
+--   REMOVED: onboarding_diagnostic_status (MOVED to class_enrollments in v2.1)
 --   Rationale: normalised status enum replaces boolean; learning profile
 --              moved to dedicated student_learning_profiles table.
+--              Onboarding status moved to class_enrollments for per-class tracking.
+--
+-- COLUMN ADDED — class_enrollments (v2.1):
+--   ADDED: onboarding_diagnostic_status onboarding_status DEFAULT 'PENDING'
+--   Rationale: tracks diagnostic completion per-class enrollment.
+--              Student is fully onboarded when ALL active enrollments are COMPLETED.
 --
 -- COLUMN ADDED — assessments:
 --   ADDED: is_system_generated BOOLEAN NOT NULL DEFAULT FALSE

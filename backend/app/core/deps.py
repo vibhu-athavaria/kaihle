@@ -178,7 +178,7 @@ async def require_onboarding_complete(
     Dependency that enforces onboarding completion for STUDENT role.
 
     For STUDENT role, checks:
-    - student_profiles.onboarding_diagnostic_status == 'COMPLETED'
+    - class_enrollments.onboarding_diagnostic_status == 'COMPLETED' for all active enrollments
     - student_learning_profiles.completed_at IS NOT NULL
 
     Non-STUDENT roles pass through without any check.
@@ -197,7 +197,7 @@ async def require_onboarding_complete(
     if current_user.role != UserRole.STUDENT:
         return current_user
 
-    # Check student profile for diagnostic status
+    # Check student profile exists (required for diagnostic status)
     result = await db.execute(select(StudentProfile).where(StudentProfile.user_id == current_user.id))
     student_profile = result.scalar_one_or_none()
 
@@ -207,8 +207,13 @@ async def require_onboarding_complete(
             detail="Student profile not found",
         )
 
-    # Check onboarding diagnostic status
-    if student_profile.onboarding_diagnostic_status != OnboardingStatus.COMPLETED:
+    # Check onboarding diagnostic status using class_enrollments (v2.1)
+    from app.services.onboarding_service import OnboardingService
+
+    service = OnboardingService(db)
+    diagnostics_status = await service.get_diagnostic_onboarding_status(current_user.id)
+
+    if diagnostics_status != OnboardingStatus.COMPLETED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={

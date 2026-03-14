@@ -72,6 +72,29 @@ class OnboardingStatus(BaseModel):
     overall: str = Field(..., pattern="^(PENDING|IN_PROGRESS|COMPLETED)$")
 
 
+class DiagnosticStatusByClass(BaseModel):
+    """Schema for per-class diagnostic status breakdown."""
+
+    class_id: UUID = Field(..., description="Class identifier")
+    class_name: str = Field(..., description="Class name")
+    status: str = Field(..., description="Diagnostic status for this class enrollment")
+
+
+class OnboardingStatusResponse(BaseModel):
+    """Extended schema for onboarding status with per-class breakdown."""
+
+    learning_profile_complete: bool = Field(..., description="True if learning profile questionnaire is submitted")
+    diagnostics_status: str = Field(
+        ..., pattern="^(PENDING|IN_PROGRESS|COMPLETED)$", description="Aggregated diagnostic status"
+    )
+    overall: str = Field(..., pattern="^(PENDING|IN_PROGRESS|COMPLETED)$")
+    diagnostics_by_class: list[DiagnosticStatusByClass] = Field(
+        default_factory=list, description="Per-class diagnostic status breakdown"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class StudentLearningProfileResponse(BaseModel):
     """Schema for student learning profile response.
 

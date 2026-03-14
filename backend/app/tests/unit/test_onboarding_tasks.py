@@ -333,35 +333,45 @@ class TestSelectQuestionsForDiagnostic:
 
 
 class TestOnboardingStatusUpdate:
-    """Tests for onboarding status update logic within Celery task."""
+    """Tests for onboarding status update logic within Celery task.
+
+    The task now updates class_enrollments.onboarding_diagnostic_status instead of
+    student_profiles. This test validates the conditional update pattern.
+    """
 
     @pytest.mark.asyncio
-    async def test_when_status_pending_then_updated_to_in_progress(self) -> None:
-        profile = SimpleNamespace(
+    async def test_when_enrollment_status_pending_then_updated_to_in_progress(self) -> None:
+        """Test that a PENDING enrollment status gets updated to IN_PROGRESS."""
+        enrollment = SimpleNamespace(
             onboarding_diagnostic_status=OnboardingStatus.PENDING,
         )
 
-        if profile.onboarding_diagnostic_status == OnboardingStatus.PENDING:
-            profile.onboarding_diagnostic_status = OnboardingStatus.IN_PROGRESS
+        # Simulate the update logic from trigger_onboarding_diagnostics
+        if enrollment.onboarding_diagnostic_status == OnboardingStatus.PENDING:
+            enrollment.onboarding_diagnostic_status = OnboardingStatus.IN_PROGRESS
 
-        assert profile.onboarding_diagnostic_status == OnboardingStatus.IN_PROGRESS
+        assert enrollment.onboarding_diagnostic_status == OnboardingStatus.IN_PROGRESS
 
-    def test_when_status_completed_then_not_regressed(self) -> None:
-        profile = SimpleNamespace(
+    def test_when_enrollment_status_completed_then_not_regressed(self) -> None:
+        """Test that a COMPLETED status is not regressed to IN_PROGRESS."""
+        enrollment = SimpleNamespace(
             onboarding_diagnostic_status=OnboardingStatus.COMPLETED,
         )
 
-        if profile.onboarding_diagnostic_status == OnboardingStatus.PENDING:
-            profile.onboarding_diagnostic_status = OnboardingStatus.IN_PROGRESS
+        # Simulate the update logic - should not update if not PENDING
+        if enrollment.onboarding_diagnostic_status == OnboardingStatus.PENDING:
+            enrollment.onboarding_diagnostic_status = OnboardingStatus.IN_PROGRESS
 
-        assert profile.onboarding_diagnostic_status == OnboardingStatus.COMPLETED
+        assert enrollment.onboarding_diagnostic_status == OnboardingStatus.COMPLETED
 
-    def test_when_status_in_progress_then_not_changed(self) -> None:
-        profile = SimpleNamespace(
+    def test_when_enrollment_status_in_progress_then_not_changed(self) -> None:
+        """Test that IN_PROGRESS status remains unchanged when PENDING check fails."""
+        enrollment = SimpleNamespace(
             onboarding_diagnostic_status=OnboardingStatus.IN_PROGRESS,
         )
 
-        if profile.onboarding_diagnostic_status == OnboardingStatus.PENDING:
-            profile.onboarding_diagnostic_status = OnboardingStatus.IN_PROGRESS
+        # Simulate the update logic - should not update if not PENDING
+        if enrollment.onboarding_diagnostic_status == OnboardingStatus.PENDING:
+            enrollment.onboarding_diagnostic_status = OnboardingStatus.IN_PROGRESS
 
-        assert profile.onboarding_diagnostic_status == OnboardingStatus.IN_PROGRESS
+        assert enrollment.onboarding_diagnostic_status == OnboardingStatus.IN_PROGRESS

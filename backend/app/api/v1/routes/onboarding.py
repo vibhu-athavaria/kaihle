@@ -19,9 +19,8 @@ from app.core.questionnaire_config import get_questionnaire_definition
 from app.models.onboarding import StudentLearningProfile
 from app.models.user import UserRole
 from app.schemas.onboarding import (
-    OnboardingStatus as OnboardingStatusSchema,
-)
-from app.schemas.onboarding import (
+    DiagnosticStatusByClass,
+    OnboardingStatusResponse,
     QuestionnaireDefinition,
     QuestionnaireSubmitRequest,
     StudentLearningProfileResponse,
@@ -59,18 +58,18 @@ def get_current_user(request: Request) -> dict[str, Any]:
     return user
 
 
-@router.get("/status", response_model=OnboardingStatusSchema)
+@router.get("/status", response_model=OnboardingStatusResponse)
 async def get_onboarding_status(
     request: Request,
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
+) -> OnboardingStatusResponse:
     """Get the onboarding status for the current user.
 
     Returns learning profile completion status, diagnostics completion status,
-    and overall onboarding status.
+    and overall onboarding status. Includes per-class diagnostic breakdown.
 
     Returns:
-        Onboarding status dictionary.
+        Onboarding status with per-class diagnostics.
     """
     current_user = get_current_user(request)
 
@@ -94,7 +93,20 @@ async def get_onboarding_status(
         )
 
     service = OnboardingService(db)
+
+    # Get base onboarding status
     status_data = await service.get_onboarding_status(current_user["id"])
+
+    # Get per-class diagnostic breakdown
+    diagnostics_by_class_data = await service.get_diagnostic_status_by_class(current_user["id"])
+    diagnostics_by_class = [
+        DiagnosticStatusByClass(
+            class_id=item["class_id"],
+            class_name=item["class_name"],
+            status=item["status"],
+        )
+        for item in diagnostics_by_class_data
+    ]
 
     logger.debug(
         "onboarding_status_retrieved",
@@ -102,7 +114,14 @@ async def get_onboarding_status(
         overall=status_data["overall"],
     )
 
-    return status_data
+    return OnboardingStatusResponse(
+        learning_profile_complete=status_data["learning_profile_complete"],
+        diagnostics_status=status_data["diagnostics_complete"]
+        and "COMPLETED"
+        or ("IN_PROGRESS" if any(d.status != "PENDING" for d in diagnostics_by_class) else "PENDING"),
+        overall=status_data["overall"],
+        diagnostics_by_class=diagnostics_by_class,
+    )
 
 
 @router.get("/questionnaire", response_model=QuestionnaireDefinition)

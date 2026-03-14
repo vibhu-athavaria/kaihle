@@ -34,7 +34,6 @@ from app.models.study_plan import StudyPlan
 from app.models.user import (
     AuthToken,
     AuthTokenType,
-    OnboardingStatus,
     ParentStudent,
     StudentProfile,
     TeacherProfile,
@@ -80,18 +79,21 @@ class TestModelCRUD:
         assert fetched.role == UserRole.STUDENT
 
     async def test_student_profile_crud(self, db_session: AsyncSession, test_user: User) -> None:
-        """Test StudentProfile model can be written and read."""
+        """Test StudentProfile model can be written and read.
+
+        Note: onboarding_diagnostic_status moved to class_enrollments in v2.1.
+        """
         profile = StudentProfile(
             id=uuid.uuid4(),
             user_id=test_user.id,
-            onboarding_diagnostic_status=OnboardingStatus.PENDING,
         )
         db_session.add(profile)
         await db_session.commit()
 
         result = await db_session.execute(select(StudentProfile).where(StudentProfile.id == profile.id))
         fetched = result.scalar_one()
-        assert fetched.onboarding_diagnostic_status == OnboardingStatus.PENDING
+        # StudentProfile no longer has onboarding_diagnostic_status (now in class_enrollments)
+        assert fetched.user_id == test_user.id
 
     async def test_teacher_profile_crud(self, db_session: AsyncSession, test_teacher: User) -> None:
         """Test TeacherProfile model can be written and read."""

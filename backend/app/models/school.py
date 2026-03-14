@@ -6,35 +6,34 @@ Covers: schools, school_curricula, classes, class_enrollments
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String, func
+from sqlalchemy import Boolean, CheckConstraint, Enum, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
-class School(Base, UUIDMixin, TimestampMixin):
-    """One row per tenant. This is the multi-tenancy anchor."""
+class ClassEnrollment(Base):
+    """Many-to-many: students enrolled in classes."""
 
-    __tablename__ = "schools"
+    __tablename__ = "class_enrollments"
 
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
-    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
-    address: Mapped[str | None] = mapped_column(String(500))
-    city: Mapped[str | None] = mapped_column(String(100))
-    country: Mapped[str | None] = mapped_column(String(100))
-    timezone: Mapped[str] = mapped_column(String(50), nullable=False, default="Asia/Singapore")
-    contact_email: Mapped[str | None] = mapped_column(String(255))
-    contact_phone: Mapped[str | None] = mapped_column(String(50))
-    website: Mapped[str | None] = mapped_column(String(255))
-    logo_url: Mapped[str | None] = mapped_column(String(500))
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
-
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('pending', 'active', 'suspended')",
-            name="chk_school_status",
-        ),
+    class_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("classes.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    enrolled_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    onboarding_diagnostic_status: Mapped[str] = mapped_column(
+        Enum("PENDING", "IN_PROGRESS", "COMPLETED", name="onboarding_status", native_enum=False),
+        nullable=False,
+        server_default="PENDING",
     )
 
 
@@ -92,20 +91,26 @@ class Class(Base, UUIDMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
-class ClassEnrollment(Base):
-    """Many-to-many: students enrolled in classes."""
+class School(Base, UUIDMixin, TimestampMixin):
+    """One row per tenant. This is the multi-tenancy anchor."""
 
-    __tablename__ = "class_enrollments"
+    __tablename__ = "schools"
 
-    class_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("classes.id", ondelete="CASCADE"),
-        primary_key=True,
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    address: Mapped[str | None] = mapped_column(String(500))
+    city: Mapped[str | None] = mapped_column(String(100))
+    country: Mapped[str | None] = mapped_column(String(100))
+    timezone: Mapped[str] = mapped_column(String(50), nullable=False, default="Asia/Singapore")
+    contact_email: Mapped[str | None] = mapped_column(String(255))
+    contact_phone: Mapped[str | None] = mapped_column(String(50))
+    website: Mapped[str | None] = mapped_column(String(255))
+    logo_url: Mapped[str | None] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'active', 'suspended')",
+            name="chk_school_status",
+        ),
     )
-    student_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    enrolled_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

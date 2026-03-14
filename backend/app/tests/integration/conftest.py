@@ -33,7 +33,6 @@ from app.models.curriculum import (
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import Class, School
 from app.models.user import (
-    OnboardingStatus,
     StudentProfile,
     User,
     UserRole,
@@ -121,11 +120,13 @@ async def test_user(db_session: AsyncSession, test_school: School) -> User:
 
 @pytest_asyncio.fixture
 async def test_student_profile(db_session: AsyncSession, test_user: User) -> StudentProfile:
-    """Create a test student profile."""
+    """Create a test student profile.
+
+    Note: onboarding_diagnostic_status moved to class_enrollments in v2.1.
+    """
     profile = StudentProfile(
         id=uuid.uuid4(),
         user_id=test_user.id,
-        onboarding_diagnostic_status=OnboardingStatus.PENDING,
     )
     db_session.add(profile)
     await db_session.commit()

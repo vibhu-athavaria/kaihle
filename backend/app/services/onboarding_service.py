@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.questionnaire_config import get_option_by_key
 from app.models.onboarding import StudentLearningProfile
+from app.models.school import Class, ClassEnrollment
 from app.models.user import OnboardingStatus, StudentProfile
 
 logger = structlog.get_logger()
@@ -257,6 +258,7 @@ class OnboardingService:
         """Get the overall onboarding status for a student.
 
         Checks both learning profile completion and diagnostic completion.
+        Uses class_enrollments to determine diagnostic status (v2.1).
 
         Args:
             student_id: The student user ID.
@@ -272,13 +274,9 @@ class OnboardingService:
 
         learning_profile_complete = learning_profile is not None and learning_profile.completed_at is not None
 
-        # Check diagnostic completion
-        result = await self.db.execute(select(StudentProfile).where(StudentProfile.user_id == student_id))
-        student_profile = cast(StudentProfile | None, result.scalar_one_or_none())
-
-        diagnostics_complete = (
-            student_profile is not None and student_profile.onboarding_diagnostic_status == OnboardingStatus.COMPLETED
-        )
+        # Check diagnostic completion using class_enrollments (v2.1)
+        diagnostics_status = await self.get_diagnostic_onboarding_status(student_id)
+        diagnostics_complete = diagnostics_status == OnboardingStatus.COMPLETED
 
         # Calculate overall status
         if learning_profile_complete and diagnostics_complete:
@@ -318,8 +316,6 @@ class OnboardingService:
         Returns:
             True if the student is in one of the teacher's classes.
         """
-        from app.models.school import Class, ClassEnrollment
-
         # Query to check if student is in any class taught by this teacher
         result = await self.db.execute(
             select(ClassEnrollment)
@@ -333,3 +329,142 @@ class OnboardingService:
 
         enrollment = result.scalar_one_or_none()
         return enrollment is not None
+
+    async def get_diagnostic_onboarding_status(
+        self,
+        student_id: UUID,
+    ) -> str:
+        """Get the aggregated diagnostic onboarding status from class_enrollments.
+
+        A student is considered fully diagnostically onboarded when ALL active
+        class_enrollments have onboarding_diagnostic_status = 'COMPLETED'.
+
+        Args:
+            student_id: The student user ID.
+
+        Returns:
+            One of 'PENDING', 'IN_PROGRESS', 'COMPLETED'.
+        """
+        result = await self.db.execute(
+            select(ClassEnrollment.onboarding_diagnostic_status).where(
+                ClassEnrollment.student_id == student_id,
+                ClassEnrollment.is_active.is_(True),
+            )
+        )
+        statuses = result.scalars().all()
+
+        if not statuses:
+            return OnboardingStatus.PENDING
+        if all(s == OnboardingStatus.COMPLETED for s in statuses):
+            return OnboardingStatus.COMPLETED
+        if any(s != OnboardingStatus.PENDING for s in statuses):
+            return OnboardingStatus.IN_PROGRESS
+        return OnboardingStatus.PENDING
+
+    async def get_diagnostic_status_by_class(
+        self,
+        student_id: UUID,
+    ) -> list[dict[str, Any]]:
+        """Get per-class diagnostic status breakdown.
+
+        Args:
+            student_id: The student user ID.
+
+        Returns:
+            List of dictionaries with class_id, class_name, and status.
+        """
+        result = await self.db.execute(
+            select(ClassEnrollment, Class)
+            .join(Class, ClassEnrollment.class_id == Class.id)
+            .where(
+                ClassEnrollment.student_id == student_id,
+                ClassEnrollment.is_active.is_(True),
+            )
+        )
+        rows = result.all()
+
+        return [
+            {
+                "class_id": str(enrollment.class_id),
+                "class_name": class_.name,
+                "status": enrollment.onboarding_diagnostic_status,
+            }
+            for enrollment, class_ in rows
+        ]
+
+    async def check_and_update_onboarding_complete(
+        self,
+        student_id: UUID,
+        class_id: UUID,
+    ) -> bool:
+        """Check if the student completed the diagnostic for a specific class.
+
+        Finds the Tier 1 diagnostic assessment for the class (is_system_generated = TRUE),
+        checks if the student_attempt for that assessment is COMPLETED,
+        and if so, updates the class_enrollment status to COMPLETED.
+
+        Args:
+            student_id: The student user ID.
+            class_id: The class ID.
+
+        Returns:
+            True if the diagnostic was completed and the enrollment status was updated.
+        """
+        from app.models.assessment import Assessment, StudentAttempt
+
+        # Find the Tier 1 diagnostic assessment for this class
+        result = await self.db.execute(
+            select(Assessment).where(
+                Assessment.class_id == class_id,
+                Assessment.is_system_generated.is_(True),
+            )
+        )
+        diagnostic = result.scalar_one_or_none()
+
+        if not diagnostic:
+            logger.warning(
+                "no_diagnostic_found_for_class",
+                student_id=str(student_id),
+                class_id=str(class_id),
+            )
+            return False
+
+        # Check if the student attempt for this diagnostic is COMPLETED
+        attempt_result = await self.db.execute(
+            select(StudentAttempt).where(
+                StudentAttempt.assessment_id == diagnostic.id,
+                StudentAttempt.student_id == student_id,
+            )
+        )
+        attempt = attempt_result.scalar_one_or_none()
+
+        if not attempt or attempt.status != "COMPLETED":
+            return False
+
+        # Update the class_enrollment status to COMPLETED
+        await self.db.execute(
+            select(ClassEnrollment).where(
+                ClassEnrollment.class_id == class_id,
+                ClassEnrollment.student_id == student_id,
+                ClassEnrollment.onboarding_diagnostic_status != OnboardingStatus.COMPLETED,
+            )
+        )
+        # Use an update statement to set the status
+        from sqlalchemy import update
+
+        await self.db.execute(
+            update(ClassEnrollment)
+            .where(
+                ClassEnrollment.class_id == class_id,
+                ClassEnrollment.student_id == student_id,
+                ClassEnrollment.onboarding_diagnostic_status != OnboardingStatus.COMPLETED,
+            )
+            .values(onboarding_diagnostic_status=OnboardingStatus.COMPLETED)
+        )
+
+        logger.info(
+            "onboarding_diagnostic_completed",
+            student_id=str(student_id),
+            class_id=str(class_id),
+        )
+        return True

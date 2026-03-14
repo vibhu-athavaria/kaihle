@@ -1,13 +1,12 @@
 """School management service layer."""
 
 import uuid
-from typing import cast
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.school import Class, ClassEnrollment, School
-from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
+from app.models.user import User, UserRole
 from app.schemas.school import (
     ClassCreate,
     EnrollResponse,
@@ -300,13 +299,17 @@ class SchoolService:
                 self.db.add(enrollment)
                 enrolled += 1
 
-                # 5. Check onboarding status and trigger diagnostics
-                # Only trigger if status is PENDING (not IN_PROGRESS or COMPLETED)
-                result = await self.db.execute(select(StudentProfile).where(StudentProfile.user_id == student_id))
-                # Note: scalar_one_or_none() returns Any due to SQLAlchemy type stubs limitations
-                # The cast clarifies the expected type for the type checker
-                student_profile = cast(StudentProfile | None, result.scalar_one_or_none())
-                if student_profile and student_profile.onboarding_diagnostic_status == OnboardingStatus.PENDING:
+                # 5. Check onboarding status and trigger diagnostics (v2.1: check class_enrollments)
+                # Only trigger if enrollment status is PENDING
+                result = await self.db.execute(
+                    select(ClassEnrollment).where(
+                        ClassEnrollment.class_id == class_id,
+                        ClassEnrollment.student_id == student_id,
+                        ClassEnrollment.is_active.is_(True),
+                    )
+                )
+                enrollment_row = result.scalar_one_or_none()
+                if enrollment_row and enrollment_row.onboarding_diagnostic_status == "PENDING":  # type: ignore[attr-defined]
                     # Trigger onboarding diagnostics task
                     trigger_onboarding_diagnostics(str(student_id), str(class_id))
 

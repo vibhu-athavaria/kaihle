@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
 from app.models.school import Class, ClassEnrollment, School
-from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
+from app.models.user import StudentProfile, User, UserRole
 
 
 @pytest_asyncio.fixture
@@ -46,11 +46,10 @@ async def test_student(db_session: AsyncSession, test_school: School) -> User:
     db_session.add(student)
     await db_session.commit()
 
-    # Create student profile
+    # Create student profile (v2.1: no onboarding_diagnostic_status - it's now in class_enrollments)
     profile = StudentProfile(
         id=uuid.uuid4(),
         user_id=student.id,
-        onboarding_diagnostic_status=OnboardingStatus.PENDING,
     )
     db_session.add(profile)
     await db_session.commit()
@@ -303,11 +302,13 @@ async def test_full_onboarding_flow(
     assert status["diagnostics_complete"] is False
     assert status["overall"] == "IN_PROGRESS"
 
-    # 6. Update diagnostic status to completed
-    result = await db_session.execute(select(StudentProfile).where(StudentProfile.user_id == test_student.id))
-    student_profile = result.scalar_one()
-    student_profile.onboarding_diagnostic_status = OnboardingStatus.COMPLETED
-    await db_session.commit()
+    # 6. Update diagnostic status to completed via class_enrollments (v2.1)
+    # First ensure there's an enrollment to update
+    result = await db_session.execute(select(ClassEnrollment).where(ClassEnrollment.student_id == test_student.id))
+    enrollment = result.scalar_one_or_none()
+    if enrollment:
+        enrollment.onboarding_diagnostic_status = "COMPLETED"
+        await db_session.commit()
 
     # 7. Check final onboarding status
     status = await service.get_onboarding_status(test_student.id)
