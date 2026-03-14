@@ -545,6 +545,9 @@ CREATE TABLE student_profiles (
     -- grade_id: current grade. Also derivable via class_enrollments → classes.
     -- Stored here for fast access without join (e.g. Parent Portal header).
     age                             INT,
+    -- v2.1: is_learning_profile_complete tracks whether student has submitted
+    -- the learning profile questionnaire. Required for dashboard access.
+    is_learning_profile_complete    BOOLEAN NOT NULL DEFAULT FALSE,
     -- NOTE: onboarding_diagnostic_status REMOVED in v2.1 - moved to class_enrollments
     -- A student is fully diagnostically onboarded when ALL active class_enrollments
     -- have onboarding_diagnostic_status = 'COMPLETED'
@@ -560,6 +563,7 @@ COMMENT ON TABLE student_profiles IS
      No redundant curriculum storage.
      v2.1: replaced has_completed_onboarding BOOLEAN + learning_profile JSONB
      with separate student_learning_profiles table.
+     v2.1: added is_learning_profile_complete BOOLEAN to track questionnaire completion.
      onboarding_diagnostic_status moved to class_enrollments table (per-class tracking).';
 
 -- ---------------------------------------------------------------------------

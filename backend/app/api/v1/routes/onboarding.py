@@ -11,10 +11,11 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.deps import CurrentUser, get_current_user
 from app.core.questionnaire_config import get_questionnaire_definition
 from app.models.onboarding import StudentLearningProfile
 from app.models.user import UserRole
@@ -32,35 +33,18 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 
-def get_current_user(request: Request) -> dict[str, Any]:
-    """Extract current user from request state (set by auth middleware).
-
-    This is a temporary implementation until M0-3-T3 auth middleware is complete.
-    The middleware will set request.state.user with user details.
-
-    Args:
-        request: FastAPI request object.
-
-    Returns:
-        Dictionary with user details (id, role, school_id).
-
-    Raises:
-        HTTPException: If user is not authenticated.
-    """
-    user: dict[str, Any] | None = getattr(request.state, "user", None)
-    if not user:
-        # For development, allow testing without auth
-        # In production, this should raise 401
+def _require_student_role(current_user: CurrentUser) -> None:
+    """Helper to enforce student role on endpoints."""
+    if current_user.role != UserRole.STUDENT:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint",
         )
-    return user
 
 
 @router.get("/status", response_model=OnboardingStatusResponse)
 async def get_onboarding_status(
-    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> OnboardingStatusResponse:
     """Get the onboarding status for the current user.
@@ -71,34 +55,15 @@ async def get_onboarding_status(
     Returns:
         Onboarding status with per-class diagnostics.
     """
-    current_user = get_current_user(request)
-
-    role_str = current_user.get("role")
-    if role_str is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can access onboarding status",
-        )
-    try:
-        role = UserRole(role_str)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid user role",
-        )
-    if role != UserRole.STUDENT:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can access onboarding status",
-        )
+    _require_student_role(current_user)
 
     service = OnboardingService(db)
 
     # Get base onboarding status
-    status_data = await service.get_onboarding_status(current_user["id"])
+    status_data = await service.get_onboarding_status(current_user.id)
 
     # Get per-class diagnostic breakdown
-    diagnostics_by_class_data = await service.get_diagnostic_status_by_class(current_user["id"])
+    diagnostics_by_class_data = await service.get_diagnostic_status_by_class(current_user.id)
     diagnostics_by_class = [
         DiagnosticStatusByClass(
             class_id=item["class_id"],
@@ -110,7 +75,7 @@ async def get_onboarding_status(
 
     logger.debug(
         "onboarding_status_retrieved",
-        user_id=str(current_user["id"]),
+        user_id=str(current_user.id),
         overall=status_data["overall"],
     )
 
@@ -126,7 +91,7 @@ async def get_onboarding_status(
 
 @router.get("/questionnaire", response_model=QuestionnaireDefinition)
 async def get_questionnaire(
-    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Get the learning profile questionnaire definition.
 
@@ -136,32 +101,13 @@ async def get_questionnaire(
     Returns:
         Questionnaire definition dictionary.
     """
-    current_user = get_current_user(request)
-
-    role_str = current_user.get("role")
-    if role_str is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can access the questionnaire",
-        )
-    try:
-        role = UserRole(role_str)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid user role",
-        )
-    if role != UserRole.STUDENT:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can access the questionnaire",
-        )
+    _require_student_role(current_user)
 
     questionnaire = get_questionnaire_definition()
 
     logger.debug(
         "questionnaire_retrieved",
-        user_id=str(current_user["id"]),
+        user_id=str(current_user.id),
         version=questionnaire["version"],
     )
 
@@ -174,8 +120,8 @@ async def get_questionnaire(
     status_code=status.HTTP_200_OK,
 )
 async def submit_questionnaire(
-    request: Request,
     submit_data: QuestionnaireSubmitRequest,
+    current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> StudentLearningProfile:
     """Submit questionnaire responses and update learning profile.
@@ -190,26 +136,7 @@ async def submit_questionnaire(
     Returns:
         Updated student learning profile.
     """
-    current_user = get_current_user(request)
-
-    role_str = current_user.get("role")
-    if role_str is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can submit the questionnaire",
-        )
-    try:
-        role = UserRole(role_str)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid user role",
-        )
-    if role != UserRole.STUDENT:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can submit the questionnaire",
-        )
+    _require_student_role(current_user)
 
     service = OnboardingService(db)
 
@@ -217,13 +144,13 @@ async def submit_questionnaire(
         # Convert Pydantic models to dicts for service
         responses = [r.model_dump() for r in submit_data.responses]
         profile = await service.save_questionnaire_response(
-            student_id=current_user["id"],
+            student_id=current_user.id,
             responses=responses,
         )
 
         logger.info(
             "questionnaire_submitted",
-            user_id=str(current_user["id"]),
+            user_id=str(current_user.id),
             profile_id=str(profile.id),
         )
 
@@ -232,7 +159,7 @@ async def submit_questionnaire(
     except ValueError as e:
         logger.error(
             "questionnaire_submit_failed",
-            user_id=str(current_user["id"]),
+            user_id=str(current_user.id),
             error=str(e),
         )
         raise HTTPException(
@@ -243,7 +170,7 @@ async def submit_questionnaire(
 
 @router.get("/learning-profile", response_model=StudentLearningProfileResponse)
 async def get_learning_profile(
-    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
     student_id: UUID | None = Query(None, description="Student ID (required for teachers/admins)"),
     db: AsyncSession = Depends(get_db),
 ) -> StudentLearningProfile:
@@ -259,39 +186,21 @@ async def get_learning_profile(
     Returns:
         Student learning profile.
     """
-    current_user = get_current_user(request)
-    user_id = current_user["id"]
-    user_role_str = current_user.get("role")
-
-    if user_role_str is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User role not found",
-        )
-
-    try:
-        user_role = UserRole(user_role_str)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid user role",
-        )
-
     service = OnboardingService(db)
 
     # Determine which student profile to retrieve
     target_student_id: UUID
 
-    if user_role == UserRole.STUDENT:
+    if current_user.role == UserRole.STUDENT:
         # Students can only view their own profile
-        if student_id is not None and student_id != user_id:
+        if student_id is not None and student_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Students can only view their own learning profile",
             )
-        target_student_id = user_id
+        target_student_id = current_user.id
 
-    elif user_role == UserRole.TEACHER:
+    elif current_user.role == UserRole.TEACHER:
         # Teachers must provide student_id and must teach that student
         if student_id is None:
             raise HTTPException(
@@ -300,7 +209,7 @@ async def get_learning_profile(
             )
 
         # Verify teacher-student relationship
-        is_related = await service.verify_teacher_student_relationship(user_id, student_id)
+        is_related = await service.verify_teacher_student_relationship(current_user.id, student_id)
         if not is_related:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -309,7 +218,7 @@ async def get_learning_profile(
 
         target_student_id = student_id
 
-    elif user_role == UserRole.KAIHLE_ADMIN:
+    elif current_user.role == UserRole.KAIHLE_ADMIN:
         # Admins can view any student's profile
         if student_id is None:
             raise HTTPException(
@@ -336,8 +245,8 @@ async def get_learning_profile(
 
     logger.debug(
         "learning_profile_retrieved",
-        requester_id=str(user_id),
-        requester_role=user_role,
+        requester_id=str(current_user.id),
+        requester_role=current_user.role,
         student_id=str(target_student_id),
     )
 

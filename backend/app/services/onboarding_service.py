@@ -145,6 +145,11 @@ class OnboardingService:
         await self.db.commit()
         await self.db.refresh(learning_profile)
 
+        # Update student_profiles.is_learning_profile_complete (v2.1)
+        if student_profile and not student_profile.is_learning_profile_complete:
+            student_profile.is_learning_profile_complete = True
+            await self.db.commit()
+
         logger.info(
             "questionnaire_response_saved",
             student_id=str(student_id),
@@ -254,42 +259,57 @@ class OnboardingService:
 
         return []
 
-    async def get_onboarding_status(self, student_id: UUID) -> dict[str, Any]:
-        """Get the overall onboarding status for a student.
+    async def get_learning_profile_complete_status(self, student_id: UUID) -> dict[str, Any]:
+        """Get the learning profile completion status for a student.
 
-        Checks both learning profile completion and diagnostic completion.
-        Uses class_enrollments to determine diagnostic status (v2.1).
+        Checks student_profiles.is_learning_profile_complete boolean.
 
         Args:
             student_id: The student user ID.
 
         Returns:
-            Dictionary with learning_profile_complete, diagnostics_complete, and overall status.
+            Dictionary with completed (bool) and completed_at (datetime or None).
         """
-        # Check learning profile completion
-        result = await self.db.execute(
+        result = await self.db.execute(select(StudentProfile).where(StudentProfile.user_id == student_id))
+        student_profile = result.scalar_one_or_none()
+
+        if not student_profile:
+            return {
+                "completed": False,
+                "completed_at": None,
+            }
+
+        # Get the learning profile to return completed_at
+        learning_result = await self.db.execute(
             select(StudentLearningProfile).where(StudentLearningProfile.student_id == student_id)
         )
-        learning_profile = result.scalar_one_or_none()
+        learning_profile = learning_result.scalar_one_or_none()
 
-        learning_profile_complete = learning_profile is not None and learning_profile.completed_at is not None
+        return {
+            "completed": student_profile.is_learning_profile_complete,
+            "completed_at": learning_profile.completed_at if learning_profile else None,
+        }
 
-        # Check diagnostic completion using class_enrollments (v2.1)
-        diagnostics_status = await self.get_diagnostic_onboarding_status(student_id)
-        diagnostics_complete = diagnostics_status == OnboardingStatus.COMPLETED
+    async def get_onboarding_status(self, student_id: UUID) -> dict[str, Any]:
+        """Get the overall onboarding status for a student.
 
-        # Calculate overall status
-        if learning_profile_complete and diagnostics_complete:
-            overall = "COMPLETED"
-        elif learning_profile_complete or diagnostics_complete:
-            overall = "IN_PROGRESS"
-        else:
-            overall = "PENDING"
+        This is a simplified version that only returns learning profile completion status.
+
+        Args:
+            student_id: The student user ID.
+
+        Returns:
+            Dictionary with learning_profile_complete and overall status.
+        """
+        # Check learning profile completion via student_profiles
+        result = await self.db.execute(select(StudentProfile).where(StudentProfile.user_id == student_id))
+        student_profile = result.scalar_one_or_none()
+
+        learning_profile_complete = student_profile.is_learning_profile_complete if student_profile else False
 
         return {
             "learning_profile_complete": learning_profile_complete,
-            "diagnostics_complete": diagnostics_complete,
-            "overall": overall,
+            "overall": "COMPLETED" if learning_profile_complete else "PENDING",
         }
 
     async def get_learning_profile(self, student_id: UUID) -> StudentLearningProfile | None:
@@ -391,6 +411,44 @@ class OnboardingService:
             }
             for enrollment, class_ in rows
         ]
+
+    async def get_class_diagnostic_status(
+        self,
+        student_id: UUID,
+        class_id: UUID,
+    ) -> dict[str, Any]:
+        """Get diagnostic status for a specific class enrollment.
+
+        Args:
+            student_id: The student user ID.
+            class_id: The class ID.
+
+        Returns:
+            Dictionary with class_id and onboarding_diagnostic_status.
+        """
+        result = await self.db.execute(
+            select(ClassEnrollment, Class)
+            .join(Class, ClassEnrollment.class_id == Class.id)
+            .where(
+                ClassEnrollment.student_id == student_id,
+                ClassEnrollment.class_id == class_id,
+                ClassEnrollment.is_active.is_(True),
+            )
+        )
+        row = result.one_or_none()
+
+        if not row:
+            return {
+                "class_id": str(class_id),
+                "onboarding_diagnostic_status": None,
+            }
+
+        enrollment, class_ = row
+        return {
+            "class_id": str(enrollment.class_id),
+            "class_name": class_.name,
+            "onboarding_diagnostic_status": enrollment.onboarding_diagnostic_status,
+        }
 
     async def check_and_update_onboarding_complete(
         self,

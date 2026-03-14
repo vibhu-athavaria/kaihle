@@ -86,13 +86,13 @@ async def get_school(
     SchoolAdmin can see only their own school.
     """
     # Check permissions
-    if current_user.role not in ("KAIHLE_ADMIN", "SCHOOL_ADMIN"):
+    if current_user.role not in (UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions",
         )
 
-    if current_user.role == "SCHOOL_ADMIN" and current_user.school_id != school_id:
+    if current_user.role == UserRole.SCHOOL_ADMIN and current_user.school_id != school_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot access school from different organization",

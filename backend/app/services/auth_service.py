@@ -18,7 +18,7 @@ from app.core.security import (
     store_refresh_token,
     verify_password,
 )
-from app.models.user import AuthToken, User
+from app.models.user import AuthToken, AuthTokenType, User
 from app.schemas.auth import LoginResponse, RegisterResponse, TokenResponse
 
 
@@ -127,7 +127,7 @@ class AuthService:
             select(AuthToken).where(
                 AuthToken.user_id == user_id,
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "MAGIC_LINK",
+                AuthToken.type == AuthTokenType.MAGIC_LINK,
                 AuthToken.used_at.is_(None),
                 AuthToken.expires_at > datetime.now(UTC),
             )
@@ -168,7 +168,7 @@ class AuthService:
         auth_token = await self.db.scalar(
             select(AuthToken).where(
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "REFRESH",
+                AuthToken.type == AuthTokenType.REFRESH,
                 AuthToken.used_at.is_(None),
                 AuthToken.expires_at > datetime.now(UTC),
             )
@@ -189,7 +189,7 @@ class AuthService:
         auth_token = await self.db.scalar(
             select(AuthToken).where(
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "REFRESH",
+                AuthToken.type == AuthTokenType.REFRESH,
             )
         )
         if auth_token:

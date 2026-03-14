@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.school import Class, ClassEnrollment, School
-from app.models.user import User, UserRole
+from app.models.user import OnboardingStatus, User, UserRole
 from app.schemas.school import (
     ClassCreate,
     EnrollResponse,
@@ -309,7 +309,7 @@ class SchoolService:
                     )
                 )
                 enrollment_row = result.scalar_one_or_none()
-                if enrollment_row and enrollment_row.onboarding_diagnostic_status == "PENDING":  # type: ignore[attr-defined]
+                if enrollment_row and enrollment_row.onboarding_diagnostic_status == OnboardingStatus.PENDING:  # type: ignore[attr-defined]
                     # Trigger onboarding diagnostics task
                     trigger_onboarding_diagnostics(str(student_id), str(class_id))
 

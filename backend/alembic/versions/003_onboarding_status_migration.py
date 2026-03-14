@@ -1,12 +1,15 @@
-"""Migrate onboarding_diagnostic_status from student_profiles to class_enrollments
+"""Migrate onboarding_diagnostic_status and add learning profile completion flag
 
 Revision ID: 003_onboarding_status_migration
 Revises: 002_nullable_created_by
 Create Date: 2026-03-14
 
-This migration moves the onboarding diagnostic status tracking from the global
-student_profiles table to class_enrollments. This allows tracking onboarding
-status per-class, rather than globally per-student.
+This migration:
+1. Moves the onboarding diagnostic status tracking from the global student_profiles
+   table to class_enrollments. This allows tracking onboarding status per-class,
+   rather than globally per-student.
+2. Adds is_learning_profile_complete boolean column to student_profiles to track
+   whether the student has completed the learning profile questionnaire.
 
 A student is considered fully onboarded when ALL active class_enrollments rows
 have onboarding_diagnostic_status = 'COMPLETED'.
@@ -26,7 +29,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # Add onboarding_diagnostic_status column to class_enrollments
+    # Step 1: Add onboarding_diagnostic_status column to class_enrollments
     # Use the existing onboarding_status enum type
     op.add_column(
         "class_enrollments",
@@ -49,9 +52,23 @@ def upgrade() -> None:
     # First, we need to drop the column - the default will handle existing rows
     op.drop_column("student_profiles", "onboarding_diagnostic_status")
 
+    # Step 2: Add is_learning_profile_complete to student_profiles
+    op.add_column(
+        "student_profiles",
+        sa.Column(
+            "is_learning_profile_complete",
+            sa.Boolean(),
+            nullable=False,
+            server_default="FALSE",
+        ),
+    )
+
 
 def downgrade() -> None:
-    # Add back onboarding_diagnostic_status to student_profiles
+    # Step 1: Remove is_learning_profile_complete
+    op.drop_column("student_profiles", "is_learning_profile_complete")
+
+    # Step 2: Add back onboarding_diagnostic_status to student_profiles
     op.add_column(
         "student_profiles",
         sa.Column(

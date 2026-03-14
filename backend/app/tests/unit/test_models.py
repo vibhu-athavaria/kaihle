@@ -5,7 +5,7 @@ import uuid
 from app.models.assessment import Assessment, AssessmentStatus
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import ClassEnrollment
-from app.models.user import StudentProfile
+from app.models.user import OnboardingStatus, StudentProfile
 
 
 class TestStudentLearningProfile:
@@ -89,10 +89,10 @@ class TestClassEnrollment:
         enrollment = ClassEnrollment(
             class_id=uuid.uuid4(),
             student_id=uuid.uuid4(),
-            onboarding_diagnostic_status="COMPLETED",
+            onboarding_diagnostic_status=OnboardingStatus.COMPLETED,
         )
 
-        assert enrollment.onboarding_diagnostic_status == "COMPLETED"
+        assert enrollment.onboarding_diagnostic_status == OnboardingStatus.COMPLETED
 
     def test_column_is_not_nullable(self) -> None:
         """Test that onboarding_diagnostic_status is NOT NULL."""

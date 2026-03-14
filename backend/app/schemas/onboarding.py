@@ -80,13 +80,36 @@ class DiagnosticStatusByClass(BaseModel):
     status: str = Field(..., description="Diagnostic status for this class enrollment")
 
 
+class LearningProfileStatusResponse(BaseModel):
+    """Schema for learning profile completion status."""
+
+    completed: bool = Field(..., description="Whether learning profile questionnaire is completed")
+    completed_at: datetime | None = Field(None, description="Timestamp when completed (null if not completed)")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ClassDiagnosticStatusResponse(BaseModel):
+    """Schema for diagnostic status of a specific class enrollment."""
+
+    class_id: UUID = Field(..., description="Class identifier")
+    class_name: str = Field(..., description="Class name")
+    onboarding_diagnostic_status: str | None = Field(
+        None, description="Diagnostic status: PENDING, IN_PROGRESS, or COMPLETED"
+    )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class OnboardingStatusResponse(BaseModel):
-    """Extended schema for onboarding status with per-class breakdown."""
+    """Schema for onboarding status response.
+
+    Returns learning profile completion status, diagnostics completion status,
+    and overall onboarding status. Includes per-class diagnostic breakdown.
+    """
 
     learning_profile_complete: bool = Field(..., description="True if learning profile questionnaire is submitted")
-    diagnostics_status: str = Field(
-        ..., pattern="^(PENDING|IN_PROGRESS|COMPLETED)$", description="Aggregated diagnostic status"
-    )
+    diagnostics_status: str = Field(..., description="Diagnostic status: PENDING, IN_PROGRESS, or COMPLETED")
     overall: str = Field(..., pattern="^(PENDING|IN_PROGRESS|COMPLETED)$")
     diagnostics_by_class: list[DiagnosticStatusByClass] = Field(
         default_factory=list, description="Per-class diagnostic status breakdown"
