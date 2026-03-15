@@ -11,8 +11,9 @@ This migration:
 2. Adds is_learning_profile_complete boolean column to student_profiles to track
    whether the student has completed the learning profile questionnaire.
 
-A student is considered fully onboarded when ALL active class_enrollments rows
-have onboarding_diagnostic_status = 'COMPLETED'.
+A student is considered fully onboarded when they complete the learning profile
+questionnaire (is_learning_profile_complete = TRUE). The diagnostic status in
+class_enrollments tracks per-class diagnostic assessment completion.
 """
 
 from collections.abc import Sequence
@@ -42,10 +43,12 @@ def upgrade() -> None:
     )
 
     # Create index for efficient gate checks on onboarding status
+    # Use CONCURRENTLY to avoid table locks on large datasets
     op.create_index(
         "idx_enrollments_onboarding_status",
         "class_enrollments",
         ["student_id", "onboarding_diagnostic_status"],
+        postgresql_concurrently=True,
     )
 
     # Remove onboarding_diagnostic_status column from student_profiles
@@ -80,5 +83,6 @@ def downgrade() -> None:
     )
 
     # Remove the column from class_enrollments
-    op.drop_index("idx_enrollments_onboarding_status", table_name="class_enrollments")
+    # Use CONCURRENTLY to avoid table locks on large datasets
+    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_enrollments_onboarding_status")
     op.drop_column("class_enrollments", "onboarding_diagnostic_status")

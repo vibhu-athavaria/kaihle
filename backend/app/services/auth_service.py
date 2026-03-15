@@ -23,6 +23,18 @@ from app.models.user import AuthToken, AuthTokenType, User
 from app.schemas.auth import LoginResponse, RegisterResponse, TokenResponse
 
 
+class SchoolNotFoundError(Exception):
+    """Raised when a school is not found."""
+
+    pass
+
+
+class AuthServiceError(Exception):
+    """Base exception for auth service errors."""
+
+    pass
+
+
 class AuthService:
     """Service for all authentication operations."""
 
@@ -55,7 +67,7 @@ class AuthService:
         if school_id:
             school = await self.db.get(School, school_id)
             if not school:
-                raise ValueError("School not found")
+                raise SchoolNotFoundError(f"School with id {school_id} not found")
 
         hashed = hash_password(password)
         user = User(

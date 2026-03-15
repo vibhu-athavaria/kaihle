@@ -15,7 +15,7 @@ from app.schemas.auth import (
     RegisterResponse,
     TokenResponse,
 )
-from app.services.auth_service import AuthService
+from app.services.auth_service import AuthService, SchoolNotFoundError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -33,11 +33,10 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
             first_name=body.first_name,
             last_name=body.last_name,
         )
+    except SchoolNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
-        error_msg = str(e)
-        if error_msg == "School not found":
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error_msg)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 @router.post("/login", response_model=LoginResponse)
