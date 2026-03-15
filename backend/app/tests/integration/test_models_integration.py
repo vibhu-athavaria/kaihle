@@ -493,9 +493,10 @@ class TestModelCRUD:
         test_user: User,
         test_class: Class,
         test_teacher: User,
+        test_grade: Grade,
     ) -> None:
         """Test StudyPlan model can be written and read."""
-        # Need a subtopic first
+        # Use existing test_grade fixture to avoid unique constraint violations
         subject = Subject(
             id=uuid.uuid4(),
             name="Math",
@@ -503,16 +504,6 @@ class TestModelCRUD:
             is_active=True,
         )
         db_session.add(subject)
-        await db_session.commit()
-
-        level = random.randint(1, 13)
-        grade = Grade(
-            id=uuid.uuid4(),
-            name=f"Grade {level}",
-            level=level,
-            is_active=True,
-        )
-        db_session.add(grade)
         await db_session.commit()
 
         topic = Topic(
@@ -537,7 +528,7 @@ class TestModelCRUD:
             id=uuid.uuid4(),
             curriculum_id=curriculum.id,
             subject_id=subject.id,
-            grade_id=grade.id,
+            grade_id=test_grade.id,
             topic_id=topic.id,
         )
         db_session.add(ct)
