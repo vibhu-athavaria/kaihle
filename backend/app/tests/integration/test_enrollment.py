@@ -373,8 +373,8 @@ async def test_enroll_students_when_onboarding_pending_then_celery_task_fired(
         assert response.status_code == 200
 
         # Verify task was called for student with PENDING status
-        mock_task.assert_called_once()
-        call_args = mock_task.call_args
+        mock_task.delay.assert_called_once()
+        call_args = mock_task.delay.call_args
         assert str(students[0].id) in str(call_args)
 
 
@@ -412,7 +412,7 @@ async def test_enroll_students_when_onboarding_in_progress_then_celery_task_not_
 
     # Assert - task should be called for new enrollment (default PENDING status)
     assert response.status_code == 200
-    mock_task.assert_called_once()
+    mock_task.delay.assert_called_once()
 
 
 @pytest.mark.asyncio
