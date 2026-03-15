@@ -293,23 +293,32 @@ class OnboardingService:
     async def get_onboarding_status(self, student_id: UUID) -> dict[str, Any]:
         """Get the overall onboarding status for a student.
 
-        This is a simplified version that only returns learning profile completion status.
+        Overall status is based on learning profile completion only.
+        Diagnostic status is tracked separately and does not affect dashboard access.
 
         Args:
             student_id: The student user ID.
 
         Returns:
-            Dictionary with learning_profile_complete and overall status.
+            Dictionary with learning_profile_complete, diagnostics_complete, and overall status.
         """
         # Check learning profile completion via student_profiles
         result = await self.db.execute(select(StudentProfile).where(StudentProfile.user_id == student_id))
         student_profile = result.scalar_one_or_none()
-
         learning_profile_complete = student_profile.is_learning_profile_complete if student_profile else False
+
+        # Get diagnostic completion status from class_enrollments (for information only)
+        diagnostics_complete = await self.get_diagnostic_onboarding_status(student_id) == OnboardingStatus.COMPLETED
+
+        # Overall status for dashboard access is based on learning profile only
+        # - COMPLETED: learning profile finished
+        # - PENDING: learning profile not finished
+        overall = "COMPLETED" if learning_profile_complete else "PENDING"
 
         return {
             "learning_profile_complete": learning_profile_complete,
-            "overall": "COMPLETED" if learning_profile_complete else "PENDING",
+            "diagnostics_complete": diagnostics_complete,
+            "overall": overall,
         }
 
     async def get_learning_profile(self, student_id: UUID) -> StudentLearningProfile | None:

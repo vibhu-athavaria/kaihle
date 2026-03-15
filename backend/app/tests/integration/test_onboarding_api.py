@@ -8,28 +8,16 @@ Tests cover:
 """
 
 import uuid
-from collections.abc import AsyncGenerator
 from typing import Any
 
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.main import app
+from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.school import Class, ClassEnrollment, School
 from app.models.user import StudentProfile, User, UserRole
-
-
-@pytest_asyncio.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    """Create an async test client."""
-    from httpx import ASGITransport, AsyncClient
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
 
 
 @pytest_asyncio.fixture
@@ -46,7 +34,6 @@ async def test_student(db_session: AsyncSession, test_school: School) -> User:
     db_session.add(student)
     await db_session.commit()
 
-    # Create student profile (v2.1: no onboarding_diagnostic_status - it's now in class_enrollments)
     profile = StudentProfile(
         id=uuid.uuid4(),
         user_id=student.id,
@@ -252,6 +239,10 @@ async def test_full_onboarding_flow(
     db_session: AsyncSession,
     test_school: School,
     test_student: User,
+    test_grade: Grade,
+    test_subject: Subject,
+    test_curriculum: Curriculum,
+    test_teacher: User,
 ) -> None:
     """Test the complete onboarding flow end-to-end.
 
@@ -300,15 +291,36 @@ async def test_full_onboarding_flow(
     status = await service.get_onboarding_status(test_student.id)
     assert status["learning_profile_complete"] is True
     assert status["diagnostics_complete"] is False
-    assert status["overall"] == "IN_PROGRESS"
+    assert status["overall"] == "COMPLETED"
 
     # 6. Update diagnostic status to completed via class_enrollments (v2.1)
-    # First ensure there's an enrollment to update
-    result = await db_session.execute(select(ClassEnrollment).where(ClassEnrollment.student_id == test_student.id))
-    enrollment = result.scalar_one_or_none()
-    if enrollment:
-        enrollment.onboarding_diagnostic_status = "COMPLETED"
-        await db_session.commit()
+    # Create a class and enroll the student
+    test_class = Class(
+        id=uuid.uuid4(),
+        school_id=test_school.id,
+        grade_id=test_grade.id,
+        subject_id=test_subject.id,
+        curriculum_id=test_curriculum.id,
+        teacher_id=test_teacher.id,
+        name="Test Class",
+        academic_year="2026",
+        is_active=True,
+    )
+    db_session.add(test_class)
+    await db_session.flush()
+
+    enrollment = ClassEnrollment(
+        class_id=test_class.id,
+        student_id=test_student.id,
+        is_active=True,
+        onboarding_diagnostic_status="PENDING",
+    )
+    db_session.add(enrollment)
+    await db_session.commit()
+
+    # Now update the enrollment status to COMPLETED
+    enrollment.onboarding_diagnostic_status = "COMPLETED"
+    await db_session.commit()
 
     # 7. Check final onboarding status
     status = await service.get_onboarding_status(test_student.id)
