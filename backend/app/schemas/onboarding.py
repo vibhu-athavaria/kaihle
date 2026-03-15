@@ -107,20 +107,6 @@ class QuestionnaireDefinition(BaseModel):
     questions: list[QuestionnaireQuestion] = Field(..., description="List of questions")
 
 
-class OnboardingStatus(BaseModel):
-    """Schema for onboarding status response.
-
-    Overall status:
-    - COMPLETED: both profile and diagnostics complete
-    - IN_PROGRESS: either profile or diagnostics started
-    - PENDING: neither started
-    """
-
-    learning_profile_complete: bool = Field(..., description="True if learning profile questionnaire is submitted")
-    diagnostics_complete: bool = Field(..., description="True if all tier-1 diagnostics are completed")
-    overall: str = Field(..., pattern="^(PENDING|IN_PROGRESS|COMPLETED)$")
-
-
 class DiagnosticStatusByClass(BaseModel):
     """Schema for per-class diagnostic status breakdown."""
 
@@ -138,18 +124,6 @@ class LearningProfileStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ClassDiagnosticStatusResponse(BaseModel):
-    """Schema for diagnostic status of a specific class enrollment."""
-
-    class_id: UUID = Field(..., description="Class identifier")
-    class_name: str = Field(..., description="Class name")
-    onboarding_diagnostic_status: str | None = Field(
-        None, description="Diagnostic status: PENDING, IN_PROGRESS, or COMPLETED"
-    )
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class OnboardingStatusResponse(BaseModel):
     """Schema for onboarding status response.
 
@@ -158,11 +132,22 @@ class OnboardingStatusResponse(BaseModel):
     """
 
     learning_profile_complete: bool = Field(..., description="True if learning profile questionnaire is submitted")
-    diagnostics_status: str = Field(..., description="Diagnostic status: PENDING, IN_PROGRESS, or COMPLETED")
-    overall: str = Field(..., pattern="^(PENDING|IN_PROGRESS|COMPLETED)$")
     diagnostics_by_class: list[DiagnosticStatusByClass] = Field(
         default_factory=list, description="Per-class diagnostic status breakdown"
     )
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OnboardingPendingResponse(BaseModel):
+    """Schema for pending onboarding status response.
+
+    Returns list of students who have not completed their learning profile
+    """
+
+    student_id: UUID
+    student_name: str = Field(..., description="Student name")
+    learning_profile_complete: bool = Field(..., description="True if learning profile questionnaire is submitted")
 
     model_config = ConfigDict(from_attributes=True)
 

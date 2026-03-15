@@ -179,6 +179,23 @@ async def another_school_admin(db_session: AsyncSession, another_school: School)
 
 
 @pytest.fixture
+async def other_teacher(db_session: AsyncSession, test_school: School) -> User:
+    """Create a other teacher user."""
+    teacher = User(
+        id=uuid.uuid4(),
+        school_id=test_school.id,
+        email=f"other-teacher-{uuid.uuid4().hex[:8]}@example.com",
+        first_name="Other",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(teacher)
+    await db_session.commit()
+    return teacher
+
+
+@pytest.fixture
 async def another_school_class(
     db_session: AsyncSession,
     another_school: School,
@@ -240,34 +257,37 @@ async def test_enroll_01_school_admin_enrolls_valid_students_returns_200(
 
 
 @pytest.mark.asyncio
-async def test_enroll_02_kaihle_admin_enrolls_students_returns_200(
+async def test_enroll_03_teacher_enrolls_students_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
     test_school: School,
-    kaihle_admin: User,
+    teacher: User,
     class_with_teacher: Class,
     students: list[User],
     student_profiles: list[StudentProfile],
 ) -> None:
-    """ENROLL-02: KaihleAdmin enrolls students → 200."""
-    headers = auth_header(kaihle_admin)
+    """ENROLL-03: teacher enrolls students → 200."""
+    headers = auth_header(teacher)
     enroll_data: dict = {
         "student_ids": [str(students[0].id)],
     }
 
-    response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
-        json=enroll_data,
-        headers=headers,
-    )
+    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+        response = await client.post(
+            f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+            json=enroll_data,
+            headers=headers,
+        )
 
     assert response.status_code == 200
     result = response.json()
     assert result["enrolled"] == 1
+    assert result["skipped"] == 0
+    assert len(result["errors"]) == 0
 
 
 @pytest.mark.asyncio
-async def test_enroll_03_enroll_multiple_students_returns_correct_count(
+async def test_enroll_04_enroll_multiple_students_returns_correct_count(
     client: AsyncClient,
     db_session: AsyncSession,
     test_school: School,
@@ -276,7 +296,7 @@ async def test_enroll_03_enroll_multiple_students_returns_correct_count(
     students: list[User],
     student_profiles: list[StudentProfile],
 ) -> None:
-    """ENROLL-03: Enroll multiple students at once → 200, correct count."""
+    """ENROLL-04: Enroll multiple students at once → 200, correct count."""
     headers = auth_header(school_admin)
     enroll_data: dict = {
         "student_ids": [str(s.id) for s in students[:3]],
@@ -297,7 +317,7 @@ async def test_enroll_03_enroll_multiple_students_returns_correct_count(
 
 
 @pytest.mark.asyncio
-async def test_enroll_04_enroll_student_triggers_diagnostic_status_pending(
+async def test_enroll_05_enroll_student_triggers_diagnostic_status_pending(
     client: AsyncClient,
     db_session: AsyncSession,
     test_school: School,
@@ -306,7 +326,7 @@ async def test_enroll_04_enroll_student_triggers_diagnostic_status_pending(
     students: list[User],
     student_profiles: list[StudentProfile],
 ) -> None:
-    """ENROLL-04: Enroll student triggers diagnostic status → enrollment status = PENDING."""
+    """ENROLL-05: Enroll student triggers diagnostic status → enrollment status = PENDING."""
     headers = auth_header(school_admin)
     enroll_data: dict = {
         "student_ids": [str(students[0].id)],
@@ -338,17 +358,17 @@ async def test_enroll_04_enroll_student_triggers_diagnostic_status_pending(
 
 
 @pytest.mark.asyncio
-async def test_enroll_05_teacher_tries_to_enroll_returns_403(
+async def test_enroll_kaihle_admin_enrolls_students_returns_403(
     client: AsyncClient,
     db_session: AsyncSession,
     test_school: School,
-    teacher: User,
+    kaihle_admin: User,
     class_with_teacher: Class,
     students: list[User],
     student_profiles: list[StudentProfile],
 ) -> None:
-    """ENROLL-05: Teacher tries to enroll → 403."""
-    headers = auth_header(teacher)
+    """ENROLL: KaihleAdmin enrolls students → 403."""
+    headers = auth_header(kaihle_admin)
     enroll_data: dict = {
         "student_ids": [str(students[0].id)],
     }
@@ -360,7 +380,32 @@ async def test_enroll_05_teacher_tries_to_enroll_returns_403(
     )
 
     assert response.status_code == 403
-    assert "Only SchoolAdmin or KaihleAdmin can enroll students" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_enroll_teacher_tries_to_enroll_returns_403(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    test_school: School,
+    other_teacher: User,
+    class_with_teacher: Class,
+    students: list[User],
+    student_profiles: list[StudentProfile],
+) -> None:
+    """ENROLL: Teacher tries to enroll → 403."""
+    headers = auth_header(other_teacher)
+    enroll_data: dict = {
+        "student_ids": [str(students[0].id)],
+    }
+
+    response = await client.post(
+        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        json=enroll_data,
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    assert "You can only enroll students in your own classes" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.school import Class, ClassEnrollment, School
 from app.models.user import StudentProfile, User, UserRole
+from app.services.onboarding_service import OnboardingService
 
 
 @pytest_asyncio.fixture
@@ -220,20 +221,6 @@ class TestGetLearningProfile:
         assert response.status_code == 401
 
 
-class TestGetOnboardingStatus:
-    """Tests for GET /api/v1/onboarding/status."""
-
-    @pytest.mark.asyncio
-    async def test_get_onboarding_status_when_not_complete_then_returns_pending(
-        self, client: AsyncClient, test_student: User
-    ) -> None:
-        """Test that status endpoint returns pending for new students."""
-        response = await client.get("/api/v1/onboarding/status")
-
-        # Without auth, should get 401
-        assert response.status_code == 401
-
-
 @pytest.mark.asyncio
 async def test_full_onboarding_flow(
     db_session: AsyncSession,
@@ -249,7 +236,6 @@ async def test_full_onboarding_flow(
     This test uses the service layer directly since auth middleware
     is not yet implemented (M0-3-T3).
     """
-    from app.services.onboarding_service import OnboardingService
 
     service = OnboardingService(db_session)
 
@@ -262,8 +248,7 @@ async def test_full_onboarding_flow(
     # 2. Check initial onboarding status
     status = await service.get_onboarding_status(test_student.id)
     assert status["learning_profile_complete"] is False
-    assert status["diagnostics_complete"] is False
-    assert status["overall"] == "PENDING"
+    assert len(status["diagnostics_by_class"]) == 0
 
     # 3. Submit questionnaire responses
     responses: list[dict[str, Any]] = [
@@ -290,8 +275,7 @@ async def test_full_onboarding_flow(
     # 5. Check onboarding status after profile completion
     status = await service.get_onboarding_status(test_student.id)
     assert status["learning_profile_complete"] is True
-    assert status["diagnostics_complete"] is False
-    assert status["overall"] == "COMPLETED"
+    assert len(status["diagnostics_by_class"]) == 0
 
     # 6. Update diagnostic status to completed via class_enrollments (v2.1)
     # Create a class and enroll the student
@@ -325,8 +309,7 @@ async def test_full_onboarding_flow(
     # 7. Check final onboarding status
     status = await service.get_onboarding_status(test_student.id)
     assert status["learning_profile_complete"] is True
-    assert status["diagnostics_complete"] is True
-    assert status["overall"] == "COMPLETED"
+    assert len(status["diagnostics_by_class"]) == 1
 
     # 8. Re-submit (idempotent check)
     reupdated_profile = await service.save_questionnaire_response(test_student.id, responses)

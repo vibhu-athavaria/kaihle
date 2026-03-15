@@ -467,41 +467,10 @@ class TestGetOnboardingStatus:
         status = await service.get_onboarding_status(student_id)
 
         assert status["learning_profile_complete"] is True
-        assert status["diagnostics_complete"] is False
-        assert status["overall"] == "COMPLETED"
+        assert len(status["diagnostics_by_class"]) == 0
 
-    async def test_when_learning_profile_not_complete_then_overall_pending(
-        self, service: OnboardingService, student_id: uuid.UUID
-    ) -> None:
-        """Test that overall=PENDING when learning profile is not complete."""
-        # Create student profile with is_learning_profile_complete = False
-        student_profile = StudentProfile(
-            id=uuid.uuid4(),
-            user_id=student_id,
-            is_learning_profile_complete=False,
-        )
-
-        # Mock the database queries:
-        # 1. First call: StudentProfile query
-        # 2. Second call: ClassEnrollment diagnostic status query (returns empty list = no enrollments)
-        mock_results = [
-            MagicMock(scalar_one_or_none=MagicMock(return_value=student_profile)),  # StudentProfile query
-            MagicMock(
-                scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
-            ),  # ClassEnrollment query
-        ]
-        service.db.execute = AsyncMock(side_effect=mock_results)  # type: ignore[method-assign]
-
-        status = await service.get_onboarding_status(student_id)
-
-        assert status["learning_profile_complete"] is False
-        assert status["diagnostics_complete"] is False
-        assert status["overall"] == "PENDING"
-
-    async def test_when_no_student_profile_then_pending(
-        self, service: OnboardingService, student_id: uuid.UUID
-    ) -> None:
-        """Test that overall=PENDING when student profile doesn't exist."""
+    async def test_when_no_student_profile_then_false(self, service: OnboardingService, student_id: uuid.UUID) -> None:
+        """Test that learning_profile_complete return false when student profile doesn't exist."""
         # Mock the database queries:
         # 1. First call: StudentProfile query (returns None = no profile)
         # 2. Second call: ClassEnrollment diagnostic status query (returns empty list)
@@ -516,8 +485,7 @@ class TestGetOnboardingStatus:
         status = await service.get_onboarding_status(student_id)
 
         assert status["learning_profile_complete"] is False
-        assert status["diagnostics_complete"] is False
-        assert status["overall"] == "PENDING"
+        assert len(status["diagnostics_by_class"]) == 0
 
 
 @pytest.mark.asyncio

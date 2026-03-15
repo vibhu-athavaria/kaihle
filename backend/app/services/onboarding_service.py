@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.questionnaire_config import get_option_by_key
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import Class, ClassEnrollment
-from app.models.user import OnboardingStatus, StudentProfile
+from app.models.user import OnboardingStatus, StudentProfile, User
 
 logger = structlog.get_logger()
 
@@ -111,8 +111,6 @@ class OnboardingService:
 
         if not learning_profile:
             # Need to get school_id from user record
-            from app.models.user import User
-
             user_result = await self.db.execute(select(User).where(User.id == student_id))
             user = user_result.scalar_one_or_none()
 
@@ -291,35 +289,24 @@ class OnboardingService:
         }
 
     async def get_onboarding_status(self, student_id: UUID) -> dict[str, Any]:
-        """Get the overall onboarding status for a student.
-
-        Overall status is based on learning profile completion only.
-        Diagnostic status is tracked separately and does not affect dashboard access.
+        """Get the learning profile complete status and each class enrolle class
+         diagnostic completion status
 
         Args:
             student_id: The student user ID.
 
         Returns:
-            Dictionary with learning_profile_complete, diagnostics_complete, and overall status.
+            Dictionary with learning_profile_complete and diagnostics_by_class
         """
         # Check learning profile completion via student_profiles
         result = await self.db.execute(select(StudentProfile).where(StudentProfile.user_id == student_id))
         student_profile = result.scalar_one_or_none()
         learning_profile_complete = student_profile.is_learning_profile_complete if student_profile else False
 
-        # Get diagnostic completion status from class_enrollments (for information only)
-        diagnostics_complete = await self.get_diagnostic_onboarding_status(student_id) == OnboardingStatus.COMPLETED
+        # Get diagnostic completion status per class_enrollments (for information only)
+        diagnostics_by_class = await self.get_diagnostic_status_by_class(student_id)
 
-        # Overall status for dashboard access is based on learning profile only
-        # - COMPLETED: learning profile finished
-        # - PENDING: learning profile not finished
-        overall = "COMPLETED" if learning_profile_complete else "PENDING"
-
-        return {
-            "learning_profile_complete": learning_profile_complete,
-            "diagnostics_complete": diagnostics_complete,
-            "overall": overall,
-        }
+        return {"learning_profile_complete": learning_profile_complete, "diagnostics_by_class": diagnostics_by_class}
 
     async def get_learning_profile(self, student_id: UUID) -> StudentLearningProfile | None:
         """Get a student's learning profile.
@@ -363,10 +350,7 @@ class OnboardingService:
         self,
         student_id: UUID,
     ) -> str:
-        """Get the aggregated diagnostic onboarding status from class_enrollments.
-
-        A student is considered fully diagnostically onboarded when ALL active
-        class_enrollments have onboarding_diagnostic_status = 'COMPLETED'.
+        """Get the diagnostic onboarding status from class_enrollments.
 
         Args:
             student_id: The student user ID.

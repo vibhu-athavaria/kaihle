@@ -198,23 +198,6 @@ class TestGetQuestionnaire:
         assert len(data["questions"]) == 6
 
     @pytest.mark.asyncio
-    async def test_quest_02_authenticated_teacher_retrieves_questionnaire(
-        self,
-        client: AsyncClient,
-        auth_headers_teacher: dict[str, str],
-    ) -> None:
-        """QUEST-02: Authenticated teacher retrieves questionnaire → 200."""
-        response = await client.get(
-            "/api/v1/onboarding/questionnaire",
-            headers=auth_headers_teacher,
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "version" in data
-        assert "questions" in data
-
-    @pytest.mark.asyncio
     async def test_quest_03_authenticated_kaihle_admin_retrieves_questionnaire(
         self,
         client: AsyncClient,

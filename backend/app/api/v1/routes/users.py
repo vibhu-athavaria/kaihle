@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, get_current_user
+from app.core.deps import CurrentUser, require_role
 from app.models.user import UserRole
 from app.schemas.user import UserInvite, UserListResponse, UserResponse, UserUpdate
 from app.services.user_service import UserService
@@ -20,14 +20,11 @@ def _check_school_access(school_id: uuid.UUID, current_user: CurrentUser) -> Non
     SchoolAdmin can only access own school.
     Teachers and Parents cannot manage users (403).
     """
-    # KaihleAdmin can access any school
-    if current_user.role == UserRole.KAIHLE_ADMIN:
-        return
     # SchoolAdmin can only access their own school
-    if current_user.role == UserRole.SCHOOL_ADMIN and current_user.school_id == school_id:
-        return
+    if current_user.role == UserRole.SCHOOL_ADMIN and current_user.school_id != school_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
 
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    return
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -35,7 +32,7 @@ async def invite_user(
     school_id: uuid.UUID,
     body: UserInvite,
     request: Request,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     """
@@ -66,7 +63,7 @@ async def list_users(
     role: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> UserListResponse:
     """List users in a school with optional role filter and pagination."""
@@ -86,7 +83,7 @@ async def update_user(
     school_id: uuid.UUID,
     user_id: uuid.UUID,
     body: UserUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     """Update user information."""
@@ -103,7 +100,7 @@ async def update_user(
 async def deactivate_user(
     school_id: uuid.UUID,
     user_id: uuid.UUID,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Deactivate a user (soft delete)."""
