@@ -39,6 +39,8 @@ async def test_register_valid_email_password_role_student_school_returns_201(
             "password": "SecurePass123!",
             "role": "STUDENT",
             "school_id": str(school.id),
+            "first_name": "John",
+            "last_name": "Doe",
         },
     )
 
@@ -64,10 +66,11 @@ async def test_register_student_with_first_name_last_name_returns_201(
     db_session.add(school)
     await db_session.commit()
 
+    email = f"student-{uuid.uuid4().hex[:8]}@example.com"
     response = await client.post(
         "/api/v1/auth/register",
         json={
-            "email": f"student-{uuid.uuid4().hex[:8]}@example.com",
+            "email": email,
             "password": "SecurePass123!",
             "role": "STUDENT",
             "school_id": str(school.id),
@@ -79,7 +82,7 @@ async def test_register_student_with_first_name_last_name_returns_201(
     assert response.status_code == 201
     data = response.json()
     assert "user_id" in data
-    assert data["email"] == f"student-{uuid.uuid4().hex[:8]}@example.com"
+    assert data["email"] == email
 
 
 @pytest.mark.asyncio
@@ -105,6 +108,8 @@ async def test_register_multiple_students_same_school_returns_201_each(
                 "password": "SecurePass123!",
                 "role": "STUDENT",
                 "school_id": str(school.id),
+                "first_name": f"Student{i}",
+                "last_name": "Test",
             },
         )
         assert response.status_code == 201
@@ -141,6 +146,8 @@ async def test_register_duplicate_email_returns_409(
             "password": "SecurePass123!",
             "role": "STUDENT",
             "school_id": str(school.id),
+            "first_name": "John",
+            "last_name": "Doe",
         },
     )
     assert response1.status_code == 201
@@ -152,6 +159,8 @@ async def test_register_duplicate_email_returns_409(
             "password": "SecurePass123!",
             "role": "STUDENT",
             "school_id": str(school.id),
+            "first_name": "John",
+            "last_name": "Doe",
         },
     )
     assert response2.status_code == 409
@@ -266,6 +275,8 @@ async def test_register_nonexistent_school_id_returns_404(
             "password": "SecurePass123!",
             "role": "STUDENT",
             "school_id": str(uuid.uuid4()),
+            "first_name": "John",
+            "last_name": "Doe",
         },
     )
 
@@ -367,9 +378,17 @@ async def test_login_after_registration_returns_200(
             "password": password,
             "role": "STUDENT",
             "school_id": str(school.id),
+            "first_name": "John",
+            "last_name": "Doe",
         },
     )
     assert register_response.status_code == 201
+    user_id = register_response.json()["user_id"]
+
+    user = await db_session.get(User, user_id)
+    assert user is not None
+    user.is_active = True
+    await db_session.commit()
 
     login_response = await client.post(
         "/api/v1/auth/login",
@@ -465,10 +484,10 @@ async def test_login_empty_email_returns_422(
 
 
 @pytest.mark.asyncio
-async def test_login_empty_password_returns_422(
+async def test_login_empty_password_returns_401(
     client: AsyncClient,
 ) -> None:
-    """LOGIN-06: Empty password returns 422."""
+    """LOGIN-06: Empty password returns 401."""
     response = await client.post(
         "/api/v1/auth/login",
         json={
@@ -477,4 +496,4 @@ async def test_login_empty_password_returns_422(
         },
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 401

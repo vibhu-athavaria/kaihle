@@ -18,6 +18,7 @@ from app.core.security import (
     store_refresh_token,
     verify_password,
 )
+from app.models.school import School
 from app.models.user import AuthToken, AuthTokenType, User
 from app.schemas.auth import LoginResponse, RegisterResponse, TokenResponse
 
@@ -49,6 +50,12 @@ class AuthService:
         existing = await self.db.scalar(stmt)
         if existing:
             raise ValueError("Email already registered")
+
+        # Validate school exists if provided
+        if school_id:
+            school = await self.db.get(School, school_id)
+            if not school:
+                raise ValueError("School not found")
 
         hashed = hash_password(password)
         user = User(

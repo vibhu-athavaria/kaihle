@@ -234,7 +234,7 @@ class SchoolService:
         """
         class_ = await self.get_class(class_id)
         if class_.school_id != school_id:
-            raise ValueError("Class does not belong to this school")
+            raise ValueError("Class not found")
         return class_
 
     # ===========================================
@@ -311,7 +311,7 @@ class SchoolService:
                 enrollment_row = result.scalar_one_or_none()
                 if enrollment_row and enrollment_row.onboarding_diagnostic_status == OnboardingStatus.PENDING:  # type: ignore[attr-defined]
                     # Trigger onboarding diagnostics task
-                    trigger_onboarding_diagnostics(str(student_id), str(class_id))
+                    trigger_onboarding_diagnostics.delay(str(student_id), str(class_id))
 
             except Exception as e:
                 errors.append(f"Error enrolling student {student_id}: {str(e)}")

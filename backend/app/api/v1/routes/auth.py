@@ -34,7 +34,10 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
             last_name=body.last_name,
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        error_msg = str(e)
+        if error_msg == "School not found":
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error_msg)
 
 
 @router.post("/login", response_model=LoginResponse)

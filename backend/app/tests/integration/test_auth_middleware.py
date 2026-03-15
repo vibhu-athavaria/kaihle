@@ -166,6 +166,7 @@ async def student_profile_completed(db_session: AsyncSession, student_user: User
     profile = StudentProfile(
         id=uuid.uuid4(),
         user_id=student_user.id,
+        is_learning_profile_complete=True,
     )
     db_session.add(profile)
     await db_session.commit()
@@ -521,7 +522,7 @@ async def test_student_with_pending_onboarding_then_403(
 async def test_student_with_incomplete_learning_profile_then_403(
     client: AsyncClient,
     student_user: User,
-    student_profile_completed: StudentProfile,
+    student_profile_pending: StudentProfile,
     learning_profile_incomplete: StudentLearningProfile,
 ) -> None:
     """Test that student with incomplete learning profile returns 403."""

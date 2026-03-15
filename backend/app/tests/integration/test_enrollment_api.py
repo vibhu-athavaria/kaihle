@@ -29,9 +29,18 @@ def auth_header(user: User) -> dict[str, str]:
 @pytest.fixture
 async def kaihle_admin(db_session: AsyncSession) -> User:
     """Create a KaihleAdmin user."""
+    school = School(
+        id=uuid.uuid4(),
+        name="Kaihle HQ",
+        slug=f"kaihle-hq-{uuid.uuid4().hex[:8]}",
+        status="active",
+    )
+    db_session.add(school)
+    await db_session.flush()
+
     admin = User(
         id=uuid.uuid4(),
-        school_id=None,
+        school_id=school.id,
         email=f"kaihle-admin-{uuid.uuid4().hex[:8]}@example.com",
         first_name="Kaihle",
         last_name="Admin",
@@ -216,11 +225,12 @@ async def test_enroll_01_school_admin_enrolls_valid_students_returns_200(
         "student_ids": [str(students[0].id)],
     }
 
-    response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
-        json=enroll_data,
-        headers=headers,
-    )
+    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+        response = await client.post(
+            f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+            json=enroll_data,
+            headers=headers,
+        )
 
     assert response.status_code == 200
     result = response.json()
@@ -272,11 +282,12 @@ async def test_enroll_03_enroll_multiple_students_returns_correct_count(
         "student_ids": [str(s.id) for s in students[:3]],
     }
 
-    response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
-        json=enroll_data,
-        headers=headers,
-    )
+    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+        response = await client.post(
+            f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+            json=enroll_data,
+            headers=headers,
+        )
 
     assert response.status_code == 200
     result = response.json()
