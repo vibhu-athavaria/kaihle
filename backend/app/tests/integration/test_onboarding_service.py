@@ -7,8 +7,6 @@ Tests cover:
 - Inactive enrollment handling
 """
 
-import uuid
-
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +21,6 @@ from app.services.onboarding_service import OnboardingService
 async def system_diagnostic_assessment(db_session: AsyncSession, test_class: Class, test_teacher: User) -> Assessment:
     """Create a system-generated diagnostic assessment for the class."""
     assessment = Assessment(
-        id=uuid.uuid4(),
         class_id=test_class.id,
         created_by=test_teacher.id,
         title="Tier 1 Diagnostic",
@@ -38,12 +35,11 @@ async def system_diagnostic_assessment(db_session: AsyncSession, test_class: Cla
 
 
 @pytest_asyncio.fixture
-async def class_enrollment_pending(db_session: AsyncSession, test_class: Class, test_student: User) -> ClassEnrollment:
+async def class_enrollment_pending(db_session: AsyncSession, test_class: Class, test_user: User) -> ClassEnrollment:
     """Create a class enrollment with PENDING onboarding status."""
     enrollment = ClassEnrollment(
-        id=uuid.uuid4(),
         class_id=test_class.id,
-        student_id=test_student.id,
+        student_id=test_user.id,
         onboarding_diagnostic_status=OnboardingStatus.PENDING,
         is_active=True,
     )
@@ -59,7 +55,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
     async def test_end_to_end_diagnostic_completion(
         self,
         db_session: AsyncSession,
-        test_student: User,
+        test_user: User,
         test_class: Class,
         system_diagnostic_assessment: Assessment,
         class_enrollment_pending: ClassEnrollment,
@@ -67,13 +63,11 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
         """Test full flow: create assessment, complete attempt, verify enrollment updated."""
         # Create a completed student attempt
         attempt = StudentAttempt(
-            id=uuid.uuid4(),
             assessment_id=system_diagnostic_assessment.id,
-            student_id=test_student.id,
+            student_id=test_user.id,
             status="COMPLETED",
-            score=85,
-            started_at=None,
-            completed_at=None,
+            overall_score=0.85,
+            questions_answered=10,
         )
         db_session.add(attempt)
         await db_session.commit()
@@ -81,7 +75,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
         # Call the service method
         service = OnboardingService(db_session)
         result = await service.check_and_update_onboarding_complete(
-            student_id=test_student.id,
+            student_id=test_user.id,
             class_id=test_class.id,
         )
 
@@ -96,7 +90,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
     async def test_rowcount_reflects_actual_updates(
         self,
         db_session: AsyncSession,
-        test_student: User,
+        test_user: User,
         test_class: Class,
         system_diagnostic_assessment: Assessment,
         class_enrollment_pending: ClassEnrollment,
@@ -104,9 +98,8 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
         """Test that rowcount returns correct number of updated rows."""
         # Create completed attempt
         attempt = StudentAttempt(
-            id=uuid.uuid4(),
             assessment_id=system_diagnostic_assessment.id,
-            student_id=test_student.id,
+            student_id=test_user.id,
             status="COMPLETED",
         )
         db_session.add(attempt)
@@ -115,7 +108,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
         # Call service - this internally checks rowcount
         service = OnboardingService(db_session)
         result = await service.check_and_update_onboarding_complete(
-            student_id=test_student.id,
+            student_id=test_user.id,
             class_id=test_class.id,
         )
 
@@ -125,7 +118,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
     async def test_rowcount_zero_when_no_update(
         self,
         db_session: AsyncSession,
-        test_student: User,
+        test_user: User,
         test_class: Class,
         system_diagnostic_assessment: Assessment,
     ) -> None:
@@ -133,7 +126,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
         # No enrollment created - call should return False
         service = OnboardingService(db_session)
         result = await service.check_and_update_onboarding_complete(
-            student_id=test_student.id,
+            student_id=test_user.id,
             class_id=test_class.id,
         )
 
@@ -143,16 +136,15 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
     async def test_idempotent_when_already_completed(
         self,
         db_session: AsyncSession,
-        test_student: User,
+        test_user: User,
         test_class: Class,
         system_diagnostic_assessment: Assessment,
     ) -> None:
         """Test calling method twice - first succeeds, second returns False."""
         # Create enrollment already COMPLETED
         enrollment = ClassEnrollment(
-            id=uuid.uuid4(),
             class_id=test_class.id,
-            student_id=test_student.id,
+            student_id=test_user.id,
             onboarding_diagnostic_status=OnboardingStatus.COMPLETED,
             is_active=True,
         )
@@ -161,9 +153,8 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
 
         # Create completed attempt
         attempt = StudentAttempt(
-            id=uuid.uuid4(),
             assessment_id=system_diagnostic_assessment.id,
-            student_id=test_student.id,
+            student_id=test_user.id,
             status="COMPLETED",
         )
         db_session.add(attempt)
@@ -173,13 +164,13 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
 
         # First call - should return False (already completed)
         result1 = await service.check_and_update_onboarding_complete(
-            student_id=test_student.id,
+            student_id=test_user.id,
             class_id=test_class.id,
         )
 
         # Second call - should also return False
         result2 = await service.check_and_update_onboarding_complete(
-            student_id=test_student.id,
+            student_id=test_user.id,
             class_id=test_class.id,
         )
 
@@ -190,16 +181,15 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
     async def test_no_update_when_inactive_enrollment(
         self,
         db_session: AsyncSession,
-        test_student: User,
+        test_user: User,
         test_class: Class,
         system_diagnostic_assessment: Assessment,
     ) -> None:
         """Test that inactive enrollment is not updated."""
         # Create inactive enrollment
         enrollment = ClassEnrollment(
-            id=uuid.uuid4(),
             class_id=test_class.id,
-            student_id=test_student.id,
+            student_id=test_user.id,
             onboarding_diagnostic_status=OnboardingStatus.PENDING,
             is_active=False,  # Inactive
         )
@@ -208,9 +198,8 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
 
         # Create completed attempt
         attempt = StudentAttempt(
-            id=uuid.uuid4(),
             assessment_id=system_diagnostic_assessment.id,
-            student_id=test_student.id,
+            student_id=test_user.id,
             status="COMPLETED",
         )
         db_session.add(attempt)
@@ -218,7 +207,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
 
         service = OnboardingService(db_session)
         result = await service.check_and_update_onboarding_complete(
-            student_id=test_student.id,
+            student_id=test_user.id,
             class_id=test_class.id,
         )
 
@@ -232,7 +221,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
     async def test_returns_false_when_attempt_in_progress(
         self,
         db_session: AsyncSession,
-        test_student: User,
+        test_user: User,
         test_class: Class,
         system_diagnostic_assessment: Assessment,
         class_enrollment_pending: ClassEnrollment,
@@ -240,9 +229,8 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
         """Test that False is returned when attempt status is IN_PROGRESS."""
         # Create in-progress attempt (not completed)
         attempt = StudentAttempt(
-            id=uuid.uuid4(),
             assessment_id=system_diagnostic_assessment.id,
-            student_id=test_student.id,
+            student_id=test_user.id,
             status="IN_PROGRESS",
         )
         db_session.add(attempt)
@@ -250,7 +238,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
 
         service = OnboardingService(db_session)
         result = await service.check_and_update_onboarding_complete(
-            student_id=test_student.id,
+            student_id=test_user.id,
             class_id=test_class.id,
         )
 
@@ -264,7 +252,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
     async def test_returns_false_when_no_attempt_exists(
         self,
         db_session: AsyncSession,
-        test_student: User,
+        test_user: User,
         test_class: Class,
         system_diagnostic_assessment: Assessment,
         class_enrollment_pending: ClassEnrollment,
@@ -274,7 +262,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
 
         service = OnboardingService(db_session)
         result = await service.check_and_update_onboarding_complete(
-            student_id=test_student.id,
+            student_id=test_user.id,
             class_id=test_class.id,
         )
 
@@ -288,7 +276,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
     async def test_returns_false_when_diagnostic_not_system_generated(
         self,
         db_session: AsyncSession,
-        test_student: User,
+        test_user: User,
         test_class: Class,
         test_teacher: User,
         class_enrollment_pending: ClassEnrollment,
@@ -296,7 +284,6 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
         """Test that False is returned when assessment is not system-generated."""
         # Create a non-system-generated assessment
         assessment = Assessment(
-            id=uuid.uuid4(),
             class_id=test_class.id,
             created_by=test_teacher.id,
             title="Teacher Created Assessment",
@@ -309,9 +296,8 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
 
         # Create completed attempt
         attempt = StudentAttempt(
-            id=uuid.uuid4(),
             assessment_id=assessment.id,
-            student_id=test_student.id,
+            student_id=test_user.id,
             status="COMPLETED",
         )
         db_session.add(attempt)
@@ -319,7 +305,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
 
         service = OnboardingService(db_session)
         result = await service.check_and_update_onboarding_complete(
-            student_id=test_student.id,
+            student_id=test_user.id,
             class_id=test_class.id,
         )
 
@@ -333,16 +319,15 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
     async def test_returns_true_when_in_progress_enrollment(
         self,
         db_session: AsyncSession,
-        test_student: User,
+        test_user: User,
         test_class: Class,
         system_diagnostic_assessment: Assessment,
     ) -> None:
         """Test that enrollment with IN_PROGRESS status is updated to COMPLETED."""
         # Create enrollment with IN_PROGRESS status
         enrollment = ClassEnrollment(
-            id=uuid.uuid4(),
             class_id=test_class.id,
-            student_id=test_student.id,
+            student_id=test_user.id,
             onboarding_diagnostic_status=OnboardingStatus.IN_PROGRESS,
             is_active=True,
         )
@@ -351,9 +336,8 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
 
         # Create completed attempt
         attempt = StudentAttempt(
-            id=uuid.uuid4(),
             assessment_id=system_diagnostic_assessment.id,
-            student_id=test_student.id,
+            student_id=test_user.id,
             status="COMPLETED",
         )
         db_session.add(attempt)
@@ -361,7 +345,7 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
 
         service = OnboardingService(db_session)
         result = await service.check_and_update_onboarding_complete(
-            student_id=test_student.id,
+            student_id=test_user.id,
             class_id=test_class.id,
         )
 
