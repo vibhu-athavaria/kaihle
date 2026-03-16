@@ -11,10 +11,11 @@ from typing import Any, cast
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.questionnaire_config import get_option_by_key
+from app.models.assessment import Assessment, StudentAttempt
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import Class, ClassEnrollment
 from app.models.user import OnboardingStatus, StudentProfile, User
@@ -461,53 +462,49 @@ class OnboardingService:
         Returns:
             True if the diagnostic was completed and the enrollment status was updated.
         """
-        from app.models.assessment import Assessment, StudentAttempt
 
-        # Find the Tier 1 diagnostic assessment for this class
-        result = await self.db.execute(
-            select(Assessment).where(
+        # Subquery to check if diagnostic is completed for this student/class
+        # Joins Assessment (via class_id) -> StudentAttempt (via student_id)
+        diagnostic_completed_subquery = (
+            select(StudentAttempt.id)
+            .join(Assessment, Assessment.id == StudentAttempt.assessment_id)
+            .where(
                 Assessment.class_id == class_id,
                 Assessment.is_system_generated.is_(True),
-            )
-        )
-        diagnostic = result.scalar_one_or_none()
-
-        if not diagnostic:
-            logger.warning(
-                "no_diagnostic_found_for_class",
-                student_id=str(student_id),
-                class_id=str(class_id),
-            )
-            return False
-
-        # Check if the student attempt for this diagnostic is COMPLETED
-        attempt_result = await self.db.execute(
-            select(StudentAttempt).where(
-                StudentAttempt.assessment_id == diagnostic.id,
                 StudentAttempt.student_id == student_id,
+                StudentAttempt.status == "COMPLETED",
             )
+            .exists()
         )
-        attempt = attempt_result.scalar_one_or_none()
 
-        if not attempt or attempt.status != "COMPLETED":
-            return False
-
-        # Update the class_enrollment status to COMPLETED
-        from sqlalchemy import update
-
-        await self.db.execute(
+        # Single update query that checks all conditions atomically
+        stmt = (
             update(ClassEnrollment)
             .where(
                 ClassEnrollment.class_id == class_id,
                 ClassEnrollment.student_id == student_id,
                 ClassEnrollment.onboarding_diagnostic_status != OnboardingStatus.COMPLETED,
+                diagnostic_completed_subquery,
             )
             .values(onboarding_diagnostic_status=OnboardingStatus.COMPLETED)
         )
 
-        logger.info(
-            "onboarding_diagnostic_completed",
+        result = await self.db.execute(stmt)
+        rows_updated = result.rowcount  # type: ignore[attr-defined]
+
+        if rows_updated > 0:
+            logger.info(
+                "onboarding_diagnostic_completed",
+                student_id=str(student_id),
+                class_id=str(class_id),
+                rows_updated=rows_updated,
+            )
+            return True
+
+        # No diagnostic found - log warning
+        logger.warning(
+            "no_diagnostic_found_for_class",
             student_id=str(student_id),
             class_id=str(class_id),
         )
-        return True
+        return False
