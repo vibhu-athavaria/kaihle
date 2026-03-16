@@ -75,7 +75,7 @@ Idempotent: safe to run multiple times.
    ```python
    # Fetch Cambridge Lower Secondary and IGCSE from curricula table
    # Upsert into school_curricula for this school
-   # Subjects: Mathematics, Science, English Language
+   # Subjects: MATH + SCI + ENG (Lower Secondary), MATH + BIO + CHEM + PHY + ENG + ENGL (IGCSE)
    ```
 
 3. **Create trial subscription:**
@@ -107,19 +107,19 @@ Idempotent: safe to run multiple times.
 5. **Print summary:**
    ```
    ✅ Pilot school seeded successfully
-   
+
    School:      Bali Coding School (slug: bali-coding-school)
    School ID:   <uuid>
    Curricula:   Cambridge Lower Secondary, IGCSE
    Subjects:    Mathematics, Science, English Language
-   
+
    Admin User:  Wayan Sudarsana
    Email:       admin@balicodingschool.com
    Temp pass:   Kaihle2026! (must change on first login)
-   
+
    Subscription: TRIAL (15 days, max 30 students)
    Expires:     <date>
-   
+
    Next steps:
    1. Email admin their credentials
    2. Admin logs in and changes password
@@ -156,7 +156,7 @@ cd backend
 # Seed curriculum graph (idempotent)
 python -m scripts.seed_curriculum_graph
 
-# Import question bank (idempotent)  
+# Import question bank (idempotent)
 python -m scripts.import_questions --file data/questions/kaihle_questions_v1.csv
 
 # Seed pilot school (idempotent)

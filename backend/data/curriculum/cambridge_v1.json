@@ -1,0 +1,3224 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "authored_by": "Vidhya (curriculum content) + Kramer (structure validation)",
+    "date": "2026-03",
+    "scope": "Cambridge Lower Secondary (Grades 6-8) + Cambridge IGCSE (Grades 9-10)",
+    "total_curricula": 2,
+    "total_subjects": 7,
+    "subject_split_note": "SCI (Integrated Science) is Lower Secondary only. BIO, CHEM, PHY are IGCSE only. ENGL (Literature) is IGCSE only. MATH and ENG span both curricula.",
+    "grade_boundary_note": "cambridge_lower = Grades 6-8 (Cambridge Stages 7-9). igcse = Grades 9-10 (IGCSE Years 10-11). This overrides the original task file which incorrectly had cambridge_lower = 6-9.",
+    "format_note": "Each curriculum_tree entry uses grade_level (singular integer) not grade_levels (array). The seed script must iterate entries individually."
+  },
+
+  "curricula": [
+    {
+      "code": "cambridge_lower",
+      "name": "Cambridge Lower Secondary",
+      "description": "Cambridge Lower Secondary curriculum for Grades 6-8 (Stages 7-9). Internationally recognised framework covering Mathematics, Integrated Science and English Language.",
+      "country": null,
+      "is_active": true
+    },
+    {
+      "code": "igcse",
+      "name": "Cambridge IGCSE",
+      "description": "Cambridge International General Certificate of Secondary Education for Grades 9-10. Externally assessed qualification recognised by universities worldwide.",
+      "country": null,
+      "is_active": true
+    }
+  ],
+
+  "subjects": [
+    {
+      "code": "MATH",
+      "name": "Mathematics",
+      "icon": "calculator",
+      "color": "#0D9488",
+      "description": "Mathematics covering number, algebra, geometry, statistics and probability."
+    },
+    {
+      "code": "SCI",
+      "name": "Integrated Science",
+      "icon": "flask",
+      "color": "#7C3AED",
+      "description": "Integrated science covering biology, chemistry and physics strands with scientific enquiry. Lower Secondary only."
+    },
+    {
+      "code": "ENG",
+      "name": "English Language",
+      "icon": "book-open",
+      "color": "#DC2626",
+      "description": "English Language covering reading, writing, and speaking and listening."
+    },
+    {
+      "code": "BIO",
+      "name": "Biology",
+      "icon": "leaf",
+      "color": "#16A34A",
+      "description": "Cambridge IGCSE Biology covering cell biology, physiology, genetics and ecology."
+    },
+    {
+      "code": "CHEM",
+      "name": "Chemistry",
+      "icon": "beaker",
+      "color": "#D97706",
+      "description": "Cambridge IGCSE Chemistry covering atomic structure, bonding, stoichiometry and organic chemistry."
+    },
+    {
+      "code": "PHY",
+      "name": "Physics",
+      "icon": "zap",
+      "color": "#2563EB",
+      "description": "Cambridge IGCSE Physics covering forces, thermal physics, waves, electricity and nuclear physics."
+    },
+    {
+      "code": "ENGL",
+      "name": "English Literature",
+      "icon": "book",
+      "color": "#9333EA",
+      "description": "Cambridge IGCSE English Literature covering poetry, prose and drama."
+    }
+  ],
+
+  "grades": [
+    {
+      "level": 6,
+      "name": "Grade 6",
+      "description": "Cambridge Lower Secondary Stage 7"
+    },
+    {
+      "level": 7,
+      "name": "Grade 7",
+      "description": "Cambridge Lower Secondary Stage 8"
+    },
+    {
+      "level": 8,
+      "name": "Grade 8",
+      "description": "Cambridge Lower Secondary Stage 9"
+    },
+    {
+      "level": 9,
+      "name": "Grade 9",
+      "description": "Cambridge IGCSE Year 1 (Year 10)"
+    },
+    {
+      "level": 10,
+      "name": "Grade 10",
+      "description": "Cambridge IGCSE Year 2 (Year 11)"
+    },
+    {
+      "level": 11,
+      "name": "Grade 11",
+      "description": "Cambridge AS Level Year 1 (Year 12) — seeded in later milestone"
+    },
+    {
+      "level": 12,
+      "name": "Grade 12",
+      "description": "Cambridge A Level Year 2 (Year 13) — seeded in later milestone"
+    }
+  ],
+
+  "curriculum_subjects": [
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "MATH",
+      "is_core": true,
+      "sort_order": 1
+    },
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "SCI",
+      "is_core": true,
+      "sort_order": 2
+    },
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "ENG",
+      "is_core": true,
+      "sort_order": 3
+    },
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "MATH",
+      "is_core": true,
+      "sort_order": 1
+    },
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "BIO",
+      "is_core": true,
+      "sort_order": 2
+    },
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "CHEM",
+      "is_core": true,
+      "sort_order": 3
+    },
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "PHY",
+      "is_core": true,
+      "sort_order": 4
+    },
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "ENG",
+      "is_core": true,
+      "sort_order": 5
+    },
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "ENGL",
+      "is_core": false,
+      "sort_order": 6
+    }
+  ],
+
+  "curriculum_tree": [
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "MATH",
+      "grade_level": 6,
+      "standard_code_prefix": "6M",
+      "topics": [
+        {
+          "name": "Number",
+          "canonical_code": "MATH-NUM",
+          "sequence_order": 1,
+          "recommended_weeks": 7,
+          "learning_objectives": [
+            "Understand and use place value for integers and decimals",
+            "Work with fractions, decimals, percentages and ratio",
+            "Solve problems involving proportion"
+          ],
+          "subtopics": [
+            {
+              "name": "Integers and Place Value",
+              "canonical_code": "MATH-NUM-G6-01",
+              "learning_objective": "Understand the value of each digit in integers up to 7 digits; order and compare positive and negative integers on a number line.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Fractions",
+              "canonical_code": "MATH-NUM-G6-02",
+              "learning_objective": "Compare and order fractions; convert between improper fractions and mixed numbers; calculate fractions of whole number quantities.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": ["Integers and Place Value"]
+            },
+            {
+              "name": "Decimals and Percentages",
+              "canonical_code": "MATH-NUM-G6-03",
+              "learning_objective": "Convert fluently between fractions, decimals and percentages; calculate simple percentages of quantities and express one quantity as a percentage of another.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": ["Fractions"]
+            },
+            {
+              "name": "Ratio and Proportion",
+              "canonical_code": "MATH-NUM-G6-04",
+              "learning_objective": "Write and simplify ratios; divide a quantity into a given ratio; solve simple proportion problems using the unitary method.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 4,
+              "prerequisites": ["Fractions"]
+            }
+          ]
+        },
+        {
+          "name": "Algebra",
+          "canonical_code": "MATH-ALG",
+          "sequence_order": 2,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Recognise and describe number patterns and sequences",
+            "Use letters to represent unknowns and write algebraic expressions",
+            "Solve simple linear equations"
+          ],
+          "subtopics": [
+            {
+              "name": "Sequences",
+              "canonical_code": "MATH-ALG-G6-01",
+              "learning_objective": "Recognise and extend linear and simple non-linear sequences; describe the term-to-term rule in words and using algebra.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Algebraic Expressions",
+              "canonical_code": "MATH-ALG-G6-02",
+              "learning_objective": "Write and simplify algebraic expressions; substitute numerical values into expressions and formulae to evaluate them.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": ["Sequences"]
+            },
+            {
+              "name": "Simple Linear Equations",
+              "canonical_code": "MATH-ALG-G6-03",
+              "learning_objective": "Form and solve one-step and two-step linear equations with the unknown on one side, including equations arising from problem contexts.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["Algebraic Expressions"]
+            }
+          ]
+        },
+        {
+          "name": "Geometry and Measure",
+          "canonical_code": "MATH-GEO",
+          "sequence_order": 3,
+          "recommended_weeks": 7,
+          "learning_objectives": [
+            "Identify and calculate angles in 2D shapes and on straight lines",
+            "Classify and describe properties of 2D and 3D shapes",
+            "Calculate area, perimeter and convert between metric units"
+          ],
+          "subtopics": [
+            {
+              "name": "Angles and Lines",
+              "canonical_code": "MATH-GEO-G6-01",
+              "learning_objective": "Identify acute, obtuse, reflex and right angles; calculate unknown angles on a straight line, at a point, and in triangles and quadrilaterals.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "2D Shape Properties",
+              "canonical_code": "MATH-GEO-G6-02",
+              "learning_objective": "Classify triangles by side length and angle; classify quadrilaterals by their properties; identify lines of symmetry and the order of rotational symmetry.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": ["Angles and Lines"]
+            },
+            {
+              "name": "Area and Perimeter",
+              "canonical_code": "MATH-GEO-G6-03",
+              "learning_objective": "Calculate the perimeter and area of rectangles, triangles, parallelograms and compound rectilinear shapes; solve problems in context.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": ["2D Shape Properties"]
+            },
+            {
+              "name": "Units and Measurement",
+              "canonical_code": "MATH-GEO-G6-04",
+              "learning_objective": "Convert between metric units of length, mass and capacity; read scales accurately; estimate and measure lengths, masses and capacities.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Statistics and Probability",
+          "canonical_code": "MATH-STAT",
+          "sequence_order": 4,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Collect, organise and represent data in appropriate diagrams",
+            "Calculate and interpret measures of average and spread",
+            "Express and calculate probability of simple events"
+          ],
+          "subtopics": [
+            {
+              "name": "Data Representation",
+              "canonical_code": "MATH-STAT-G6-01",
+              "learning_objective": "Construct and interpret bar charts, pictograms, line graphs and simple pie charts from frequency tables and raw data.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Averages and Range",
+              "canonical_code": "MATH-STAT-G6-02",
+              "learning_objective": "Calculate the mean, median, mode and range from a set of raw data; interpret and compare these measures in context.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": ["Data Representation"]
+            },
+            {
+              "name": "Probability Scale",
+              "canonical_code": "MATH-STAT-G6-03",
+              "learning_objective": "Describe the likelihood of events using probability language; express the probability of a single event as a fraction, decimal or percentage on a 0-to-1 scale.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "MATH",
+      "grade_level": 7,
+      "standard_code_prefix": "7M",
+      "topics": [
+        {
+          "name": "Number",
+          "canonical_code": "MATH-NUM",
+          "sequence_order": 1,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Perform calculations with fractions, decimals and percentages",
+            "Apply index notation and calculate powers and roots",
+            "Express numbers in standard form and solve proportion problems"
+          ],
+          "subtopics": [
+            {
+              "name": "Fractions, Decimals and Percentages",
+              "canonical_code": "MATH-NUM-G7-01",
+              "learning_objective": "Perform the four operations with fractions and decimals; calculate percentage increase and decrease; express percentage change.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Powers and Roots",
+              "canonical_code": "MATH-NUM-G7-02",
+              "learning_objective": "Calculate squares, square roots, cubes and cube roots; use index notation; apply the rules of indices for positive integer exponents.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Standard Form",
+              "canonical_code": "MATH-NUM-G7-03",
+              "learning_objective": "Express large and small numbers in standard form (a × 10ⁿ where 1 ≤ a < 10); convert between standard form and ordinary numbers.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["Powers and Roots"]
+            },
+            {
+              "name": "Ratio and Direct Proportion",
+              "canonical_code": "MATH-NUM-G7-04",
+              "learning_objective": "Solve problems using ratio, including sharing in a given ratio; recognise and use direct proportion; construct and use proportion equations.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 4,
+              "prerequisites": ["Fractions, Decimals and Percentages"]
+            }
+          ]
+        },
+        {
+          "name": "Algebra",
+          "canonical_code": "MATH-ALG",
+          "sequence_order": 2,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Expand and factorise algebraic expressions",
+            "Solve linear equations and inequalities",
+            "Plot and interpret linear graphs"
+          ],
+          "subtopics": [
+            {
+              "name": "Algebraic Manipulation",
+              "canonical_code": "MATH-ALG-G7-01",
+              "learning_objective": "Expand single brackets and simplify algebraic expressions; factorise expressions by extracting a common factor.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Linear Equations",
+              "canonical_code": "MATH-ALG-G7-02",
+              "learning_objective": "Solve linear equations with unknowns on both sides and those involving brackets; form equations from word problems and check solutions.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": ["Algebraic Manipulation"]
+            },
+            {
+              "name": "Inequalities",
+              "canonical_code": "MATH-ALG-G7-03",
+              "learning_objective": "Write, solve and represent linear inequalities on a number line; use correct inequality notation including strict and non-strict inequalities.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["Linear Equations"]
+            },
+            {
+              "name": "Linear Graphs",
+              "canonical_code": "MATH-ALG-G7-04",
+              "learning_objective": "Plot and interpret graphs of linear functions; identify gradient and y-intercept from the equation y = mx + c; find the equation of a line from its graph.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 4,
+              "prerequisites": ["Linear Equations"]
+            }
+          ]
+        },
+        {
+          "name": "Geometry and Measure",
+          "canonical_code": "MATH-GEO",
+          "sequence_order": 3,
+          "recommended_weeks": 7,
+          "learning_objectives": [
+            "Apply Pythagoras theorem to right-angled triangles",
+            "Calculate area and volume of circles and 3D shapes",
+            "Perform and describe geometric transformations"
+          ],
+          "subtopics": [
+            {
+              "name": "Pythagoras' Theorem",
+              "canonical_code": "MATH-GEO-G7-01",
+              "learning_objective": "State and apply Pythagoras' theorem to calculate the length of unknown sides in right-angled triangles; determine whether a triangle is right-angled.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Circles — Area and Circumference",
+              "canonical_code": "MATH-GEO-G7-02",
+              "learning_objective": "Calculate the circumference and area of circles and semicircles; solve problems involving circles in real-world contexts.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Volume and Surface Area",
+              "canonical_code": "MATH-GEO-G7-03",
+              "learning_objective": "Calculate the volume and surface area of cuboids, triangular prisms and cylinders; solve problems in context.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": ["Circles — Area and Circumference"]
+            },
+            {
+              "name": "Transformations",
+              "canonical_code": "MATH-GEO-G7-04",
+              "learning_objective": "Perform and describe rotations, reflections, translations and enlargements on a coordinate grid; identify properties preserved under each transformation.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 60,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Statistics and Probability",
+          "canonical_code": "MATH-STAT",
+          "sequence_order": 4,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Construct and interpret a wider range of statistical diagrams",
+            "Calculate statistics from grouped data",
+            "Calculate probabilities of combined events"
+          ],
+          "subtopics": [
+            {
+              "name": "Statistical Diagrams",
+              "canonical_code": "MATH-STAT-G7-01",
+              "learning_objective": "Construct and interpret scatter diagrams, stem-and-leaf diagrams and frequency polygons; describe correlation and identify outliers.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Averages from Grouped Data",
+              "canonical_code": "MATH-STAT-G7-02",
+              "learning_objective": "Estimate the mean from a grouped frequency table; identify the modal class and the class containing the median; compare distributions.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": ["Statistical Diagrams"]
+            },
+            {
+              "name": "Combined Event Probability",
+              "canonical_code": "MATH-STAT-G7-03",
+              "learning_objective": "List outcomes systematically using sample space diagrams; calculate probabilities of combined events; apply P(A) + P(not A) = 1.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "MATH",
+      "grade_level": 8,
+      "standard_code_prefix": "8M",
+      "topics": [
+        {
+          "name": "Number",
+          "canonical_code": "MATH-NUM",
+          "sequence_order": 1,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Simplify and use surds",
+            "Apply direct and inverse proportion",
+            "Calculate compound measures"
+          ],
+          "subtopics": [
+            {
+              "name": "Surds",
+              "canonical_code": "MATH-NUM-G8-01",
+              "learning_objective": "Simplify surds; add, subtract and multiply expressions involving surds; rationalise a denominator of the form √n.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Proportional Reasoning",
+              "canonical_code": "MATH-NUM-G8-02",
+              "learning_objective": "Apply direct and inverse proportion to multi-step problems; recognise and construct graphs of direct and inverse proportion.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Compound Measures",
+              "canonical_code": "MATH-NUM-G8-03",
+              "learning_objective": "Calculate speed, density and pressure using the correct formulae; convert between compound units; choose appropriate units for a given context.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Algebra",
+          "canonical_code": "MATH-ALG",
+          "sequence_order": 2,
+          "recommended_weeks": 7,
+          "learning_objectives": [
+            "Expand and factorise quadratic expressions",
+            "Solve simultaneous linear equations",
+            "Use function notation and find nth terms"
+          ],
+          "subtopics": [
+            {
+              "name": "Quadratic Expressions",
+              "canonical_code": "MATH-ALG-G8-01",
+              "learning_objective": "Expand the product of two binomials; factorise quadratic expressions of the form x² + bx + c; recognise the difference of two squares.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Simultaneous Equations",
+              "canonical_code": "MATH-ALG-G8-02",
+              "learning_objective": "Solve pairs of simultaneous linear equations using the elimination and substitution methods; interpret solutions graphically.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": ["Quadratic Expressions"]
+            },
+            {
+              "name": "Functions",
+              "canonical_code": "MATH-ALG-G8-03",
+              "learning_objective": "Understand and use function notation f(x); find outputs for given inputs; identify the domain and range of simple functions.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Nth Term of Sequences",
+              "canonical_code": "MATH-ALG-G8-04",
+              "learning_objective": "Derive and use the nth term formula for arithmetic sequences; determine whether a given value is a term in a sequence.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Geometry and Measure",
+          "canonical_code": "MATH-GEO",
+          "sequence_order": 3,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Use trigonometric ratios in right-angled triangles",
+            "Apply circle properties",
+            "Use similarity and enlargement to find unknown lengths"
+          ],
+          "subtopics": [
+            {
+              "name": "Trigonometric Ratios",
+              "canonical_code": "MATH-GEO-G8-01",
+              "learning_objective": "Define and use sine, cosine and tangent ratios to calculate unknown sides and angles in right-angled triangles in 2D contexts.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Circle Properties",
+              "canonical_code": "MATH-GEO-G8-02",
+              "learning_objective": "Apply the properties of tangents, chords and the angle in a semicircle; calculate arc length and sector area as fractions of a full circle.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Similarity and Enlargement",
+              "canonical_code": "MATH-GEO-G8-03",
+              "learning_objective": "Identify similar figures; use scale factors to find unknown lengths, areas and volumes in similar shapes; perform enlargements with fractional scale factors.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Statistics and Probability",
+          "canonical_code": "MATH-STAT",
+          "sequence_order": 4,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Construct and interpret cumulative frequency graphs and histograms",
+            "Calculate probabilities using tree diagrams"
+          ],
+          "subtopics": [
+            {
+              "name": "Cumulative Frequency",
+              "canonical_code": "MATH-STAT-G8-01",
+              "learning_objective": "Construct and use cumulative frequency tables and graphs; estimate the median, lower and upper quartiles, and interquartile range.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Histograms",
+              "canonical_code": "MATH-STAT-G8-02",
+              "learning_objective": "Draw and interpret histograms with unequal class widths using frequency density; calculate frequencies from a histogram.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": ["Cumulative Frequency"]
+            },
+            {
+              "name": "Tree Diagrams and Combined Probability",
+              "canonical_code": "MATH-STAT-G8-03",
+              "learning_objective": "Construct and use tree diagrams to calculate the probability of two or more combined independent and dependent events.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "SCI",
+      "grade_level": 6,
+      "standard_code_prefix": "6S",
+      "topics": [
+        {
+          "name": "Scientific Enquiry",
+          "canonical_code": "SCI-ENQ",
+          "sequence_order": 1,
+          "recommended_weeks": 3,
+          "learning_objectives": [
+            "Plan and carry out fair scientific investigations",
+            "Record and present scientific data accurately"
+          ],
+          "subtopics": [
+            {
+              "name": "Planning Investigations",
+              "canonical_code": "SCI-ENQ-G6-01",
+              "learning_objective": "Identify independent, dependent and control variables in a scientific investigation; write a testable hypothesis and design a fair test.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Recording and Presenting Data",
+              "canonical_code": "SCI-ENQ-G6-02",
+              "learning_objective": "Select appropriate apparatus; record results accurately in clearly labelled tables; present data as bar charts and line graphs, choosing appropriate scales.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": ["Planning Investigations"]
+            }
+          ]
+        },
+        {
+          "name": "Biology",
+          "canonical_code": "SCI-BIO",
+          "sequence_order": 2,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Identify and describe the structure of plant and animal cells",
+            "Explain photosynthesis and the role of producers",
+            "Describe food chains, food webs and the roles of organisms in ecosystems"
+          ],
+          "subtopics": [
+            {
+              "name": "Cells and Cell Functions",
+              "canonical_code": "SCI-BIO-G6-01",
+              "learning_objective": "Identify and label the structures of plant and animal cells; state the function of the nucleus, cell membrane, cytoplasm, cell wall, vacuole and chloroplasts.",
+              "bloom_taxonomy_level": "Remember",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Photosynthesis",
+              "canonical_code": "SCI-BIO-G6-02",
+              "learning_objective": "Write the word equation for photosynthesis; describe the roles of light, chlorophyll, carbon dioxide and water; explain why plants are producers in a food chain.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": ["Cells and Cell Functions"]
+            },
+            {
+              "name": "Ecosystems and Food Chains",
+              "canonical_code": "SCI-BIO-G6-03",
+              "learning_objective": "Construct and interpret food chains and food webs; describe the roles of producers, consumers and decomposers; explain energy flow through a food chain.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["Photosynthesis"]
+            }
+          ]
+        },
+        {
+          "name": "Chemistry",
+          "canonical_code": "SCI-CHEM",
+          "sequence_order": 3,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Describe the arrangement and movement of particles in the three states of matter",
+            "Distinguish between elements, compounds and mixtures and describe separation methods",
+            "Compare the physical properties of common materials"
+          ],
+          "subtopics": [
+            {
+              "name": "States of Matter",
+              "canonical_code": "SCI-CHEM-G6-01",
+              "learning_objective": "Describe the arrangement and movement of particles in solids, liquids and gases; explain melting, boiling, condensation and freezing in terms of particle theory.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Mixtures and Separation Techniques",
+              "canonical_code": "SCI-CHEM-G6-02",
+              "learning_objective": "Distinguish between elements, compounds and mixtures using particle diagrams; describe and explain filtration, evaporation, distillation and chromatography.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": ["States of Matter"]
+            },
+            {
+              "name": "Properties of Materials",
+              "canonical_code": "SCI-CHEM-G6-03",
+              "learning_objective": "Compare physical properties including hardness, solubility, thermal and electrical conductivity; explain material selection for specific uses based on properties.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["States of Matter"]
+            }
+          ]
+        },
+        {
+          "name": "Physics",
+          "canonical_code": "SCI-PHY",
+          "sequence_order": 4,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Identify forces and describe their effects on motion",
+            "Describe energy forms and energy transfer",
+            "Draw and interpret simple electric circuits"
+          ],
+          "subtopics": [
+            {
+              "name": "Forces and Their Effects",
+              "canonical_code": "SCI-PHY-G6-01",
+              "learning_objective": "Identify contact and non-contact forces; describe the effects of balanced and unbalanced forces on the motion and shape of objects.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Energy Forms and Transfer",
+              "canonical_code": "SCI-PHY-G6-02",
+              "learning_objective": "Identify different forms of energy (kinetic, potential, thermal, chemical, electrical, light, sound); describe energy transfers and transformations in everyday contexts.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Electric Circuits",
+              "canonical_code": "SCI-PHY-G6-03",
+              "learning_objective": "Draw and interpret circuit diagrams using standard symbols; describe the difference between series and parallel circuits; predict the effect of adding components.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": ["Energy Forms and Transfer"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "SCI",
+      "grade_level": 7,
+      "standard_code_prefix": "7S",
+      "topics": [
+        {
+          "name": "Scientific Enquiry",
+          "canonical_code": "SCI-ENQ",
+          "sequence_order": 1,
+          "recommended_weeks": 3,
+          "learning_objectives": [
+            "Evaluate validity and reliability of investigations",
+            "Draw evidence-based conclusions"
+          ],
+          "subtopics": [
+            {
+              "name": "Variables and Fair Testing",
+              "canonical_code": "SCI-ENQ-G7-01",
+              "learning_objective": "Distinguish between independent, dependent and control variables; evaluate the validity and reliability of an investigation design.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Analysing Evidence and Drawing Conclusions",
+              "canonical_code": "SCI-ENQ-G7-02",
+              "learning_objective": "Identify patterns and anomalies in data; draw conclusions based on evidence; relate findings to scientific knowledge and suggest explanations.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": ["Variables and Fair Testing"]
+            }
+          ]
+        },
+        {
+          "name": "Biology",
+          "canonical_code": "SCI-BIO",
+          "sequence_order": 2,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Describe the structure and function of key human organ systems",
+            "Explain reproduction in plants and humans",
+            "Identify the components of a balanced diet and their roles"
+          ],
+          "subtopics": [
+            {
+              "name": "Human Organ Systems",
+              "canonical_code": "SCI-BIO-G7-01",
+              "learning_objective": "Describe the structure and function of the digestive, circulatory and respiratory systems; explain how these systems interact to sustain life.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Reproduction",
+              "canonical_code": "SCI-BIO-G7-02",
+              "learning_objective": "Compare sexual and asexual reproduction; describe fertilisation in plants and humans; explain the stages of the menstrual cycle.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Nutrition and Health",
+              "canonical_code": "SCI-BIO-G7-03",
+              "learning_objective": "Identify the roles of carbohydrates, proteins, fats, vitamins, minerals and water in the diet; explain the effects of nutritional deficiency and excess on health.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["Human Organ Systems"]
+            }
+          ]
+        },
+        {
+          "name": "Chemistry",
+          "canonical_code": "SCI-CHEM",
+          "sequence_order": 3,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Describe atomic structure and use the Periodic Table",
+            "Distinguish between physical and chemical changes",
+            "Describe acids, alkalis and neutralisation"
+          ],
+          "subtopics": [
+            {
+              "name": "Atoms, Elements and the Periodic Table",
+              "canonical_code": "SCI-CHEM-G7-01",
+              "learning_objective": "Describe the structure of the atom in terms of protons, neutrons and electrons; use the Periodic Table to identify element properties and group trends.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Chemical and Physical Changes",
+              "canonical_code": "SCI-CHEM-G7-02",
+              "learning_objective": "Distinguish between physical and chemical changes with examples; write word equations for combustion, oxidation and neutralisation reactions.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": ["Atoms, Elements and the Periodic Table"]
+            },
+            {
+              "name": "Acids, Alkalis and Neutralisation",
+              "canonical_code": "SCI-CHEM-G7-03",
+              "learning_objective": "Use the pH scale to classify substances as acidic, neutral or alkaline; describe the reaction between acids and bases; use indicators to determine pH.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": ["Chemical and Physical Changes"]
+            }
+          ]
+        },
+        {
+          "name": "Physics",
+          "canonical_code": "SCI-PHY",
+          "sequence_order": 4,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Describe reflection and refraction of light with ray diagrams",
+            "Explain the properties and transmission of sound",
+            "Describe the structure of the solar system and celestial motion"
+          ],
+          "subtopics": [
+            {
+              "name": "Light and Optics",
+              "canonical_code": "SCI-PHY-G7-01",
+              "learning_objective": "Describe reflection and refraction using ray diagrams; explain how lenses form images; describe dispersion of white light into a spectrum.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Sound and Waves",
+              "canonical_code": "SCI-PHY-G7-02",
+              "learning_objective": "Describe how sound is produced and transmitted as a longitudinal wave; relate pitch to frequency and loudness to amplitude; explain echoes and uses of ultrasound.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Earth and Space",
+              "canonical_code": "SCI-PHY-G7-03",
+              "learning_objective": "Describe the structure of the solar system; explain day and night, seasons and lunar phases using models of the Earth's and Moon's motion.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "SCI",
+      "grade_level": 8,
+      "standard_code_prefix": "8S",
+      "topics": [
+        {
+          "name": "Scientific Enquiry",
+          "canonical_code": "SCI-ENQ",
+          "sequence_order": 1,
+          "recommended_weeks": 2,
+          "learning_objectives": [
+            "Evaluate the quality of evidence and suggest improvements to experimental design"
+          ],
+          "subtopics": [
+            {
+              "name": "Evaluating Investigations",
+              "canonical_code": "SCI-ENQ-G8-01",
+              "learning_objective": "Evaluate the quality of evidence by identifying sources of systematic and random error; suggest improvements to experimental design to increase reliability and validity.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Biology",
+          "canonical_code": "SCI-BIO",
+          "sequence_order": 2,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Explain inheritance using DNA and Punnett squares",
+            "Describe how pathogens cause disease and how the body responds",
+            "Compare aerobic and anaerobic respiration"
+          ],
+          "subtopics": [
+            {
+              "name": "Genetics and Inheritance",
+              "canonical_code": "SCI-BIO-G8-01",
+              "learning_objective": "Describe the structure of DNA and the role of genes in inheritance; use Punnett squares to predict ratios of offspring phenotypes for a single trait.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Disease and Immunity",
+              "canonical_code": "SCI-BIO-G8-02",
+              "learning_objective": "Classify pathogens as bacteria, viruses, fungi and protists; describe modes of transmission; explain how the immune system responds and how vaccination prevents disease.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Respiration and Gas Exchange",
+              "canonical_code": "SCI-BIO-G8-03",
+              "learning_objective": "Write word equations for aerobic and anaerobic respiration; compare the two processes; describe the structure of the lungs and explain gas exchange across the alveoli.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Chemistry",
+          "canonical_code": "SCI-CHEM",
+          "sequence_order": 3,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Describe Periodic Table trends and reactivity",
+            "Explain rates of reaction using collision theory",
+            "Describe reversible reactions"
+          ],
+          "subtopics": [
+            {
+              "name": "The Periodic Table and Reactivity",
+              "canonical_code": "SCI-CHEM-G8-01",
+              "learning_objective": "Describe the trends in reactivity in Group 1 and Group 7; explain reactivity using electron configuration; write displacement reaction equations.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Rates of Reaction",
+              "canonical_code": "SCI-CHEM-G8-02",
+              "learning_objective": "State and explain the effect of concentration, temperature, surface area and catalysts on reaction rate; use collision theory to explain these effects.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": ["The Periodic Table and Reactivity"]
+            },
+            {
+              "name": "Reversible Reactions",
+              "canonical_code": "SCI-CHEM-G8-03",
+              "learning_objective": "Describe reversible reactions with examples such as hydration of copper sulfate; explain what happens to products and reactants when the reaction is reversed.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["Rates of Reaction"]
+            }
+          ]
+        },
+        {
+          "name": "Physics",
+          "canonical_code": "SCI-PHY",
+          "sequence_order": 4,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Describe electromagnetism and its applications",
+            "Define wave properties and calculate wave speed",
+            "Apply Newton's laws to explain motion"
+          ],
+          "subtopics": [
+            {
+              "name": "Electromagnetism",
+              "canonical_code": "SCI-PHY-G8-01",
+              "learning_objective": "Describe the magnetic field around a current-carrying conductor; explain how an electromagnet works; name applications including electric motors and relays.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Wave Properties",
+              "canonical_code": "SCI-PHY-G8-02",
+              "learning_objective": "Define amplitude, frequency, wavelength and wave speed; calculate wave speed using v = fλ; distinguish between transverse and longitudinal waves.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Forces and Motion",
+              "canonical_code": "SCI-PHY-G8-03",
+              "learning_objective": "Interpret distance-time and velocity-time graphs; calculate speed, acceleration and distance; state and apply Newton's First, Second and Third Laws.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "ENG",
+      "grade_level": 6,
+      "standard_code_prefix": "6E",
+      "topics": [
+        {
+          "name": "Reading",
+          "canonical_code": "ENG-READ",
+          "sequence_order": 1,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Retrieve and interpret explicit and implicit information from texts",
+            "Analyse language and structural features"
+          ],
+          "subtopics": [
+            {
+              "name": "Reading for Explicit Meaning",
+              "canonical_code": "ENG-READ-G6-01",
+              "learning_objective": "Retrieve and select relevant explicit information from fiction and non-fiction texts to answer questions, using direct quotation or close paraphrase.",
+              "bloom_taxonomy_level": "Remember",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Inference and Deduction",
+              "canonical_code": "ENG-READ-G6-02",
+              "learning_objective": "Make inferences about character, mood and situation from implicit information in a text; support inferences with specific evidence.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": ["Reading for Explicit Meaning"]
+            },
+            {
+              "name": "Language and Structure Analysis",
+              "canonical_code": "ENG-READ-G6-03",
+              "learning_objective": "Identify and comment on a writer's language choices including figurative language, word choice and structural techniques, explaining their effects on the reader.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": ["Inference and Deduction"]
+            }
+          ]
+        },
+        {
+          "name": "Writing",
+          "canonical_code": "ENG-WRITE",
+          "sequence_order": 2,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Write for different purposes and audiences",
+            "Write narrative and non-fiction texts with appropriate features"
+          ],
+          "subtopics": [
+            {
+              "name": "Writing for Purpose and Audience",
+              "canonical_code": "ENG-WRITE-G6-01",
+              "learning_objective": "Plan and write texts for different purposes (inform, entertain, persuade) and audiences; select appropriate tone, register and vocabulary.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Narrative Writing",
+              "canonical_code": "ENG-WRITE-G6-02",
+              "learning_objective": "Write engaging stories and descriptions using varied sentence structures, effective vocabulary, dialogue and imagery to create character and atmosphere.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 2,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Writing for Purpose and Audience"]
+            },
+            {
+              "name": "Non-Fiction Writing",
+              "canonical_code": "ENG-WRITE-G6-03",
+              "learning_objective": "Write well-structured non-fiction texts including formal letters, reports and instructions, using appropriate layout, conventions and language features.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": ["Writing for Purpose and Audience"]
+            }
+          ]
+        },
+        {
+          "name": "Speaking and Listening",
+          "canonical_code": "ENG-SPEAK",
+          "sequence_order": 3,
+          "recommended_weeks": 3,
+          "learning_objectives": [
+            "Plan and deliver structured spoken presentations",
+            "Participate actively and constructively in discussions"
+          ],
+          "subtopics": [
+            {
+              "name": "Oral Presentations",
+              "canonical_code": "ENG-SPEAK-G6-01",
+              "learning_objective": "Plan and deliver a structured spoken presentation using clear vocabulary, appropriate pace and eye contact to engage a specified audience.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Group Discussion",
+              "canonical_code": "ENG-SPEAK-G6-02",
+              "learning_objective": "Participate actively in discussions by listening carefully, building on contributions, and supporting viewpoints with reasons and examples.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "ENG",
+      "grade_level": 7,
+      "standard_code_prefix": "7E",
+      "topics": [
+        {
+          "name": "Reading",
+          "canonical_code": "ENG-READ",
+          "sequence_order": 1,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Analyse and interpret theme, viewpoint and language effect",
+            "Compare how two texts present ideas"
+          ],
+          "subtopics": [
+            {
+              "name": "Inference and Interpretation",
+              "canonical_code": "ENG-READ-G7-01",
+              "learning_objective": "Analyse and interpret character motivation, theme and writer's viewpoint in literary texts; support analysis with precisely selected and embedded quotations.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Language Analysis",
+              "canonical_code": "ENG-READ-G7-02",
+              "learning_objective": "Explain the effects of a writer's vocabulary choices, figurative language and narrative voice; use subject terminology accurately when commenting on language.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": ["Inference and Interpretation"]
+            },
+            {
+              "name": "Comparative Reading",
+              "canonical_code": "ENG-READ-G7-03",
+              "learning_objective": "Compare how two texts present a similar theme or idea, exploring similarities and differences in the writers' language choices, structure and purpose.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": ["Language Analysis"]
+            }
+          ]
+        },
+        {
+          "name": "Writing",
+          "canonical_code": "ENG-WRITE",
+          "sequence_order": 2,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Write persuasive and descriptive texts using a range of techniques",
+            "Write structured analytical paragraphs"
+          ],
+          "subtopics": [
+            {
+              "name": "Persuasive Writing",
+              "canonical_code": "ENG-WRITE-G7-01",
+              "learning_objective": "Write persuasive texts using rhetorical devices including direct address, tricolon, rhetorical questions, emotive language and counter-argument.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Descriptive Writing",
+              "canonical_code": "ENG-WRITE-G7-02",
+              "learning_objective": "Write atmospheric descriptions using sensory language, figurative devices and carefully chosen vocabulary to create mood and engage the reader.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Analytical Writing",
+              "canonical_code": "ENG-WRITE-G7-03",
+              "learning_objective": "Write structured analytical paragraphs using the point-evidence-explanation model; embed quotations and use subject-specific terminology to respond to literary texts.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": ["Persuasive Writing"]
+            }
+          ]
+        },
+        {
+          "name": "Speaking and Listening",
+          "canonical_code": "ENG-SPEAK",
+          "sequence_order": 3,
+          "recommended_weeks": 3,
+          "learning_objectives": [
+            "Participate in formal debate",
+            "Listen critically and respond to spoken texts"
+          ],
+          "subtopics": [
+            {
+              "name": "Formal Debate",
+              "canonical_code": "ENG-SPEAK-G7-01",
+              "learning_objective": "Prepare and present arguments in a formal debate; respond to counter-arguments with evidence and maintain a formal, courteous register.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Critical Listening",
+              "canonical_code": "ENG-SPEAK-G7-02",
+              "learning_objective": "Listen critically to a spoken text; identify the speaker's main argument and key supporting points; evaluate evidence and formulate relevant follow-up questions.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_lower",
+      "subject_code": "ENG",
+      "grade_level": 8,
+      "standard_code_prefix": "8E",
+      "topics": [
+        {
+          "name": "Reading",
+          "canonical_code": "ENG-READ",
+          "sequence_order": 1,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Critically analyse complex texts for language, structure and form",
+            "Synthesise ideas and information from multiple texts"
+          ],
+          "subtopics": [
+            {
+              "name": "Critical Textual Analysis",
+              "canonical_code": "ENG-READ-G8-01",
+              "learning_objective": "Analyse how a writer uses language, structure and form to create meaning and achieve effects in complex literary and non-literary texts; evaluate critically.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Cross-Text Synthesis",
+              "canonical_code": "ENG-READ-G8-02",
+              "learning_objective": "Synthesise ideas and information from two or more texts; make relevant comparisons and present a coherent, evidence-based response.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Critical Textual Analysis"]
+            }
+          ]
+        },
+        {
+          "name": "Writing",
+          "canonical_code": "ENG-WRITE",
+          "sequence_order": 2,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Plan, draft and redraft extended written pieces",
+            "Write analytical and evaluative responses to texts"
+          ],
+          "subtopics": [
+            {
+              "name": "Extended Writing",
+              "canonical_code": "ENG-WRITE-G8-01",
+              "learning_objective": "Plan, draft, redraft and proofread extended written pieces demonstrating sustained control of form, structure, style and accurate grammar and punctuation.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 3,
+              "estimated_minutes": 75,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Evaluative Writing",
+              "canonical_code": "ENG-WRITE-G8-02",
+              "learning_objective": "Write analytical and evaluative responses to literary texts; construct and sustain a critical argument with embedded evidence and subject-specific vocabulary.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["Extended Writing"]
+            }
+          ]
+        },
+        {
+          "name": "Speaking and Listening",
+          "canonical_code": "ENG-SPEAK",
+          "sequence_order": 3,
+          "recommended_weeks": 3,
+          "learning_objectives": [
+            "Deliver a sustained individual presentation demonstrating rhetorical awareness"
+          ],
+          "subtopics": [
+            {
+              "name": "Independent Presentation",
+              "canonical_code": "ENG-SPEAK-G8-01",
+              "learning_objective": "Deliver a well-prepared individual presentation on a chosen topic, demonstrating rhetorical awareness, appropriate register and sustained audience engagement.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "MATH",
+      "grade_level": 9,
+      "standard_code_prefix": "9M",
+      "topics": [
+        {
+          "name": "Number",
+          "canonical_code": "MATH-NUM",
+          "sequence_order": 1,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Apply surds and index laws including negative and fractional powers",
+            "Use standard form in calculations",
+            "Solve proportion problems and model with algebra"
+          ],
+          "subtopics": [
+            {
+              "name": "Surds and Index Laws",
+              "canonical_code": "MATH-NUM-G9-01",
+              "learning_objective": "Simplify expressions involving surds; apply the laws of indices to evaluate and simplify expressions with integer, fractional and negative powers.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Standard Form Calculations",
+              "canonical_code": "MATH-NUM-G9-02",
+              "learning_objective": "Perform multiplication, division and powers of numbers expressed in standard form; convert between standard form and ordinary notation in multi-step problems.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": ["Surds and Index Laws"]
+            },
+            {
+              "name": "Direct and Inverse Proportion",
+              "canonical_code": "MATH-NUM-G9-03",
+              "learning_objective": "Set up and solve problems involving direct and inverse proportion; construct and use proportional models; interpret graphs of proportional relationships.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Algebra",
+          "canonical_code": "MATH-ALG",
+          "sequence_order": 2,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Manipulate quadratic expressions and solve quadratic equations",
+            "Solve simultaneous equations algebraically and graphically",
+            "Work with sequences and inequalities"
+          ],
+          "subtopics": [
+            {
+              "name": "Quadratic Expressions and Factorisation",
+              "canonical_code": "MATH-ALG-G9-01",
+              "learning_objective": "Expand double brackets; factorise quadratic expressions including difference of two squares and trinomials; complete the square for x² + bx + c.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Solving Quadratic Equations",
+              "canonical_code": "MATH-ALG-G9-02",
+              "learning_objective": "Solve quadratic equations by factorisation, completing the square and using the quadratic formula; interpret the discriminant; link solutions to graphical intersections.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["Quadratic Expressions and Factorisation"]
+            },
+            {
+              "name": "Simultaneous Equations",
+              "canonical_code": "MATH-ALG-G9-03",
+              "learning_objective": "Solve pairs of simultaneous linear equations by elimination and substitution; solve one linear and one quadratic simultaneous equation; interpret graphically.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 3,
+              "prerequisites": ["Solving Quadratic Equations"]
+            },
+            {
+              "name": "Sequences",
+              "canonical_code": "MATH-ALG-G9-04",
+              "learning_objective": "Derive and use the nth term formula for arithmetic sequences; identify and use geometric sequences; recognise other sequence types including quadratic.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 55,
+              "sequence_order": 4,
+              "prerequisites": []
+            },
+            {
+              "name": "Inequalities",
+              "canonical_code": "MATH-ALG-G9-05",
+              "learning_objective": "Solve linear and simple quadratic inequalities; represent solution sets on number lines and using set notation; shade regions on a coordinate grid.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 5,
+              "prerequisites": ["Solving Quadratic Equations"]
+            }
+          ]
+        },
+        {
+          "name": "Coordinate Geometry",
+          "canonical_code": "MATH-COORD",
+          "sequence_order": 3,
+          "recommended_weeks": 3,
+          "learning_objectives": [
+            "Calculate gradient and write equations of straight lines",
+            "Calculate distance and midpoint between two coordinate points"
+          ],
+          "subtopics": [
+            {
+              "name": "Gradient and Equations of Lines",
+              "canonical_code": "MATH-COORD-G9-01",
+              "learning_objective": "Calculate the gradient of a straight line; write and use the equation y = mx + c; find the equations of lines parallel and perpendicular to a given line.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Distance and Midpoint",
+              "canonical_code": "MATH-COORD-G9-02",
+              "learning_objective": "Calculate the distance between two coordinate points using the distance formula; find the coordinates of the midpoint of a line segment.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": ["Gradient and Equations of Lines"]
+            }
+          ]
+        },
+        {
+          "name": "Geometry",
+          "canonical_code": "MATH-GEO",
+          "sequence_order": 4,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "State and apply circle theorems",
+            "Identify and use similarity and congruence"
+          ],
+          "subtopics": [
+            {
+              "name": "Circle Theorems",
+              "canonical_code": "MATH-GEO-G9-01",
+              "learning_objective": "State and apply all standard circle theorems to find missing angles and lengths; provide formal geometric reasons at each step of a solution.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Similarity and Congruence",
+              "canonical_code": "MATH-GEO-G9-02",
+              "learning_objective": "Prove triangles congruent using SSS, SAS, ASA and RHS; use similarity ratios to find unknown lengths, areas and volumes in similar shapes.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Trigonometry",
+          "canonical_code": "MATH-TRIG",
+          "sequence_order": 5,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Apply trigonometric ratios in 2D and 3D problems",
+            "Use the sine and cosine rules for non-right-angled triangles"
+          ],
+          "subtopics": [
+            {
+              "name": "Trigonometric Ratios in 2D and 3D",
+              "canonical_code": "MATH-TRIG-G9-01",
+              "learning_objective": "Use sine, cosine and tangent ratios to calculate missing sides and angles in right-angled triangles; extend to 3D problems involving trigonometry.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Sine Rule and Cosine Rule",
+              "canonical_code": "MATH-TRIG-G9-02",
+              "learning_objective": "Apply the sine rule and cosine rule to find unknown sides and angles in non-right-angled triangles; calculate the area of a triangle using ½ab sin C.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["Trigonometric Ratios in 2D and 3D"]
+            }
+          ]
+        },
+        {
+          "name": "Statistics and Probability",
+          "canonical_code": "MATH-STAT",
+          "sequence_order": 6,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Construct and interpret cumulative frequency diagrams and box plots",
+            "Draw and interpret histograms with unequal class widths",
+            "Calculate probability using Venn diagrams and tree diagrams"
+          ],
+          "subtopics": [
+            {
+              "name": "Cumulative Frequency and Box Plots",
+              "canonical_code": "MATH-STAT-G9-01",
+              "learning_objective": "Construct and interpret cumulative frequency diagrams and box-and-whisker plots; estimate median, quartiles, percentiles and interquartile range.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Histograms with Unequal Class Widths",
+              "canonical_code": "MATH-STAT-G9-02",
+              "learning_objective": "Draw and interpret histograms with unequal class widths using frequency density; calculate frequencies and class widths from a histogram.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Probability with Venn Diagrams and Tree Diagrams",
+              "canonical_code": "MATH-STAT-G9-03",
+              "learning_objective": "Calculate probability using Venn diagrams, two-way tables and tree diagrams; apply the addition rule and multiplication rule for independent events.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "MATH",
+      "grade_level": 10,
+      "standard_code_prefix": "10M",
+      "topics": [
+        {
+          "name": "Number",
+          "canonical_code": "MATH-NUM",
+          "sequence_order": 1,
+          "recommended_weeks": 3,
+          "learning_objectives": [
+            "Solve reverse percentage and compound growth problems",
+            "Apply upper and lower bounds to calculations"
+          ],
+          "subtopics": [
+            {
+              "name": "Compound Growth and Decay",
+              "canonical_code": "MATH-NUM-G10-01",
+              "learning_objective": "Solve reverse percentage problems; calculate compound interest and depreciation; apply exponential growth and decay models to real-world problems.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Bounds and Error Intervals",
+              "canonical_code": "MATH-NUM-G10-02",
+              "learning_objective": "Calculate upper and lower bounds of measurements rounded to a given degree of accuracy; use bounds to find the limits of calculated quantities.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Algebra",
+          "canonical_code": "MATH-ALG",
+          "sequence_order": 2,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Understand and use function notation and transformations of graphs",
+            "Construct algebraic proofs"
+          ],
+          "subtopics": [
+            {
+              "name": "Functions and Inverse Functions",
+              "canonical_code": "MATH-ALG-G10-01",
+              "learning_objective": "Use function notation; find composite and inverse functions; sketch and interpret graphs of standard functions including quadratic, cubic and reciprocal.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Transformation of Graphs",
+              "canonical_code": "MATH-ALG-G10-02",
+              "learning_objective": "Describe and apply translations f(x) + a, reflections f(−x) and −f(x), and stretches f(ax) and af(x) to graphs of functions.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Functions and Inverse Functions"]
+            },
+            {
+              "name": "Algebraic Proof",
+              "canonical_code": "MATH-ALG-G10-03",
+              "learning_objective": "Construct and present algebraic proofs using manipulation and reasoning; prove identities; disprove statements using counter-examples.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 70,
+              "sequence_order": 3,
+              "prerequisites": ["Functions and Inverse Functions"]
+            }
+          ]
+        },
+        {
+          "name": "Mensuration",
+          "canonical_code": "MATH-MENSUR",
+          "sequence_order": 3,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Calculate arc length, sector area and segment area",
+            "Calculate surface area and volume of 3D shapes"
+          ],
+          "subtopics": [
+            {
+              "name": "Arc Length and Sector Area",
+              "canonical_code": "MATH-MENSUR-G10-01",
+              "learning_objective": "Calculate arc length and sector area as fractions of a full circle; calculate the area of a segment; solve problems involving circles in context.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Surface Area and Volume of 3D Shapes",
+              "canonical_code": "MATH-MENSUR-G10-02",
+              "learning_objective": "Calculate the surface area and volume of spheres, cones, pyramids and composite 3D shapes; solve problems including frustums.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["Arc Length and Sector Area"]
+            }
+          ]
+        },
+        {
+          "name": "Vectors",
+          "canonical_code": "MATH-VEC",
+          "sequence_order": 4,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Use vector notation and perform vector operations",
+            "Apply vectors to geometric proof"
+          ],
+          "subtopics": [
+            {
+              "name": "Vector Notation and Operations",
+              "canonical_code": "MATH-VEC-G10-01",
+              "learning_objective": "Represent vectors using column notation; add, subtract and multiply vectors by a scalar; calculate the magnitude of a vector.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Geometric Applications of Vectors",
+              "canonical_code": "MATH-VEC-G10-02",
+              "learning_objective": "Use position vectors and vector addition to describe geometric paths; prove geometric results such as lines being parallel or points being collinear.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": ["Vector Notation and Operations"]
+            }
+          ]
+        },
+        {
+          "name": "Statistics and Probability",
+          "canonical_code": "MATH-STAT",
+          "sequence_order": 5,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Critically evaluate statistical investigations",
+            "Calculate conditional probability"
+          ],
+          "subtopics": [
+            {
+              "name": "Statistical Investigation and Sampling",
+              "canonical_code": "MATH-STAT-G10-01",
+              "learning_objective": "Plan and critically evaluate statistical investigations; identify bias in sampling methods (convenience, systematic, stratified) and suggest improvements.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Conditional Probability",
+              "canonical_code": "MATH-STAT-G10-02",
+              "learning_objective": "Calculate conditional probability using two-way tables, Venn diagrams and tree diagrams; apply P(A|B) = P(A ∩ B) / P(B).",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "BIO",
+      "grade_level": 9,
+      "standard_code_prefix": "9B",
+      "topics": [
+        {
+          "name": "Cell Biology",
+          "canonical_code": "BIO-CELL",
+          "sequence_order": 1,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Compare the structure of plant, animal and bacterial cells",
+            "Explain transport across cell membranes",
+            "Describe mitosis and meiosis"
+          ],
+          "subtopics": [
+            {
+              "name": "Cell Structure and Organelles",
+              "canonical_code": "BIO-CELL-G9-01",
+              "learning_objective": "Compare and contrast the structure of plant, animal and bacterial cells; state the function of each organelle including mitochondria, ribosomes and the endoplasmic reticulum.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Cell Membrane Transport",
+              "canonical_code": "BIO-CELL-G9-02",
+              "learning_objective": "Explain diffusion, osmosis and active transport in terms of particle movement; describe their roles in absorption, gas exchange and mineral uptake in living organisms.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Cell Structure and Organelles"]
+            },
+            {
+              "name": "Cell Division — Mitosis and Meiosis",
+              "canonical_code": "BIO-CELL-G9-03",
+              "learning_objective": "Describe the stages of mitosis and meiosis; explain why mitosis is required for growth and repair; explain why meiosis produces genetic variation and is essential for sexual reproduction.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 3,
+              "prerequisites": ["Cell Structure and Organelles"]
+            }
+          ]
+        },
+        {
+          "name": "Biological Molecules and Enzymes",
+          "canonical_code": "BIO-MOL",
+          "sequence_order": 2,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Identify the roles and tests for biological molecules",
+            "Explain enzyme action and the factors that affect it"
+          ],
+          "subtopics": [
+            {
+              "name": "Biological Molecules",
+              "canonical_code": "BIO-MOL-G9-01",
+              "learning_objective": "Identify the roles of carbohydrates, proteins, lipids and water in living organisms; use food tests (Benedict's, iodine, biuret and emulsion) to identify each food group.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Enzyme Action and Factors",
+              "canonical_code": "BIO-MOL-G9-02",
+              "learning_objective": "Explain enzyme action using the lock-and-key model; describe and explain the effects of temperature, pH and substrate concentration on enzyme activity with reference to denaturation.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Biological Molecules"]
+            }
+          ]
+        },
+        {
+          "name": "Plant Biology",
+          "canonical_code": "BIO-PLANT",
+          "sequence_order": 3,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Describe photosynthesis and the factors affecting its rate",
+            "Explain transport in plants and transpiration"
+          ],
+          "subtopics": [
+            {
+              "name": "Photosynthesis and Limiting Factors",
+              "canonical_code": "BIO-PLANT-G9-01",
+              "learning_objective": "Write the balanced equation for photosynthesis; describe and explain the effect of light intensity, CO₂ concentration and temperature as limiting factors on the rate of photosynthesis.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Transport in Plants and Transpiration",
+              "canonical_code": "BIO-PLANT-G9-02",
+              "learning_objective": "Describe the structure and function of xylem and phloem; explain the process of transpiration; describe the factors affecting transpiration rate and how to investigate them.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Photosynthesis and Limiting Factors"]
+            }
+          ]
+        },
+        {
+          "name": "Human Physiology",
+          "canonical_code": "BIO-PHYSIO",
+          "sequence_order": 4,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Describe digestion and absorption in the alimentary canal",
+            "Explain gas exchange in the lungs"
+          ],
+          "subtopics": [
+            {
+              "name": "Digestion and Absorption",
+              "canonical_code": "BIO-PHYSIO-G9-01",
+              "learning_objective": "Describe the structure and function of the alimentary canal; explain chemical digestion by enzymes and the absorption of nutrients into the blood.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Gas Exchange in the Lungs",
+              "canonical_code": "BIO-PHYSIO-G9-02",
+              "learning_objective": "Describe the structure of the lungs and alveoli; explain how the alveoli are adapted for efficient gas exchange; describe the mechanism of breathing.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": ["Digestion and Absorption"]
+            }
+          ]
+        },
+        {
+          "name": "Reproduction",
+          "canonical_code": "BIO-REPRO",
+          "sequence_order": 5,
+          "recommended_weeks": 3,
+          "learning_objectives": [
+            "Describe reproduction in humans and flowering plants"
+          ],
+          "subtopics": [
+            {
+              "name": "Human Reproduction",
+              "canonical_code": "BIO-REPRO-G9-01",
+              "learning_objective": "Describe the structure of the male and female reproductive systems; explain fertilisation, implantation, the role of the placenta and the stages of birth.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Reproduction in Flowering Plants",
+              "canonical_code": "BIO-REPRO-G9-02",
+              "learning_objective": "Describe self-pollination and cross-pollination; explain fertilisation in flowering plants; describe the conditions required for seed germination.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "BIO",
+      "grade_level": 10,
+      "standard_code_prefix": "10B",
+      "topics": [
+        {
+          "name": "Human Physiology",
+          "canonical_code": "BIO-PHYSIO",
+          "sequence_order": 1,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Describe the circulatory system and transport of substances",
+            "Explain coordination and response in the nervous and endocrine systems",
+            "Describe excretion and osmoregulation in the kidney",
+            "Explain disease, immunity and vaccination"
+          ],
+          "subtopics": [
+            {
+              "name": "The Circulatory System",
+              "canonical_code": "BIO-PHYSIO-G10-01",
+              "learning_objective": "Describe the structure of the heart and blood vessels; explain the cardiac cycle and the double circulatory system; describe the composition and functions of blood components.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Coordination and Response",
+              "canonical_code": "BIO-PHYSIO-G10-02",
+              "learning_objective": "Describe the structure of the nervous system; explain reflex arcs; describe the roles of key hormones including adrenaline, insulin and glucagon in homeostasis.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Excretion and Osmoregulation",
+              "canonical_code": "BIO-PHYSIO-G10-03",
+              "learning_objective": "Describe the structure of the kidney nephron; explain the processes of ultrafiltration and selective reabsorption; describe how the kidney regulates water balance.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Disease and Immunity",
+              "canonical_code": "BIO-PHYSIO-G10-04",
+              "learning_objective": "Classify pathogens by type; describe routes of transmission; explain how the immune system responds to infection; distinguish between active and passive immunity and describe vaccination.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Reproduction and Genetics",
+          "canonical_code": "BIO-REPRO",
+          "sequence_order": 2,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Predict inheritance patterns using genetic diagrams",
+            "Explain continuous and discontinuous variation and the causes of mutations"
+          ],
+          "subtopics": [
+            {
+              "name": "Inheritance and Genetic Diagrams",
+              "canonical_code": "BIO-REPRO-G10-01",
+              "learning_objective": "Use Punnett squares to predict the inheritance of monohybrid traits; explain codominance, multiple alleles and sex-linked inheritance with worked examples.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Variation and Mutation",
+              "canonical_code": "BIO-REPRO-G10-02",
+              "learning_objective": "Distinguish between continuous and discontinuous variation; explain how gene mutations and environmental factors contribute to variation; describe the consequences of mutation.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": ["Inheritance and Genetic Diagrams"]
+            }
+          ]
+        },
+        {
+          "name": "Evolution and Ecology",
+          "canonical_code": "BIO-EVOL",
+          "sequence_order": 3,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Explain natural selection and evidence for evolution",
+            "Describe the carbon and nitrogen cycles and human impact on ecosystems",
+            "Evaluate biotechnology and genetic engineering"
+          ],
+          "subtopics": [
+            {
+              "name": "Natural Selection and Evolution",
+              "canonical_code": "BIO-EVOL-G10-01",
+              "learning_objective": "Explain how natural selection leads to evolution over time; describe evidence for evolution including fossil records, antibiotic resistance and selective breeding.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Ecosystems and Human Impact",
+              "canonical_code": "BIO-EVOL-G10-02",
+              "learning_objective": "Describe the carbon and nitrogen cycles; explain the effects of deforestation, pollution, climate change and over-exploitation on ecosystems and biodiversity.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Biotechnology and Genetic Engineering",
+              "canonical_code": "BIO-EVOL-G10-03",
+              "learning_objective": "Describe the principles of selective breeding and genetic engineering including gene cloning; evaluate the benefits and ethical concerns of biotechnology.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "CHEM",
+      "grade_level": 9,
+      "standard_code_prefix": "9C",
+      "topics": [
+        {
+          "name": "Particles and Atomic Structure",
+          "canonical_code": "CHEM-ATOM",
+          "sequence_order": 1,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Describe atomic structure and use the Periodic Table",
+            "Define isotopes and calculate relative atomic mass"
+          ],
+          "subtopics": [
+            {
+              "name": "Atomic Structure and the Periodic Table",
+              "canonical_code": "CHEM-ATOM-G9-01",
+              "learning_objective": "Describe the structure of the atom in terms of protons, neutrons and electrons; determine electronic configuration; explain how the Periodic Table is arranged by atomic number and group.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Isotopes and Relative Atomic Mass",
+              "canonical_code": "CHEM-ATOM-G9-02",
+              "learning_objective": "Define isotopes and relative atomic mass; calculate RAM from isotopic abundances; describe the use of mass spectrometry and radioactive isotopes.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": ["Atomic Structure and the Periodic Table"]
+            }
+          ]
+        },
+        {
+          "name": "Chemical Bonding and Structure",
+          "canonical_code": "CHEM-BOND",
+          "sequence_order": 2,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Explain and represent ionic, covalent and metallic bonding",
+            "Describe giant and simple molecular structures and their properties"
+          ],
+          "subtopics": [
+            {
+              "name": "Ionic Bonding and Structure",
+              "canonical_code": "CHEM-BOND-G9-01",
+              "learning_objective": "Explain the formation of ionic bonds by electron transfer; draw dot-and-cross diagrams for common ionic compounds; describe the giant ionic lattice and explain its properties.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": ["Atomic Structure and the Periodic Table"]
+            },
+            {
+              "name": "Covalent Bonding and Structure",
+              "canonical_code": "CHEM-BOND-G9-02",
+              "learning_objective": "Explain covalent bond formation by electron sharing; draw dot-and-cross diagrams; distinguish between simple molecular and giant covalent structures and explain their properties.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Atomic Structure and the Periodic Table"]
+            },
+            {
+              "name": "Metallic Bonding and Properties",
+              "canonical_code": "CHEM-BOND-G9-03",
+              "learning_objective": "Describe the metallic bond model (positive ions in a sea of delocalised electrons); explain physical properties of metals including conductivity, malleability and high melting point.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": ["Ionic Bonding and Structure"]
+            }
+          ]
+        },
+        {
+          "name": "Stoichiometry",
+          "canonical_code": "CHEM-STOICH",
+          "sequence_order": 3,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Calculate moles and determine empirical formulae",
+            "Perform stoichiometric calculations from balanced equations"
+          ],
+          "subtopics": [
+            {
+              "name": "Moles and Chemical Formulae",
+              "canonical_code": "CHEM-STOICH-G9-01",
+              "learning_objective": "Calculate molar mass; determine the number of moles from mass; find empirical and molecular formulae from experimental percentage composition data.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": ["Isotopes and Relative Atomic Mass"]
+            },
+            {
+              "name": "Reacting Quantities and Yield",
+              "canonical_code": "CHEM-STOICH-G9-02",
+              "learning_objective": "Balance symbol equations; use mole ratios to calculate masses and volumes of reactants and products; calculate theoretical yield and percentage yield.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["Moles and Chemical Formulae"]
+            }
+          ]
+        },
+        {
+          "name": "Physical Chemistry",
+          "canonical_code": "CHEM-PHYS",
+          "sequence_order": 4,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Describe exothermic and endothermic reactions and energy diagrams",
+            "Explain factors affecting rates of reaction using collision theory"
+          ],
+          "subtopics": [
+            {
+              "name": "Energetics",
+              "canonical_code": "CHEM-PHYS-G9-01",
+              "learning_objective": "Define exothermic and endothermic reactions; draw and interpret energy profile diagrams; calculate enthalpy changes using bond energies or Hess's law.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Rates of Reaction",
+              "canonical_code": "CHEM-PHYS-G9-02",
+              "learning_objective": "Describe the effect of concentration, temperature, particle size, pressure and catalysts on reaction rate; explain using collision theory; interpret rate graphs.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "CHEM",
+      "grade_level": 10,
+      "standard_code_prefix": "10C",
+      "topics": [
+        {
+          "name": "Physical Chemistry",
+          "canonical_code": "CHEM-PHYS",
+          "sequence_order": 1,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Apply Le Chatelier's principle to equilibrium systems",
+            "Describe electrolysis of molten and aqueous compounds"
+          ],
+          "subtopics": [
+            {
+              "name": "Reversible Reactions and Equilibrium",
+              "canonical_code": "CHEM-PHYS-G10-01",
+              "learning_objective": "Explain dynamic equilibrium; apply Le Chatelier's principle to predict the effect of changing temperature, pressure and concentration on the position of equilibrium.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Electrochemistry",
+              "canonical_code": "CHEM-PHYS-G10-02",
+              "learning_objective": "Describe electrolysis of molten and aqueous electrolytes; predict the products at the anode and cathode; explain the products using the reactivity series and ion concentration.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Inorganic Chemistry",
+          "canonical_code": "CHEM-INORG",
+          "sequence_order": 2,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Prepare salts and describe reactions of acids",
+            "Apply the reactivity series to metals",
+            "Explain atmospheric chemistry and pollution"
+          ],
+          "subtopics": [
+            {
+              "name": "Acids, Bases and Salt Preparation",
+              "canonical_code": "CHEM-INORG-G10-01",
+              "learning_objective": "Describe the reactions of acids with metals, metal oxides, hydroxides and carbonates; prepare soluble salts by neutralisation and titration; prepare insoluble salts by precipitation.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Metals and the Reactivity Series",
+              "canonical_code": "CHEM-INORG-G10-02",
+              "learning_objective": "Order metals by reactivity; explain displacement reactions; describe the extraction of metals by reduction and electrolysis; link extraction method to position in reactivity series.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Atmospheric Chemistry and Environment",
+              "canonical_code": "CHEM-INORG-G10-03",
+              "learning_objective": "Describe the composition of the atmosphere; explain the enhanced greenhouse effect; describe the causes and consequences of acid rain and atmospheric pollution.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Organic Chemistry",
+          "canonical_code": "CHEM-ORG",
+          "sequence_order": 3,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Describe the structure and reactions of alkanes and alkenes",
+            "Describe alcohols and carboxylic acids and their reactions",
+            "Explain polymer formation and evaluate environmental impact"
+          ],
+          "subtopics": [
+            {
+              "name": "Hydrocarbons — Alkanes and Alkenes",
+              "canonical_code": "CHEM-ORG-G10-01",
+              "learning_objective": "Describe the structure and properties of alkanes and alkenes; explain substitution in alkanes and addition in alkenes; describe cracking and its industrial importance.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Alcohols and Carboxylic Acids",
+              "canonical_code": "CHEM-ORG-G10-02",
+              "learning_objective": "Describe the structure, properties and reactions of ethanol and ethanoic acid; explain fermentation and the production of ethanol; describe esterification.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Hydrocarbons — Alkanes and Alkenes"]
+            },
+            {
+              "name": "Polymers and Environmental Impact",
+              "canonical_code": "CHEM-ORG-G10-03",
+              "learning_objective": "Describe the formation of addition and condensation polymers; evaluate the environmental impact of synthetic polymers including disposal and biodegradability.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": ["Hydrocarbons — Alkanes and Alkenes"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "PHY",
+      "grade_level": 9,
+      "standard_code_prefix": "9P",
+      "topics": [
+        {
+          "name": "Forces and Motion",
+          "canonical_code": "PHY-MOTION",
+          "sequence_order": 1,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Interpret and draw motion graphs",
+            "Apply Newton's laws to motion problems",
+            "Apply conservation of energy and momentum"
+          ],
+          "subtopics": [
+            {
+              "name": "Kinematics and Motion Graphs",
+              "canonical_code": "PHY-MOTION-G9-01",
+              "learning_objective": "Interpret and construct distance-time and velocity-time graphs; calculate displacement, velocity, acceleration and distance from graphs; apply equations of uniform motion.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Newton's Laws of Motion",
+              "canonical_code": "PHY-MOTION-G9-02",
+              "learning_objective": "State Newton's three laws; apply F = ma to calculate resultant force, mass or acceleration; explain terminal velocity in terms of balanced forces.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Kinematics and Motion Graphs"]
+            },
+            {
+              "name": "Work, Energy and Power",
+              "canonical_code": "PHY-MOTION-G9-03",
+              "learning_objective": "Calculate work done, gravitational potential energy, kinetic energy and power; apply the principle of conservation of energy to multi-step problems.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 3,
+              "prerequisites": ["Newton's Laws of Motion"]
+            },
+            {
+              "name": "Momentum and Impulse",
+              "canonical_code": "PHY-MOTION-G9-04",
+              "learning_objective": "Calculate momentum using p = mv; apply the principle of conservation of momentum to collisions and explosions; explain impulse as the change in momentum.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 4,
+              "prerequisites": ["Newton's Laws of Motion"]
+            }
+          ]
+        },
+        {
+          "name": "Thermal Physics",
+          "canonical_code": "PHY-THERMAL",
+          "sequence_order": 2,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Explain changes of state and calculate thermal energy",
+            "Describe modes of thermal energy transfer"
+          ],
+          "subtopics": [
+            {
+              "name": "Thermal Properties and Changes of State",
+              "canonical_code": "PHY-THERMAL-G9-01",
+              "learning_objective": "Explain changes of state using kinetic theory; calculate thermal energy for temperature change using Q = mcΔT; calculate energy for a change of state using Q = mL.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Thermal Energy Transfer",
+              "canonical_code": "PHY-THERMAL-G9-02",
+              "learning_objective": "Describe conduction, convection and radiation; explain the factors affecting the rate of each; apply to real-world contexts such as building insulation and climate.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Waves",
+          "canonical_code": "PHY-WAVES",
+          "sequence_order": 3,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Define wave properties and calculate wave speed",
+            "Explain reflection, refraction and total internal reflection of light",
+            "Describe the electromagnetic spectrum and its uses"
+          ],
+          "subtopics": [
+            {
+              "name": "Wave Properties and Calculations",
+              "canonical_code": "PHY-WAVES-G9-01",
+              "learning_objective": "Describe transverse and longitudinal waves; define amplitude, frequency, wavelength and period; calculate wave speed using v = fλ; interpret wave diagrams.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Light — Reflection, Refraction and TIR",
+              "canonical_code": "PHY-WAVES-G9-02",
+              "learning_objective": "Describe reflection and refraction using ray diagrams; calculate the critical angle; explain total internal reflection and describe its applications in optical fibres.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Wave Properties and Calculations"]
+            },
+            {
+              "name": "The Electromagnetic Spectrum",
+              "canonical_code": "PHY-WAVES-G9-03",
+              "learning_objective": "List the regions of the EM spectrum in order of wavelength and frequency; describe the properties, sources and uses of each region; explain the hazards of ionising radiation.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": ["Wave Properties and Calculations"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "PHY",
+      "grade_level": 10,
+      "standard_code_prefix": "10P",
+      "topics": [
+        {
+          "name": "Waves",
+          "canonical_code": "PHY-WAVES",
+          "sequence_order": 1,
+          "recommended_weeks": 2,
+          "learning_objectives": [
+            "Describe sound waves and the uses of ultrasound"
+          ],
+          "subtopics": [
+            {
+              "name": "Sound and Ultrasound",
+              "canonical_code": "PHY-WAVES-G10-01",
+              "learning_objective": "Describe how sound waves are produced and transmitted as longitudinal waves; explain the uses of ultrasound in medicine and industry; describe the limits of human hearing.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Electricity and Magnetism",
+          "canonical_code": "PHY-ELEC",
+          "sequence_order": 2,
+          "recommended_weeks": 7,
+          "learning_objectives": [
+            "Analyse series and parallel circuits using Ohm's law",
+            "Calculate electrical power and energy",
+            "Explain the motor effect and electromagnetic induction",
+            "Explain how transformers work and why they are used in the national grid"
+          ],
+          "subtopics": [
+            {
+              "name": "Circuit Analysis and Ohm's Law",
+              "canonical_code": "PHY-ELEC-G10-01",
+              "learning_objective": "Apply Ohm's law to calculate resistance, current and voltage; analyse series and parallel circuits using the rules for current, voltage and resistance.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Electrical Power and Energy",
+              "canonical_code": "PHY-ELEC-G10-02",
+              "learning_objective": "Calculate electrical power using P = IV = I²R; calculate electrical energy transferred; determine the cost of using household appliances; describe domestic wiring and safety features.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": ["Circuit Analysis and Ohm's Law"]
+            },
+            {
+              "name": "Electromagnetism and the Motor Effect",
+              "canonical_code": "PHY-ELEC-G10-03",
+              "learning_objective": "Describe the magnetic field around a current-carrying conductor; explain the motor effect using F = BIL; describe electromagnetic induction and Faraday's law qualitatively.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 3,
+              "prerequisites": ["Circuit Analysis and Ohm's Law"]
+            },
+            {
+              "name": "Transformers and the National Grid",
+              "canonical_code": "PHY-ELEC-G10-04",
+              "learning_objective": "Explain how a transformer works using the principle of electromagnetic induction; apply the transformer equation; explain why high-voltage transmission is used in the national grid.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 4,
+              "prerequisites": ["Electromagnetism and the Motor Effect"]
+            }
+          ]
+        },
+        {
+          "name": "Nuclear Physics",
+          "canonical_code": "PHY-NUCLEAR",
+          "sequence_order": 3,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Describe the properties and uses of ionising radiation",
+            "Calculate radioactive decay using half-life",
+            "Describe nuclear fission and fusion and their applications"
+          ],
+          "subtopics": [
+            {
+              "name": "Radioactivity and Ionising Radiation",
+              "canonical_code": "PHY-NUCLEAR-G10-01",
+              "learning_objective": "Describe the properties of alpha, beta and gamma radiation including charge, mass and penetrating power; explain ionisation; describe uses of radioactive isotopes in medicine and industry.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Radioactive Decay and Half-Life",
+              "canonical_code": "PHY-NUCLEAR-G10-02",
+              "learning_objective": "Define half-life; calculate the activity and amount of substance remaining after a given number of half-lives; interpret decay graphs and use them to determine half-life.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Radioactivity and Ionising Radiation"]
+            },
+            {
+              "name": "Nuclear Fission, Fusion and Energy",
+              "canonical_code": "PHY-NUCLEAR-G10-03",
+              "learning_objective": "Distinguish between nuclear fission and fusion; explain the chain reaction in a nuclear reactor; evaluate the advantages and risks of nuclear power compared to other energy sources.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 3,
+              "prerequisites": ["Radioactive Decay and Half-Life"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "ENG",
+      "grade_level": 9,
+      "standard_code_prefix": "9E",
+      "topics": [
+        {
+          "name": "Reading",
+          "canonical_code": "ENG-READ",
+          "sequence_order": 1,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Retrieve, interpret and analyse information from unseen texts",
+            "Analyse language effects and write accurate summaries"
+          ],
+          "subtopics": [
+            {
+              "name": "Comprehension and Inference",
+              "canonical_code": "ENG-READ-G9-01",
+              "learning_objective": "Retrieve and interpret explicit and implicit information from unseen literary and non-literary texts; support answers with precisely selected and embedded quotations.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Language Analysis for Effect",
+              "canonical_code": "ENG-READ-G9-02",
+              "learning_objective": "Analyse the effects of a writer's language choices including diction, imagery, tone and syntax; use subject terminology accurately and evaluate the writer's craft.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Comprehension and Inference"]
+            },
+            {
+              "name": "Summary Writing",
+              "canonical_code": "ENG-READ-G9-03",
+              "learning_objective": "Select and synthesise relevant information from a source text; write a focused, accurate summary in your own words, avoiding direct quotation.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": ["Comprehension and Inference"]
+            }
+          ]
+        },
+        {
+          "name": "Writing",
+          "canonical_code": "ENG-WRITE",
+          "sequence_order": 2,
+          "recommended_weeks": 10,
+          "learning_objectives": [
+            "Write for specific purposes, audiences and forms using source material",
+            "Write narrative and descriptive compositions"
+          ],
+          "subtopics": [
+            {
+              "name": "Directed Writing",
+              "canonical_code": "ENG-WRITE-G9-01",
+              "learning_objective": "Write for a specific purpose, audience and form (letter, report, article, speech) using information and ideas from given source material; adapt tone and register appropriately.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 3,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Narrative and Descriptive Writing",
+              "canonical_code": "ENG-WRITE-G9-02",
+              "learning_objective": "Write narrative or descriptive compositions with effective use of vocabulary, varied sentence structures, structural devices and a consistent voice to engage the reader.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": ["Directed Writing"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "ENG",
+      "grade_level": 10,
+      "standard_code_prefix": "10E",
+      "topics": [
+        {
+          "name": "Reading",
+          "canonical_code": "ENG-READ",
+          "sequence_order": 1,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Compare how two writers achieve effects across texts",
+            "Evaluate a writer's effectiveness with a sustained critical perspective"
+          ],
+          "subtopics": [
+            {
+              "name": "Comparative Textual Analysis",
+              "canonical_code": "ENG-READ-G10-01",
+              "learning_objective": "Compare how two writers use language, structure and form to achieve different effects and influence the reader; evaluate which is more effective, sustaining a critical perspective.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Writing",
+          "canonical_code": "ENG-WRITE",
+          "sequence_order": 2,
+          "recommended_weeks": 10,
+          "learning_objectives": [
+            "Write argumentative and persuasive texts with a clear sustained viewpoint",
+            "Write extended compositions with sophisticated style and structure"
+          ],
+          "subtopics": [
+            {
+              "name": "Argumentative and Persuasive Writing",
+              "canonical_code": "ENG-WRITE-G10-01",
+              "learning_objective": "Write a coherent argument or persuasive text using a range of rhetorical techniques; structure ideas logically; maintain a clear, sustained viewpoint throughout.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Extended Composition",
+              "canonical_code": "ENG-WRITE-G10-02",
+              "learning_objective": "Write extended narrative or descriptive compositions demonstrating full control of register, style, structure and sophisticated vocabulary choices throughout.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 2,
+              "prerequisites": ["Argumentative and Persuasive Writing"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "ENGL",
+      "grade_level": 9,
+      "standard_code_prefix": "9L",
+      "topics": [
+        {
+          "name": "Poetry",
+          "canonical_code": "ENGL-POETRY",
+          "sequence_order": 1,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Analyse set and unseen poems for language, form and context",
+            "Compare how two poets explore a theme"
+          ],
+          "subtopics": [
+            {
+              "name": "Set Poetry Analysis",
+              "canonical_code": "ENGL-POETRY-G9-01",
+              "learning_objective": "Analyse poems from the set anthology for meaning, language, form, structure and context; compare how two poets explore a similar theme, evaluating their methods.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Unseen Poetry",
+              "canonical_code": "ENGL-POETRY-G9-02",
+              "learning_objective": "Respond to an unseen poem by analysing how the poet uses language, structure, tone and form to create effects; support all points with close textual reference.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["Set Poetry Analysis"]
+            }
+          ]
+        },
+        {
+          "name": "Prose",
+          "canonical_code": "ENGL-PROSE",
+          "sequence_order": 2,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Analyse the set prose text for character, theme and narrative technique"
+          ],
+          "subtopics": [
+            {
+              "name": "Set Text Prose Analysis",
+              "canonical_code": "ENGL-PROSE-G9-01",
+              "learning_objective": "Analyse the set prose text for character development, theme, narrative technique and the writer's use of language and structure to create meaning and effect.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Drama",
+          "canonical_code": "ENGL-DRAMA",
+          "sequence_order": 3,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Analyse the set play for character, conflict and dramatic technique"
+          ],
+          "subtopics": [
+            {
+              "name": "Set Play Analysis",
+              "canonical_code": "ENGL-DRAMA-G9-01",
+              "learning_objective": "Analyse the set dramatic text for character development, conflict, dramatic irony and theatrical devices; explain how the playwright creates tension and meaning.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "igcse",
+      "subject_code": "ENGL",
+      "grade_level": 10,
+      "standard_code_prefix": "10L",
+      "topics": [
+        {
+          "name": "Poetry",
+          "canonical_code": "ENGL-POETRY",
+          "sequence_order": 1,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Write a sustained comparative essay on two anthology poems"
+          ],
+          "subtopics": [
+            {
+              "name": "Comparative Poetry Essay",
+              "canonical_code": "ENGL-POETRY-G10-01",
+              "learning_objective": "Write a sustained comparative essay discussing how two poems from the anthology present a theme; analyse the poets' methods and evaluate their relative effectiveness.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 1,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Prose",
+          "canonical_code": "ENGL-PROSE",
+          "sequence_order": 2,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Write extended analytical essays on the set prose text",
+            "Analyse unseen prose passages for language, character and atmosphere"
+          ],
+          "subtopics": [
+            {
+              "name": "Extended Prose Essay",
+              "canonical_code": "ENGL-PROSE-G10-01",
+              "learning_objective": "Write an extended analytical essay evaluating the writer's methods and their effects on the reader in the set prose text; sustain a critical argument with embedded evidence.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Unseen Prose Analysis",
+              "canonical_code": "ENGL-PROSE-G10-02",
+              "learning_objective": "Analyse an unseen prose passage, discussing how the writer creates character, atmosphere and tension through language, structure and narrative technique.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["Extended Prose Essay"]
+            }
+          ]
+        },
+        {
+          "name": "Drama",
+          "canonical_code": "ENGL-DRAMA",
+          "sequence_order": 3,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Analyse how a playwright uses dramatic structure, context and stagecraft to create meaning"
+          ],
+          "subtopics": [
+            {
+              "name": "Drama in Context and Performance",
+              "canonical_code": "ENGL-DRAMA-G10-01",
+              "learning_objective": "Analyse how a playwright uses dramatic structure, stagecraft and historical or social context to create meaning; evaluate how production choices would shape the audience's experience.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 1,
+              "prerequisites": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

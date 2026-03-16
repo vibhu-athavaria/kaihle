@@ -1038,15 +1038,18 @@ Each answer maps to a modality. Student's final `modality_scores` are normalised
 
 **M1-2-T1: Curriculum graph seeding**
 - `/backend/scripts/seed_curriculum_graph.py`:
-  - Seeds full v2 hierarchy for Cambridge Lower Secondary + IGCSE, Math + Science + English, Grades 6–12
+  - Seeds full v2 hierarchy for Cambridge Lower Secondary (Grades 6–8) + IGCSE (Grades 9–10)
+  - Subjects seeded: MATH, SCI, ENG (Lower Secondary); MATH, BIO, CHEM, PHY, ENG, ENGL (IGCSE)
+  - Note: SCI (Integrated Science) is Lower Secondary only. BIO, CHEM, PHY, ENGL are IGCSE only.
   - Source: manually authored JSON at `/backend/data/curriculum/cambridge_v1.json`
   - Inserts in dependency order: `curricula → subjects → grades → curriculum_subjects → topics → curriculum_topics → subtopics → subtopic_prerequisites`
   - Idempotent — upsert on unique constraints
   - **Must run before `ingest_curriculum.py`**
 
 **Acceptance criteria:**
-- [ ] JSON covers all 3 subjects × 7 grades × all Cambridge topics
-- [ ] All `subtopic_prerequisites` correctly linked
+- [ ] JSON covers cambridge_lower (MATH/SCI/ENG × Grades 6–8) + igcse (MATH/BIO/CHEM/PHY/ENG/ENGL × Grades 9–10)
+- [ ] SCI does not appear under igcse; BIO/CHEM/PHY/ENGL do not appear under cambridge_lower
+- [ ] All subtopic_prerequisites correctly linked (193 subtopics total)
 - [ ] Unit test: subtopic prerequisite traversal returns all upstream prerequisites
 - [ ] Script idempotent — re-running produces zero new inserts
 
@@ -1694,7 +1697,9 @@ Each answer maps to a modality. Student's final `modality_scores` are normalised
 - `seed_pilot_school.py`:
   - Creates first Bali pilot school record
   - Creates school admin user
-  - Imports Cambridge curriculum for Math + Science + English, Grades 6–12
+  - Adopts Cambridge Lower Secondary (Grades 6–8) and IGCSE (Grades 9–10) for the pilot school
+  - Subjects: MATH, SCI, ENG (Lower Secondary); MATH, BIO, CHEM, PHY, ENG, ENGL (IGCSE)
+  - Note: curriculum graph must already be seeded by seed_curriculum_graph.py (M1-2-T1)
   - Imports matching questions from bank
 
 **M6-3-T5: Pre-launch checklist**
