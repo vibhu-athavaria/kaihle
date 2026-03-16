@@ -14,8 +14,23 @@
 Kaihle is an AI-powered learning diagnostics platform for schools. It identifies knowledge gaps in students, generates personalised study plans, and gives teachers and parents real-time visibility into student progress.
 
 **Target users:** Students (age 11–18), Teachers, School Admins, Parents.
-**Curriculum scope (v1):** Curriculum scope (v1): Cambridge Lower Secondary (Grades 6–8) + Cambridge IGCSE (Grades 9–10).
-**Pilot target:** Bali micro-schools. Max 10 schools, ~400 students in v1.
+**Curriculum scope (v1):** Cambridge Lower Secondary (Grades 6–8) + Cambridge IGCSE (Grades 9–10).
+
+## Programme                        Grades                      Subjects
+Cambridge Lower Secondary           6, 7, 8                     Mathematics (MATH), Integrated Science                                                         (SCI), English Language (ENG)
+Cambridge IGCSE                     9, 10                       Mathematics (MATH), Biology(BIO),
+                                                                Chemistry (CHEM), Physics (PHY), English Language (ENG),
+                                                                English Literature (ENGL — non-core)
+
+## Subject binding rules (absolute — enforced by curriculum_subjects table and seed script):
+  - SCI (Integrated Science) belongs to cambridge_lower ONLY. It does not exist under igcse.
+  - BIO, CHEM, PHY, ENGL belong to igcse ONLY. They do not exist under cambridge_lower.
+  - MATH and ENG span both curricula.
+
+**Cambridge AS & A Level (Grades 11–12)** is deferred to a later milestone.
+It will be added as a separate curriculum entry cambridge_as_a when scoped.
+
+**Pilot target:** micro-schools. Max 10 schools, ~400 students in v1.
 
 ---
 
