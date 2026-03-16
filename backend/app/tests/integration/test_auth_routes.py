@@ -1,4 +1,7 @@
-"""Integration tests for authentication API routes."""
+"""Integration tests for authentication API routes.
+
+Fixtures provided by conftest.py.
+"""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -24,40 +27,6 @@ from app.models.user import AuthToken, User, UserRole
 
 # Set test JWT secret
 settings.jwt_secret_key = "test-secret-key-for-testing"
-
-
-@pytest_asyncio.fixture
-async def school(db_session: AsyncSession) -> School:
-    """Create a test school."""
-    school = School(
-        id=uuid.uuid4(),
-        name="Test School",
-        slug=f"test-school-{uuid.uuid4().hex[:8]}",
-        status="active",
-    )
-    db_session.add(school)
-    await db_session.commit()
-    return school
-
-
-@pytest_asyncio.fixture
-async def user(db_session: AsyncSession, school: School) -> User:
-    """Create a test user with password."""
-    from app.core.security import hash_password
-
-    user = User(
-        id=uuid.uuid4(),
-        school_id=school.id,
-        email=f"test-{uuid.uuid4().hex[:8]}@example.com",
-        hashed_password=hash_password("correct-password"),
-        first_name="Test",
-        last_name="User",
-        role=UserRole.TEACHER,
-        is_active=True,
-    )
-    db_session.add(user)
-    await db_session.commit()
-    return user
 
 
 @pytest_asyncio.fixture

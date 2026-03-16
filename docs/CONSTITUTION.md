@@ -119,7 +119,9 @@ It will be added as a separate curriculum entry cambridge_as_a when scoped.
 3. **All queries filter by `school_id`** unless the caller role is `KAIHLE_ADMIN`.
 4. **All LLM calls go through `LLMProvider` abstraction.** No feature code imports provider SDKs directly. Use `router.py` to select provider.
 5. **No hardcoded secrets.** All config comes from environment variables via `app/core/config.py` (Pydantic Settings).
-6. **Test coverage ≥ 80%** on all files in `/services/`. Enforced by CI — no merge to `main` if below.
+6. **Test coverage ≥ 90%** on all files in `/services/`. Enforced by CI — no merge to `main` if below.
+   Pre-commit hook enforces ≥ 80% on unit tests locally. Full 90% threshold is verified in CI
+   against both unit and integration tests combined.
 7. **Test naming:** `test_<what>_when_<condition>_then_<expected>`
 8. **`kaihle_v2_1_schema.sql` is the single source of truth for the database schema.** If a task file and the SQL file conflict, the SQL file wins. Always check it for exact column names, types, and constraints.
 9. **Do not write migration SQL by hand.** Use `alembic revision --autogenerate -m "description"` and review the output.

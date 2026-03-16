@@ -1,4 +1,7 @@
-"""Integration tests for authentication middleware and route guards."""
+"""Integration tests for authentication middleware and route guards.
+
+Fixtures provided by conftest.py.
+"""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -27,34 +30,6 @@ from app.models.user import StudentProfile, User, UserRole
 
 # Set test JWT secret
 settings.jwt_secret_key = "test-secret-key-for-testing"
-
-
-@pytest_asyncio.fixture
-async def school(db_session: AsyncSession) -> School:
-    """Create a test school."""
-    school = School(
-        id=uuid.uuid4(),
-        name="Test School",
-        slug=f"test-school-{uuid.uuid4().hex[:8]}",
-        status="active",
-    )
-    db_session.add(school)
-    await db_session.commit()
-    return school
-
-
-@pytest_asyncio.fixture
-async def other_school(db_session: AsyncSession) -> School:
-    """Create another test school."""
-    school = School(
-        id=uuid.uuid4(),
-        name="Other School",
-        slug=f"other-school-{uuid.uuid4().hex[:8]}",
-        status="active",
-    )
-    db_session.add(school)
-    await db_session.commit()
-    return school
 
 
 @pytest_asyncio.fixture

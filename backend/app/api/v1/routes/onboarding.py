@@ -203,70 +203,53 @@ async def get_learning_profile(
     Returns:
         Student learning profile.
     """
+    # Resolve target student ID
+    target_id = _resolve_target_student(current_user, student_id)
+
+    # Service handles all authorization
     service = OnboardingService(db)
-
-    # Determine target student ID based on role
-    target_student_id: UUID
-
-    if current_user.role == UserRole.STUDENT:
-        # Students can only view their own profile - default to own ID if not specified
-        if student_id is not None and student_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Students can only view their own learning profile",
-            )
-        target_student_id = current_user.id
-    else:
-        # Teachers/Admins must provide student_id
-        if student_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="student_id query parameter is required",
-            )
-        target_student_id = student_id
-
-    if current_user.role == UserRole.TEACHER:
-        # Verify teacher-student relationship
-        is_related = await service.verify_teacher_student_relationship(current_user.id, target_student_id)
-        if not is_related:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only view profiles of students in your classes",
-            )
-
-    elif current_user.role == UserRole.SCHOOL_ADMIN:
-        # School Admins can only view their school student's profile
-        try:
-            student_ = await UserService(db).get_user(target_student_id)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Invalid student id",
-            )
-
-        if current_user.school_id != student_.school_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to view this student",
-            )
-
-    # Retrieve the profile
-    profile = await service.get_learning_profile(target_student_id)
-
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Learning profile not found",
+    try:
+        profile = await service.get_learning_profile_authorized(
+            requester_id=current_user.id,
+            requester_role=current_user.role,
+            requester_school_id=current_user.school_id,
+            target_student_id=target_id,
         )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
     logger.debug(
         "learning_profile_retrieved",
         requester_id=str(current_user.id),
         requester_role=current_user.role,
-        student_id=str(target_student_id),
+        student_id=str(target_id),
     )
 
     return profile
+
+
+def _resolve_target_student(current_user: CurrentUser, student_id: UUID | None) -> UUID:
+    """Resolve target student ID based on role.
+
+    Students always get their own profile.
+    Teachers/admins must provide student_id.
+    """
+    if current_user.role == UserRole.STUDENT:
+        # Students can only view their own profile
+        if student_id is not None and student_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Students can only view their own learning profile",
+            )
+        return current_user.id
+    if student_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="student_id query parameter is required",
+        )
+    return student_id
 
 
 @router.get("/students/pending", response_model=list[OnboardingPendingResponse])

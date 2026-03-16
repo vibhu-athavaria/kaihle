@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: kaihle
       POSTGRES_DB: kaihle
     ports:
-      - "5432:5432"
+      - "5433:5432"  # Host port 5433 to avoid conflicts with local PostgreSQL on 5432.
+                     # CI uses port 5432 (GitHub Actions service containers use standard ports).
+                     # Tests run locally should use: DATABASE_URL=...@localhost:5433/...
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql

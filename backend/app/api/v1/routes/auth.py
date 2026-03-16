@@ -1,6 +1,7 @@
 """Authentication API routes."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -37,6 +38,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except IntegrityError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
 
 @router.post("/login", response_model=LoginResponse)
