@@ -8,28 +8,17 @@ Tests cover:
 """
 
 import uuid
-from collections.abc import AsyncGenerator
 from typing import Any
 
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.main import app
+from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.school import Class, ClassEnrollment, School
-from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
-
-
-@pytest_asyncio.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    """Create an async test client."""
-    from httpx import ASGITransport, AsyncClient
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+from app.models.user import StudentProfile, User, UserRole
+from app.services.onboarding_service import OnboardingService
 
 
 @pytest_asyncio.fixture
@@ -46,11 +35,9 @@ async def test_student(db_session: AsyncSession, test_school: School) -> User:
     db_session.add(student)
     await db_session.commit()
 
-    # Create student profile
     profile = StudentProfile(
         id=uuid.uuid4(),
         user_id=student.id,
-        onboarding_diagnostic_status=OnboardingStatus.PENDING,
     )
     db_session.add(profile)
     await db_session.commit()
@@ -234,32 +221,21 @@ class TestGetLearningProfile:
         assert response.status_code == 401
 
 
-class TestGetOnboardingStatus:
-    """Tests for GET /api/v1/onboarding/status."""
-
-    @pytest.mark.asyncio
-    async def test_get_onboarding_status_when_not_complete_then_returns_pending(
-        self, client: AsyncClient, test_student: User
-    ) -> None:
-        """Test that status endpoint returns pending for new students."""
-        response = await client.get("/api/v1/onboarding/status")
-
-        # Without auth, should get 401
-        assert response.status_code == 401
-
-
 @pytest.mark.asyncio
 async def test_full_onboarding_flow(
     db_session: AsyncSession,
     test_school: School,
     test_student: User,
+    test_grade: Grade,
+    test_subject: Subject,
+    test_curriculum: Curriculum,
+    test_teacher: User,
 ) -> None:
     """Test the complete onboarding flow end-to-end.
 
     This test uses the service layer directly since auth middleware
     is not yet implemented (M0-3-T3).
     """
-    from app.services.onboarding_service import OnboardingService
 
     service = OnboardingService(db_session)
 
@@ -272,8 +248,7 @@ async def test_full_onboarding_flow(
     # 2. Check initial onboarding status
     status = await service.get_onboarding_status(test_student.id)
     assert status["learning_profile_complete"] is False
-    assert status["diagnostics_complete"] is False
-    assert status["overall"] == "PENDING"
+    assert len(status["diagnostics_by_class"]) == 0
 
     # 3. Submit questionnaire responses
     responses: list[dict[str, Any]] = [
@@ -300,20 +275,41 @@ async def test_full_onboarding_flow(
     # 5. Check onboarding status after profile completion
     status = await service.get_onboarding_status(test_student.id)
     assert status["learning_profile_complete"] is True
-    assert status["diagnostics_complete"] is False
-    assert status["overall"] == "IN_PROGRESS"
+    assert len(status["diagnostics_by_class"]) == 0
 
-    # 6. Update diagnostic status to completed
-    result = await db_session.execute(select(StudentProfile).where(StudentProfile.user_id == test_student.id))
-    student_profile = result.scalar_one()
-    student_profile.onboarding_diagnostic_status = OnboardingStatus.COMPLETED
+    # 6. Update diagnostic status to completed via class_enrollments (v2.1)
+    # Create a class and enroll the student
+    test_class = Class(
+        id=uuid.uuid4(),
+        school_id=test_school.id,
+        grade_id=test_grade.id,
+        subject_id=test_subject.id,
+        curriculum_id=test_curriculum.id,
+        teacher_id=test_teacher.id,
+        name="Test Class",
+        academic_year="2026",
+        is_active=True,
+    )
+    db_session.add(test_class)
+    await db_session.flush()
+
+    enrollment = ClassEnrollment(
+        class_id=test_class.id,
+        student_id=test_student.id,
+        is_active=True,
+        onboarding_diagnostic_status="PENDING",
+    )
+    db_session.add(enrollment)
+    await db_session.commit()
+
+    # Now update the enrollment status to COMPLETED
+    enrollment.onboarding_diagnostic_status = "COMPLETED"
     await db_session.commit()
 
     # 7. Check final onboarding status
     status = await service.get_onboarding_status(test_student.id)
     assert status["learning_profile_complete"] is True
-    assert status["diagnostics_complete"] is True
-    assert status["overall"] == "COMPLETED"
+    assert len(status["diagnostics_by_class"]) == 1
 
     # 8. Re-submit (idempotent check)
     reupdated_profile = await service.save_questionnaire_response(test_student.id, responses)

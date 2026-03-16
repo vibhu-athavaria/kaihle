@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, get_current_user, require_role
+from app.core.deps import CurrentUser, require_role
 from app.models.school import Class
 from app.models.user import UserRole
 from app.schemas.school import (
@@ -77,7 +77,7 @@ async def list_schools(
 @router.get("/{school_id}", response_model=SchoolResponse)
 async def get_school(
     school_id: uuid.UUID,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> SchoolResponse:
     """Get a single school by ID.
@@ -85,14 +85,7 @@ async def get_school(
     KaihleAdmin can see any school.
     SchoolAdmin can see only their own school.
     """
-    # Check permissions
-    if current_user.role not in ("KAIHLE_ADMIN", "SCHOOL_ADMIN"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions",
-        )
-
-    if current_user.role == "SCHOOL_ADMIN" and current_user.school_id != school_id:
+    if current_user.role == UserRole.SCHOOL_ADMIN and current_user.school_id != school_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot access school from different organization",
@@ -155,15 +148,11 @@ def _class_to_response(class_: Class) -> ClassResponse:
 
 def _check_school_access(school_id: uuid.UUID, current_user: CurrentUser) -> None:
     """Check if user can access school.
-
     KaihleAdmin can access any school.
     SchoolAdmin can only access own school.
     Teachers can only access their own school.
-    Raises 403 if access denied.
+
     """
-    # KAIHLE_ADMIN bypasses all checks
-    if current_user.role == UserRole.KAIHLE_ADMIN:
-        return
 
     # Other roles must match school_id
     if current_user.school_id != school_id:
@@ -177,7 +166,7 @@ def _check_school_access(school_id: uuid.UUID, current_user: CurrentUser) -> Non
 async def create_class(
     school_id: uuid.UUID,
     body: ClassCreate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
 ) -> ClassResponse:
     """Create a new class for a school.
@@ -205,7 +194,7 @@ async def create_class(
 @router.get("/{school_id}/classes", response_model=list[ClassResponse])
 async def list_classes(
     school_id: uuid.UUID,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
 ) -> list[ClassResponse]:
     """List classes for a school.
@@ -238,20 +227,14 @@ async def enroll_students(
     school_id: uuid.UUID,
     class_id: uuid.UUID,
     body: EnrollRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
 ) -> EnrollResponse:
     """Enroll students in a class.
 
-    SchoolAdmin or KaihleAdmin can enroll students.
+    SchoolAdmin or Teacher can enroll students.
     Returns: {enrolled: int, skipped: int, errors: list}
     """
-    # Check role
-    if current_user.role not in (UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only SchoolAdmin or KaihleAdmin can enroll students",
-        )
 
     # Check school access
     _check_school_access(school_id, current_user)
@@ -259,9 +242,16 @@ async def enroll_students(
     # Verify class belongs to school
     service = SchoolService(db)
     try:
-        await service.verify_class_school(class_id, school_id)
+        class_ = await service.verify_class_school(class_id, school_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    # Teachers can only enroll in their own class
+    if current_user.role == UserRole.TEACHER and class_.teacher_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only enroll students in your own classes",
+        )
 
     # Enroll students
     result = await service.enroll_students(class_id, body.student_ids)
@@ -272,7 +262,7 @@ async def enroll_students(
 async def get_class_students(
     school_id: uuid.UUID,
     class_id: uuid.UUID,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
 ) -> list[StudentSummary]:
     """Get students enrolled in a class.

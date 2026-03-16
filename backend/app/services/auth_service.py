@@ -18,8 +18,21 @@ from app.core.security import (
     store_refresh_token,
     verify_password,
 )
-from app.models.user import AuthToken, User
+from app.models.school import School
+from app.models.user import AuthToken, AuthTokenType, User
 from app.schemas.auth import LoginResponse, RegisterResponse, TokenResponse
+
+
+class SchoolNotFoundError(Exception):
+    """Raised when a school is not found."""
+
+    pass
+
+
+class AuthServiceError(Exception):
+    """Base exception for auth service errors."""
+
+    pass
 
 
 class AuthService:
@@ -49,6 +62,12 @@ class AuthService:
         existing = await self.db.scalar(stmt)
         if existing:
             raise ValueError("Email already registered")
+
+        # Validate school exists if provided
+        if school_id:
+            school = await self.db.get(School, school_id)
+            if not school:
+                raise SchoolNotFoundError(f"School with id {school_id} not found")
 
         hashed = hash_password(password)
         user = User(
@@ -127,7 +146,7 @@ class AuthService:
             select(AuthToken).where(
                 AuthToken.user_id == user_id,
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "MAGIC_LINK",
+                AuthToken.type == AuthTokenType.MAGIC_LINK,
                 AuthToken.used_at.is_(None),
                 AuthToken.expires_at > datetime.now(UTC),
             )
@@ -168,7 +187,7 @@ class AuthService:
         auth_token = await self.db.scalar(
             select(AuthToken).where(
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "REFRESH",
+                AuthToken.type == AuthTokenType.REFRESH,
                 AuthToken.used_at.is_(None),
                 AuthToken.expires_at > datetime.now(UTC),
             )
@@ -189,7 +208,7 @@ class AuthService:
         auth_token = await self.db.scalar(
             select(AuthToken).where(
                 AuthToken.token_hash == token_hash,
-                AuthToken.type == "REFRESH",
+                AuthToken.type == AuthTokenType.REFRESH,
             )
         )
         if auth_token:

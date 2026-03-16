@@ -9,7 +9,6 @@ Tests cover:
 """
 
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -17,7 +16,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.onboarding import StudentLearningProfile
-from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
+from app.models.user import StudentProfile
 from app.services.onboarding_service import OnboardingService
 
 
@@ -347,10 +346,10 @@ class TestSaveQuestionnaireResponse:
             questionnaire_version="v1",
         )
 
+        # StudentProfile no longer has onboarding_diagnostic_status (moved to class_enrollments in v2.1)
         student_profile = StudentProfile(
             id=uuid.uuid4(),
             user_id=student_id,
-            onboarding_diagnostic_status=OnboardingStatus.PENDING,
         )
 
         responses: list[dict[str, Any]] = [
@@ -377,35 +376,41 @@ class TestSaveQuestionnaireResponse:
         assert result.completed_at is not None
         assert result.modality_scores["visual"] == 1.0
         service.db.add.assert_not_called()  # type: ignore[attr-defined]  # Should not create new row
-        service.db.commit.assert_called_once()  # type: ignore[attr-defined]
+        assert service.db.commit.call_count == 2  # type: ignore[attr-defined]  # Once for profile, once for is_learning_profile_complete
 
     async def test_when_completed_at_is_set_on_submit(
         self, service: OnboardingService, student_id: uuid.UUID, school_id: uuid.UUID
     ) -> None:
         """Test that completed_at timestamp is set when submitting."""
+        # StudentProfile no longer has onboarding_diagnostic_status (moved to class_enrollments in v2.1)
         student_profile = StudentProfile(
             id=uuid.uuid4(),
             user_id=student_id,
-            onboarding_diagnostic_status=OnboardingStatus.PENDING,
         )
 
-        user = User(
-            id=student_id,
-            school_id=school_id,
-            email="test@example.com",
-            first_name="Test",
-            last_name="User",
-            role=UserRole.STUDENT,
-        )
-
-        responses = [
+        responses: list[dict[str, Any]] = [
             {"question_id": "q1", "answer_key": "watch_video"},
+            {"question_id": "q2", "answer_key": "see_diagrams"},
+            {"question_id": "q3", "answer_key": "solo"},
+            {"question_id": "q4", "answer_key": "short"},
+            {"question_id": "q5", "answer_key": "concept_first"},
+            {"question_id": "q6_to_q10", "answer_keys": ["sports"]},
         ]
 
+        # Create existing profile for the second call
+        existing_profile = StudentLearningProfile(
+            id=uuid.uuid4(),
+            student_id=student_id,
+            school_id=school_id,
+            modality_scores={},
+            work_style={},
+            questionnaire_version="v1",
+        )
+
+        # Mock the database queries
         mock_results = [
-            MagicMock(scalar_one_or_none=MagicMock(return_value=student_profile)),
-            MagicMock(scalar_one_or_none=MagicMock(return_value=None)),  # No existing profile
-            MagicMock(scalar_one=MagicMock(return_value=user)),  # User lookup
+            MagicMock(scalar_one_or_none=MagicMock(return_value=student_profile)),  # First call: student profile
+            MagicMock(scalar_one_or_none=MagicMock(return_value=existing_profile)),  # Second call: learning profile
         ]
         service.db.execute = AsyncMock(side_effect=mock_results)  # type: ignore[method-assign]
         service.db.commit = AsyncMock()  # type: ignore[method-assign]
@@ -413,8 +418,11 @@ class TestSaveQuestionnaireResponse:
 
         result = await service.save_questionnaire_response(student_id, responses)
 
+        assert result == existing_profile
         assert result.completed_at is not None
-        assert isinstance(result.completed_at, datetime)
+        assert result.modality_scores["visual"] == 1.0
+        service.db.add.assert_not_called()  # type: ignore[attr-defined]  # Should not create new row
+        assert service.db.commit.call_count == 2  # type: ignore[attr-defined]  # Once for profile, once for is_learning_profile_complete
 
     async def test_when_student_profile_not_found_then_raises_value_error(
         self, service: OnboardingService, student_id: uuid.UUID
@@ -432,139 +440,52 @@ class TestSaveQuestionnaireResponse:
 
 @pytest.mark.asyncio
 class TestGetOnboardingStatus:
-    """Tests for get_onboarding_status method."""
+    """Tests for get_onboarding_status method (v2.1 - uses student_profiles.is_learning_profile_complete)."""
 
-    async def test_when_both_complete_then_overall_completed(
+    async def test_when_learning_profile_complete_then_overall_completed(
         self, service: OnboardingService, student_id: uuid.UUID
     ) -> None:
-        """Test that overall=COMPLETED when both profile and diagnostics are done."""
-        learning_profile = StudentLearningProfile(
-            id=uuid.uuid4(),
-            student_id=student_id,
-            school_id=uuid.uuid4(),
-            modality_scores={"visual": 1.0},
-            completed_at=datetime.now(UTC),
-        )
-
+        """Test that overall=COMPLETED when learning profile is complete."""
+        # Create student profile with is_learning_profile_complete = True
         student_profile = StudentProfile(
             id=uuid.uuid4(),
             user_id=student_id,
-            onboarding_diagnostic_status=OnboardingStatus.COMPLETED,
+            is_learning_profile_complete=True,
         )
 
+        # Mock the database queries:
+        # 1. First call: StudentProfile query
+        # 2. Second call: ClassEnrollment diagnostic status query (returns empty list = no enrollments)
         mock_results = [
-            MagicMock(scalar_one_or_none=MagicMock(return_value=learning_profile)),
-            MagicMock(scalar_one_or_none=MagicMock(return_value=student_profile)),
+            MagicMock(scalar_one_or_none=MagicMock(return_value=student_profile)),  # StudentProfile query
+            MagicMock(
+                scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+            ),  # ClassEnrollment query
         ]
         service.db.execute = AsyncMock(side_effect=mock_results)  # type: ignore[method-assign]
 
         status = await service.get_onboarding_status(student_id)
 
         assert status["learning_profile_complete"] is True
-        assert status["diagnostics_complete"] is True
-        assert status["overall"] == "COMPLETED"
+        assert len(status["diagnostics_by_class"]) == 0
 
-    async def test_when_only_profile_done_then_in_progress(
-        self, service: OnboardingService, student_id: uuid.UUID
-    ) -> None:
-        """Test that overall=IN_PROGRESS when only profile is done."""
-        learning_profile = StudentLearningProfile(
-            id=uuid.uuid4(),
-            student_id=student_id,
-            school_id=uuid.uuid4(),
-            modality_scores={"visual": 1.0},
-            completed_at=datetime.now(UTC),
-        )
-
-        student_profile = StudentProfile(
-            id=uuid.uuid4(),
-            user_id=student_id,
-            onboarding_diagnostic_status=OnboardingStatus.PENDING,
-        )
-
+    async def test_when_no_student_profile_then_false(self, service: OnboardingService, student_id: uuid.UUID) -> None:
+        """Test that learning_profile_complete return false when student profile doesn't exist."""
+        # Mock the database queries:
+        # 1. First call: StudentProfile query (returns None = no profile)
+        # 2. Second call: ClassEnrollment diagnostic status query (returns empty list)
         mock_results = [
-            MagicMock(scalar_one_or_none=MagicMock(return_value=learning_profile)),
-            MagicMock(scalar_one_or_none=MagicMock(return_value=student_profile)),
-        ]
-        service.db.execute = AsyncMock(side_effect=mock_results)  # type: ignore[method-assign]
-
-        status = await service.get_onboarding_status(student_id)
-
-        assert status["learning_profile_complete"] is True
-        assert status["diagnostics_complete"] is False
-        assert status["overall"] == "IN_PROGRESS"
-
-    async def test_when_only_diagnostics_done_then_in_progress(
-        self, service: OnboardingService, student_id: uuid.UUID
-    ) -> None:
-        """Test that overall=IN_PROGRESS when only diagnostics are done."""
-        learning_profile = StudentLearningProfile(
-            id=uuid.uuid4(),
-            student_id=student_id,
-            school_id=uuid.uuid4(),
-            modality_scores={},
-            completed_at=None,
-        )
-
-        student_profile = StudentProfile(
-            id=uuid.uuid4(),
-            user_id=student_id,
-            onboarding_diagnostic_status=OnboardingStatus.COMPLETED,
-        )
-
-        mock_results = [
-            MagicMock(scalar_one_or_none=MagicMock(return_value=learning_profile)),
-            MagicMock(scalar_one_or_none=MagicMock(return_value=student_profile)),
+            MagicMock(scalar_one_or_none=MagicMock(return_value=None)),  # StudentProfile query - returns None
+            MagicMock(
+                scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+            ),  # ClassEnrollment query
         ]
         service.db.execute = AsyncMock(side_effect=mock_results)  # type: ignore[method-assign]
 
         status = await service.get_onboarding_status(student_id)
 
         assert status["learning_profile_complete"] is False
-        assert status["diagnostics_complete"] is True
-        assert status["overall"] == "IN_PROGRESS"
-
-    async def test_when_nothing_done_then_pending(self, service: OnboardingService, student_id: uuid.UUID) -> None:
-        """Test that overall=PENDING when neither is done."""
-        mock_results = [
-            MagicMock(scalar_one_or_none=MagicMock(return_value=None)),  # No learning profile
-            MagicMock(scalar_one_or_none=MagicMock(return_value=None)),  # No student profile
-        ]
-        service.db.execute = AsyncMock(side_effect=mock_results)  # type: ignore[method-assign]
-
-        status = await service.get_onboarding_status(student_id)
-
-        assert status["learning_profile_complete"] is False
-        assert status["diagnostics_complete"] is False
-        assert status["overall"] == "PENDING"
-
-    async def test_when_learning_profile_no_completed_at_then_not_complete(
-        self, service: OnboardingService, student_id: uuid.UUID
-    ) -> None:
-        """Test that learning profile without completed_at is not considered complete."""
-        learning_profile = StudentLearningProfile(
-            id=uuid.uuid4(),
-            student_id=student_id,
-            school_id=uuid.uuid4(),
-            modality_scores={},
-            completed_at=None,
-        )
-
-        student_profile = StudentProfile(
-            id=uuid.uuid4(),
-            user_id=student_id,
-            onboarding_diagnostic_status=OnboardingStatus.PENDING,
-        )
-
-        mock_results = [
-            MagicMock(scalar_one_or_none=MagicMock(return_value=learning_profile)),
-            MagicMock(scalar_one_or_none=MagicMock(return_value=student_profile)),
-        ]
-        service.db.execute = AsyncMock(side_effect=mock_results)  # type: ignore[method-assign]
-
-        status = await service.get_onboarding_status(student_id)
-
-        assert status["learning_profile_complete"] is False
+        assert len(status["diagnostics_by_class"]) == 0
 
 
 @pytest.mark.asyncio

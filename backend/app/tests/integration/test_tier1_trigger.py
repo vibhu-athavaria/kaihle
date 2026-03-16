@@ -30,7 +30,7 @@ from app.models.curriculum import (
     Topic,
 )
 from app.models.school import Class, School
-from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
+from app.models.user import StudentProfile, User, UserRole
 from app.services.assessment_service import MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT, AssessmentService
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ async def _create_student_with_profile(db: AsyncSession, school: School) -> tupl
     profile = StudentProfile(
         id=uuid.uuid4(),
         user_id=student.id,
-        onboarding_diagnostic_status=OnboardingStatus.PENDING,
+        # v2.1: onboarding_diagnostic_status moved to class_enrollments
     )
     db.add(profile)
     await db.commit()

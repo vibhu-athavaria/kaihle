@@ -11,8 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import InvalidTokenError, decode_token
-from app.models.onboarding import StudentLearningProfile
-from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
+from app.models.user import StudentProfile, User, UserRole
 
 # HTTPBearer for extracting Bearer token
 security = HTTPBearer()
@@ -178,8 +177,7 @@ async def require_onboarding_complete(
     Dependency that enforces onboarding completion for STUDENT role.
 
     For STUDENT role, checks:
-    - student_profiles.onboarding_diagnostic_status == 'COMPLETED'
-    - student_learning_profiles.completed_at IS NOT NULL
+    - student_profiles.is_learning_profile_complete == TRUE
 
     Non-STUDENT roles pass through without any check.
 
@@ -197,7 +195,7 @@ async def require_onboarding_complete(
     if current_user.role != UserRole.STUDENT:
         return current_user
 
-    # Check student profile for diagnostic status
+    # Check student profile exists
     result = await db.execute(select(StudentProfile).where(StudentProfile.user_id == current_user.id))
     student_profile = result.scalar_one_or_none()
 
@@ -207,24 +205,9 @@ async def require_onboarding_complete(
             detail="Student profile not found",
         )
 
-    # Check onboarding diagnostic status
-    if student_profile.onboarding_diagnostic_status != OnboardingStatus.COMPLETED:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "message": "Onboarding not complete",
-                "redirect": "/onboarding/diagnostic",
-                "required": ["diagnostic"],
-            },
-        )
-
-    # Check learning profile completion - use StudentLearningProfile.completed_at
-    learning_result = await db.execute(
-        select(StudentLearningProfile).where(StudentLearningProfile.student_id == current_user.id)
-    )
-    learning_profile = learning_result.scalar_one_or_none()
-
-    if not learning_profile or learning_profile.completed_at is None:
+    # Check learning profile completion (v2.1)
+    # Student can access dashboard as soon as learning profile is complete
+    if not student_profile.is_learning_profile_complete:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={

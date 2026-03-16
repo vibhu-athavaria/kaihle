@@ -118,10 +118,14 @@ class UserService:
         total = await self.db.scalar(count_stmt) or 0
         return list(users), total
 
-    async def get_user(self, school_id: uuid.UUID, user_id: uuid.UUID) -> User:
+    async def get_user(self, user_id: uuid.UUID, school_id: uuid.UUID | None = None) -> User:
         """Get a user by ID, ensuring they belong to the specified school."""
         # Fetch user with both user_id and school_id in single query
-        user = await self.db.scalar(select(User).where(User.id == user_id, User.school_id == school_id))
+        stmt = select(User).where(User.id == user_id)
+        if school_id is not None:
+            stmt = stmt.where(User.school_id == school_id)
+
+        user = await self.db.scalar(stmt)
         if not user:
             raise ValueError("User not found")
         return user
@@ -133,7 +137,7 @@ class UserService:
         data: UserUpdate,
     ) -> User:
         """Update user information."""
-        user = await self.get_user(school_id, user_id)
+        user = await self.get_user(user_id, school_id)
         previous_state = {"first_name": user.first_name, "last_name": user.last_name, "is_active": user.is_active}
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(user, field, value)
@@ -151,7 +155,7 @@ class UserService:
 
     async def deactivate_user(self, school_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Soft delete — sets is_active=False. User cannot log in after this."""
-        user = await self.get_user(school_id, user_id)
+        user = await self.get_user(user_id, school_id)
         previous_state = user.is_active
         user.is_active = False
         await self.db.flush()

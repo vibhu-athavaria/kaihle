@@ -79,11 +79,11 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str):
           student_id,
           status = 'NOT_STARTED'
         }
-5. After all subjects processed:
-   UPDATE student_profiles
-   SET onboarding_diagnostic_status = 'IN_PROGRESS'
-   WHERE student_id = ?
-   -- Only update if currently 'PENDING' (don't regress if already IN_PROGRESS/COMPLETED)
+   5. After all subjects processed:
+    UPDATE class_enrollments
+    SET onboarding_diagnostic_status = 'IN_PROGRESS'
+    WHERE class_id = ? AND student_id = ?
+    -- Only update if currently 'PENDING' (don't regress if already IN_PROGRESS/COMPLETED)
 ```
 
 ---
@@ -117,7 +117,7 @@ for topic in topics:
 is_system_generated   BOOLEAN DEFAULT FALSE   -- set TRUE for Tier 1
 created_by            UUID NULLABLE           -- NULL for system-generated
 
--- student_profiles (v2.1 addition)
+-- class_enrollments (v2.1 addition)
 onboarding_diagnostic_status  onboarding_status_enum DEFAULT 'PENDING'
 ```
 
@@ -130,7 +130,7 @@ onboarding_diagnostic_status  onboarding_status_enum DEFAULT 'PENDING'
 - [ ] Each assessment has a matching `student_attempts` row with `status='NOT_STARTED'`
 - [ ] Questions span all curriculum_topics for the subject+grade (not just one topic)
 - [ ] Each assessment has ≤ 20 questions (or all available if bank has fewer)
-- [ ] `student_profiles.onboarding_diagnostic_status` set to `'IN_PROGRESS'` after task completes
+- [ ] `class_enrollments.onboarding_diagnostic_status` set to `'IN_PROGRESS'` for the enrolled class after task completes
 - [ ] Re-triggering for same student+class → no duplicate assessments created
 - [ ] Task retries up to 3 times on DB error
 - [ ] `created_by` is NULL on system-generated assessments

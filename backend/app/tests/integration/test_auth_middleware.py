@@ -23,7 +23,7 @@ from app.core.deps import (
 from app.core.security import create_access_token
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import School
-from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
+from app.models.user import StudentProfile, User, UserRole
 
 # Set test JWT secret
 settings.jwt_secret_key = "test-secret-key-for-testing"
@@ -144,11 +144,13 @@ async def inactive_user(db_session: AsyncSession, school: School) -> User:
 
 @pytest_asyncio.fixture
 async def student_profile_pending(db_session: AsyncSession, student_user: User) -> StudentProfile:
-    """Create a student profile with PENDING onboarding status."""
+    """Create a student profile.
+
+    Note: v2.1 - onboarding_diagnostic_status moved to class_enrollments.
+    """
     profile = StudentProfile(
         id=uuid.uuid4(),
         user_id=student_user.id,
-        onboarding_diagnostic_status=OnboardingStatus.PENDING,
     )
     db_session.add(profile)
     await db_session.commit()
@@ -157,11 +159,14 @@ async def student_profile_pending(db_session: AsyncSession, student_user: User) 
 
 @pytest_asyncio.fixture
 async def student_profile_completed(db_session: AsyncSession, student_user: User, school: School) -> StudentProfile:
-    """Create a student profile with COMPLETED onboarding status."""
+    """Create a student profile.
+
+    Note: v2.1 - onboarding_diagnostic_status moved to class_enrollments.
+    """
     profile = StudentProfile(
         id=uuid.uuid4(),
         user_id=student_user.id,
-        onboarding_diagnostic_status=OnboardingStatus.COMPLETED,
+        is_learning_profile_complete=True,
     )
     db_session.add(profile)
     await db_session.commit()
@@ -517,7 +522,7 @@ async def test_student_with_pending_onboarding_then_403(
 async def test_student_with_incomplete_learning_profile_then_403(
     client: AsyncClient,
     student_user: User,
-    student_profile_completed: StudentProfile,
+    student_profile_pending: StudentProfile,
     learning_profile_incomplete: StudentLearningProfile,
 ) -> None:
     """Test that student with incomplete learning profile returns 403."""

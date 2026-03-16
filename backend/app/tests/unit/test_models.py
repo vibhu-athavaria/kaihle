@@ -4,6 +4,7 @@ import uuid
 
 from app.models.assessment import Assessment, AssessmentStatus
 from app.models.onboarding import StudentLearningProfile
+from app.models.school import ClassEnrollment
 from app.models.user import OnboardingStatus, StudentProfile
 
 
@@ -68,17 +69,32 @@ class TestAssessment:
 class TestStudentProfile:
     """Tests for StudentProfile model."""
 
-    def test_onboarding_status_column_default(self) -> None:
-        """Test that onboarding_diagnostic_status column defaults to PENDING."""
-        col = StudentProfile.__table__.c.onboarding_diagnostic_status
-        assert col.default is not None
-        assert col.default.arg == OnboardingStatus.PENDING
+    def test_grade_id_nullable(self) -> None:
+        """Test that grade_id is nullable."""
+        col = StudentProfile.__table__.c.grade_id
+        assert col.nullable is True
+
+
+class TestClassEnrollment:
+    """Tests for ClassEnrollment model (v2.1)."""
+
+    def test_onboarding_status_column_has_server_default(self) -> None:
+        """Test that onboarding_diagnostic_status column has server_default PENDING."""
+        col = ClassEnrollment.__table__.c.onboarding_diagnostic_status
+        assert col.server_default is not None
+        assert col.server_default.arg == "PENDING"
 
     def test_explicit_onboarding_status(self) -> None:
         """Test that onboarding_diagnostic_status can be explicitly set."""
-        profile = StudentProfile(
-            user_id=uuid.uuid4(),
+        enrollment = ClassEnrollment(
+            class_id=uuid.uuid4(),
+            student_id=uuid.uuid4(),
             onboarding_diagnostic_status=OnboardingStatus.COMPLETED,
         )
 
-        assert profile.onboarding_diagnostic_status == OnboardingStatus.COMPLETED
+        assert enrollment.onboarding_diagnostic_status == OnboardingStatus.COMPLETED
+
+    def test_column_is_not_nullable(self) -> None:
+        """Test that onboarding_diagnostic_status is NOT NULL."""
+        col = ClassEnrollment.__table__.c.onboarding_diagnostic_status
+        assert col.nullable is False

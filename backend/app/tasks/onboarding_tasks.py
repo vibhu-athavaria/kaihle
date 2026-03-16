@@ -13,7 +13,7 @@ import asyncio
 import uuid as _uuid
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import update
 
 from app.tasks.celery_app import celery_app
 
@@ -121,8 +121,8 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
     diagnostic assessment (created by create_class_diagnostic_task).
     Idempotent — safe to call multiple times for the same student+class.
 
-    After creating the attempt, sets student_profiles.onboarding_diagnostic_status
-    to IN_PROGRESS (only if currently PENDING — does not regress).
+    After creating the attempt, sets class_enrollments.onboarding_diagnostic_status
+    to IN_PROGRESS for the specific class (only if currently PENDING — does not regress).
 
     Args:
         student_id: The student UUID as string.
@@ -134,7 +134,8 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.core.config import settings
-    from app.models.user import OnboardingStatus, StudentProfile
+    from app.models.school import ClassEnrollment
+    from app.models.user import OnboardingStatus
     from app.services.assessment_service import AssessmentService
 
     logger.info(
@@ -164,22 +165,24 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
                     class_id=class_uuid,
                 )
 
-                # Update onboarding_diagnostic_status to IN_PROGRESS
+                # Update onboarding_diagnostic_status to IN_PROGRESS for the specific class enrollment
                 # only if currently PENDING — never regress
-                profile_result = await db.execute(select(StudentProfile).where(StudentProfile.user_id == student_uuid))
-                student_profile = profile_result.scalar_one_or_none()
-
-                if (
-                    student_profile is not None
-                    and student_profile.onboarding_diagnostic_status == OnboardingStatus.PENDING
-                ):
-                    student_profile.onboarding_diagnostic_status = OnboardingStatus.IN_PROGRESS
-                    logger.info(
-                        "onboarding_diagnostic_status_updated",
-                        student_id=student_id,
-                        previous_status=OnboardingStatus.PENDING,
-                        new_status=OnboardingStatus.IN_PROGRESS,
+                await db.execute(
+                    update(ClassEnrollment)
+                    .where(
+                        ClassEnrollment.class_id == class_uuid,
+                        ClassEnrollment.student_id == student_uuid,
+                        ClassEnrollment.onboarding_diagnostic_status == OnboardingStatus.PENDING,
                     )
+                    .values(onboarding_diagnostic_status=OnboardingStatus.IN_PROGRESS)
+                )
+                logger.info(
+                    "onboarding_diagnostic_status_updated",
+                    student_id=student_id,
+                    class_id=class_id,
+                    previous_status=OnboardingStatus.PENDING,
+                    new_status=OnboardingStatus.IN_PROGRESS,
+                )
 
             return {"attempt_id": str(attempt.id), "student_id": student_id}
 
