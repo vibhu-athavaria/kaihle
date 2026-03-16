@@ -89,7 +89,11 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:  # t
             }
 
     try:
-        run_result = asyncio.run(_run())
+        loop = asyncio.new_event_loop()
+        try:
+            run_result = loop.run_until_complete(_run())
+        finally:
+            loop.close()
 
         logger.info(
             "create_class_diagnostic_task_completed",
@@ -187,7 +191,11 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
             return {"attempt_id": str(attempt.id), "student_id": student_id}
 
     try:
-        run_result = asyncio.run(_run())
+        loop = asyncio.new_event_loop()
+        try:
+            run_result = loop.run_until_complete(_run())
+        finally:
+            loop.close()
 
         logger.info(
             "trigger_onboarding_diagnostics_completed",

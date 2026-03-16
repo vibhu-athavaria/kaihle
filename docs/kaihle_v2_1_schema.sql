@@ -474,7 +474,9 @@ CREATE UNIQUE INDEX idx_school_curricula_one_primary
 
 CREATE TABLE users (
     id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    school_id       UUID        NOT NULL REFERENCES schools (id) ON DELETE CASCADE,
+    school_id       UUID        REFERENCES schools (id) ON DELETE SET NULL,
+    -- NULL is valid ONLY for KAIHLE_ADMIN. All other roles require school_id.
+    -- Enforced by: CHECK (role = 'KAIHLE_ADMIN' OR school_id IS NOT NULL)
     email           VARCHAR(255) NOT NULL,
     hashed_password VARCHAR(255),
     -- NULL for magic-link-only users (invited teachers/parents)
@@ -490,8 +492,9 @@ CREATE TABLE users (
 
 COMMENT ON TABLE users IS
     'All human users across all roles.
-     school_id on every user — the multi-tenancy invariant.
-     KAIHLE_ADMIN users: school_id = a reserved internal Kaihle school record.
+     school_id: NULL is valid ONLY for KAIHLE_ADMIN (platform-level role with no school).
+     All other roles (STUDENT, TEACHER, SCHOOL_ADMIN, PARENT) MUST have school_id.
+     Enforced by CHECK constraint: CHECK (role = ''KAIHLE_ADMIN'' OR school_id IS NOT NULL).
      hashed_password NULL: user authenticates via magic link only.
      email UNIQUE: globally unique, not per-school (simplifies magic link auth).';
 
