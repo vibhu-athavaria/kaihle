@@ -490,7 +490,7 @@ class OnboardingService:
         )
 
         result = await self.db.execute(stmt)
-        rows_updated = result.rowcount
+        rows_updated = result.rowcount  # type: ignore[attr-defined]
 
         if rows_updated > 0:
             logger.info(
