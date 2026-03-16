@@ -65,6 +65,10 @@ Working local dev environment, CI/CD pipeline, auth system, multi-tenant model, 
 | M0-6-T2 | `M0/M0-6-T2_tier1_diagnostic_trigger.md` | Celery task: auto-create Tier 1 diagnostics |
 | M0-6-T3 | `M0/M0-6-T3_onboarding_completion_tracking.md` | Onboarding completion check service |
 | M0-6-T4 | `M0/M0-6-T4_onboarding_ui.md` | Student onboarding UI (questionnaire + diagnostic hub) |
+| M0-8-T1 | `M0/M0-8-T1_backend_critical_fixes.md`   | User.school_id nullable + Celery asyncio.run fix |
+| M0-8-T2 | `M0/M0-8-T2_backend_important_fixes.md`  | Test fixtures, email uniqueness, coverage docs, route refactor, OpenAPI tags |
+| M0-8-T3 | `M0/M0-8-T3_frontend_critical_config.md` | Google Fonts, tailwind configs, mastery.ts, LoginForm brand fix |
+| M0-8-T4 | `M0/M0-8-T4_shared_ui_foundation.md`     | packages/ui core components + packages/api-client scaffold |
 
 ---
 
@@ -88,10 +92,28 @@ M0-1-T1 (monorepo)
           → M0-6-T3 (completion tracking)
             → M0-6-T4 (onboarding UI) ← last
   → M0-3-T4 (auth frontend) ← parallel with backend work
-    → M0-3-T5 (login UI)
+    M0-3-T5 (login UI)
+      → M0-8-T1 (backend critical fixes)  ← can run in parallel with T2/T3/T4
+      → M0-8-T2 (backend important fixes) ← can run in parallel with T1/T3/T4
+      → M0-8-T3 (frontend config fixes)   ← can run in parallel with T1/T2
+        → M0-8-T4 (shared UI components)  ← needs fonts + tokens from T3
+          → M0-7-T1 (layout wrappers)     ← needs shared components from T4
+
+            ← ALL of M0-8-T1, M0-8-T2, M0-8-T3, M0-8-T4, M0-7-T1 must be
+              complete before any of the following start:
+
+            → M0-6-T4 (onboarding UI)     ← first feature UI — needs wrappers, types, clean backend
+            → M0-7-T2 (teacher dashboard) ← parallel with M0-6-T4 once M0-7-T1 done
+            → M0-7-T3 (student dashboard) ← parallel
+            → M0-7-T4 (school admin UI)   ← parallel
+            → M0-7-T5 (kaihle admin UI)   ← parallel
   → M0-5-T1, M0-5-T2 ← can run anytime after M0-2-T2
 ```
-
+Note on backend/frontend parallelism: M0-8-T1 and M0-8-T2 are backend-only and can
+run at the same time as M0-8-T3 and M0-8-T4 if multiple agents are available.
+However ALL four M0-8 tasks must be complete and passing before M0-6-T4 begins.
+M0-8-T1 specifically must be done before M0-6-T4 acceptance tests can pass cleanly
+(the onboarding API tests depend on a valid auth setup including the KaihleAdmin fix).
 ---
 
 ## Definition of Done

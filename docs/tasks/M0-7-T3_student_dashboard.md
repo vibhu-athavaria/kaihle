@@ -2,7 +2,11 @@
 **Milestone:** M0 — Foundations
 **Epic:** M0-7 — Frontend Foundations
 **Task ID:** M0-7-T3
-**Depends on:** M0-7-T1 (layout wrappers), M0-6-T3 (onboarding completion), M0-3-T4 (auth frontend)
+**Depends on:** M0-8-T3 (packages/types mastery helper), M0-7-T1 (layout wrappers), M0-6-T3 (onboarding completion), M0-3-T4 (auth frontend)
+
+REASON: SubjectScoreCard derives border and text classes from mastery scores using
+getMasteryStyle() from @kaihle/types (created by M0-8-T3).
+
 **Blocks:** Nothing — but this is the post-onboarding landing for students
 **Estimated effort:** 3–4 hours
 
@@ -135,16 +139,24 @@ Label:   text-xs font-bold uppercase tracking-wide text-brand-muted mt-1
 Status:  text-xs text-brand-muted mt-0.5  — "Strong" / "Developing" / "Needs Work"
 ```
 
-Border color mapping (from mastery band):
-```typescript
-Strong:     border-brand-mid       (#b5d4bc — green border)
-Developing: border-brand-gold-mid  (#e8c97a — gold border)
-Needs Work: border-brand-red/30    (soft red border)
-Not assessed: border-brand-border  (neutral gray)
-```
+Border color — use getMasteryStyle() from @kaihle/types, then map bgClass to a
+border variant. Do NOT inline this mapping in the component:
 
-The three cards are always shown in fixed order: Math, then subjects in alpha order.
-If a subject has no data yet: shows `—` and `Not assessed` (not 0%).
+```typescript
+import { getMasteryStyle, scoreToPercent } from '@kaihle/types'
+
+// Map mastery bgClass to colored border class:
+const borderClassMap: Record<string, string> = {
+  'bg-brand-green-light':  'border-brand-mid',        // green border
+  'bg-brand-amber-light':  'border-brand-gold-mid',   // gold border
+  'bg-brand-red-light':    'border-brand-red/30',     // soft red border
+  'bg-gray-50':            'border-brand-border',     // not assessed
+}
+
+const { bgClass, textClass, label } = getMasteryStyle(score)
+const borderClass = borderClassMap[bgClass] ?? 'border-brand-border'
+const displayPct = scoreToPercent(score)   // "72%" or "—"
+```
 
 ---
 

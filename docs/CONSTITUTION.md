@@ -257,6 +257,8 @@ Used consistently across all UI and API.
 Background tints for cards/rows: `bg-brand-green-light`, `bg-brand-amber-light`, `bg-brand-red-light`.
 
 Always use `getMasteryStyle(score)` — do not inline mastery color logic in components.
+> Implementation: `getMasteryStyle()` is exported from `packages/types/src/mastery.ts`.
+> This file is created by **M0-8-T3**. It must exist before any component implements mastery display.
 
 ---
 

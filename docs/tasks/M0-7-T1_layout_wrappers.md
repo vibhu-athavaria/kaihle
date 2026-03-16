@@ -2,7 +2,12 @@
 **Milestone:** M0 — Foundations
 **Epic:** M0-7 — Frontend Foundations (new epic)
 **Task ID:** M0-7-T1
-**Depends on:** M0-3-T5 (login UI, auth hooks), M0-1-T1 (monorepo structure)
+**Depends on:** M0-8-T4 (packages/ui must have Button, Card, Input components), M0-3-T5 (login UI, auth hooks), M0-1-T1 (monorepo structure)
+
+REASON: DashboardLayout and StudentLayout import Button, Card, and other components
+from `@kaihle/ui`. These components are created by M0-8-T4. Without M0-8-T4, the
+layout wrappers will have broken imports at build time.
+
 **Blocks:** Every UI task from M0-6-T4 onwards — nothing can be built without these
 **Estimated effort:** 4–6 hours
 
