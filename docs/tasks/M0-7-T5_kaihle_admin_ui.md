@@ -2,7 +2,9 @@
 **Milestone:** M0 — Foundations
 **Epic:** M0-7 — Frontend Foundations
 **Task ID:** M0-7-T5
-**Depends on:** M0-7-T1 (layout wrappers), M0-4-T1 (school management API), M0-3-T4 (auth)
+**Depends on:** M0-8-T3 (brand tokens in tailwind), M0-8-T4 (Button, Card, Badge from @kaihle/ui), M0-7-T1 (layout wrappers), M0-4-T1 (school management API), M0-3-T4 (auth)
+
+REASON: Pages use AdminLayout from @kaihle/ui and role-admin-* color tokens from tailwind.
 **Blocks:** M6-3-T4 (pilot seed — admin needs to create and manage the pilot school)
 **Estimated effort:** 4–5 hours
 

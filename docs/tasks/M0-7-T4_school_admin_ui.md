@@ -2,7 +2,10 @@
 **Milestone:** M0 — Foundations
 **Epic:** M0-7 — Frontend Foundations
 **Task ID:** M0-7-T4
-**Depends on:** M0-7-T1 (layout wrappers), M0-4-T1/T2/T3 (school/user/class APIs), M0-3-T4 (auth)
+**Depends on:** M0-8-T3 (brand tokens in tailwind), M0-8-T4 (Button, Card, Badge, Input from @kaihle/ui), M0-7-T1 (layout wrappers), M0-4-T1/T2/T3 (school/user/class APIs), M0-3-T4 (auth)
+
+REASON: Pages use DashboardLayout from @kaihle/ui (created by M0-7-T1, which requires M0-8-T4),
+and reference brand-* color tokens (available after M0-8-T3 extends tailwind config).
 **Blocks:** M6-1-T2 (analytics UI — School Admin views it from this shell)
 **Estimated effort:** 5–6 hours
 

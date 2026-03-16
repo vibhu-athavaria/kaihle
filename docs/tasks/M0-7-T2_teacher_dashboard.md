@@ -2,7 +2,24 @@
 **Milestone:** M0 — Foundations
 **Epic:** M0-7 — Frontend Foundations
 **Task ID:** M0-7-T2
-**Depends on:** M0-7-T1 (layout wrappers), M0-4-T3 (grade/class API), M0-3-T4 (auth frontend)
+**Depends on:** M0-8-T3 (packages/types mastery helper), M0-7-T1 (layout wrappers), M0-4-T3 (grade/class API), M0-3-T4 (auth frontend)
+
+REASON: ClassCard uses `getMasteryStyle()` from `@kaihle/types` (created by M0-8-T3).
+Without M0-8-T3, the import will fail to resolve at build time.
+
+ALSO ADD this implementation note to the ClassCard section (after the card layout spec):
+
+```
+Implementation note:
+  Use getMasteryStyle() from @kaihle/types to derive color classes — do not hardcode.
+  import { getMasteryStyle, scoreToPercent } from '@kaihle/types'
+
+  const { dotClass, textClass, label } = getMasteryStyle(avgMastery)
+  // dotClass  → e.g. 'bg-brand-amber'  (for the mastery dot)
+  // textClass → e.g. 'text-brand-amber' (for the percentage text)
+  // label     → e.g. 'Developing'       (for the status text)
+  const displayPct = scoreToPercent(avgMastery)  // → "61%" or "—"
+```
 **Blocks:** Nothing — but this is the landing page after teacher login
 **Estimated effort:** 3–4 hours
 

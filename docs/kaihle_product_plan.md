@@ -990,7 +990,15 @@ Each answer maps to a modality. Student's final `modality_scores` are normalised
 - [ ] Learning profile questionnaire submits and stores correctly
 - [ ] All M0 tests pass
 - [ ] No hardcoded secrets anywhere in codebase
-
+- [ ] M0-8 pre-flight fixes complete: User.school_id nullable, Celery asyncio.run fixed
+- [ ] Test fixtures consolidated into shared conftest.py (no duplicate fixtures across test files)
+- [ ] Email uniqueness is globally enforced: duplicate email returns 409 not 500
+- [ ] `packages/ui` has Button, Card, Badge, Input, Skeleton, EmptyState, ProgressBar components
+- [ ] `packages/types` exports getMasteryStyle() and scoreToPercent() from @kaihle/types
+- [ ] `packages/api-client` re-exports apiClient (scaffold for M1+ typed hooks)
+- [ ] Google Fonts (Nunito + Fraunces + Inter + Lora) load in all three apps
+- [ ] Brand tokens (bg-brand-primary, bg-role-student-bg, bg-role-parent-bg, etc.) resolve correctly in student and parent apps
+- [ ] CONSTITUTION §4 Rule 6 reads "≥ 90%" coverage threshold (matches actual CI config)
 ---
 
 # MILESTONE 1: Core Diagnostics Flow

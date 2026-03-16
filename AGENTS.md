@@ -119,7 +119,9 @@ they are implementing. Key distinctions:
 **Color rules agents must memorise:**
 - Teacher primary action buttons are **gold** (`bg-brand-gold`), not green. Green is SUCCESS DATA only.
 - Mastery Strong color is `bg-brand-green` / `#16a34a`. NOT `emerald-500` / `#10b981` — that is WRONG.
-- All mastery logic flows through `getMasteryStyle()` in `packages/types/src/mastery.ts`.
+- All mastery logic flows through `getMasteryStyle()` exported from `@kaihle/types`.
+  Source: `packages/types/src/mastery.ts` — created by task **M0-8-T3**.
+  If this import fails to resolve, M0-8-T3 has not been run yet.
 - All color classes use `brand-*` or `role-*` tokens. No raw `indigo-*`, `emerald-*`, `violet-*`.
 
 #### When generating React components, agents MUST:
