@@ -519,3 +519,128 @@ class TestVerifyTeacherStudentRelationship:
         result = await service.verify_teacher_student_relationship(teacher_id, student_id)
 
         assert result is False
+
+
+@pytest.mark.asyncio
+class TestCheckAndUpdateOnboardingComplete:
+    """Tests for check_and_update_onboarding_complete method."""
+
+    async def test_when_diagnostic_completed_enrollment_updated_returns_true(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that True is returned when diagnostic completed and enrollment updated."""
+        class_id = uuid.uuid4()
+
+        # Mock successful update with rowcount = 1
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id, class_id)
+
+        assert result is True
+        service.db.execute.assert_called_once()
+
+    async def test_when_no_diagnostic_found_for_class_returns_false(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that False is returned when no diagnostic found for class."""
+        class_id = uuid.uuid4()
+
+        # Mock update with rowcount = 0 (no matching enrollment)
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id, class_id)
+
+        assert result is False
+        service.db.execute.assert_called_once()
+
+    async def test_when_diagnostic_found_but_no_attempt_returns_false(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that False is returned when diagnostic exists but no student attempt."""
+        class_id = uuid.uuid4()
+
+        # Mock update with rowcount = 0 (subquery returns false - no attempt)
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id, class_id)
+
+        assert result is False
+
+    async def test_when_attempt_status_not_completed_returns_false(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that False is returned when attempt status is not COMPLETED."""
+        class_id = uuid.uuid4()
+
+        # Mock update with rowcount = 0 (attempt not completed)
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id, class_id)
+
+        assert result is False
+
+    async def test_when_enrollment_already_completed_returns_false(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that False is returned when enrollment already COMPLETED."""
+        class_id = uuid.uuid4()
+
+        # Mock update with rowcount = 0 (already completed, WHERE clause excludes it)
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id, class_id)
+
+        assert result is False
+
+    async def test_when_enrollment_not_found_returns_false(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that False is returned when no enrollment exists for student/class."""
+        class_id = uuid.uuid4()
+
+        # Mock update with rowcount = 0 (no enrollment record)
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id, class_id)
+
+        assert result is False
+
+    async def test_when_multiple_attempts_one_completed_returns_true(
+        self, service: OnboardingService, student_id: uuid.UUID
+    ) -> None:
+        """Test that True is returned when multiple attempts exist and one is COMPLETED."""
+        class_id = uuid.uuid4()
+
+        # Mock successful update (subquery finds completed attempt)
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
+
+        result = await service.check_and_update_onboarding_complete(student_id, class_id)
+
+        assert result is True
+
+    async def test_uses_single_query_with_subquery(self, service: OnboardingService, student_id: uuid.UUID) -> None:
+        """Test that the implementation uses a single query with EXISTS subquery."""
+        class_id = uuid.uuid4()
+
+        mock_result = MagicMock()
+        mock_result.rowcount = 0
+        service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
+
+        await service.check_and_update_onboarding_complete(student_id, class_id)
+
+        # Verify only ONE call to db.execute (not 3 separate queries)
+        assert service.db.execute.call_count == 1
