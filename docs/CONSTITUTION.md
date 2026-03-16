@@ -14,7 +14,7 @@
 Kaihle is an AI-powered learning diagnostics platform for schools. It identifies knowledge gaps in students, generates personalised study plans, and gives teachers and parents real-time visibility into student progress.
 
 **Target users:** Students (age 11–18), Teachers, School Admins, Parents.
-**Curriculum scope (v1):** Cambridge Lower Secondary + IGCSE. Subjects: Mathematics, Science, English Language. Grades 6–12.
+**Curriculum scope (v1):** Curriculum scope (v1): Cambridge Lower Secondary (Grades 6–8) + Cambridge IGCSE (Grades 9–10).
 **Pilot target:** Bali micro-schools. Max 10 schools, ~400 students in v1.
 
 ---
