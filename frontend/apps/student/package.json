@@ -18,6 +18,7 @@
     "axios": "^1.7.0",
     "react-hook-form": "^7.52.0",
     "zod": "^3.23.0",
+    "lucide-react": "^0.383.0",
     "@kaihle/auth": "workspace:*",
     "@kaihle/ui": "workspace:*",
     "@kaihle/types": "workspace:*"

@@ -1,3 +1,4 @@
+import React from "react";
 import { Sidebar, TopNav } from "../components/nav";
 
 interface DashboardLayoutProps {
