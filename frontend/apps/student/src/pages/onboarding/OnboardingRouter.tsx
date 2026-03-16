@@ -12,28 +12,11 @@ export function OnboardingRouter() {
     );
   }
 
-  // Check if all diagnostics are completed
-  const diagnosticsComplete =
-    status.diagnostics_by_class?.every((d) => d.status === "COMPLETED") ??
-    false;
-
-  // If no diagnostics yet (empty array), treat as not complete
-  const hasDiagnostics = (status.diagnostics_by_class?.length ?? 0) > 0;
-  const allDiagnosticsComplete = hasDiagnostics && diagnosticsComplete;
-
-  if (!status.learning_profile_complete) {
-    return <Navigate to="/student/onboarding/profile" replace />;
-  }
-
-  // If diagnostics exist and all complete, go to dashboard
-  if (hasDiagnostics && allDiagnosticsComplete) {
+  // If learning profile is complete, go to dashboard
+  if (status.learning_profile_complete) {
     return <Navigate to="/student/dashboard" replace />;
   }
 
-  // If learning profile complete but diagnostics not, go to diagnostics
-  if (status.learning_profile_complete && !allDiagnosticsComplete) {
-    return <Navigate to="/student/onboarding/diagnostics" replace />;
-  }
-
+  // Otherwise, must complete questionnaire first
   return <Navigate to="/student/onboarding/profile" replace />;
 }

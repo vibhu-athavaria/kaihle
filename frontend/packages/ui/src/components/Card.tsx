@@ -33,7 +33,12 @@ export function Card({
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={
         onClick
-          ? (e) => (e.key === "Enter" || e.key === " ") && onClick()
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
           : undefined
       }
     >

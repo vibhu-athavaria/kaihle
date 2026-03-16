@@ -16,6 +16,15 @@ export type QuestionKey =
   | "q4_environment"
   | "q5_goal";
 
+// Mapping from API question IDs to store answer keys
+export const QUESTION_KEYS: QuestionKey[] = [
+  "q1_preferred_medium",
+  "q2_learning_pace",
+  "q3_help_preference",
+  "q4_environment",
+  "q5_goal",
+];
+
 interface QuestionnaireState {
   answers: QuestionnaireAnswers;
   currentStep: number;
