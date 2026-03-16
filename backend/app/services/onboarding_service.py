@@ -18,7 +18,7 @@ from app.core.questionnaire_config import get_option_by_key
 from app.models.assessment import Assessment, StudentAttempt
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import Class, ClassEnrollment
-from app.models.user import OnboardingStatus, StudentProfile, User
+from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
 
 logger = structlog.get_logger()
 
@@ -346,6 +346,55 @@ class OnboardingService:
 
         enrollment = result.scalar_one_or_none()
         return enrollment is not None
+
+    async def get_learning_profile_authorized(
+        self,
+        requester_id: UUID,
+        requester_role: str,
+        requester_school_id: UUID | None,
+        target_student_id: UUID,
+    ) -> StudentLearningProfile:
+        """Get a student's learning profile with authorization checks.
+
+        Args:
+            requester_id: The user ID making the request.
+            requester_role: The role of the requester.
+            requester_school_id: The school_id of the requester (None for KAIHLE_ADMIN).
+            target_student_id: The student ID whose profile to retrieve.
+
+        Returns:
+            The student's learning profile.
+
+        Raises:
+            PermissionError: If the requester doesn't have permission.
+            ValueError: If the student is not found.
+        """
+        # Students can only view their own profile
+        if requester_role == UserRole.STUDENT and target_student_id != requester_id:
+            raise PermissionError("Students can only view their own learning profile")
+
+        # Teachers must verify relationship
+        if requester_role == UserRole.TEACHER:
+            is_related = await self.verify_teacher_student_relationship(
+                teacher_id=requester_id, student_id=target_student_id
+            )
+            if not is_related:
+                raise PermissionError("You can only view profiles of students in your classes")
+
+        # School admins must be in same school
+        if requester_role == UserRole.SCHOOL_ADMIN:
+            student = await self.db.get(User, target_student_id)
+            if not student:
+                raise ValueError("Invalid student id")
+            if requester_school_id != student.school_id:
+                raise PermissionError("You do not have permission to view this student")
+
+        # Retrieve the profile
+        profile = await self.get_learning_profile(target_student_id)
+        if not profile:
+            raise ValueError("Learning profile not found")
+
+        return profile
 
     async def get_diagnostic_onboarding_status(
         self,

@@ -1,4 +1,7 @@
-"""Integration tests for user management API routes."""
+"""Integration tests for user management API routes.
+
+Fixtures provided by conftest.py.
+"""
 
 import uuid
 from collections.abc import AsyncGenerator
@@ -18,95 +21,6 @@ from app.models.user import TeacherProfile, User, UserRole
 
 # Set test JWT secret
 settings.jwt_secret_key = "test-secret-key-for-testing"
-
-
-@pytest_asyncio.fixture
-async def school(db_session: AsyncSession) -> School:
-    """Create a test school."""
-    school_obj = School(
-        id=uuid.uuid4(),
-        name="Test School",
-        slug=f"test-school-{uuid.uuid4().hex[:8]}",
-        status="active",
-    )
-    db_session.add(school_obj)
-    await db_session.commit()
-    return school_obj
-
-
-@pytest_asyncio.fixture
-async def other_school(db_session: AsyncSession) -> School:
-    """Create another school for cross-school access tests."""
-    school_obj = School(
-        id=uuid.uuid4(),
-        name="Other School",
-        slug=f"other-school-{uuid.uuid4().hex[:8]}",
-        status="active",
-    )
-    db_session.add(school_obj)
-    await db_session.commit()
-    return school_obj
-
-
-@pytest_asyncio.fixture
-async def school_admin(db_session: AsyncSession, school: School) -> User:
-    """Create a SchoolAdmin user."""
-    user = User(
-        id=uuid.uuid4(),
-        school_id=school.id,
-        email=f"school-admin-{uuid.uuid4().hex[:8]}@example.com",
-        first_name="School",
-        last_name="Admin",
-        role=UserRole.SCHOOL_ADMIN,
-        is_active=True,
-    )
-    db_session.add(user)
-    await db_session.commit()
-    return user
-
-
-@pytest_asyncio.fixture
-async def teacher(db_session: AsyncSession, school: School) -> User:
-    """Create a Teacher user in the school."""
-    user = User(
-        id=uuid.uuid4(),
-        school_id=school.id,
-        email=f"teacher-{uuid.uuid4().hex[:8]}@example.com",
-        first_name="Test",
-        last_name="Teacher",
-        role=UserRole.TEACHER,
-        is_active=True,
-    )
-    db_session.add(user)
-    await db_session.commit()
-    return user
-
-
-@pytest_asyncio.fixture
-async def kaihle_admin(db_session: AsyncSession) -> User:
-    """Create a KaihleAdmin user."""
-    # Create a dummy school for KaihleAdmin (required by FK)
-    school = School(
-        id=uuid.uuid4(),
-        name="Kaihle HQ",
-        slug=f"kaihle-hq-{uuid.uuid4().hex[:8]}",
-        status="active",
-    )
-    db_session.add(school)
-    await db_session.flush()
-
-    user = User(
-        id=uuid.uuid4(),
-        school_id=school.id,
-        email=f"kaihle-admin-{uuid.uuid4().hex[:8]}@kaihle.com",
-        first_name="Kaihle",
-        last_name="Admin",
-        role=UserRole.KAIHLE_ADMIN,
-        is_active=True,
-    )
-    db_session.add(user)
-    await db_session.commit()
-    return user
 
 
 @pytest_asyncio.fixture

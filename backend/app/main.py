@@ -1,39 +1,4 @@
-"""Kaihle API - Authentication & Authorization.
-
-## Authentication Middleware & Route Guards
-
-This application uses FastAPI dependency injection for authentication and authorization.
-The following guards are available in `app.core.deps`:
-
-- `get_current_user` - Validates JWT Bearer token and loads User from DB
-- `require_role(*roles)` - Factory for role-based access control
-- `require_school_match(school_id)` - Ensures user's school_id matches resource's school_id
-  (KAIHLE_ADMIN bypasses this check)
-- `require_onboarding_complete` - Blocks students until onboarding is complete
-  (checks both student_profiles.onboarding_diagnostic_status == 'COMPLETED'
-   AND student_learning_profiles.completed_at IS NOT NULL)
-
-## Usage Example
-
-```python
-from app.core.deps import get_current_user, require_role, require_school_match
-
-@app.get("/protected")
-async def protected_route(user: CurrentUser = Depends(get_current_user)):
-    return {"user": user.email}
-
-@app.get("/admin-only")
-async def admin_route(user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN))):
-    return {"admin": user.email}
-
-@app.get("/school/{school_id}/resource")
-async def school_resource(
-    school_id: UUID,
-    user: CurrentUser = Depends(require_school_match(school_id))
-):
-    return {"school": school_id}
-```
-"""
+"""Kaihle API - Authentication & Authorization."""
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -72,6 +37,17 @@ configure_logging()
 app = FastAPI(
     title="Kaihle API",
     version="0.1.0",
+    description="""
+## Authentication
+
+Use `Authorization: Bearer <access_token>` on all protected endpoints.
+
+### Route Guards
+- `get_current_user` — validates JWT Bearer token
+- `require_role(*roles)` — enforces role-based access control
+- `require_school_match` — ensures user's school matches resource school
+- `require_onboarding_complete` — blocks students until onboarding is done
+    """,
     lifespan=lifespan,
 )
 
