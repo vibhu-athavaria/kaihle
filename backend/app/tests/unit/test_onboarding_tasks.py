@@ -375,3 +375,31 @@ class TestOnboardingStatusUpdate:
             enrollment.onboarding_diagnostic_status = OnboardingStatus.IN_PROGRESS
 
         assert enrollment.onboarding_diagnostic_status == OnboardingStatus.IN_PROGRESS
+
+
+class TestCeleryTaskEventLoop:
+    """Tests for Celery task event loop handling.
+
+    Ensures tasks use new event loops instead of asyncio.run()
+    to avoid RuntimeError when called from within existing async context.
+    """
+
+    def test_create_class_diagnostic_task_uses_new_event_loop(self) -> None:
+        """Test create_class_diagnostic_task creates new event loop instead of asyncio.run()."""
+        import inspect
+
+        from app.tasks import onboarding_tasks
+
+        source = inspect.getsource(onboarding_tasks.create_class_diagnostic_task)
+        assert "asyncio.new_event_loop()" in source
+        assert "loop.run_until_complete" in source
+
+    def test_trigger_onboarding_diagnostics_uses_new_event_loop(self) -> None:
+        """Test trigger_onboarding_diagnostics creates new event loop instead of asyncio.run()."""
+        import inspect
+
+        from app.tasks import onboarding_tasks
+
+        source = inspect.getsource(onboarding_tasks.trigger_onboarding_diagnostics)
+        assert "asyncio.new_event_loop()" in source
+        assert "loop.run_until_complete" in source

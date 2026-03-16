@@ -53,12 +53,18 @@ class User(Base, TimestampMixin):
     """All human users across all roles."""
 
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "role = 'KAIHLE_ADMIN' OR school_id IS NOT NULL",
+            name="chk_user_school_id_required",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    school_id: Mapped[uuid.UUID] = mapped_column(
+    school_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("schools.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("schools.id", ondelete="SET NULL"),
+        nullable=True,
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     hashed_password: Mapped[str | None] = mapped_column(String(255))

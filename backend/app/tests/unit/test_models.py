@@ -5,7 +5,54 @@ import uuid
 from app.models.assessment import Assessment, AssessmentStatus
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import ClassEnrollment
-from app.models.user import OnboardingStatus, StudentProfile
+from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
+
+
+class TestUser:
+    """Tests for User model."""
+
+    def test_user_model_has_check_constraint(self) -> None:
+        """Test that User model has the school_id check constraint defined."""
+        from sqlalchemy import Table
+
+        table: Table = User.__table__  # type: ignore[assignment]
+        constraints = table.constraints
+        constraint_names = [c.name for c in constraints]
+        assert "chk_user_school_id_required" in constraint_names
+
+    def test_user_school_id_is_nullable(self) -> None:
+        """Test that school_id column is nullable."""
+        col = User.__table__.c.school_id
+        assert col.nullable is True
+
+    def test_kaihle_admin_role_can_have_null_school_id(self) -> None:
+        """Test that KAIHLE_ADMIN role can be instantiated with None school_id."""
+        user = User(
+            email="admin@kaihle.com",
+            hashed_password="hashed",
+            role=UserRole.KAIHLE_ADMIN,
+            school_id=None,
+            first_name="Admin",
+            last_name="User",
+            is_active=True,
+        )
+        assert user.school_id is None
+        assert user.role == UserRole.KAIHLE_ADMIN
+
+    def test_teacher_can_have_school_id(self) -> None:
+        """Test that TEACHER role can be instantiated with a school_id."""
+        school_id = uuid.uuid4()
+        user = User(
+            email="teacher@test.com",
+            hashed_password="hashed",
+            role=UserRole.TEACHER,
+            school_id=school_id,
+            first_name="Teacher",
+            last_name="User",
+            is_active=True,
+        )
+        assert user.school_id == school_id
+        assert user.role == UserRole.TEACHER
 
 
 class TestStudentLearningProfile:
