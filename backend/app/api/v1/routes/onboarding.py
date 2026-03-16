@@ -1,7 +1,6 @@
 """Onboarding API routes for learning profile questionnaire.
 
 Endpoints:
-- GET /api/v1/onboarding/status - Get current user's onboarding completion status (any authenticated user)
 - GET /api/v1/onboarding/status/{student_id} - Get specific student's onboarding status (teachers/admins only)
 - GET /api/v1/onboarding/questionnaire - Get questionnaire definition
 - POST /api/v1/onboarding/questionnaire/submit - Submit questionnaire responses
