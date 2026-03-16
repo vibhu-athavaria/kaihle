@@ -73,6 +73,7 @@ Never:
 - Bypass tests, linters, or CI gates just to "get it to pass".
 - Use inline `# type: ignore` comments in production code. Instead, configure mypy in `mypy.ini`
   by adding a `[mypy-<module>.*]` section with `ignore_missing_imports = true` and/or `ignore_errors = true`.
+- Use inline imports (e.g., `from sqlalchemy import update` inside a function). Always place imports at the top of the file.
 
 ## Tests and quality
 
