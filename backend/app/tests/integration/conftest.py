@@ -1,6 +1,18 @@
-"""Pytest configuration and fixtures for integration tests."""
+"""Shared fixtures for all integration tests.
+
+All integration tests in this directory can use these fixtures
+without importing them — pytest discovers conftest.py automatically.
+"""
 
 import os
+import uuid
+
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import create_access_token, hash_password
+from app.models.school import School
+from app.models.user import User, UserRole
 
 # Set test environment variables BEFORE importing app modules
 # This is critical because app.core.database creates engine at import time
@@ -13,12 +25,10 @@ os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-integration-tests")
 
 import random
-import uuid
 from collections.abc import AsyncGenerator
 
-import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.main import app
@@ -31,12 +41,135 @@ from app.models.curriculum import (
     Topic,
 )
 from app.models.onboarding import StudentLearningProfile
-from app.models.school import Class, School
+from app.models.school import Class
 from app.models.user import (
     StudentProfile,
-    User,
-    UserRole,
 )
+
+
+def make_auth_header(user: User) -> dict[str, str]:
+    """Generate Authorization header with a real JWT for any user."""
+    token = create_access_token(
+        user_id=user.id,
+        school_id=user.school_id,
+        role=user.role,
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def school(db_session: AsyncSession) -> School:
+    s = School(id=uuid.uuid4(), name="Test School", slug=f"test-{uuid.uuid4().hex[:8]}", status="active")
+    db_session.add(s)
+    await db_session.commit()
+    return s
+
+
+@pytest_asyncio.fixture
+async def other_school(db_session: AsyncSession) -> School:
+    s = School(id=uuid.uuid4(), name="Other School", slug=f"other-{uuid.uuid4().hex[:8]}", status="active")
+    db_session.add(s)
+    await db_session.commit()
+    return s
+
+
+@pytest_asyncio.fixture
+async def kaihle_admin(db_session: AsyncSession) -> User:
+    u = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(u)
+    await db_session.commit()
+    return u
+
+
+@pytest_asyncio.fixture
+async def school_admin(db_session: AsyncSession, school: School) -> User:
+    u = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"sadmin-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="School",
+        last_name="Admin",
+        role=UserRole.SCHOOL_ADMIN,
+        is_active=True,
+    )
+    db_session.add(u)
+    await db_session.commit()
+    return u
+
+
+@pytest_asyncio.fixture
+async def user(db_session: AsyncSession, school: School) -> User:
+    """Create a test user with password (TEACHER role)."""
+    u = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"user-{uuid.uuid4().hex[:8]}@test.com",
+        hashed_password=hash_password("correct-password"),
+        first_name="Test",
+        last_name="User",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(u)
+    await db_session.commit()
+    return u
+
+
+@pytest_asyncio.fixture
+async def teacher(db_session: AsyncSession, school: School) -> User:
+    u = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"teacher-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Test",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(u)
+    await db_session.commit()
+    return u
+
+
+@pytest_asyncio.fixture
+async def student(db_session: AsyncSession, school: School) -> User:
+    u = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"student-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Test",
+        last_name="Student",
+        role=UserRole.STUDENT,
+        is_active=True,
+    )
+    db_session.add(u)
+    await db_session.commit()
+    return u
+
+
+@pytest_asyncio.fixture
+async def student_with_password(db_session: AsyncSession, school: School) -> User:
+    u = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"student-pw-{uuid.uuid4().hex[:8]}@test.com",
+        hashed_password=hash_password("correct-password"),
+        first_name="Test",
+        last_name="Student",
+        role=UserRole.STUDENT,
+        is_active=True,
+    )
+    db_session.add(u)
+    await db_session.commit()
+    return u
 
 
 @pytest_asyncio.fixture(scope="function")

@@ -53,12 +53,10 @@ class AuthService:
         """
         Create a new user. Does NOT issue tokens — user is created as inactive
         and must be activated by an admin before they can log in.
-        Raises ValueError if email already exists in school.
+        Raises ValueError if email already exists (globally unique).
         """
-        # Check uniqueness: email must be unique within school (or globally for KaihleAdmin)
+        # Email is globally unique across all schools
         stmt = select(User).where(User.email == email)
-        if school_id:
-            stmt = stmt.where(User.school_id == school_id)
         existing = await self.db.scalar(stmt)
         if existing:
             raise ValueError("Email already registered")
