@@ -1,5 +1,9 @@
+import baseConfig from '@kaihle/ui/tailwind.config.js'
+
 export default {
-  content: ["./src/**/*.{ts,tsx}"],
-  theme: { extend: {} },
-  plugins: [],
-};
+  ...baseConfig,
+  content: [
+    './src/**/*.{ts,tsx}',
+    '../../packages/ui/src/**/*.{ts,tsx}',
+  ],
+}

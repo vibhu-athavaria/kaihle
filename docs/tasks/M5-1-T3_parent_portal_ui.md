@@ -152,7 +152,7 @@ interface TopicTrafficLightProps {
 ```tsx
 // Dashboard highlight card — most recent report only
 // Truncates narrative to 3 lines with "Read more →" link
-// Displayed with a warm background (e.g. indigo-50 or emerald-50)
+// Displayed with a warm background (e.g. bg-role-parent-bg (#fdf8f0) — warm cream, see DESIGN_SYSTEM.md §5.5)
 ```
 
 ---

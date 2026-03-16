@@ -80,23 +80,58 @@ comments or design notes:
 
 ### Frontend Design Governance
 
-- All frontend work **MUST** treat `CONSTITUTION.md` as the single source of truth for
-  tech stack choices (React, Vite, TypeScript, Tailwind).
-- **TailAdmin (Free)** is the canonical UI shell and design baseline for Kaihle:
-  - Dashboard-style apps (teacher, school admin, KaihleAdmin) **MUST** use TailAdmin-style
-    layouts: left sidebar, top navbar, main content area with responsive grid/cards.
-  - New pages **MUST** extend existing components in `packages/ui` — do not invent ad-hoc layouts.
-- Agents **MUST NOT**:
-  - Introduce additional UI kits (MUI, Chakra, shadcn, Flowbite, DaisyUI, Bootstrap) without
-    a documented ADR explicitly approving the change.
-  - Add CSS frameworks or design systems outside Tailwind CSS v3.
-  - Mix visual paradigms within the same app (e.g. Material-style in a TailAdmin layout).
-- When generating React components, agents **MUST**:
-  - Use Tailwind utility classes compatible with TailAdmin (spacing, typography, colour tokens).
-  - Keep layouts responsive using Tailwind grid/flex and the same breakpoints as TailAdmin.
-  - Place shared elements in `packages/ui` — never duplicate markup across apps.
-- Route-level pages **MUST** compose from `packages/ui` components and named layout wrappers
-  (e.g. `DashboardLayout`, `AuthLayout`). Complex layout logic **MUST NOT** live in route files.
+**Read `docs/design/DESIGN_SYSTEM.md` before writing any frontend component.**
+It is the single source of truth for colors, fonts, layout patterns, and role-specific specs.
+This section summarises the enforcement rules — full specs are in the design system file.
+
+#### Non-negotiable rules
+
+- All frontend work **MUST** treat `CONSTITUTION.md` as the source of truth for tech stack
+  choices (React, Vite, TypeScript, Tailwind).
+
+- **TailAdmin (Free)** is the canonical UI shell for dashboard-style apps (Teacher, School Admin,
+  Kaihle Admin). Student and Parent apps use top-nav-only layouts.
+
+- Agents **MUST NOT** introduce additional UI kits (MUI, Chakra, shadcn, Flowbite, DaisyUI,
+  Bootstrap) without a documented ADR explicitly approving the change.
+
+- All new layout components **MUST** live in `packages/ui/src/layouts/`. Route files compose
+  from wrappers — they do NOT define layout structure.
+
+#### Five-role design system — mandatory
+
+Each role has a distinct design spec. Agents **MUST** apply the correct spec for the role
+they are implementing. Key distinctions:
+
+| Role | Layout wrapper | Sidebar | Page bg | Primary button color |
+|---|---|---|---|---|
+| Kaihle Admin | `AdminLayout` | White, gray borders | `#f8f9fb` | Green |
+| School Admin | `DashboardLayout variant="school-admin"` | White, green borders | `#f5f7f1` | Green |
+| Teacher | `DashboardLayout variant="teacher"` | White, gray borders | `#f5f7f1` | **Gold** |
+| Student | `StudentLayout` | None (top + bottom nav) | `#f9fafb` | Green |
+| Parent | `ParentLayout` | None (top nav only) | `#fdf8f0` | Text link |
+
+**Typography by role:**
+- Kaihle Admin: `font-['Inter']` throughout. NO Fraunces. NO Lora.
+- School Admin, Teacher, Student: `font-display` (Fraunces) for headings, `font-sans` (Nunito) for UI.
+- Parent: `font-['Lora']` for narrative text and headings, `font-sans` (Nunito) for labels/buttons.
+
+**Color rules agents must memorise:**
+- Teacher primary action buttons are **gold** (`bg-brand-gold`), not green. Green is SUCCESS DATA only.
+- Mastery Strong color is `bg-brand-green` / `#16a34a`. NOT `emerald-500` / `#10b981` — that is WRONG.
+- All mastery logic flows through `getMasteryStyle()` in `packages/types/src/mastery.ts`.
+- All color classes use `brand-*` or `role-*` tokens. No raw `indigo-*`, `emerald-*`, `violet-*`.
+
+#### When generating React components, agents MUST:
+
+- Use Tailwind utility classes compatible with TailAdmin spacing, typography, and color tokens.
+- Keep layouts responsive using Tailwind grid/flex and the standard breakpoints.
+- Place shared elements in `packages/ui/src/components/` — never duplicate across apps.
+- Apply the correct role layout wrapper — route-level pages compose from wrappers.
+- Use `min-h-[44px]` on all interactive elements (touch targets).
+- Add `focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2` to
+  all interactive elements.
+- Pair every color-only status indicator with `aria-label`.
 
 ---
 

@@ -67,14 +67,21 @@ frontend/apps/student/src/tests/my-progress.spec.ts
 
 ## Colour + Label Mapping (Client-side)
 
+Do NOT define this function locally. Import from the shared types package:
+
 ```typescript
-function getMasteryLabel(score: number | null): { colour: string, label: string } {
-  if (score === null) return { colour: 'bg-gray-200', label: 'Not assessed' }
-  if (score > 0.7)   return { colour: 'bg-emerald-500', label: 'Strong' }
-  if (score >= 0.4)  return { colour: 'bg-amber-400', label: 'Developing' }
-  return               { colour: 'bg-red-500', label: 'Needs Work' }
-}
+import { getMasteryStyle } from '@kaihle/types'
+
+// Usage:
+const { dotClass, textClass, bgClass, label } = getMasteryStyle(score)
+
+// dotClass  → for the coloured circle: bg-brand-green / bg-brand-amber / bg-brand-red
+// textClass → for the score text:      text-brand-green etc.
+// bgClass   → for row tint backgrounds (if used)
+// label     → "Strong" / "Developing" / "Needs Work" / "Not assessed"
 ```
+
+The circle must use `aria-label={label}` — not colour alone as the only indicator.
 
 ---
 

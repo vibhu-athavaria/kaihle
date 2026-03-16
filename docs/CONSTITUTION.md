@@ -124,10 +124,35 @@ It will be added as a separate curriculum entry cambridge_as_a when scoped.
 8. **`kaihle_v2_1_schema.sql` is the single source of truth for the database schema.** If a task file and the SQL file conflict, the SQL file wins. Always check it for exact column names, types, and constraints.
 9. **Do not write migration SQL by hand.** Use `alembic revision --autogenerate -m "description"` and review the output.
 10. **Student onboarding gate.** Students cannot access any route outside `/student/onboarding/*` until both their learning profile questionnaire AND all Tier 1 diagnostics are marked complete. Enforced by `require_onboarding_complete` FastAPI dependency.
-11. Frontend apps MUST use TailAdmin as the base layout and design system for all dashboard-style pages (teacher, school admin, internal admin).
-    - Agents MUST NOT introduce additional UI kits (e.g. MUI, Chakra, shadcn) without an explicit ADR.
-    - Any new layout components MUST be implemented as TailAdmin-style Tailwind components in packages/ui.
+11. Frontend apps MUST use TailAdmin as the base layout and design system for all dashboard-style
+    pages (teacher, school admin, Kaihle admin). Student and Parent apps use top-nav-only layouts.
+    - Agents MUST NOT introduce additional UI kits (MUI, Chakra, shadcn, Flowbite, DaisyUI) without an ADR.
+    - Any new layout components MUST live in `packages/ui/src/layouts/` — never in route files.
+    - Layout wrappers: `AdminLayout` (Kaihle Admin), `DashboardLayout variant="school-admin"|"teacher"`,
+      `StudentLayout`, `ParentLayout`, `AuthLayout`, `OnboardingLayout`.
 
+12. **All frontend tasks MUST load `docs/design/DESIGN_SYSTEM.md` before writing any component.**
+    Five roles. Five distinct design specs. Agents must apply the correct spec for the role they are implementing.
+
+    | Role | Layout | Sidebar | Page bg | Active nav | Button primary |
+    |---|---|---|---|---|---|
+    | Kaihle Admin | AdminLayout | White + gray borders | `#f8f9fb` | Gray fill + green dot | Green |
+    | School Admin | DashboardLayout school-admin | White + green borders | `#f5f7f1` | Left green stripe + tint | Green |
+    | Teacher | DashboardLayout teacher | White + gray borders | `#f5f7f1` | Gold tint fill | **Gold** |
+    | Student | StudentLayout (top+bottom nav) | None | `#f9fafb` | Primary underline | Green |
+    | Parent | ParentLayout (top nav only) | None | `#fdf8f0` | N/A | Rare — text link |
+
+    Critical per-role rules:
+    - Kaihle Admin: Inter font throughout. NO Fraunces. NO Lora. NO decorative elements.
+    - School Admin: Fraunces headings. Green-tinted borders. Left stripe active indicator.
+    - Teacher: Gold (`brand-gold #c9932a`) is the action color. Green is SUCCESS/MASTERY ONLY.
+      NEVER use green buttons for teacher actions.
+    - Student: No sidebar. Bottom nav on mobile. Colored-border subject cards (not generic gray).
+    - Parent: Lora serif for narrative text and headings. Narrow `max-w-lg mx-auto` reading column.
+      Espresso ink `#2c1a0e`. Warm cream bg `#fdf8f0`.
+
+    All color classes MUST use `brand-*` or `role-*` tokens from `packages/ui/tailwind.config.js`.
+    Do NOT use generic `indigo-*`, `emerald-*`, `violet-*` classes for brand or status colors.
 
 ---
 
@@ -217,12 +242,21 @@ onboarding_status:   PENDING | IN_PROGRESS | COMPLETED
 
 Used consistently across all UI and API.
 
-| Score | Label | Colour |
-|---|---|---|
-| < 0.4 | Needs Work | Red `#EF4444` |
-| 0.4 – 0.7 | Developing | Amber `#F59E0B` |
-| > 0.7 | Strong | Green `#10B981` |
-| Not assessed | — | Grey `#9CA3AF` |
+> ⚠️ Use `brand-*` Tailwind tokens — NOT generic `emerald-*`, `amber-*`, `red-*`.
+> `#10B981` (emerald-500) was WRONG. The correct green is `#16a34a` (brand-green).
+> Full token definitions: `frontend/packages/ui/tailwind.config.js`.
+> TypeScript helper: `getMasteryStyle()` in `packages/types/src/mastery.ts`.
+
+| Score | Label | Tailwind dot class | Tailwind text class | Hex |
+|---|---|---|---|---|
+| > 0.7 | Strong | `bg-brand-green` | `text-brand-green` | `#16a34a` |
+| 0.4–0.7 | Developing | `bg-brand-amber` | `text-brand-amber` | `#f59e0b` |
+| < 0.4 | Needs Work | `bg-brand-red` | `text-brand-red` | `#ef4444` |
+| null | Not assessed | `bg-brand-muted` | `text-brand-muted` | `#9ca3af` |
+
+Background tints for cards/rows: `bg-brand-green-light`, `bg-brand-amber-light`, `bg-brand-red-light`.
+
+Always use `getMasteryStyle(score)` — do not inline mastery color logic in components.
 
 ---
 
@@ -235,6 +269,7 @@ Used consistently across all UI and API.
 | This milestone's goals + DoD | `/docs/milestones/M{N}_brief.md` |
 | This specific task's instructions | `/docs/tasks/M{N}/M{N}-{E}-T{T}_*.md` |
 | LLM prompt templates | `/backend/app/ai/prompts/*.jinja2` |
+| Design tokens, component patterns, role-specific palettes, typography | `docs/design/DESIGN_SYSTEM.md` |
 | Key environment variables | `kaihle_product_plan_v2_1.md` Part 6 |
 
 ---

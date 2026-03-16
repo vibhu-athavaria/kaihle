@@ -49,17 +49,29 @@ frontend/apps/teacher/src/tests/gap-map.spec.ts
 
 ## Cell Colours
 
-Use exactly these Tailwind classes (consistent with CONSTITUTION §10):
+Use `getMasteryStyle()` from `packages/types/src/mastery.ts` to derive Tailwind classes.
+Do NOT hardcode color class names — use the helper.
 
 | Score | Tailwind bg class | Label |
 |---|---|---|
-| > 0.7 | `bg-emerald-500` | Strong |
-| 0.4–0.7 | `bg-amber-400` | Developing |
-| < 0.4 | `bg-red-500` | Needs Work |
-| No data | `bg-gray-200` | — |
+| > 0.7 | `bg-brand-green` | Strong |
+| 0.4–0.7 | `bg-brand-amber` | Developing |
+| < 0.4 | `bg-brand-red` | Needs Work |
+| No data | `bg-brand-muted/30` | — |
 
 Cells are 40×40px squares. No text inside cells — colour only. Tooltip on hover.
 
+```tsx
+import { getMasteryStyle } from '@kaihle/types'
+
+// In the cell component:
+const { dotClass, label } = getMasteryStyle(score)
+<td
+  className={`w-10 h-10 ${dotClass} cursor-pointer`}
+  title={`${studentName} · ${label}`}
+  aria-label={`${studentName}: ${label}`}
+/>
+```
 ---
 
 ## Hover Tooltip
