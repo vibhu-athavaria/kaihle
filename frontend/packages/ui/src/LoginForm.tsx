@@ -218,7 +218,7 @@ export function LoginForm({
             <button
               type="button"
               onClick={() => setMagicSent(false)}
-              className="mt-4 text-sm text-teal-600 hover:underline"
+              className="mt-4 text-sm font-semibold text-brand-primary hover:text-brand-dark transition-colors"
             >
               Send again
             </button>

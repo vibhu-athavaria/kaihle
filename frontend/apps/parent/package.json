@@ -19,7 +19,8 @@
     "react-hook-form": "^7.52.0",
     "zod": "^3.23.0",
     "@kaihle/auth": "workspace:*",
-    "@kaihle/ui": "workspace:*"
+    "@kaihle/ui": "workspace:*",
+    "@kaihle/types": "workspace:*"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",
