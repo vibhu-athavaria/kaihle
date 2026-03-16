@@ -1,6 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PrivateRoute, OnboardingRoute } from "@kaihle/auth";
 import { LoginPage } from "./pages/LoginPage";
+import { OnboardingRouter } from "./pages/onboarding/OnboardingRouter";
+import { ProfileQuestionnaire } from "./pages/onboarding/ProfileQuestionnaire";
+import { DiagnosticHub } from "./pages/onboarding/DiagnosticHub";
 
 export default function App() {
   return (
@@ -11,10 +14,23 @@ export default function App() {
           path="/student/onboarding"
           element={
             <PrivateRoute>
-              {/* Onboarding page — implemented in M0-6-T4 */}
-              <div className="p-8 text-gray-500">
-                Student onboarding — coming in M0-6-T4
-              </div>
+              <OnboardingRouter />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/onboarding/profile"
+          element={
+            <PrivateRoute>
+              <ProfileQuestionnaire />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/onboarding/diagnostics"
+          element={
+            <PrivateRoute>
+              <DiagnosticHub />
             </PrivateRoute>
           }
         />
@@ -23,7 +39,6 @@ export default function App() {
           element={
             <PrivateRoute>
               <OnboardingRoute>
-                {/* Student dashboard — implemented in later milestones */}
                 <div className="p-8 text-gray-500">
                   Student dashboard — coming in M2
                 </div>
