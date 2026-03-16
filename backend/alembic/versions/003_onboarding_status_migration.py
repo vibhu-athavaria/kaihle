@@ -43,12 +43,13 @@ def upgrade() -> None:
     )
 
     # Create index for efficient gate checks on onboarding status
-    # Use CONCURRENTLY to avoid table locks on large datasets
+    # Note: Cannot use CONCURRENTLY here because Alembic runs migrations
+    # inside a transaction block, and PostgreSQL doesn't allow
+    # CREATE INDEX CONCURRENTLY within a transaction
     op.create_index(
         "idx_enrollments_onboarding_status",
         "class_enrollments",
         ["student_id", "onboarding_diagnostic_status"],
-        postgresql_concurrently=True,
     )
 
     # Remove onboarding_diagnostic_status column from student_profiles
@@ -83,6 +84,5 @@ def downgrade() -> None:
     )
 
     # Remove the column from class_enrollments
-    # Use CONCURRENTLY to avoid table locks on large datasets
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_enrollments_onboarding_status")
+    op.execute("DROP INDEX IF EXISTS idx_enrollments_onboarding_status")
     op.drop_column("class_enrollments", "onboarding_diagnostic_status")
