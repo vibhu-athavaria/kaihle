@@ -71,13 +71,13 @@ importers:
         version: 18.3.7(@types/react@18.3.28)
       '@vitejs/plugin-react':
         specifier: ^4.3.0
-        version: 4.7.0(vite@5.4.21(@types/node@25.3.3))
+        version: 4.7.0(vite@5.4.21(@types/node@22.19.13))
       autoprefixer:
         specifier: ^10.4.0
         version: 10.4.27(postcss@8.5.8)
       jest:
         specifier: ^29.0.0
-        version: 29.7.0(@types/node@25.3.3)
+        version: 29.7.0(@types/node@22.19.13)
       postcss:
         specifier: ^8.4.0
         version: 8.5.8
@@ -86,7 +86,7 @@ importers:
         version: 3.4.19
       vite:
         specifier: ^5.4.0
-        version: 5.4.21(@types/node@25.3.3)
+        version: 5.4.21(@types/node@22.19.13)
 
   apps/student:
     dependencies:
@@ -105,6 +105,9 @@ importers:
       axios:
         specifier: ^1.7.0
         version: 1.13.6
+      lucide-react:
+        specifier: ^0.383.0
+        version: 0.383.0(react@18.3.1)
       react:
         specifier: ^18.3.0
         version: 18.3.1
@@ -138,13 +141,13 @@ importers:
         version: 18.3.7(@types/react@18.3.28)
       '@vitejs/plugin-react':
         specifier: ^4.3.0
-        version: 4.7.0(vite@5.4.21(@types/node@22.19.13))
+        version: 4.7.0(vite@5.4.21(@types/node@25.3.3))
       autoprefixer:
         specifier: ^10.4.0
         version: 10.4.27(postcss@8.5.8)
       jest:
         specifier: ^29.0.0
-        version: 29.7.0(@types/node@22.19.13)
+        version: 29.7.0(@types/node@25.3.3)
       postcss:
         specifier: ^8.4.0
         version: 8.5.8
@@ -153,7 +156,7 @@ importers:
         version: 3.4.19
       vite:
         specifier: ^5.4.0
-        version: 5.4.21(@types/node@22.19.13)
+        version: 5.4.21(@types/node@25.3.3)
 
   apps/teacher:
     dependencies:
