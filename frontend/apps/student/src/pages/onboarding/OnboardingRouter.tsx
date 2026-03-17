@@ -12,17 +12,11 @@ export function OnboardingRouter() {
     );
   }
 
-  if (status.overall === "COMPLETED") {
+  // If learning profile is complete, go to dashboard
+  if (status.learning_profile_complete) {
     return <Navigate to="/student/dashboard" replace />;
   }
 
-  if (!status.learning_profile_complete) {
-    return <Navigate to="/student/onboarding/profile" replace />;
-  }
-
-  if (status.learning_profile_complete && !status.diagnostics_complete) {
-    return <Navigate to="/student/onboarding/diagnostics" replace />;
-  }
-
+  // Otherwise, must complete questionnaire first
   return <Navigate to="/student/onboarding/profile" replace />;
 }

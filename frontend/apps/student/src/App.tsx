@@ -3,7 +3,6 @@ import { PrivateRoute, OnboardingRoute } from "@kaihle/auth";
 import { LoginPage } from "./pages/LoginPage";
 import { OnboardingRouter } from "./pages/onboarding/OnboardingRouter";
 import { ProfileQuestionnaire } from "./pages/onboarding/ProfileQuestionnaire";
-import { DiagnosticHub } from "./pages/onboarding/DiagnosticHub";
 
 export default function App() {
   return (
@@ -23,14 +22,6 @@ export default function App() {
           element={
             <PrivateRoute>
               <ProfileQuestionnaire />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/student/onboarding/diagnostics"
-          element={
-            <PrivateRoute>
-              <DiagnosticHub />
             </PrivateRoute>
           }
         />
