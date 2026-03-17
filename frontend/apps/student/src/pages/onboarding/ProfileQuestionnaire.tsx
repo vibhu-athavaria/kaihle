@@ -206,9 +206,6 @@ export function ProfileQuestionnaire() {
       >
         <div className="text-center py-8">
           <p className="text-brand-red">{error}</p>
-          <Button onClick={() => window.location.reload()} className="mt-4">
-            Try Again
-          </Button>
         </div>
       </OnboardingLayout>
     );
