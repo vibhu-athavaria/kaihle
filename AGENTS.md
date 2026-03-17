@@ -26,6 +26,9 @@ Any coding agent or automation that can generate or modify code, schemas, or con
 - **MUST** read `CONSTITUTION.md` §2 (Tech Stack) and §4 (Absolute Rules) before any task.
 - **MUST NOT** include domain-specific rules (tables, fields, enums, endpoints) in this file —
   those belong in `CONSTITUTION.md` and task files.
+- **MUST NOT** make any code changes without explicit approval from the user.
+  When asked to analyze or review, present findings first, then WAIT for approval before implementing.
+- **MUST NOT** operate in "code mode" unless explicitly instructed by the user.
 
 ---
 
