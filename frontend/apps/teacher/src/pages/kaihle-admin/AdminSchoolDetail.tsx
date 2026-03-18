@@ -160,7 +160,7 @@ function StatsSection({
             <Users className="w-5 h-5 text-brand-primary" />
           </div>
           <p className="text-xl font-bold text-role-admin-ink">
-            {analytics?.teacher_count ?? 0}
+            {analytics?.teachers_count ?? 0}
           </p>
           <p className="text-xs text-role-admin-muted">Teachers</p>
         </div>
@@ -169,7 +169,7 @@ function StatsSection({
             <GraduationCap className="w-5 h-5 text-brand-primary" />
           </div>
           <p className="text-xl font-bold text-role-admin-ink">
-            {analytics?.student_count ?? 0}
+            {analytics?.students_count ?? 0}
           </p>
           <p className="text-xs text-role-admin-muted">Students</p>
         </div>
