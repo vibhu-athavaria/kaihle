@@ -59,6 +59,7 @@ export function StudentDashboard() {
   const firstName = data?.studentInfo.firstName || "";
   const gradeName = data?.studentInfo.gradeName || "";
   const curriculumName = data?.studentInfo.curriculumName || "";
+  const streakDays = data?.studentInfo.streakDays || 0;
   const subjects = data?.gapMap.subjects || [];
   const studyPlans = data?.studyPlans || [];
   const assessments = data?.assessments || [];
@@ -130,7 +131,7 @@ export function StudentDashboard() {
             <h1 className="font-display font-bold text-2xl text-brand-ink">
               {greeting}{firstName ? `, ${firstName}` : ""} 👋
             </h1>
-            <StreakBadge days={3} />
+            <StreakBadge days={streakDays} />
           </div>
           {gradeName && curriculumName && (
             <p className="font-sans text-sm text-brand-muted mt-1">

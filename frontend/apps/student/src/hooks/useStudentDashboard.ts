@@ -28,6 +28,8 @@ interface StudentInfo {
   firstName: string;
   gradeName: string;
   curriculumName: string;
+  classId?: string;
+  streakDays?: number;
 }
 
 interface StudyPlansResponse {
@@ -80,6 +82,12 @@ interface UseStudentDashboardResult {
 export function useStudentDashboard(): UseStudentDashboardResult {
   const { user } = useAuth();
 
+  const studentInfoQuery = useQuery({
+    queryKey: ["student", "info", user?.id] as const,
+    queryFn: () => fetchStudentInfo(user!.id),
+    enabled: !!user?.id,
+  });
+
   const gapMapQuery = useQuery({
     queryKey: QUERY_KEYS.gapMap(user?.id || ""),
     queryFn: () => fetchGapMap(user!.id),
@@ -93,15 +101,9 @@ export function useStudentDashboard(): UseStudentDashboardResult {
   });
 
   const assessmentsQuery = useQuery({
-    queryKey: ["student", "assessments", user?.id] as const,
-    queryFn: () => fetchAssessments("default"),
-    enabled: !!user?.id,
-  });
-
-  const studentInfoQuery = useQuery({
-    queryKey: ["student", "info", user?.id] as const,
-    queryFn: () => fetchStudentInfo(user!.id),
-    enabled: !!user?.id,
+    queryKey: ["student", "assessments", user?.id, studentInfoQuery.data?.classId] as const,
+    queryFn: () => fetchAssessments(studentInfoQuery.data?.classId || ""),
+    enabled: !!user?.id && !!studentInfoQuery.data?.classId,
   });
 
   const isLoading =
