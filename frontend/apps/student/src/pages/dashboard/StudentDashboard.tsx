@@ -1,3 +1,4 @@
+import { StudentLayout } from "@kaihle/ui";
 import { SubjectScoreCard } from "./SubjectScoreCard";
 import { NextStepCard, EmptyNextSteps } from "./NextStepCard";
 import { StreakBadge } from "./StreakBadge";
@@ -35,11 +36,7 @@ function SkeletonNextStep() {
 }
 
 interface NextStep {
-  type:
-    | "assessment"
-    | "study-plan-ready"
-    | "study-plan-progress"
-    | "weakest-area";
+  type: "assessment" | "study-plan-ready" | "study-plan-progress" | "weakest-area";
   title: string;
   subtitle: string;
   actionLabel: string;
@@ -50,11 +47,11 @@ export function StudentDashboard() {
 
   if (isError) {
     return (
-      <div className="p-6">
+      <StudentLayout activeNav="home">
         <div className="text-center py-8">
           <p className="text-brand-red">Failed to load dashboard data.</p>
         </div>
-      </div>
+      </StudentLayout>
     );
   }
 
@@ -62,25 +59,21 @@ export function StudentDashboard() {
   const firstName = data?.studentInfo.firstName || "";
   const gradeName = data?.studentInfo.gradeName || "";
   const curriculumName = data?.studentInfo.curriculumName || "";
-  const streakDays = data?.studentInfo.streakDays || 0;
   const subjects = data?.gapMap.subjects || [];
   const studyPlans = data?.studyPlans || [];
   const assessments = data?.assessments || [];
 
   const activeStudyPlans = studyPlans.filter((sp) => sp.status === "ACTIVE");
-  const inProgressStudyPlans = studyPlans.filter(
-    (sp) => sp.status === "IN_PROGRESS",
-  );
+  const inProgressStudyPlans = studyPlans.filter((sp) => sp.status === "IN_PROGRESS");
 
   const weakestSubject =
     subjects.length > 0
-      ? subjects.reduce(
-          (weakest, current) =>
-            current.score !== null &&
-            (weakest.score === null || current.score < weakest.score)
-              ? current
-              : weakest,
-          subjects[0],
+      ? subjects.reduce((weakest, current) =>
+          current.score !== null &&
+          (weakest.score === null || current.score < weakest.score)
+            ? current
+            : weakest,
+        subjects[0]
         )
       : null;
 
@@ -89,12 +82,8 @@ export function StudentDashboard() {
   if (assessments.length > 0) {
     nextSteps.push({
       type: "assessment",
-      title: `${assessments.length} assessment${
-        assessments.length > 1 ? "s" : ""
-      } due`,
-      subtitle: `${assessments[0].subjectName} · Due ${new Date(
-        assessments[0].dueDate,
-      ).toLocaleDateString("en-GB", {
+      title: `${assessments.length} assessment${assessments.length > 1 ? "s" : ""} due`,
+      subtitle: `${assessments[0].subjectName} · Due ${new Date(assessments[0].dueDate).toLocaleDateString("en-GB", {
         day: "numeric",
         month: "short",
       })}`,
@@ -105,9 +94,7 @@ export function StudentDashboard() {
   if (activeStudyPlans.length > 0) {
     nextSteps.push({
       type: "study-plan-ready",
-      title: `${activeStudyPlans.length} study plan${
-        activeStudyPlans.length > 1 ? "s" : ""
-      } ready`,
+      title: `${activeStudyPlans.length} study plan${activeStudyPlans.length > 1 ? "s" : ""} ready`,
       subtitle: "Start learning where it counts",
       actionLabel: "View plans →",
     });
@@ -136,72 +123,71 @@ export function StudentDashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <h1 className="font-display font-bold text-2xl text-brand-ink">
-            {greeting}
-            {firstName ? `, ${firstName}` : ""} 👋
-          </h1>
-          <StreakBadge days={streakDays} />
-        </div>
-        {gradeName && curriculumName && (
-          <p className="font-sans text-sm text-brand-muted mt-1">
-            {gradeName} · {curriculumName}
-          </p>
-        )}
-      </div>
-
-      <div>
-        <div className="grid grid-cols-3 gap-3">
-          {isLoading
-            ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
-            : subjects
-                .slice(0, 3)
-                .map((subject) => (
-                  <SubjectScoreCard
-                    key={subject.subjectCode}
-                    subjectName={subject.subjectName}
-                    subjectCode={subject.subjectCode}
-                    score={subject.score}
-                  />
-                ))}
-        </div>
-      </div>
-
-      {nextSteps.length > 0 && (
+    <StudentLayout activeNav="home">
+      <div className="space-y-6">
         <div>
-          <h2 className="font-sans text-sm font-bold text-brand-muted uppercase tracking-wide mb-3">
-            What's waiting for you
-          </h2>
-          <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h1 className="font-display font-bold text-2xl text-brand-ink">
+              {greeting}{firstName ? `, ${firstName}` : ""} 👋
+            </h1>
+            <StreakBadge days={3} />
+          </div>
+          {gradeName && curriculumName && (
+            <p className="font-sans text-sm text-brand-muted mt-1">
+              {gradeName} · {curriculumName}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <div className="grid grid-cols-3 gap-3">
             {isLoading
-              ? Array.from({ length: 2 }).map((_, i) => (
-                  <SkeletonNextStep key={i} />
-                ))
-              : nextSteps
+              ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
+              : subjects
                   .slice(0, 3)
-                  .map((step, index) => (
-                    <NextStepCard
-                      key={index}
-                      type={step.type}
-                      title={step.title}
-                      subtitle={step.subtitle}
-                      actionLabel={step.actionLabel}
+                  .map((subject) => (
+                    <SubjectScoreCard
+                      key={subject.subjectCode}
+                      subjectName={subject.subjectName}
+                      subjectCode={subject.subjectCode}
+                      score={subject.score}
                     />
                   ))}
           </div>
         </div>
-      )}
 
-      {nextSteps.length === 0 && !isLoading && (
-        <div>
-          <h2 className="font-sans text-sm font-bold text-brand-muted uppercase tracking-wide mb-3">
-            Keep going
-          </h2>
-          <EmptyNextSteps />
-        </div>
-      )}
-    </div>
+        {nextSteps.length > 0 && (
+          <div>
+            <h2 className="font-sans text-sm font-bold text-brand-muted uppercase tracking-wide mb-3">
+              What's waiting for you
+            </h2>
+            <div className="space-y-3">
+              {isLoading
+                ? Array.from({ length: 2 }).map((_, i) => <SkeletonNextStep key={i} />)
+                : nextSteps
+                    .slice(0, 3)
+                    .map((step, index) => (
+                      <NextStepCard
+                        key={index}
+                        type={step.type}
+                        title={step.title}
+                        subtitle={step.subtitle}
+                        actionLabel={step.actionLabel}
+                      />
+                    ))}
+            </div>
+          </div>
+        )}
+
+        {nextSteps.length === 0 && !isLoading && (
+          <div>
+            <h2 className="font-sans text-sm font-bold text-brand-muted uppercase tracking-wide mb-3">
+              Keep going
+            </h2>
+            <EmptyNextSteps />
+          </div>
+        )}
+      </div>
+    </StudentLayout>
   );
 }

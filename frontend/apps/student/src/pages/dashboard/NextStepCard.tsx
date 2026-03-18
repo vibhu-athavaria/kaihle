@@ -1,9 +1,5 @@
 interface NextStepCardProps {
-  type:
-    | "assessment"
-    | "study-plan-ready"
-    | "study-plan-progress"
-    | "weakest-area";
+  type: "assessment" | "study-plan-ready" | "study-plan-progress" | "weakest-area";
   title: string;
   subtitle: string;
   actionLabel: string;
