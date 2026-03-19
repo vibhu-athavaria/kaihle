@@ -25,5 +25,18 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
+    # LLM task routing — all overridable via environment variables
+    llm_gap_classification_model: str = "gemini/gemini-2.5-flash"
+    llm_gap_classification_api_base: str | None = None
+
+    llm_study_plan_model: str = "gpt-4.1-mini"
+    llm_study_plan_api_base: str | None = None
+
+    llm_lesson_plan_model: str = "gpt-4.1"
+    llm_lesson_plan_api_base: str | None = None
+
+    llm_embeddings_model: str = "text-embedding-004"
+    llm_embeddings_api_base: str | None = None
+
 
 settings = Settings()
