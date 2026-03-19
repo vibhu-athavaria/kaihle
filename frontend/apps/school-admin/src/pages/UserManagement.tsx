@@ -11,7 +11,7 @@ import {
   useInviteUser,
   useUpdateUser,
   type User,
-} from "../../hooks/useSchoolAdmin";
+} from "../hooks/useSchoolAdmin";
 import { InviteUserModal } from "./InviteUserModal";
 
 type RoleTab = "TEACHER" | "STUDENT" | "PARENT";
@@ -157,7 +157,7 @@ export function UserManagement() {
   };
 
   const getTabHref = (tab: RoleTab) => {
-    return `/school/users?role=${tab.toLowerCase()}`;
+    return `/school-admin/users?role=${tab.toLowerCase()}`;
   };
 
   return (

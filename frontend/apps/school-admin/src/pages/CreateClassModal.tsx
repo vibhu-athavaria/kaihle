@@ -7,7 +7,7 @@ import {
   useGrades,
   useSchoolUsers,
   useCreateClass,
-} from "../../hooks/useSchoolAdmin";
+} from "../hooks/useSchoolAdmin";
 
 interface CreateClassModalProps {
   isOpen: boolean;

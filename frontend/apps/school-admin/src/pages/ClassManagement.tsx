@@ -12,7 +12,7 @@ import {
   useEnrollStudents,
   type Class,
   type User as UserType,
-} from "../../hooks/useSchoolAdmin";
+} from "../hooks/useSchoolAdmin";
 import { CreateClassModal } from "./CreateClassModal";
 
 function getInitials(firstName: string, lastName: string): string {
