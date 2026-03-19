@@ -1,5 +1,7 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+
+const STORAGE_KEY = "kaihle-auth";
 
 export interface User {
   id: string;
@@ -45,7 +47,14 @@ export const useAuthStore = create<AuthState>()(
       updateAccessToken: (access) => set({ accessToken: access }),
     }),
     {
-      name: "kaihle-auth",
+      name: STORAGE_KEY,
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+      }),
     },
   ),
 );
