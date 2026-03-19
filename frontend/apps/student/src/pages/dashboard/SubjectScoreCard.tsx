@@ -2,7 +2,6 @@ import { getMasteryStyle, scoreToPercent } from "@kaihle/types";
 
 interface SubjectScoreCardProps {
   subjectName: string;
-  subjectCode: string;
   score: number | null;
 }
 
@@ -15,7 +14,6 @@ const borderClassMap: Record<string, string> = {
 
 export function SubjectScoreCard({
   subjectName,
-  subjectCode: _subjectCode,
   score,
 }: SubjectScoreCardProps) {
   const { bgClass, textClass, label } = getMasteryStyle(score);

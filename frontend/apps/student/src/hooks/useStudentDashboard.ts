@@ -89,19 +89,28 @@ export function useStudentDashboard(): UseStudentDashboardResult {
 
   const studentInfoQuery = useQuery({
     queryKey: ["student", "info", user?.id] as const,
-    queryFn: () => fetchStudentInfo(user!.id),
+    queryFn: () => {
+      if (!user?.id) throw new Error("User ID not available");
+      return fetchStudentInfo(user.id);
+    },
     enabled: !!user?.id,
   });
 
   const gapMapQuery = useQuery({
     queryKey: QUERY_KEYS.gapMap(user?.id || ""),
-    queryFn: () => fetchGapMap(user!.id),
+    queryFn: () => {
+      if (!user?.id) throw new Error("User ID not available");
+      return fetchGapMap(user.id);
+    },
     enabled: !!user?.id,
   });
 
   const studyPlansQuery = useQuery({
     queryKey: ["student", "study-plans", user?.id] as const,
-    queryFn: () => fetchStudyPlans(user!.id),
+    queryFn: () => {
+      if (!user?.id) throw new Error("User ID not available");
+      return fetchStudyPlans(user.id);
+    },
     enabled: !!user?.id,
   });
 
@@ -112,7 +121,11 @@ export function useStudentDashboard(): UseStudentDashboardResult {
       user?.id,
       studentInfoQuery.data?.classId,
     ] as const,
-    queryFn: () => fetchAssessments(studentInfoQuery.data?.classId || ""),
+    queryFn: () => {
+      const classId = studentInfoQuery.data?.classId;
+      if (!classId) throw new Error("Class ID not available");
+      return fetchAssessments(classId);
+    },
     enabled: !!user?.id && !!studentInfoQuery.data?.classId,
   });
 

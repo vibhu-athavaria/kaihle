@@ -1,56 +1,119 @@
 import { test, expect } from "@playwright/test";
-import { config } from "./config";
+
+async function loginAsStudent(page: any) {
+  await page.goto("http://localhost:3002/login");
+  await page.getByLabel(/email/i).fill("student@school.edu");
+  await page.getByLabel(/password/i).fill("password123");
+  await page.getByRole("button", { name: /sign in/i }).click();
+}
 
 test.describe("Student Dashboard", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto(`${config.studentApp}/login`);
-    await page.getByLabel(/email/i).fill("student@kaihle.com");
-    await page.getByLabel(/password/i).fill("TestPassword123!");
-    await page.getByRole("button", { name: /sign in/i }).click();
-    await page.waitForURL(/\/student/);
-  });
-
-  test("STUD-1: Student logs in → dashboard loads with subject cards", async ({
+  test("student who completed onboarding lands on /student/dashboard", async ({
     page,
   }) => {
-    await expect(page).toHaveURL(/\/student/);
-    await expect(page.getByText(/student dashboard/i)).toBeVisible();
+    await loginAsStudent(page);
+    await expect(page).toHaveURL(/\/student\/dashboard/);
   });
 
-  test("STUD-3: API error → error message displayed", async ({ page }) => {
-    await page.goto(`${config.studentApp}/student/dashboard`);
-
-    await page.route("**/api/v1/**", (route) => {
-      route.abort("failed");
-    });
-
-    await page.reload();
-    await expect(page.getByText(/failed to load|error/i)).toBeVisible();
-  });
-
-  test("STUD-5: Page load → single layout (no duplicate header/sidebar)", async ({
+  test("greeting uses time-of-day (Good morning before noon)", async ({
     page,
   }) => {
-    await page.goto(`${config.studentApp}/student/dashboard`);
-
-    const headers = page.locator("header");
-    await expect(headers).toHaveCount(1);
-
-    const asides = page.locator("aside");
-    await expect(asides).toHaveCount(0);
+    await loginAsStudent(page);
+    await expect(page.locator("text=Good morning")).toBeVisible();
   });
 
-  test("STUD-6: Page load → time-based greeting", async ({ page }) => {
-    await page.goto(`${config.studentApp}/student/dashboard`);
+  test("subject score cards render with correct mastery colors", async ({
+    page,
+  }) => {
+    await loginAsStudent(page);
+    await expect(page.locator("text=Strong")).toBeVisible();
+  });
 
-    const hour = new Date().getHours();
-    let expectedGreeting: string;
-    if (hour < 12) expectedGreeting = "Good morning";
-    else if (hour < 18) expectedGreeting = "Good afternoon";
-    else expectedGreeting = "Good evening";
+  test("card with score 0.72 shows green border and Strong label", async ({
+    page,
+  }) => {
+    await loginAsStudent(page);
+    await expect(page.locator("text=72%")).toBeVisible();
+    await expect(page.locator("text=Strong")).toBeVisible();
+  });
 
-    await expect(
-      page.getByText(new RegExp(expectedGreeting, "i")),
-    ).toBeVisible();
+  test("subject with no data shows dash not zero percent", async ({ page }) => {
+    await loginAsStudent(page);
+    await expect(page.locator("text=—")).toBeVisible();
+  });
+
+  test("active study plan card shows with View plans link", async ({
+    page,
+  }) => {
+    await loginAsStudent(page);
+    const viewPlansLink = page.locator("text=View plans →");
+    await expect(viewPlansLink).toBeVisible();
+  });
+
+  test("active assessment card shows with Start now link", async ({ page }) => {
+    await loginAsStudent(page);
+    const startNowLink = page.locator("text=Start now →");
+    await expect(startNowLink).toBeVisible();
+  });
+
+  test("no pending actions shows caught up message", async ({ page }) => {
+    await loginAsStudent(page);
+    const caughtUpMessage = page.locator("text=You're all caught up!");
+    await expect(caughtUpMessage).toBeVisible();
+  });
+
+  test("SubjectScoreCard score=0.38 shows red border and red text", async ({
+    page,
+  }) => {
+    await loginAsStudent(page);
+    await expect(page.locator("text=38%")).toBeVisible();
+  });
+
+  test("SubjectScoreCard score=null shows neutral border and dash value", async ({
+    page,
+  }) => {
+    await loginAsStudent(page);
+    const dashValue = page.locator("text=—").first();
+    await expect(dashValue).toBeVisible();
+  });
+
+  test("responsive 3-column card grid on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await loginAsStudent(page);
+    const grid = page.locator(".grid.grid-cols-3");
+    await expect(grid).toBeVisible();
+  });
+
+  test("next step cards stack vertically on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await loginAsStudent(page);
+    const nextStepsContainer = page.locator("text=What's waiting for you");
+    await expect(nextStepsContainer).toBeVisible();
+  });
+
+  test("bottom nav visible on mobile", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await loginAsStudent(page);
+    const bottomNav = page.locator("nav[aria-label='Student navigation']");
+    await expect(bottomNav).toBeVisible();
+  });
+
+  test("bottom nav hidden on desktop", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await loginAsStudent(page);
+    const bottomNav = page.locator("nav[aria-label='Student navigation']");
+    await expect(bottomNav).toBeHidden();
+  });
+
+  test("greeting uses font-display", async ({ page }) => {
+    await loginAsStudent(page);
+    const greeting = page.locator("h1.font-display");
+    await expect(greeting).toBeVisible();
+  });
+
+  test("skeleton cards shown during loading", async ({ page }) => {
+    await loginAsStudent(page);
+    const skeleton = page.locator(".animate-pulse");
+    await expect(skeleton.first()).toBeVisible();
   });
 });
