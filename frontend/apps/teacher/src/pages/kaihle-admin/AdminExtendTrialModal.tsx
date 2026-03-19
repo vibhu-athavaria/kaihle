@@ -12,7 +12,7 @@ const extensionOptions: { days: ExtensionDays; label: string }[] = [
 
 export function AdminExtendTrialModal({
   schoolId,
-  schoolName: _schoolName,
+  schoolName,
   currentTrialEnd,
   onClose,
 }: {
@@ -52,9 +52,11 @@ export function AdminExtendTrialModal({
             Extend trial
           </h2>
           <p className="text-sm text-role-admin-subtle mb-6">
+            for <span className="font-semibold">{schoolName}</span>
             {currentTrialEnd && (
               <span>
-                Current trial ends:{" "}
+                {" "}
+                — Current trial ends:{" "}
                 {new Date(currentTrialEnd).toLocaleDateString()}
               </span>
             )}

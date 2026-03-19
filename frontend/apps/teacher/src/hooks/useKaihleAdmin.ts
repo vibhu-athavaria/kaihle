@@ -9,11 +9,10 @@ export interface School {
   city: string;
   timezone: string;
   plan_tier: string;
-  status: "ACTIVE" | "TRIAL" | "SUSPENDED";
+  subscription_status: "ACTIVE" | "TRIAL" | "SUSPENDED";
   created_at: string;
   trial_expires_at: string | null;
   trial_end_date: string | null;
-  subscription_status: string;
   teacher_count: number;
   student_count: number;
   parent_count: number;
@@ -34,7 +33,6 @@ export interface RecentActivity {
   type: string;
   description: string;
   timestamp: string;
-  message?: string;
 }
 
 export interface SchoolAnalytics {
@@ -44,6 +42,8 @@ export interface SchoolAnalytics {
   onboarding_percentage: number;
   onboarded_students: number;
   total_students: number;
+  assessments_completed: number;
+  avg_mastery: number;
 }
 
 export interface SchoolsResponse {

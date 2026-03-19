@@ -35,6 +35,13 @@ function validateSlug(slug: string): string | null {
   return null;
 }
 
+function validateEmail(email: string): string | null {
+  if (!email) return "Admin email is required";
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) return "Please enter a valid email address";
+  return null;
+}
+
 export function AdminCreateSchoolModal({ onClose }: { onClose: () => void }) {
   const createSchool = useCreateSchool();
   const [formData, setFormData] = useState({
@@ -63,6 +70,11 @@ export function AdminCreateSchoolModal({ onClose }: { onClose: () => void }) {
     else if (errors.slug) setErrors({ ...errors, slug: "" });
   };
 
+  const handleEmailChange = (email: string) => {
+    setFormData({ ...formData, admin_email: email });
+    if (errors.admin_email) setErrors({ ...errors, admin_email: "" });
+  };
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
     if (!formData.name.trim()) newErrors.name = "School name is required";
@@ -71,8 +83,8 @@ export function AdminCreateSchoolModal({ onClose }: { onClose: () => void }) {
       const slugError = validateSlug(formData.slug);
       if (slugError) newErrors.slug = slugError;
     }
-    if (!formData.admin_email.trim())
-      newErrors.admin_email = "Admin email is required";
+    const emailError = validateEmail(formData.admin_email);
+    if (emailError) newErrors.admin_email = emailError;
     if (!formData.admin_first_name.trim())
       newErrors.admin_first_name = "First name is required";
     if (!formData.admin_last_name.trim())
@@ -89,7 +101,9 @@ export function AdminCreateSchoolModal({ onClose }: { onClose: () => void }) {
       await createSchool.mutateAsync(formData);
       onClose();
     } catch (err) {
-      setErrors({ submit: "Failed to create school. Please try again." });
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      console.error("Failed to create school:", errorMessage);
+      setErrors({ submit: `Failed to create school: ${errorMessage}` });
     }
   };
 
@@ -186,9 +200,7 @@ export function AdminCreateSchoolModal({ onClose }: { onClose: () => void }) {
                 label="Admin email"
                 type="email"
                 value={formData.admin_email}
-                onChange={(e) =>
-                  setFormData({ ...formData, admin_email: e.target.value })
-                }
+                onChange={(e) => handleEmailChange(e.target.value)}
                 error={errors.admin_email}
                 placeholder="admin@school.com"
               />

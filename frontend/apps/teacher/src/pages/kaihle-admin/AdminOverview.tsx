@@ -188,7 +188,9 @@ function RecentActivityList({ loading }: { loading?: boolean }) {
         <div key={activity.id} className="flex items-start gap-3">
           <span className="w-2 h-2 rounded-full bg-brand-primary mt-2 flex-shrink-0" />
           <div>
-            <p className="text-sm text-role-admin-ink">{activity.message}</p>
+            <p className="text-sm text-role-admin-ink">
+              {activity.description}
+            </p>
             <p className="text-xs text-role-admin-muted">
               {new Date(activity.timestamp).toLocaleString()}
             </p>
