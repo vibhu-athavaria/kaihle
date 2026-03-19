@@ -4,6 +4,7 @@ import { DashboardLayout } from "@kaihle/ui";
 import { Card } from "@kaihle/ui";
 import { Badge } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import { MoreVertical, Mail, UserX, UserCheck, RefreshCw } from "lucide-react";
 import {
   useSchoolUsers,
@@ -129,6 +130,7 @@ function UserRow({
 }
 
 export function UserManagement() {
+  const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<RoleTab>("TEACHER");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -163,6 +165,7 @@ export function UserManagement() {
       variant="school-admin"
       pageTitle="Users"
       pageSubtitle="Manage teachers, students, and parents at your school"
+      onLogout={logout}
       topNavAction={
         <Button
           variant="primary"

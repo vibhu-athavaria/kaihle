@@ -3,6 +3,7 @@ import { DashboardLayout } from "@kaihle/ui";
 import { Card } from "@kaihle/ui";
 import { Badge } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import { Plus, X, BookOpen } from "lucide-react";
 import {
   useSchoolClasses,
@@ -223,6 +224,7 @@ function ClassDetailPanel({
 }
 
 export function ClassManagement() {
+  const { logout } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState<Class | null>(null);
 
@@ -259,6 +261,7 @@ export function ClassManagement() {
       variant="school-admin"
       pageTitle="Classes"
       pageSubtitle="Manage classes, assign teachers, and enroll students"
+      onLogout={logout}
       topNavAction={
         <Button
           variant="primary"
