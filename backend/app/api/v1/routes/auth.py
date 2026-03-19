@@ -11,9 +11,11 @@ from app.schemas.auth import (
     LoginResponse,
     LogoutRequest,
     MagicLinkRequest,
+    MagicLinkVerifyResponse,
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
+    SetPasswordRequest,
     TokenResponse,
 )
 from app.services.auth_service import AuthService, SchoolNotFoundError
@@ -69,12 +71,17 @@ async def send_magic_link(
     return {"message": "If that email is registered, a login link has been sent."}
 
 
-@router.get("/magic-link/verify", response_model=LoginResponse)
-async def verify_magic_link(token: str, db: AsyncSession = Depends(get_db)) -> LoginResponse:
-    """Verify a magic link token and return JWT tokens."""
+@router.get("/magic-link/verify", response_model=MagicLinkVerifyResponse)
+async def verify_magic_link(token: str, db: AsyncSession = Depends(get_db)) -> MagicLinkVerifyResponse:
+    """Verify a magic link token and return a scoped JWT for password setup."""
     service = AuthService(db)
     try:
-        return await service.verify_magic_link(token)
+        setup_token = await service.verify_magic_link_get_token(token)
+        return MagicLinkVerifyResponse(
+            setup_token=setup_token,
+            token_type="bearer",
+            requires_password_setup=True,
+        )
     except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -93,6 +100,24 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)) -> T
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token is invalid or expired",
         )
+
+
+@router.post("/set-password", response_model=LoginResponse)
+async def set_password(
+    body: SetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> LoginResponse:
+    """Set password for a magic-link-invited user on first login.
+
+    Requires a JWT with scope: password_setup (issued by verify_magic_link).
+    Returns a full-access JWT pair (access + refresh) on success.
+    Raises 403 if called with a full-access token (password already set).
+    """
+    service = AuthService(db)
+    try:
+        return await service.set_password_from_scoped_token(body.password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/logout")

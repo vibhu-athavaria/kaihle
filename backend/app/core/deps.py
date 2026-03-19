@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import InvalidTokenError, decode_token
+from app.core.security import InvalidTokenError, decode_token, get_token_scope
 from app.models.user import StudentProfile, User, UserRole
 
 # HTTPBearer for extracting Bearer token
@@ -89,6 +89,45 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_token_payload(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+) -> dict[str, Any]:
+    """
+    Get the raw token payload without requiring user lookup.
+    Used by require_full_access to check token scope.
+    """
+    token = credentials.credentials
+    try:
+        payload = decode_token(token)
+    except InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from e
+    return payload
+
+
+async def require_full_access(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    token_payload: Annotated[dict[str, Any], Depends(get_token_payload)],
+) -> CurrentUser:
+    """Reject tokens that only have password_setup scope.
+
+    Apply this dependency to all protected endpoints that should not be
+    accessible until after the user has set their password.
+    """
+    if get_token_scope(token_payload) == "password_setup":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "PASSWORD_SETUP_REQUIRED",
+                "message": "You must set your password before accessing this resource.",
+            },
+        )
+    return current_user
 
 
 def require_role(*allowed_roles: UserRole) -> Callable[..., Any]:

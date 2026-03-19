@@ -91,18 +91,28 @@ def create_magic_link_token(
     expires_in_minutes: int = 10,
 ) -> str:
     """
-    Create a one-time magic link JWT (10-minute expiry).
+    Create a one-time magic link JWT with scope: password_setup.
+
+    This token grants ONLY the ability to call POST /api/v1/auth/set-password.
+    All other protected endpoints must reject tokens with this scope.
+
     Stored as a hash in auth_tokens table.
     """
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": str(user_id),
+        "scope": "password_setup",
         "iat": now,
         "exp": now + timedelta(minutes=expires_in_minutes),
         "type": "magic_link",
     }
     result: str = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
     return result
+
+
+def get_token_scope(payload: dict[str, Any]) -> str | None:
+    """Return the scope claim from a decoded JWT payload, or None if absent."""
+    return payload.get("scope")
 
 
 def decode_token(token: str) -> dict[str, Any]:

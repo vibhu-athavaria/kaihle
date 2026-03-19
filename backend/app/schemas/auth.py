@@ -3,7 +3,7 @@
 import uuid
 from typing import Any
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 class RegisterRequest(BaseModel):
@@ -39,6 +39,31 @@ class TokenResponse(BaseModel):
 
 class MagicLinkRequest(BaseModel):
     email: EmailStr
+
+
+class MagicLinkVerifyResponse(BaseModel):
+    """Response from magic link verification — scoped token only."""
+
+    setup_token: str
+    token_type: str = "bearer"
+    requires_password_setup: bool = True
+
+
+class SetPasswordRequest(BaseModel):
+    """Request body for POST /api/v1/auth/set-password."""
+
+    password: str = Field(
+        ...,
+        min_length=8,
+        description="New password — minimum 8 characters",
+    )
+    confirm_password: str = Field(..., description="Must match password")
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> "SetPasswordRequest":
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
 
 
 class RefreshRequest(BaseModel):

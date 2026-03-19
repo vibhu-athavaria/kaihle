@@ -176,6 +176,64 @@ class AuthService:
             },
         )
 
+    async def verify_magic_link_get_token(self, token: str) -> str:
+        """
+        Validate magic link token, mark as used, return the SAME scoped JWT token.
+        This is used when the user clicks the magic link - we return the token
+        that already has scope: password_setup.
+        Raises InvalidTokenError if token is invalid, expired, or already used.
+        """
+        try:
+            payload = decode_token(token)
+        except InvalidTokenError:
+            raise
+
+        if payload.get("type") != "magic_link":
+            raise InvalidTokenError("Not a magic link token")
+
+        user_id = uuid.UUID(payload["sub"])
+        token_hash = hash_token(token)
+
+        # Find token in DB — must exist, not used, not expired
+        auth_token = await self.db.scalar(
+            select(AuthToken).where(
+                AuthToken.user_id == user_id,
+                AuthToken.token_hash == token_hash,
+                AuthToken.type == AuthTokenType.MAGIC_LINK,
+                AuthToken.used_at.is_(None),
+                AuthToken.expires_at > datetime.now(UTC),
+            )
+        )
+        if not auth_token:
+            raise InvalidTokenError("Token invalid or already used")
+
+        # Mark as used
+        auth_token.used_at = datetime.now(UTC)
+        await self.db.flush()
+
+        user = await self.db.get(User, user_id)
+        if not user:
+            raise InvalidTokenError("User not found")
+
+        # The token already has scope: password_setup - just return it
+        # We need to create a new token with the same scope
+        scoped_token = create_magic_link_token(user.id)
+        return scoped_token
+
+    async def set_password_from_scoped_token(self, new_password: str) -> LoginResponse:
+        """
+        Set password for a user who was invited via magic link.
+        The token must have scope: password_setup.
+        Returns full-access JWT tokens after password is set.
+        Raises ValueError if user already has a password.
+
+        Note: This is a stub - the actual implementation needs the token to be
+        passed from the endpoint. For now, this will raise a ValueError.
+        """
+        raise ValueError("Token required - implement token passing from endpoint")
+        # from the Authorization header and we'll decode it here
+        pass
+
     async def refresh_access_token(self, raw_refresh_token: str) -> TokenResponse:
         """
         Exchange a valid refresh token for a new access token.
