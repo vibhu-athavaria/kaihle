@@ -3,8 +3,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { AdminLayout } from "@kaihle/ui";
 import { Card, Badge, Button, Skeleton } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
-import { useAdminSchools } from "../../hooks/useKaihleAdmin";
-import { School } from "../../hooks/useKaihleAdmin";
+import { useAdminSchools } from "../hooks/useKaihleAdmin";
+import { School } from "../hooks/useKaihleAdmin";
 import { Plus, Filter } from "lucide-react";
 import { AdminCreateSchoolModal } from "./AdminCreateSchoolModal";
 

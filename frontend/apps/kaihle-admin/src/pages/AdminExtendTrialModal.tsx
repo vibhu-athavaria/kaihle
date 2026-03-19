@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Card, Button, Input } from "@kaihle/ui";
-import { useExtendTrial } from "../../hooks/useKaihleAdmin";
+import { useExtendTrial } from "../hooks/useKaihleAdmin";
 
 type ExtensionDays = 7 | 14 | 30;
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Card, Button, Input } from "@kaihle/ui";
-import { useCreateSchool } from "../../hooks/useKaihleAdmin";
+import { useCreateSchool } from "../hooks/useKaihleAdmin";
 
 const TIMEZONES = [
   { value: "Asia/Makassar", label: "Asia/Makassar (WITA)" },
