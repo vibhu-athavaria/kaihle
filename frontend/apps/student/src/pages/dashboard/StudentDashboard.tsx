@@ -1,4 +1,5 @@
 import { StudentLayout } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import { SubjectScoreCard } from "./SubjectScoreCard";
 import { NextStepCard, EmptyNextSteps } from "./NextStepCard";
 import { StreakBadge } from "./StreakBadge";
@@ -36,18 +37,23 @@ function SkeletonNextStep() {
 }
 
 interface NextStep {
-  type: "assessment" | "study-plan-ready" | "study-plan-progress" | "weakest-area";
+  type:
+    | "assessment"
+    | "study-plan-ready"
+    | "study-plan-progress"
+    | "weakest-area";
   title: string;
   subtitle: string;
   actionLabel: string;
 }
 
 export function StudentDashboard() {
+  const { logout } = useAuth();
   const { data, isLoading, isError } = useStudentDashboard();
 
   if (isError) {
     return (
-      <StudentLayout activeNav="home">
+      <StudentLayout activeNav="home" onLogout={logout}>
         <div className="text-center py-8">
           <p className="text-brand-red">Failed to load dashboard data.</p>
         </div>
@@ -65,16 +71,19 @@ export function StudentDashboard() {
   const assessments = data?.assessments || [];
 
   const activeStudyPlans = studyPlans.filter((sp) => sp.status === "ACTIVE");
-  const inProgressStudyPlans = studyPlans.filter((sp) => sp.status === "IN_PROGRESS");
+  const inProgressStudyPlans = studyPlans.filter(
+    (sp) => sp.status === "IN_PROGRESS",
+  );
 
   const weakestSubject =
     subjects.length > 0
-      ? subjects.reduce((weakest, current) =>
-          current.score !== null &&
-          (weakest.score === null || current.score < weakest.score)
-            ? current
-            : weakest,
-        subjects[0]
+      ? subjects.reduce(
+          (weakest, current) =>
+            current.score !== null &&
+            (weakest.score === null || current.score < weakest.score)
+              ? current
+              : weakest,
+          subjects[0],
         )
       : null;
 
@@ -83,8 +92,12 @@ export function StudentDashboard() {
   if (assessments.length > 0) {
     nextSteps.push({
       type: "assessment",
-      title: `${assessments.length} assessment${assessments.length > 1 ? "s" : ""} due`,
-      subtitle: `${assessments[0].subjectName} · Due ${new Date(assessments[0].dueDate).toLocaleDateString("en-GB", {
+      title: `${assessments.length} assessment${
+        assessments.length > 1 ? "s" : ""
+      } due`,
+      subtitle: `${assessments[0].subjectName} · Due ${new Date(
+        assessments[0].dueDate,
+      ).toLocaleDateString("en-GB", {
         day: "numeric",
         month: "short",
       })}`,
@@ -95,7 +108,9 @@ export function StudentDashboard() {
   if (activeStudyPlans.length > 0) {
     nextSteps.push({
       type: "study-plan-ready",
-      title: `${activeStudyPlans.length} study plan${activeStudyPlans.length > 1 ? "s" : ""} ready`,
+      title: `${activeStudyPlans.length} study plan${
+        activeStudyPlans.length > 1 ? "s" : ""
+      } ready`,
       subtitle: "Start learning where it counts",
       actionLabel: "View plans →",
     });
@@ -124,12 +139,13 @@ export function StudentDashboard() {
   }
 
   return (
-    <StudentLayout activeNav="home">
+    <StudentLayout activeNav="home" onLogout={logout}>
       <div className="space-y-6">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-display font-bold text-2xl text-brand-ink">
-              {greeting}{firstName ? `, ${firstName}` : ""} 👋
+              {greeting}
+              {firstName ? `, ${firstName}` : ""} 👋
             </h1>
             <StreakBadge days={streakDays} />
           </div>
@@ -143,7 +159,9 @@ export function StudentDashboard() {
         <div>
           <div className="grid grid-cols-3 gap-3">
             {isLoading
-              ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
+              ? Array.from({ length: 3 }).map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))
               : subjects
                   .slice(0, 3)
                   .map((subject) => (
@@ -164,7 +182,9 @@ export function StudentDashboard() {
             </h2>
             <div className="space-y-3">
               {isLoading
-                ? Array.from({ length: 2 }).map((_, i) => <SkeletonNextStep key={i} />)
+                ? Array.from({ length: 2 }).map((_, i) => (
+                    <SkeletonNextStep key={i} />
+                  ))
                 : nextSteps
                     .slice(0, 3)
                     .map((step, index) => (
