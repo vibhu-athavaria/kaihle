@@ -29,24 +29,27 @@ async function fetchTeacherDashboard(schoolId: string): Promise<{
   analytics: Record<string, number>;
 }> {
   const [classesRes, analyticsRes] = await Promise.all([
-    apiClient.get(`/api/v1/schools/${schoolId}/classes`),
+    apiClient.get(`/api/v1/admin/schools/${schoolId}/classes`),
     apiClient
-      .get(`/api/v1/schools/${schoolId}/analytics`)
+      .get(`/api/v1/admin/schools/${schoolId}/analytics`)
       .catch(() => ({ data: {} })),
   ]);
-  return {
-    classes: classesRes.data,
-    analytics: analyticsRes.data,
-  };
-}
 
-async function fetchLessonPlan(
-  classId: string,
-): Promise<{ topics: string[] } | null> {
-  const response = await apiClient.get(
-    `/api/v1/classes/${classId}/lesson-plans?limit=1`,
-  );
-  return response.data.length > 0 ? response.data[0] : null;
+  // Transform classes to include subjectName and gradeName
+  const classes = (classesRes.data || []).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    subjectName: c.subjectName || c.name?.split(" ")[0] || "Unknown",
+    gradeName: c.gradeName || c.name?.split(" ")[1] || "Unknown",
+    studentCount: 0,
+    avgMastery: null,
+    lessonPlanStatus: "none" as const,
+  }));
+
+  return {
+    classes,
+    analytics: analyticsRes.data || {},
+  };
 }
 
 export function useTeacherDashboard(schoolId: string | null) {
@@ -54,33 +57,6 @@ export function useTeacherDashboard(schoolId: string | null) {
     queryKey: ["teacher", "dashboard", schoolId],
     queryFn: () => fetchTeacherDashboard(schoolId!),
     enabled: !!schoolId,
-  });
-
-  const lessonPlanQuery = useQuery({
-    queryKey: ["teacher", "lesson-plans", schoolId],
-    queryFn: async () => {
-      if (!dashboardQuery.data) return null;
-      const classesWithPlans = dashboardQuery.data.classes.filter(
-        (c: TeacherClass) => c.lessonPlanStatus === "ready",
-      );
-      if (classesWithPlans.length === 0) return null;
-
-      const results = await Promise.all(
-        classesWithPlans.map((c: TeacherClass) => fetchLessonPlan(c.id)),
-      );
-      const firstPlan = results.find((r) => r !== null);
-      if (!firstPlan) return null;
-
-      const classInfo = classesWithPlans.find((_, i) => results[i] !== null);
-      return classInfo
-        ? {
-            classId: classInfo.id,
-            className: classInfo.name,
-            topics: firstPlan.topics,
-          }
-        : null;
-    },
-    enabled: !!dashboardQuery.data,
   });
 
   const pendingActions: PendingAction[] = [];
@@ -109,9 +85,10 @@ export function useTeacherDashboard(schoolId: string | null) {
     data: {
       classes: dashboardQuery.data?.classes || [],
       pendingActions,
-      lessonPlan: lessonPlanQuery.data || null,
+      lessonPlan: null,
     } as TeacherDashboardData,
-    isLoading: dashboardQuery.isLoading || lessonPlanQuery.isLoading,
+    isLoading: dashboardQuery.isLoading,
     isError: dashboardQuery.isError,
+    user: null, // Will be filled from auth store
   };
 }
