@@ -3,6 +3,7 @@ import { DashboardLayout } from "@kaihle/ui";
 import { Card } from "@kaihle/ui";
 import { Badge } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import { Plus, X, BookOpen } from "lucide-react";
 import {
   useSchoolClasses,
@@ -13,6 +14,12 @@ import {
   type User as UserType,
 } from "../../hooks/useSchoolAdmin";
 import { CreateClassModal } from "./CreateClassModal";
+
+function getInitials(firstName: string, lastName: string): string {
+  const first = firstName?.[0] || "";
+  const last = lastName?.[0] || "";
+  return (first + last).toUpperCase() || "?";
+}
 
 function ClassDetailPanel({
   cls,
@@ -177,8 +184,7 @@ function ClassDetailPanel({
                     >
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-brand-light text-brand-primary text-xs font-bold flex items-center justify-center">
-                          {s.first_name[0]}
-                          {s.last_name[0]}
+                          {getInitials(s.first_name, s.last_name)}
                         </div>
                         <span className="text-sm text-brand-ink">
                           {s.first_name} {s.last_name}
@@ -218,6 +224,7 @@ function ClassDetailPanel({
 }
 
 export function ClassManagement() {
+  const { logout } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState<Class | null>(null);
 
@@ -254,6 +261,7 @@ export function ClassManagement() {
       variant="school-admin"
       pageTitle="Classes"
       pageSubtitle="Manage classes, assign teachers, and enroll students"
+      onLogout={logout}
       topNavAction={
         <Button
           variant="primary"

@@ -4,6 +4,7 @@ import { DashboardLayout } from "@kaihle/ui";
 import { Card } from "@kaihle/ui";
 import { Badge } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import { MoreVertical, Mail, UserX, UserCheck, RefreshCw } from "lucide-react";
 import {
   useSchoolUsers,
@@ -38,6 +39,12 @@ function getStatusBadge(status: User["status"]) {
   }
 }
 
+function getInitials(firstName: string, lastName: string): string {
+  const first = firstName?.[0] || "";
+  const last = lastName?.[0] || "";
+  return (first + last).toUpperCase() || "?";
+}
+
 function UserRow({
   user,
   onResendInvite,
@@ -48,7 +55,7 @@ function UserRow({
   onToggleStatus: (user: User) => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
-  const initials = `${user.first_name[0]}${user.last_name[0]}`.toUpperCase();
+  const initials = getInitials(user.first_name, user.last_name);
 
   return (
     <tr className="border-b border-brand-border-soft hover:bg-brand-light/30">
@@ -123,6 +130,7 @@ function UserRow({
 }
 
 export function UserManagement() {
+  const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<RoleTab>("TEACHER");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -139,8 +147,8 @@ export function UserManagement() {
     await inviteUser.mutateAsync(data);
   };
 
-  const handleResendInvite = (user: User) => {
-    console.log("Resend invite to", user.email);
+  const handleResendInvite = (_user: User) => {
+    // TODO: Implement resend invite functionality
   };
 
   const handleToggleStatus = (user: User) => {
@@ -157,6 +165,7 @@ export function UserManagement() {
       variant="school-admin"
       pageTitle="Users"
       pageSubtitle="Manage teachers, students, and parents at your school"
+      onLogout={logout}
       topNavAction={
         <Button
           variant="primary"

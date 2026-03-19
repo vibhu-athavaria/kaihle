@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { Card } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import { Users, GraduationCap, TrendingUp, Plus } from "lucide-react";
 import {
   useSchoolAnalytics,
@@ -9,6 +10,7 @@ import {
 } from "../../hooks/useSchoolAdmin";
 
 export function SchoolOverview() {
+  const { logout } = useAuth();
   const { data: analytics, isLoading: analyticsLoading } = useSchoolAnalytics();
   const { data: classes, isLoading: classesLoading } = useSchoolClasses();
 
@@ -38,6 +40,7 @@ export function SchoolOverview() {
       variant="school-admin"
       pageTitle="Overview"
       pageSubtitle="Welcome back! Here's what's happening at your school."
+      onLogout={logout}
     >
       <div className="space-y-6">
         <section>
@@ -170,7 +173,7 @@ export function SchoolOverview() {
             </div>
             <div className="mt-4 text-right">
               <Link
-                to="/admin/analytics"
+                to="/school/analytics"
                 className="text-sm text-brand-primary hover:underline font-medium"
               >
                 View analytics →

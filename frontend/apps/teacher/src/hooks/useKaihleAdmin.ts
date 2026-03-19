@@ -5,173 +5,127 @@ export interface School {
   id: string;
   name: string;
   slug: string;
-  country: string | null;
-  city: string | null;
+  country: string;
+  city: string;
   timezone: string;
-  plan_tier: "TRIAL" | "STARTER" | "GROWTH" | "SCALE";
-  subscription_status: "ACTIVE" | "TRIAL" | "SUSPENDED";
-  trial_end_date: string | null;
-  mrr: number | null;
+  plan_tier: string;
+  status: "ACTIVE" | "TRIAL" | "SUSPENDED";
   created_at: string;
-}
-
-export interface SchoolAnalytics {
-  teachers_count: number;
-  students_count: number;
-  assessments_completed: number;
-  avg_mastery: number;
+  trial_expires_at: string | null;
+  trial_end_date: string | null;
+  subscription_status: string;
+  teacher_count: number;
+  student_count: number;
+  parent_count: number;
 }
 
 export interface PlatformStats {
   total_schools: number;
   total_students: number;
+  total_teachers: number;
   mrr: number;
-  uptime: number;
-  latency_ms: number;
+  mrr_growth: number;
+  uptime?: number;
+  latency_ms?: number;
 }
 
 export interface RecentActivity {
   id: string;
-  type: "SCHOOL_ENROLLED" | "TRIAL_EXTENDED" | "PAYMENT_RECEIVED";
-  message: string;
+  type: string;
+  description: string;
   timestamp: string;
+  message?: string;
 }
 
-export interface CreateSchoolPayload {
-  name: string;
-  slug: string;
-  country?: string;
-  city?: string;
-  timezone: string;
-  plan_tier: "TRIAL" | "STARTER" | "GROWTH" | "SCALE";
-  admin_email: string;
-  admin_first_name: string;
-  admin_last_name: string;
+export interface SchoolAnalytics {
+  teacher_count: number;
+  student_count: number;
+  parent_count: number;
+  onboarding_percentage: number;
+  onboarded_students: number;
+  total_students: number;
 }
 
-export interface ExtendTrialPayload {
-  days: 7 | 14 | 30;
-  reason: string;
+export interface SchoolsResponse {
+  schools: School[];
 }
 
-export interface UpdateSchoolPayload {
-  subscription_status?: "ACTIVE" | "TRIAL" | "SUSPENDED";
-  plan_tier?: "TRIAL" | "STARTER" | "GROWTH" | "SCALE";
-}
-
-function getAdminSchools(params?: {
-  page?: number;
-  page_size?: number;
-  status?: string;
-}) {
-  const searchParams = new URLSearchParams();
-  if (params?.page) searchParams.set("page", String(params.page));
-  if (params?.page_size)
-    searchParams.set("page_size", String(params.page_size));
-  if (params?.status) searchParams.set("status", params.status);
-  const query = searchParams.toString();
-  return apiClient.get<{ schools: School[]; total: number }>(
-    `/api/v1/admin/schools${query ? `?${query}` : ""}`,
-  );
-}
-
-function getAdminSchool(id: string) {
-  return apiClient.get<School>(`/api/v1/admin/schools/${id}`);
-}
-
-function getSchoolAnalytics(schoolId: string) {
-  return apiClient.get<SchoolAnalytics>(
-    `/api/v1/schools/${schoolId}/analytics`,
-  );
-}
-
-function getPlatformStats() {
-  return apiClient.get<PlatformStats>("/api/v1/admin/stats");
-}
-
-function getRecentActivity() {
-  return apiClient.get<RecentActivity[]>("/api/v1/admin/activity");
-}
-
-function createSchool(data: CreateSchoolPayload) {
-  return apiClient.post<School>("/api/v1/admin/schools", data);
-}
-
-function updateSchool(id: string, data: UpdateSchoolPayload) {
-  return apiClient.patch<School>(`/api/v1/admin/schools/${id}`, data);
-}
-
-function extendTrial(id: string, data: ExtendTrialPayload) {
-  return apiClient.post<{ trial_end_date: string }>(
-    `/api/v1/admin/schools/${id}/trial-extension`,
-    data,
-  );
+export function usePlatformStats() {
+  return useQuery({
+    queryKey: ["platform", "stats"],
+    queryFn: async () => {
+      const response = await apiClient.get("/api/v1/admin/platform/stats");
+      return response.data as PlatformStats;
+    },
+  });
 }
 
 export function useAdminSchools(params?: {
-  page?: number;
   page_size?: number;
   status?: string;
 }) {
   return useQuery({
     queryKey: ["admin", "schools", params],
-    queryFn: () => getAdminSchools(params),
-    select: (res) => res.data,
-  });
-}
-
-export function useAdminSchool(id: string) {
-  return useQuery({
-    queryKey: ["admin", "school", id],
-    queryFn: () => getAdminSchool(id),
-    select: (res) => res.data,
-    enabled: !!id,
-  });
-}
-
-export function useSchoolAnalytics(schoolId: string) {
-  return useQuery({
-    queryKey: ["school", schoolId, "analytics"],
-    queryFn: () => getSchoolAnalytics(schoolId),
-    select: (res) => res.data,
-    enabled: !!schoolId,
-  });
-}
-
-export function usePlatformStats() {
-  return useQuery({
-    queryKey: ["admin", "stats"],
-    queryFn: getPlatformStats,
-    select: (res) => res.data,
+    queryFn: async () => {
+      const response = await apiClient.get("/api/v1/admin/schools", { params });
+      return response.data as SchoolsResponse;
+    },
   });
 }
 
 export function useRecentActivity() {
   return useQuery({
     queryKey: ["admin", "activity"],
-    queryFn: getRecentActivity,
-    select: (res) => res.data,
+    queryFn: async () => {
+      const response = await apiClient.get("/api/v1/admin/recent-activity");
+      return response.data as RecentActivity[];
+    },
+  });
+}
+
+export function useAdminSchool(schoolId: string) {
+  return useQuery({
+    queryKey: ["admin", "school", schoolId],
+    queryFn: async () => {
+      const response = await apiClient.get(`/api/v1/admin/schools/${schoolId}`);
+      return response.data as School;
+    },
+    enabled: !!schoolId,
+  });
+}
+
+export function useSchoolAnalytics(schoolId: string) {
+  return useQuery({
+    queryKey: ["admin", "school", schoolId, "analytics"],
+    queryFn: async () => {
+      const response = await apiClient.get(
+        `/api/v1/admin/schools/${schoolId}/analytics`,
+      );
+      return response.data as SchoolAnalytics;
+    },
+    enabled: !!schoolId,
   });
 }
 
 export function useCreateSchool() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: createSchool,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "schools"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "stats"] });
-    },
-  });
-}
 
-export function useUpdateSchool() {
-  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateSchoolPayload }) =>
-      updateSchool(id, data),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "school", id] });
+    mutationFn: async (data: {
+      name: string;
+      slug: string;
+      country: string;
+      city: string;
+      timezone: string;
+      plan_tier: string;
+      admin_email: string;
+      admin_first_name: string;
+      admin_last_name: string;
+    }) => {
+      const response = await apiClient.post("/api/v1/admin/schools", data);
+      return response.data;
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "schools"] });
     },
   });
@@ -179,13 +133,20 @@ export function useUpdateSchool() {
 
 export function useExtendTrial() {
   const queryClient = useQueryClient();
+
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: ExtendTrialPayload }) =>
-      extendTrial(id, data),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "school", id] });
+    mutationFn: async (payload: {
+      id: string;
+      data: { days: number; reason: string };
+    }) => {
+      const response = await apiClient.post(
+        `/api/v1/admin/schools/${payload.id}/extend-trial`,
+        payload.data,
+      );
+      return response.data;
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "schools"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "activity"] });
     },
   });
 }
