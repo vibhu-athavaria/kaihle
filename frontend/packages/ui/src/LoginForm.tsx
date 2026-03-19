@@ -21,6 +21,7 @@ export interface LoginFormProps {
   onMagicLink: (email: string) => Promise<void>;
   logoLabel?: string; // e.g. "Teacher Portal"
   isLoading?: boolean;
+  error?: string; // external error message
 }
 
 export function LoginForm({
@@ -28,11 +29,15 @@ export function LoginForm({
   onMagicLink,
   logoLabel,
   isLoading,
+  error: externalError,
 }: LoginFormProps) {
   const [mode, setMode] = useState<"password" | "magic">("password");
   const [magicSent, setMagicSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Use external error if provided, otherwise use internal error
+  const displayError = externalError ?? error;
 
   const passwordForm = useForm<LoginFields>({
     resolver: zodResolver(loginSchema),
@@ -109,9 +114,9 @@ export function LoginForm({
         </div>
 
         {/* Error */}
-        {error && (
+        {displayError && (
           <div className="mb-4 px-3 py-2 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600">
-            {error}
+            {displayError}
           </div>
         )}
 
