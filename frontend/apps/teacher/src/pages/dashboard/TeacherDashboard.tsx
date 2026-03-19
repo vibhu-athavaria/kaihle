@@ -17,7 +17,7 @@ export function TeacherDashboard() {
         </div>
       )}
 
-      {data.pendingActions.length > 0 && (
+      {data?.pendingActions && data.pendingActions.length > 0 && (
         <div className="mb-6">
           <PendingActionBanner action={data.pendingActions[0]} />
         </div>
@@ -32,7 +32,7 @@ export function TeacherDashboard() {
             ? Array.from({ length: 3 }).map((_, i) => (
                 <ClassCardSkeleton key={i} />
               ))
-            : data.classes.map((cls) => (
+            : data?.classes.map((cls) => (
                 <ClassCard
                   key={cls.id}
                   classId={cls.id}
@@ -41,7 +41,6 @@ export function TeacherDashboard() {
                   gradeName={cls.gradeName}
                   studentCount={cls.studentCount}
                   avgMastery={cls.avgMastery}
-                  lessonPlanStatus={cls.lessonPlanStatus}
                 />
               ))}
         </div>
@@ -51,7 +50,7 @@ export function TeacherDashboard() {
         <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-role-teacher-muted mb-4">
           This week
         </h2>
-        <ThisWeekCard lessonPlan={data.lessonPlan} />
+        <ThisWeekCard lessonPlan={data?.lessonPlan} />
       </div>
     </div>
   );

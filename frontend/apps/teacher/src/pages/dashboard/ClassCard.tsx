@@ -8,7 +8,6 @@ interface ClassCardProps {
   gradeName: string;
   studentCount: number;
   avgMastery: number | null;
-  lessonPlanStatus: "ready" | "generating" | "none";
 }
 
 const subjectColorMap: Record<string, string> = {
