@@ -61,6 +61,17 @@ test.describe("Login Flow", () => {
         page.getByText(/enter a valid email address/i),
       ).toBeVisible();
     });
+
+    test("LOGIN-4: empty password → validation error", async ({ page }) => {
+      await page.goto("http://localhost:3001/login");
+
+      // Fill email but not password
+      await page.getByLabel(/email/i).fill("teacher@kaihle.com");
+      await page.getByRole("button", { name: /sign in/i }).click();
+
+      // Should show validation error for password
+      await expect(page.getByText(/password is required/i)).toBeVisible();
+    });
   });
 
   test.describe("Student App", () => {
