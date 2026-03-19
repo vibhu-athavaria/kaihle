@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { AdminLayout } from "@kaihle/ui";
 import { Card, Badge, Button, Skeleton } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import { useAdminSchool, useSchoolAnalytics } from "../../hooks/useKaihleAdmin";
 import { AdminExtendTrialModal } from "./AdminExtendTrialModal";
 import {
@@ -200,6 +201,7 @@ function StatsSection({
 }
 
 export function AdminSchoolDetail() {
+  const { logout } = useAuth();
   const { schoolId } = useParams<{ schoolId: string }>();
   const [showExtendModal, setShowExtendModal] = useState(false);
 
@@ -210,7 +212,7 @@ export function AdminSchoolDetail() {
 
   if (schoolLoading || !school) {
     return (
-      <AdminLayout pageTitle="Loading...">
+      <AdminLayout pageTitle="Loading..." onLogout={logout}>
         <div className="space-y-6">
           <Link
             to="/kaihle-admin/schools"
@@ -227,7 +229,7 @@ export function AdminSchoolDetail() {
   }
 
   return (
-    <AdminLayout pageTitle={school.name}>
+    <AdminLayout pageTitle={school.name} onLogout={logout}>
       <div className="space-y-6">
         <Link
           to="/kaihle-admin/schools"

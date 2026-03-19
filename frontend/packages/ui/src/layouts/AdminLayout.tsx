@@ -6,6 +6,7 @@ interface AdminLayoutProps {
   pageTitle: string;
   pageSubtitle?: string;
   topNavAction?: React.ReactNode;
+  onLogout?: () => void;
 }
 
 export function AdminLayout({
@@ -13,10 +14,11 @@ export function AdminLayout({
   pageTitle,
   pageSubtitle,
   topNavAction,
+  onLogout,
 }: AdminLayoutProps) {
   return (
     <div className="flex h-screen overflow-hidden bg-role-admin-bg">
-      <Sidebar variant="admin" />
+      <Sidebar variant="admin" onLogout={onLogout} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <TopNav
           pageTitle={pageTitle}

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { AdminLayout } from "@kaihle/ui";
 import { Card, Badge, Button, Skeleton } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import {
   usePlatformStats,
   useAdminSchools,
@@ -187,7 +188,9 @@ function RecentActivityList({ loading }: { loading?: boolean }) {
         <div key={activity.id} className="flex items-start gap-3">
           <span className="w-2 h-2 rounded-full bg-brand-primary mt-2 flex-shrink-0" />
           <div>
-            <p className="text-sm text-role-admin-ink">{activity.message}</p>
+            <p className="text-sm text-role-admin-ink">
+              {activity.description}
+            </p>
             <p className="text-xs text-role-admin-muted">
               {new Date(activity.timestamp).toLocaleString()}
             </p>
@@ -202,6 +205,7 @@ function RecentActivityList({ loading }: { loading?: boolean }) {
 }
 
 export function AdminOverview() {
+  const { logout } = useAuth();
   const { data: stats, isLoading: statsLoading } = usePlatformStats();
   const { data: schoolsData, isLoading: schoolsLoading } = useAdminSchools({
     page_size: 50,
@@ -218,6 +222,7 @@ export function AdminOverview() {
   return (
     <AdminLayout
       pageTitle="Platform overview"
+      onLogout={logout}
       topNavAction={
         <Link to="/kaihle-admin/schools?action=create">
           <Button>+ Add school</Button>
