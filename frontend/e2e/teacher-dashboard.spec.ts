@@ -1,8 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { config } from "./config";
 
 test.describe("Teacher Dashboard", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("http://localhost:3001/login");
+    await page.goto(`${config.teacherApp}/login`);
     await page.getByLabel(/email/i).fill("teacher@kaihle.com");
     await page.getByLabel(/password/i).fill("TestPassword123!");
     await page.getByRole("button", { name: /sign in/i }).click();
@@ -17,7 +18,7 @@ test.describe("Teacher Dashboard", () => {
   });
 
   test("TEACH-3: API error → error message displayed", async ({ page }) => {
-    await page.goto("http://localhost:3001/teacher/dashboard");
+    await page.goto(`${config.teacherApp}/teacher/dashboard`);
 
     await page.route("**/api/v1/**", (route) => {
       route.abort("failed");
@@ -28,7 +29,7 @@ test.describe("Teacher Dashboard", () => {
   });
 
   test("TEACH-4: Loading → skeleton loaders shown", async ({ page }) => {
-    await page.goto("http://localhost:3001/teacher/dashboard");
+    await page.goto(`${config.teacherApp}/teacher/dashboard`);
 
     const skeletonCards = page.locator(".animate-pulse, [class*='skeleton']");
     const count = await skeletonCards.count();
@@ -36,7 +37,7 @@ test.describe("Teacher Dashboard", () => {
   });
 
   test("TEACH-5: Page load → single sidebar", async ({ page }) => {
-    await page.goto("http://localhost:3001/teacher/dashboard");
+    await page.goto(`${config.teacherApp}/teacher/dashboard`);
 
     const sidebars = page.locator("aside");
     await expect(sidebars).toHaveCount(1);
@@ -45,14 +46,14 @@ test.describe("Teacher Dashboard", () => {
   test("TEACH-6: Page load → gold Assessment button in top nav", async ({
     page,
   }) => {
-    await page.goto("http://localhost:3001/teacher/dashboard");
+    await page.goto(`${config.teacherApp}/teacher/dashboard`);
 
     const assessmentButton = page.getByRole("button", { name: /assessment/i });
     await expect(assessmentButton).toBeVisible();
   });
 
   test("TEACH-7: Page load → time-based greeting", async ({ page }) => {
-    await page.goto("http://localhost:3001/teacher/dashboard");
+    await page.goto(`${config.teacherApp}/teacher/dashboard`);
 
     const hour = new Date().getHours();
     let expectedGreeting: string;

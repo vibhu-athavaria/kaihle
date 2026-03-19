@@ -1,11 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { config } from "./config";
 
 test.describe("Login Flow", () => {
   test.describe("Teacher App", () => {
     test("teacher logs in with email/password → lands on /teacher/dashboard", async ({
       page,
     }) => {
-      await page.goto("http://localhost:3001/login");
+      await page.goto(`${config.teacherApp}/login`);
 
       // Fill in login form
       await page.getByLabel(/email/i).fill("teacher@school.edu");
@@ -18,7 +19,7 @@ test.describe("Login Flow", () => {
     });
 
     test("invalid credentials shows inline error message", async ({ page }) => {
-      await page.goto("http://localhost:3001/login");
+      await page.goto(`${config.teacherApp}/login`);
 
       // Fill in wrong credentials
       await page.getByLabel(/email/i).fill("wrong@school.edu");
@@ -32,7 +33,7 @@ test.describe("Login Flow", () => {
     test("magic link form submits → shows Check your inbox confirmation", async ({
       page,
     }) => {
-      await page.goto("http://localhost:3001/login");
+      await page.goto(`${config.teacherApp}/login`);
 
       // Switch to magic link mode
       await page.getByRole("button", { name: /magic link/i }).click();
@@ -51,7 +52,7 @@ test.describe("Login Flow", () => {
     test("form shows validation error when email field is empty on submit", async ({
       page,
     }) => {
-      await page.goto("http://localhost:3001/login");
+      await page.goto(`${config.teacherApp}/login`);
 
       // Click sign in without filling email
       await page.getByRole("button", { name: /sign in/i }).click();
@@ -63,7 +64,7 @@ test.describe("Login Flow", () => {
     });
 
     test("LOGIN-4: empty password → validation error", async ({ page }) => {
-      await page.goto("http://localhost:3001/login");
+      await page.goto(`${config.teacherApp}/login`);
 
       // Fill email but not password
       await page.getByLabel(/email/i).fill("teacher@kaihle.com");
@@ -78,7 +79,7 @@ test.describe("Login Flow", () => {
     test("student logs in → redirected to /student/onboarding", async ({
       page,
     }) => {
-      await page.goto("http://localhost:3002/login");
+      await page.goto(`${config.studentApp}/login`);
 
       // Fill in login form
       await page.getByLabel(/email/i).fill("student@school.edu");
@@ -93,7 +94,7 @@ test.describe("Login Flow", () => {
 
   test.describe("Parent App", () => {
     test("parent logs in → lands on /parent/dashboard", async ({ page }) => {
-      await page.goto("http://localhost:3003/login");
+      await page.goto(`${config.parentApp}/login`);
 
       // Fill in login form
       await page.getByLabel(/email/i).fill("parent@example.com");
@@ -108,7 +109,7 @@ test.describe("Login Flow", () => {
 
   test.describe("Accessibility", () => {
     test("all inputs have visible labels", async ({ page }) => {
-      await page.goto("http://localhost:3001/login");
+      await page.goto(`${config.teacherApp}/login`);
 
       const emailLabel = page.locator('label[for="email"]');
       const passwordLabel = page.locator('label[for="password"]');
@@ -118,7 +119,7 @@ test.describe("Login Flow", () => {
     });
 
     test("form is keyboard-navigable", async ({ page }) => {
-      await page.goto("http://localhost:3001/login");
+      await page.goto(`${config.teacherApp}/login`);
 
       // Press Tab to navigate to email field
       await page.keyboard.press("Tab");
@@ -139,7 +140,7 @@ test.describe("Login Flow", () => {
   test.describe("Responsive", () => {
     test("correct layout at 375px (mobile) viewport", async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 667 });
-      await page.goto("http://localhost:3001/login");
+      await page.goto(`${config.teacherApp}/login`);
 
       // Form should be visible and usable
       await expect(page.getByLabel(/email/i)).toBeVisible();
@@ -156,7 +157,7 @@ test.describe("Login Flow", () => {
 
     test("correct layout at 768px (tablet) viewport", async ({ page }) => {
       await page.setViewportSize({ width: 768, height: 1024 });
-      await page.goto("http://localhost:3001/login");
+      await page.goto(`${config.teacherApp}/login`);
 
       await expect(page.getByLabel(/email/i)).toBeVisible();
       await expect(page.getByLabel(/password/i)).toBeVisible();
@@ -164,7 +165,7 @@ test.describe("Login Flow", () => {
 
     test("correct layout at 1280px (desktop) viewport", async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 720 });
-      await page.goto("http://localhost:3001/login");
+      await page.goto(`${config.teacherApp}/login`);
 
       await expect(page.getByLabel(/email/i)).toBeVisible();
       await expect(page.getByLabel(/password/i)).toBeVisible();

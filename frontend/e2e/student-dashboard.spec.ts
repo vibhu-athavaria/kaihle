@@ -1,8 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { config } from "./config";
 
 test.describe("Student Dashboard", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("http://localhost:3002/login");
+    await page.goto(`${config.studentApp}/login`);
     await page.getByLabel(/email/i).fill("student@kaihle.com");
     await page.getByLabel(/password/i).fill("TestPassword123!");
     await page.getByRole("button", { name: /sign in/i }).click();
@@ -17,7 +18,7 @@ test.describe("Student Dashboard", () => {
   });
 
   test("STUD-3: API error → error message displayed", async ({ page }) => {
-    await page.goto("http://localhost:3002/student/dashboard");
+    await page.goto(`${config.studentApp}/student/dashboard`);
 
     await page.route("**/api/v1/**", (route) => {
       route.abort("failed");
@@ -30,7 +31,7 @@ test.describe("Student Dashboard", () => {
   test("STUD-5: Page load → single layout (no duplicate header/sidebar)", async ({
     page,
   }) => {
-    await page.goto("http://localhost:3002/student/dashboard");
+    await page.goto(`${config.studentApp}/student/dashboard`);
 
     const headers = page.locator("header");
     await expect(headers).toHaveCount(1);
@@ -40,7 +41,7 @@ test.describe("Student Dashboard", () => {
   });
 
   test("STUD-6: Page load → time-based greeting", async ({ page }) => {
-    await page.goto("http://localhost:3002/student/dashboard");
+    await page.goto(`${config.studentApp}/student/dashboard`);
 
     const hour = new Date().getHours();
     let expectedGreeting: string;
