@@ -170,7 +170,7 @@ export function SchoolOverview() {
             </div>
             <div className="mt-4 text-right">
               <Link
-                to="/admin/analytics"
+                to="/school/analytics"
                 className="text-sm text-brand-primary hover:underline font-medium"
               >
                 View analytics →
