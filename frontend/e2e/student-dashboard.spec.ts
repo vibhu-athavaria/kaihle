@@ -37,9 +37,7 @@ test.describe("Student Dashboard", () => {
     await expect(page.locator("text=Strong")).toBeVisible();
   });
 
-  test("subject with no data shows dash not zero percent", async ({
-    page,
-  }) => {
+  test("subject with no data shows dash not zero percent", async ({ page }) => {
     await loginAsStudent(page);
     await expect(page.locator("text=—")).toBeVisible();
   });
@@ -52,9 +50,7 @@ test.describe("Student Dashboard", () => {
     await expect(viewPlansLink).toBeVisible();
   });
 
-  test("active assessment card shows with Start now link", async ({
-    page,
-  }) => {
+  test("active assessment card shows with Start now link", async ({ page }) => {
     await loginAsStudent(page);
     const startNowLink = page.locator("text=Start now →");
     await expect(startNowLink).toBeVisible();
@@ -73,12 +69,13 @@ test.describe("Student Dashboard", () => {
     await expect(page.locator("text=38%")).toBeVisible();
   });
 
-  test("SubjectScoreCard score=null shows neutral border and dash value",
-    async ({ page }) => {
-      await loginAsStudent(page);
-      const dashValue = page.locator("text=—").first();
-      await expect(dashValue).toBeVisible();
-    });
+  test("SubjectScoreCard score=null shows neutral border and dash value", async ({
+    page,
+  }) => {
+    await loginAsStudent(page);
+    const dashValue = page.locator("text=—").first();
+    await expect(dashValue).toBeVisible();
+  });
 
   test("responsive 3-column card grid on mobile", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });

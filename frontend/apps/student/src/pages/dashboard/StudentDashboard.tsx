@@ -42,6 +42,7 @@ interface NextStep {
     | "study-plan-ready"
     | "study-plan-progress"
     | "weakest-area";
+  id: string;
   title: string;
   subtitle: string;
   actionLabel: string;
@@ -92,6 +93,7 @@ export function StudentDashboard() {
   if (assessments.length > 0) {
     nextSteps.push({
       type: "assessment",
+      id: `assessment-${assessments[0].id}`,
       title: `${assessments.length} assessment${
         assessments.length > 1 ? "s" : ""
       } due`,
@@ -108,6 +110,7 @@ export function StudentDashboard() {
   if (activeStudyPlans.length > 0) {
     nextSteps.push({
       type: "study-plan-ready",
+      id: "study-plan-ready",
       title: `${activeStudyPlans.length} study plan${
         activeStudyPlans.length > 1 ? "s" : ""
       } ready`,
@@ -119,6 +122,7 @@ export function StudentDashboard() {
   if (inProgressStudyPlans.length > 0) {
     nextSteps.push({
       type: "study-plan-progress",
+      id: `study-plan-progress-${inProgressStudyPlans[0].id}`,
       title: "Continue your study plan",
       subtitle: inProgressStudyPlans[0].title,
       actionLabel: "Continue →",
@@ -132,6 +136,7 @@ export function StudentDashboard() {
   ) {
     nextSteps.push({
       type: "weakest-area",
+      id: `weakest-${weakestSubject.subjectCode}`,
       title: `Your weakest area: ${weakestSubject.subjectName}`,
       subtitle: `${Math.round(weakestSubject.score * 100)}%`,
       actionLabel: "See what to work on →",
@@ -168,7 +173,6 @@ export function StudentDashboard() {
                     <SubjectScoreCard
                       key={subject.subjectCode}
                       subjectName={subject.subjectName}
-                      subjectCode={subject.subjectCode}
                       score={subject.score}
                     />
                   ))}
@@ -187,9 +191,9 @@ export function StudentDashboard() {
                   ))
                 : nextSteps
                     .slice(0, 3)
-                    .map((step, index) => (
+                    .map((step) => (
                       <NextStepCard
-                        key={index}
+                        key={step.id}
                         type={step.type}
                         title={step.title}
                         subtitle={step.subtitle}

@@ -44,31 +44,36 @@ interface DashboardData {
 }
 
 const QUERY_KEYS = {
-  dashboard: (studentId: string) => ["student", "dashboard", studentId] as const,
+  dashboard: (studentId: string) =>
+    ["student", "dashboard", studentId] as const,
   gapMap: (studentId: string) => ["student", "gap-map", studentId] as const,
 };
 
 async function fetchGapMap(studentId: string): Promise<GapMap> {
-  const response = await apiClient.get<GapMap>(`/api/v1/students/${studentId}/gap-map`);
+  const response = await apiClient.get<GapMap>(
+    `/api/v1/students/${studentId}/gap-map`,
+  );
   return response.data;
 }
 
 async function fetchStudyPlans(studentId: string): Promise<StudyPlan[]> {
   const response = await apiClient.get<StudyPlansResponse>(
-    `/api/v1/students/${studentId}/study-plans?status=active,in_progress&limit=10`
+    `/api/v1/students/${studentId}/study-plans?status=active,in_progress&limit=10`,
   );
   return response.data.data;
 }
 
 async function fetchAssessments(classId: string): Promise<Assessment[]> {
   const response = await apiClient.get<Assessment[]>(
-    `/api/v1/classes/${classId}/assessments?status=ACTIVE&limit=5`
+    `/api/v1/classes/${classId}/assessments?status=ACTIVE&limit=5`,
   );
   return response.data;
 }
 
 async function fetchStudentInfo(studentId: string): Promise<StudentInfo> {
-  const response = await apiClient.get<StudentInfo>(`/api/v1/students/${studentId}/info`);
+  const response = await apiClient.get<StudentInfo>(
+    `/api/v1/students/${studentId}/info`,
+  );
   return response.data;
 }
 
@@ -84,25 +89,43 @@ export function useStudentDashboard(): UseStudentDashboardResult {
 
   const studentInfoQuery = useQuery({
     queryKey: ["student", "info", user?.id] as const,
-    queryFn: () => fetchStudentInfo(user!.id),
+    queryFn: () => {
+      if (!user?.id) throw new Error("User ID not available");
+      return fetchStudentInfo(user.id);
+    },
     enabled: !!user?.id,
   });
 
   const gapMapQuery = useQuery({
     queryKey: QUERY_KEYS.gapMap(user?.id || ""),
-    queryFn: () => fetchGapMap(user!.id),
+    queryFn: () => {
+      if (!user?.id) throw new Error("User ID not available");
+      return fetchGapMap(user.id);
+    },
     enabled: !!user?.id,
   });
 
   const studyPlansQuery = useQuery({
     queryKey: ["student", "study-plans", user?.id] as const,
-    queryFn: () => fetchStudyPlans(user!.id),
+    queryFn: () => {
+      if (!user?.id) throw new Error("User ID not available");
+      return fetchStudyPlans(user.id);
+    },
     enabled: !!user?.id,
   });
 
   const assessmentsQuery = useQuery({
-    queryKey: ["student", "assessments", user?.id, studentInfoQuery.data?.classId] as const,
-    queryFn: () => fetchAssessments(studentInfoQuery.data?.classId || ""),
+    queryKey: [
+      "student",
+      "assessments",
+      user?.id,
+      studentInfoQuery.data?.classId,
+    ] as const,
+    queryFn: () => {
+      const classId = studentInfoQuery.data?.classId;
+      if (!classId) throw new Error("Class ID not available");
+      return fetchAssessments(classId);
+    },
     enabled: !!user?.id && !!studentInfoQuery.data?.classId,
   });
 
