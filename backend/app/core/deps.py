@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import InvalidTokenError, decode_token, get_token_scope
+from app.models.school import ClassEnrollment
 from app.models.user import StudentProfile, User, UserRole
 
 # HTTPBearer for extracting Bearer token
@@ -206,6 +207,52 @@ def require_school_match(
         return current_user
 
     return school_checker
+
+
+async def require_diagnostic_complete(
+    class_id: uuid.UUID,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ClassEnrollment | None:
+    """Gate class content access behind Tier 1 diagnostic completion.
+
+    Checks class_enrollments.onboarding_diagnostic_status for the specific
+    (student_id, class_id) pair. Returns the enrollment row on success.
+    Raises 403 with a structured error body if diagnostic is not yet COMPLETED.
+
+    Only applies to STUDENT role. Teachers and admins bypass this gate.
+    """
+    # Teachers and admins bypass the gate entirely
+    if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN):
+        return None
+
+    result = await db.execute(
+        select(ClassEnrollment).where(
+            ClassEnrollment.class_id == class_id,
+            ClassEnrollment.student_id == current_user.id,
+            ClassEnrollment.is_active.is_(True),
+        )
+    )
+    enrollment = result.scalar_one_or_none()
+
+    if enrollment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You are not enrolled in this class",
+        )
+
+    if enrollment.onboarding_diagnostic_status != "COMPLETED":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "DIAGNOSTIC_INCOMPLETE",
+                "message": "Complete the diagnostic assessment to access class content.",
+                "class_id": str(class_id),
+                "diagnostic_status": enrollment.onboarding_diagnostic_status,
+            },
+        )
+
+    return enrollment
 
 
 async def require_onboarding_complete(
