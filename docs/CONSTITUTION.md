@@ -1,36 +1,35 @@
 # Kaihle — Project Constitution
-**Version:** 1.0 · Based on Product Plan v2.1
+**Version:** 2.0 · Based on Product Plan v2.2
 **Status:** AUTHORITATIVE — loaded in every KiloCode session, no exceptions
 **Last updated:** March 2026
+**Supersedes:** v1.0 (March 2026)
 
 > This document is the permanent anchor for every coding session.
-> It is intentionally short. It tells you WHAT the project is, WHAT rules are locked,
-> and WHERE to find everything else. Do not duplicate content from task files here.
+> It tells you WHAT the project is, WHAT rules are locked, and WHERE to find everything else.
+> Do not duplicate content from task files here.
 
 ---
 
 ## 1. What Is Kaihle?
 
-Kaihle is an AI-powered learning diagnostics platform for schools. It identifies knowledge gaps in students, generates personalised study plans, and gives teachers and parents real-time visibility into student progress.
+Kaihle is an AI-powered learning diagnostics platform for schools. It identifies knowledge gaps in students, generates personalised study plans, and gives teachers, school admins, and parents real-time visibility into student progress.
 
-**Target users:** Students (age 11–18), Teachers, School Admins, Parents.
+**Target users:** Students (age 11–18), Teachers, School Admins, Parents, Kaihle Admin (internal team).
 **Curriculum scope (v1):** Cambridge Lower Secondary (Grades 6–8) + Cambridge IGCSE (Grades 9–10).
 
-## Programme                        Grades                      Subjects
-Cambridge Lower Secondary           6, 7, 8                     Mathematics (MATH), Integrated Science                                                         (SCI), English Language (ENG)
-Cambridge IGCSE                     9, 10                       Mathematics (MATH), Biology(BIO),
-                                                                Chemistry (CHEM), Physics (PHY), English Language (ENG),
-                                                                English Literature (ENGL — non-core)
+| Programme | Grades | Subjects |
+|---|---|---|
+| Cambridge Lower Secondary | 6, 7, 8 | Mathematics (MATH), Integrated Science (SCI), English Language (ENG) |
+| Cambridge IGCSE | 9, 10 | Mathematics (MATH), Biology (BIO), Chemistry (CHEM), Physics (PHY), English Language (ENG), English Literature (ENGL — non-core) |
 
-## Subject binding rules (absolute — enforced by curriculum_subjects table and seed script):
-  - SCI (Integrated Science) belongs to cambridge_lower ONLY. It does not exist under igcse.
-  - BIO, CHEM, PHY, ENGL belong to igcse ONLY. They do not exist under cambridge_lower.
-  - MATH and ENG span both curricula.
+**Subject binding rules (absolute — enforced by `curriculum_subjects` table and seed script):**
+- SCI belongs to `cambridge_lower` ONLY. It does not exist under `igcse`.
+- BIO, CHEM, PHY, ENGL belong to `igcse` ONLY. They do not exist under `cambridge_lower`.
+- MATH and ENG span both curricula.
 
-**Cambridge AS & A Level (Grades 11–12)** is deferred to a later milestone.
-It will be added as a separate curriculum entry cambridge_as_a when scoped.
+**Cambridge AS & A Level (Grades 11–12)** is deferred. Will be added as `cambridge_as_a` when scoped.
 
-**Pilot target:** micro-schools. Max 10 schools, ~400 students in v1.
+**Pilot target:** micro-schools in Southeast Asia. Max 10 schools, ~400 students in v1.
 
 ---
 
@@ -53,7 +52,7 @@ It will be added as a separate curriculum entry cambridge_as_a when scoped.
 |---|---|
 | Framework | React + Vite + TypeScript (strict mode) |
 | CSS | Tailwind CSS v3 — no custom CSS files |
-| UI library |  TailAdmin Free as the base admin/dashboard template
+| UI library | TailAdmin Free as the base admin/dashboard template |
 | State | Zustand (global) + React Query v5 (server) |
 | Forms | React Hook Form + Zod |
 | Router | React Router v6 |
@@ -78,204 +77,373 @@ It will be added as a separate curriculum entry cambridge_as_a when scoped.
 /kaihle
   /backend
     /app
-      /api/v1/routes/     ← thin route handlers only, delegate to services
-      /core/              ← config.py, security.py, database.py, redis.py
-      /models/            ← SQLAlchemy ORM models (one file per domain)
-      /schemas/           ← Pydantic request/response schemas
-      /services/          ← ALL business logic lives here
+      /api/v1/routes/       ← thin route handlers only, delegate to services
+      /core/                ← config.py, security.py, database.py, redis.py
+      /models/              ← SQLAlchemy ORM models (one file per domain)
+      /schemas/             ← Pydantic request/response schemas
+      /services/            ← ALL business logic lives here
       /ai/
-        /providers/       ← base.py, gemini.py, openai.py, anthropic.py, router.py
-        /rag/             ← embedder.py, retriever.py, curriculum.py
-        /prompts/         ← .jinja2 prompt templates
+        /providers/         ← router.py only (LiteLLM handles all provider adaption)
+        /rag/               ← embedder.py, retriever.py, curriculum.py
+        /prompts/           ← .jinja2 prompt templates
         content_curator.py
         quiz_generator.py
-      /tasks/             ← Celery task definitions
+      /tasks/               ← Celery task definitions
       /tests/unit/
       /tests/integration/
       /tests/e2e/
-    /scripts/             ← seed_curriculum_graph.py, import_questions.py, ingest_curriculum.py
-    /data/curriculum/     ← cambridge_v1.json (curriculum seed data)
+    /scripts/               ← seed_curriculum_graph.py, import_questions.py, ingest_curriculum.py
+    /data/curriculum/       ← cambridge_v1.json (curriculum seed data)
   /frontend
-    /apps/student/        ← Vite entrypoint, port 3002
-    /apps/teacher/        ← Vite entrypoint, port 3001
-    /apps/parent/         ← Vite entrypoint, port 3003
-    /packages/ui/         ← shared Tailwind components
-    /packages/api-client/ ← shared Axios instance + typed hooks
-    /packages/auth/       ← tokenStore, useAuth, PrivateRoute, OnboardingRoute
-    /packages/types/      ← shared TypeScript interfaces
+    /apps/student/          ← Vite entrypoint, port 3002  (STUDENT role only)
+    /apps/teacher/          ← Vite entrypoint, port 3001  (TEACHER role only)
+    /apps/parent/           ← Vite entrypoint, port 3003  (PARENT role only)
+    /apps/school-admin/     ← Vite entrypoint, port 3004  (SCHOOL_ADMIN role only)
+    /apps/kaihle-admin/     ← Vite entrypoint, port 3005  (KAIHLE_ADMIN role only)
+    /packages/ui/           ← shared Tailwind components (all roles)
+    /packages/api-client/   ← shared Axios instance + typed hooks
+    /packages/auth/         ← tokenStore, useAuth, PrivateRoute, RoleRoute,
+                               OnboardingRoute, PasswordSetupRoute
+    /packages/types/        ← shared TypeScript interfaces
   /docs/
-    CONSTITUTION.md       ← this file
-    /milestones/          ← M0_brief.md ... M6_brief.md
-    /tasks/               ← M0/M0-1-T1_*.md ... M6/M6-3-T5_*.md
+    CONSTITUTION.md         ← this file
+    /milestones/            ← M0_brief.md ... M6_brief.md
+    /tasks/                 ← M0/M0-1-T1_*.md ... M6/M6-3-T5_*.md
+    /design/
+      DESIGN_SYSTEM.md      ← colors, fonts, layout patterns, role-specific specs
+    /adr/
+      ADR-001_five_app_frontend.md
 ```
-- All dashboard-style layouts (teacher, school admin, KaihleAdmin) MUST follow a shared TailAdmin-style layout implemented in `packages/ui` (e.g. `DashboardLayout`), not custom per-app shells.
+
+### App Isolation Rule (CRITICAL — never violate)
+
+Each of the five frontend apps serves **exactly one role**. There is zero cross-role code inside any `apps/` directory. Shared code belongs exclusively in `packages/`. Specifically:
+
+- School Admin pages **MUST NOT** live in `apps/teacher/`. They live in `apps/school-admin/`.
+- Kaihle Admin pages **MUST NOT** live in `apps/teacher/`. They live in `apps/kaihle-admin/`.
+- Any agent that places role-specific pages in the wrong app is violating this rule and must stop.
+
+This rule corrects the v1.0 mistake of co-locating all admin roles inside the teacher app. See `docs/adr/ADR-001_five_app_frontend.md` for the full decision record. The migration of existing pages is tracked in M0-9-T2 and M0-9-T3.
 
 ---
 
 ## 4. Absolute Rules — Never Violate
 
-1. **Service layer owns all business logic.** Routes are thin — validate input, call a service, return response. Zero business logic in route handlers.
-2. **Every table has `school_id`.** Except curriculum tables (`curricula`, `subjects`, `grades`, `topics`, `curriculum_topics`, `subtopics`, etc.) which are school-agnostic by design.
-3. **All queries filter by `school_id`** unless the caller role is `KAIHLE_ADMIN`.
-4. **All LLM calls go through `LLMProvider` abstraction.** No feature code imports provider SDKs directly. Use `router.py` to select provider.
-5. **No hardcoded secrets.** All config comes from environment variables via `app/core/config.py` (Pydantic Settings).
-6. **Test coverage ≥ 90%** on all files in `/services/`. Enforced by CI — no merge to `main` if below.
-   Pre-commit hook enforces ≥ 80% on unit tests locally. Full 90% threshold is verified in CI
-   against both unit and integration tests combined.
-7. **Test naming:** `test_<what>_when_<condition>_then_<expected>`
-8. **`kaihle_v2_1_schema.sql` is the single source of truth for the database schema.** If a task file and the SQL file conflict, the SQL file wins. Always check it for exact column names, types, and constraints.
-9. **Do not write migration SQL by hand.** Use `alembic revision --autogenerate -m "description"` and review the output.
-10. **Student onboarding gate.** Students cannot access any route outside `/student/onboarding/*` until both their learning profile questionnaire AND all Tier 1 diagnostics are marked complete. Enforced by `require_onboarding_complete` FastAPI dependency.
-11. Frontend apps MUST use TailAdmin as the base layout and design system for all dashboard-style
-    pages (teacher, school admin, Kaihle admin). Student and Parent apps use top-nav-only layouts.
-    - Agents MUST NOT introduce additional UI kits (MUI, Chakra, shadcn, Flowbite, DaisyUI) without an ADR.
-    - Any new layout components MUST live in `packages/ui/src/layouts/` — never in route files.
-    - Layout wrappers: `AdminLayout` (Kaihle Admin), `DashboardLayout variant="school-admin"|"teacher"`,
-      `StudentLayout`, `ParentLayout`, `AuthLayout`, `OnboardingLayout`.
+**Rule 1 — Service layer owns all business logic.** Routes are thin: validate input, call a service, return response. Zero business logic in route handlers.
 
-12. **All frontend tasks MUST load `docs/design/DESIGN_SYSTEM.md` before writing any component.**
-    Five roles. Five distinct design specs. Agents must apply the correct spec for the role they are implementing.
+**Rule 2 — Every non-curriculum table has `school_id`.** Curriculum tables (`curricula`, `subjects`, `grades`, `topics`, `curriculum_topics`, `subtopics`, etc.) are school-agnostic by design.
 
-    | Role | Layout | Sidebar | Page bg | Active nav | Button primary |
-    |---|---|---|---|---|---|
-    | Kaihle Admin | AdminLayout | White + gray borders | `#f8f9fb` | Gray fill + green dot | Green |
-    | School Admin | DashboardLayout school-admin | White + green borders | `#f5f7f1` | Left green stripe + tint | Green |
-    | Teacher | DashboardLayout teacher | White + gray borders | `#f5f7f1` | Gold tint fill | **Gold** |
-    | Student | StudentLayout (top+bottom nav) | None | `#f9fafb` | Primary underline | Green |
-    | Parent | ParentLayout (top nav only) | None | `#fdf8f0` | N/A | Rare — text link |
+**Rule 3 — All queries filter by `school_id`** unless the caller is `KAIHLE_ADMIN`. The bypass must be explicit (see Rule 12).
 
-    Critical per-role rules:
-    - Kaihle Admin: Inter font throughout. NO Fraunces. NO Lora. NO decorative elements.
-    - School Admin: Fraunces headings. Green-tinted borders. Left stripe active indicator.
-    - Teacher: Gold (`brand-gold #c9932a`) is the action color. Green is SUCCESS/MASTERY ONLY.
-      NEVER use green buttons for teacher actions.
-    - Student: No sidebar. Bottom nav on mobile. Colored-border subject cards (not generic gray).
-    - Parent: Lora serif for narrative text and headings. Narrow `max-w-lg mx-auto` reading column.
-      Espresso ink `#2c1a0e`. Warm cream bg `#fdf8f0`.
+**Rule 4 — All LLM calls go through `LLMProvider` abstraction.** No feature code imports provider SDKs directly.
 
-    All color classes MUST use `brand-*` or `role-*` tokens from `packages/ui/tailwind.config.js`.
-    Do NOT use generic `indigo-*`, `emerald-*`, `violet-*` classes for brand or status colors.
+**Rule 5 — No hardcoded secrets.** All config comes from environment variables via `app/core/config.py`.
 
----
+**Rule 6 — Test coverage ≥ 90%** on all `/services/` files. Enforced by CI. Pre-commit enforces ≥ 80% on unit tests locally.
 
-## 5. Multi-Tenancy Rules
+**Rule 7 — Test naming:** `test_<what>_when_<condition>_then_<expected>`
 
-- Single database. `school_id` on every non-curriculum table.
-- Enforced at **service layer** — not PostgreSQL RLS.
-- `KaihleAdmin` role bypasses school_id filters.
-- All other roles: service methods must filter by `school_id`.
-- Cross-school data access returns **403 Forbidden**, not 404.
+**Rule 8 — `kaihle_v2_1_schema.sql` is the single source of truth for the database schema.** If a task file and the SQL file conflict, the SQL file wins.
+
+**Rule 9 — Do not write migration SQL by hand.** Use `alembic revision --autogenerate -m "description"` and review the output.
+
+**Rule 10 — Password setup is required for all magic-link-invited users before any other action.** This applies to School Admins, Teachers, and Students — all three are invited via magic link and all three must complete password setup on first login before proceeding to their next step. The magic-link-issued JWT carries `scope: "password_setup"` and is rejected by all non-password-setup endpoints. The `PasswordSetupRoute` guard in `packages/auth` enforces this client-side. The `PasswordSetupForm` component lives in `packages/ui` and is shared across all apps — no app may define its own version.
+
+**Rule 11 — Student onboarding has two distinct, independent gates.**
+- Gate 1 (global): Dashboard is inaccessible until `student_profiles.is_learning_profile_complete = TRUE`. Enforced by `OnboardingRoute` in `packages/auth`.
+- Gate 2 (per-class): Class content (topics, lesson plans, resources, quizzes) is locked until `class_enrollments.onboarding_diagnostic_status = 'COMPLETED'` for that specific enrollment. Enforced by `require_diagnostic_complete(class_id)` API dependency and locked class card UI.
+These gates are independent. Completing one class diagnostic does not unlock another class.
+
+**Rule 12 — KaihleAdmin `school_id` bypass must always be explicit.** Every `_check_school_access` helper in every route file must follow exactly this pattern:
+```python
+if current_user.role == UserRole.KAIHLE_ADMIN:
+    return  # KaihleAdmin can access any school — explicit bypass
+if current_user.school_id != school_id:
+    raise HTTPException(status_code=403, detail="Access denied")
+```
+Any helper missing the KaihleAdmin bypass is a bug.
+
+**Rule 13 — No `# type: ignore` inline comments in production code.** Resolve via `mypy.ini`. Applies to all files including Celery tasks.
+
+**Rule 14 — No additional UI kits** (MUI, Chakra, shadcn, Flowbite, DaisyUI, Bootstrap) without a documented ADR. TailAdmin Free is the canonical dashboard shell.
+
+**Rule 15 — All new layout components live in `packages/ui/src/layouts/`.** Route files compose from wrappers — they never define layout structure.
+
+**Rule 16 — All frontend tasks must load `docs/design/DESIGN_SYSTEM.md` before writing any component.** Five roles. Five distinct design specs. Apply the correct spec for the role being implemented.
+
+**Rule 17 — Celery tasks must guard against an empty question bank.** `create_class_diagnostic_task` must verify that at least one question exists for the target subject/grade before creating an assessment. If no questions are found, log at `WARNING` level and exit without creating an empty assessment.
+
+**Rule 18 — Celery tasks must emit a CRITICAL log on final retry exhaustion.** When all retries are consumed, emit a structured `structlog` event at level `CRITICAL` including `class_id`, `student_id` (if applicable), task name, and `exc_info=True`. This is the operational dead-letter signal.
 
 ---
 
-## 6. LLM Provider Routing
+## 5. Authentication and Onboarding Flows (CRITICAL)
+
+These flows are the authoritative reference. Any code that deviates is a bug.
+
+### 5.1 Magic Link → Password Setup → Role-Specific Next Step
+
+All invited role types (School Admin, Teacher, Student) follow this sequence without exception:
+
+```
+Step 1 — Invitation
+  Kaihle Admin creates school → invites School Admin via magic link email
+  School Admin invites Teacher → magic link email
+  School Admin invites Student → magic link email
+
+Step 2 — Magic Link Click
+  User clicks link → GET /api/v1/auth/magic-link/verify?token=...
+  Backend: validates token (single-use, 10-minute TTL), marks used=TRUE
+  Backend: issues SCOPED JWT { scope: "password_setup", sub: user_id, role: ..., exp: 1hr }
+  Frontend: PasswordSetupRoute detects scope → routes to /[app-prefix]/setup-password
+
+Step 3 — Password Setup (PasswordSetupForm from packages/ui)
+  User enters password + confirm password → submits
+  POST /api/v1/auth/set-password (requires scope: "password_setup" JWT)
+  Backend: hashes password, stores, issues FULL-ACCESS JWT + refresh token
+  Frontend: stores tokens → redirects to role-specific next step:
+    School Admin → /school-admin/dashboard
+    Teacher      → /teacher/dashboard
+    Student      → /student/onboarding/profile
+```
+
+### 5.2 Student Onboarding (After Password Setup)
+
+```
+Step 4 — Learning Profile Questionnaire
+  Student lands on /student/onboarding/profile
+  Completes 10-question questionnaire → POST /api/v1/onboarding/questionnaire/submit
+  Backend: stores StudentLearningProfile, sets student_profiles.is_learning_profile_complete = TRUE
+
+Step 5 — Dashboard Access
+  OnboardingRoute gate clears → /student/dashboard loads
+  Dashboard shows enrolled class cards (enrollment done by teacher or school admin)
+  Each class card independently shows:
+    - "Complete diagnostic" alert + locked content → if onboarding_diagnostic_status != COMPLETED
+    - Normal state + full content access → if COMPLETED
+    - Additional alert icons for new teacher messages or new progress check assessments
+
+Step 6 — Per-Class Diagnostic (Tier 1)
+  Student clicks "Start Diagnostic" on a locked class card
+  Takes Tier 1 assessment → submits → calculate_gap_states fires
+  class_enrollments.onboarding_diagnostic_status → COMPLETED for that class
+  That class's content unlocks independently of other classes
+```
+
+### 5.3 Email/Password Login (Returning Users)
+
+```
+POST /api/v1/auth/login → { email, password }
+  Verify bcrypt hash, check is_active=TRUE
+  Return { access_token (15min), refresh_token (7 days), user: { id, email, role, school_id } }
+  Frontend: role-based redirect per §6 table
+```
+
+---
+
+## 6. Role → App → Route Mapping
+
+| Role | App | Port | Post-Login Route (first login) | Post-Login Route (returning) |
+|---|---|---|---|---|
+| `STUDENT` | `apps/student` | 3002 | `/student/setup-password` | `/student/dashboard` or `/student/onboarding/profile` if profile incomplete |
+| `TEACHER` | `apps/teacher` | 3001 | `/teacher/setup-password` | `/teacher/dashboard` |
+| `SCHOOL_ADMIN` | `apps/school-admin` | 3004 | `/school-admin/setup-password` | `/school-admin/dashboard` |
+| `PARENT` | `apps/parent` | 3003 | `/parent/dashboard` | `/parent/dashboard` |
+| `KAIHLE_ADMIN` | `apps/kaihle-admin` | 3005 | `/kaihle-admin/dashboard` | `/kaihle-admin/dashboard` |
+
+Parents are not invited via magic link in v1. No password setup step applies to parents.
+
+---
+
+## 7. Multi-Tenancy Rules
+
+Single database. `school_id` on every non-curriculum table. Enforced at the service layer — not PostgreSQL RLS. `KAIHLE_ADMIN` bypasses school_id filters (explicit bypass required per Rule 12). All other roles: service methods must filter by `school_id`. Cross-school access returns **403 Forbidden**, not 404.
+
+---
+
+## 8. LLM Provider Routing
+
+**Library:** [LiteLLM](https://github.com/BerriAI/litellm) — provider-agnostic abstraction layer. All LLM calls go through `litellm.acompletion()` and `litellm.aembedding()`. Feature code never imports provider SDKs directly. Switching providers or routing a task to a self-hosted LLM server requires only an environment variable change — zero code changes.
+
+**Why LiteLLM:** It exposes a single OpenAI-compatible interface regardless of the underlying provider (OpenAI, Anthropic, Google, or any self-hosted server running an OpenAI-compatible API such as vLLM, Ollama, or a custom inference stack). When Kaihle moves to its own LLM server, the only change required is setting `LLM_<TASK>_API_BASE` in the environment to point at the server URL.
+
+**The only file in `app/ai/providers/` is `router.py`.** There are no separate `gemini.py`, `openai.py`, or `anthropic.py` adapter files — LiteLLM replaces all of them.
 
 ```python
-from app.ai.providers.router import get_provider
-provider = get_provider(task="question_generation")
-response = await provider.complete(request)
+# backend/app/ai/providers/router.py
+
+import litellm
+from app.core.config import settings
+
+# Task → model mapping is entirely config-driven.
+# To switch lesson_plan from GPT-4.1 to your own server:
+#   LLM_LESSON_PLAN_MODEL=openai/your-model-name
+#   LLM_LESSON_PLAN_API_BASE=http://your-llm-server:8000
+TASK_MODEL_MAP: dict[str, str] = {
+    "gap_classification": settings.llm_gap_classification_model,
+    "study_plan":         settings.llm_study_plan_model,
+    "lesson_plan":        settings.llm_lesson_plan_model,
+    "embeddings":         settings.llm_embeddings_model,
+}
+
+TASK_API_BASE_MAP: dict[str, str | None] = {
+    "gap_classification": settings.llm_gap_classification_api_base,
+    "study_plan":         settings.llm_study_plan_api_base,
+    "lesson_plan":        settings.llm_lesson_plan_api_base,
+    "embeddings":         settings.llm_embeddings_api_base,
+}
+
+async def complete(task: str, messages: list[dict], **kwargs) -> str:
+    """Call the configured LLM for a given task. Provider-agnostic."""
+    response = await litellm.acompletion(
+        model=TASK_MODEL_MAP[task],
+        api_base=TASK_API_BASE_MAP.get(task),  # None → use provider default
+        messages=messages,
+        **kwargs,
+    )
+    return response.choices[0].message.content
+
+async def embed(task: str, text: str) -> list[float]:
+    """Generate an embedding vector. Provider-agnostic."""
+    response = await litellm.aembedding(
+        model=TASK_MODEL_MAP["embeddings"],
+        api_base=TASK_API_BASE_MAP.get("embeddings"),
+        input=text,
+    )
+    return response.data[0]["embedding"]
 ```
 
-| Task string | Provider | Max latency |
-|---|---|---|
-| `question_generation` | Gemini 2.5 Flash | 8s |
-| `answer_scoring` | Rule-based → LLM fallback | 50ms / 3s |
-| `gap_classification` | Gemini 2.5 Flash | 5s |
-| `study_plan` | GPT-4.1 mini | 10s |
-| `lesson_plan` | GPT-4.1 | 15s |
-| `embeddings` | text-embedding-004 (Google) | — |
+**Task routing table (current defaults — all overridable via environment variables):**
+
+| Task string | Default model | Default provider | Max latency |
+|---|---|---|---|
+| `gap_classification` | `gemini/gemini-2.5-flash` | Google | 5s |
+| `study_plan` | `gpt-4.1-mini` | OpenAI | 10s |
+| `lesson_plan` | `gpt-4.1` | OpenAI | 15s |
+| `embeddings` | `text-embedding-004` | Google | — |
+
+**Note — question generation and answer scoring are NOT LLM tasks.** All questions come from the pre-built question bank (`question_bank` table, populated by `import_questions.py`). All answers are MCQ — scoring is a deterministic string comparison (`student_response.selected_key == question.correct_answer_key`) with no LLM involvement. This eliminates the two highest-volume LLM call types from the system entirely.
+
+**Self-hosted LLM server configuration example:**
+```bash
+# Route lesson planning to your own server — no code change required
+LLM_LESSON_PLAN_MODEL=openai/kaihle-llm-v1
+LLM_LESSON_PLAN_API_BASE=http://your-llm-server:8000
+
+# Leave other tasks on hosted providers
+LLM_GAP_CLASSIFICATION_MODEL=gemini/gemini-2.5-flash
+LLM_GAP_CLASSIFICATION_API_BASE=   # empty = use provider default
+```
 
 ---
 
-## 7. Diagnostic Assessment — Two Tiers (CRITICAL)
+## 9. Diagnostic Assessment — Two Tiers (CRITICAL)
 
-**Agents must never confuse these.**
+Agents must never confuse these two tiers.
 
-| | Tier 1 (Onboarding) | Tier 2 (Ongoing) |
+| | Tier 1 — Onboarding Diagnostic | Tier 2 — Progress Check |
 |---|---|---|
-| Created by | System (Celery task) | Teacher (API) |
-| When | On student class enrollment | Anytime teacher decides |
+| Created by | System (Celery: `create_class_diagnostic_task` on class creation) | Teacher via API |
+| Student attempt created | System (Celery: `trigger_onboarding_diagnostics` on enrollment) | When teacher publishes |
 | `is_system_generated` | `TRUE` | `FALSE` |
-| Scope | ALL topics for subject+grade | Specific topics teacher selects |
-| Blocks dashboard? | YES | NO |
-| Gap states | Same `calculate_gap_states` task | Same task |
-
-Both tiers use the **identical** student-facing UI and API for taking assessments.
+| Scope | ALL topics for subject + grade | Specific topics teacher selects |
+| Blocks class content? | YES — until `COMPLETED` on that enrollment | NO |
+| Updates gap states? | YES | YES |
+| Student-facing UI | Identical to Tier 2 | Identical to Tier 1 |
 
 ---
 
-## 8. Student Learning Profile (Quick Reference)
+## 10. Student Learning Profile (Quick Reference)
 
-Table: `student_learning_profiles` — one row per student, created during onboarding.
+Table: `student_learning_profiles` — one row per student, created when questionnaire is submitted.
 
-- `modality_scores` JSONB: `{ "visual": 0.8, "auditory": 0.3, "reading_writing": 0.6, "kinesthetic": 0.5 }` — floats 0.0–1.0
+- `modality_scores` JSONB: `{ "visual": 0.8, "auditory": 0.3, "reading_writing": 0.6, "kinesthetic": 0.5 }`
 - `work_style` JSONB: `{ "prefers_solo": true, "short_sessions": false, "task_based": true }`
-- `interests` TEXT[]: e.g. `['football', 'music', 'gaming']`
+- `interests` TEXT[]: e.g. `["football", "music", "gaming"]`
 
-**Used by:**
-- Content curator: modality multipliers on resource ranking (visual → VIDEO ×1.3, reading_writing → ARTICLE ×1.3, kinesthetic → INTERACTIVE ×1.3)
-- Quiz generator: top 2 interests injected into question generation prompt
-- Teacher gap map panel: dominant modality icon shown (read-only)
+Used by: content curator (resource ranking), quiz generator (interest contextualisation), lesson planner (aggregated class interests), teacher gap map panel (read-only display).
 
 ---
 
-## 9. Enums Reference
+## 11. Mastery Thresholds
 
-```
-assessment_type:     DIAGNOSTIC | TOPIC_SPECIFIC | PROGRESS_CHECK | FINAL
-assessment_status:   DRAFT | ACTIVE | CLOSED
-attempt_status:      NOT_STARTED | IN_PROGRESS | COMPLETED | ABANDONED
-question_type:       MCQ | TRUE_FALSE | SHORT_ANSWER
-scored_by:           RULE | LLM | PENDING
-study_plan_status:   GENERATING | ACTIVE | COMPLETED | ABANDONED
-resource_type:       VIDEO | ARTICLE | INTERACTIVE
-lesson_plan_status:  GENERATED | EDITED | USED | ARCHIVED
-user_role:           STUDENT | TEACHER | SCHOOL_ADMIN | PARENT | KAIHLE_ADMIN
-subscription_tier:   TRIAL | STARTER | GROWTH | SCALE
-subscription_status: ACTIVE | PAST_DUE | CANCELLED | EXPIRED
-payment_status:      PENDING | SUCCEEDED | FAILED | REFUNDED | DISPUTED
-token_type:          MAGIC_LINK | REFRESH
-onboarding_status:   PENDING | IN_PROGRESS | COMPLETED
-```
+Always use `getMasteryStyle(score)` from `packages/types/src/mastery.ts` — never inline mastery color logic.
+
+| Score range | Label | Tailwind classes |
+|---|---|---|
+| `score < 0.4` | Needs Work | `text-red-600 bg-red-50` |
+| `0.4 ≤ score ≤ 0.7` | Developing | `text-amber-600 bg-amber-50` |
+| `score > 0.7` | Strong | `text-green-700 bg-green-50` |
+| `null` | Not assessed | `text-gray-400 bg-gray-50` |
+
+Boundary values: `0.4` → Developing, `0.7` → Developing, `0.71` → Strong.
 
 ---
 
-## 10. Mastery Score Colour Bands
+## 12. Five-Role Design System Summary
 
-Used consistently across all UI and API.
+Read `docs/design/DESIGN_SYSTEM.md` before writing any frontend component. This table is a quick-reference only.
 
-> ⚠️ Use `brand-*` Tailwind tokens — NOT generic `emerald-*`, `amber-*`, `red-*`.
-> `#10B981` (emerald-500) was WRONG. The correct green is `#16a34a` (brand-green).
-> Full token definitions: `frontend/packages/ui/tailwind.config.js`.
-> TypeScript helper: `getMasteryStyle()` in `packages/types/src/mastery.ts`.
+| Role | App | Layout | Action color | Heading font | Body font |
+|---|---|---|---|---|---|
+| Kaihle Admin | `apps/kaihle-admin` | `AdminLayout` | Green | Inter | Inter |
+| School Admin | `apps/school-admin` | `DashboardLayout variant="school-admin"` | Green | Fraunces | Nunito |
+| Teacher | `apps/teacher` | `DashboardLayout variant="teacher"` | **Gold** `#c9932a` | Fraunces | Nunito |
+| Student | `apps/student` | `StudentLayout` | Green | Fraunces | Nunito |
+| Parent | `apps/parent` | `ParentLayout` | — (text links) | Lora | Nunito |
 
-| Score | Label | Tailwind dot class | Tailwind text class | Hex |
-|---|---|---|---|---|
-| > 0.7 | Strong | `bg-brand-green` | `text-brand-green` | `#16a34a` |
-| 0.4–0.7 | Developing | `bg-brand-amber` | `text-brand-amber` | `#f59e0b` |
-| < 0.4 | Needs Work | `bg-brand-red` | `text-brand-red` | `#ef4444` |
-| null | Not assessed | `bg-brand-muted` | `text-brand-muted` | `#9ca3af` |
-
-Background tints for cards/rows: `bg-brand-green-light`, `bg-brand-amber-light`, `bg-brand-red-light`.
-
-Always use `getMasteryStyle(score)` — do not inline mastery color logic in components.
-> Implementation: `getMasteryStyle()` is exported from `packages/types/src/mastery.ts`.
-> This file is created by **M0-8-T3**. It must exist before any component implements mastery display.
+Critical rules: Kaihle Admin uses Inter only — no Fraunces, no Lora. Teacher action buttons are gold — never green. Green in the teacher app means mastery only. Student app has no sidebar; uses bottom nav on mobile. Parent app uses a narrow reading column with warm cream background.
 
 ---
 
-## 11. Where To Find Things
+## 13. Shared `packages/ui` Components
+
+These components are shared across all five apps. No app may define its own version.
+
+| Component | Purpose |
+|---|---|
+| `PasswordSetupForm` | First-login password creation (magic-link flow) — all 5 apps |
+| `LoginForm` | Email/password + magic link — all 5 apps |
+| `AuthLayout` | Centered card layout for auth screens — all 5 apps |
+| `DashboardLayout` | Sidebar shell with teacher/school-admin variants |
+| `AdminLayout` | Platform admin shell (Kaihle Admin only) |
+| `StudentLayout` | Top nav + bottom mobile nav |
+| `ParentLayout` | Top nav only |
+| `OnboardingLayout` | Full-screen centered layout for questionnaire |
+
+---
+
+## 14. Where To Find Things
 
 | What you need | Where to look |
 |---|---|
 | Full DB schema (columns, indexes, constraints) | `kaihle_v2_1_schema.sql` |
-| Full product plan with all task details | `kaihle_product_plan_v2_1.md` |
-| This milestone's goals + DoD | `/docs/milestones/M{N}_brief.md` |
-| This specific task's instructions | `/docs/tasks/M{N}/M{N}-{E}-T{T}_*.md` |
-| LLM prompt templates | `/backend/app/ai/prompts/*.jinja2` |
-| Design tokens, component patterns, role-specific palettes, typography | `docs/design/DESIGN_SYSTEM.md` |
-| Key environment variables | `kaihle_product_plan_v2_1.md` Part 6 |
+| Full product plan with milestone task details | `docs/kaihle_product_plan.md` |
+| This milestone's goals + DoD | `docs/milestones/M{N}_brief.md` |
+| This specific task's instructions | `docs/tasks/M{N}/M{N}-{E}-T{T}_*.md` |
+| LLM prompt templates | `backend/app/ai/prompts/*.jinja2` |
+| Design tokens, component patterns, role palettes | `docs/design/DESIGN_SYSTEM.md` |
+| Architecture decisions | `docs/adr/ADR-*.md` |
+| Environment variables reference | `docs/kaihle_product_plan.md` Part 6 |
 
 ---
 
-*Kaihle Project Constitution v1.0 · March 2026 · LOAD THIS FILE IN EVERY KILOCODE SESSION.*
+## 15. Architecture Decision Records
+
+### ADR-001 — Five Separate Frontend Apps
+
+**Date:** March 2026 · **Status:** Accepted · **Supersedes:** v1.0 single-app-with-folders approach
+
+**Context:** v1.0 placed School Admin and Kaihle Admin pages inside `apps/teacher`. This weakened security isolation (admin code in the same JavaScript origin as teacher code), created deployment coupling (any teacher UI change triggered admin rebuilds), and produced design drift (admin pages inherited teacher-specific color tokens and layout patterns).
+
+**Decision:** Five fully separate Vite apps — one per role — each with its own `index.html`, `tailwind.config.js`, `tsconfig.json`, Docker Compose service, and Render deployment. Shared logic lives exclusively in `packages/`.
+
+**Ports:** student: 3002, teacher: 3001, parent: 3003, school-admin: 3004, kaihle-admin: 3005.
+
+**Migration:** Existing `apps/teacher/src/pages/school-admin/` content migrates to `apps/school-admin/src/pages/`. Existing `apps/teacher/src/pages/kaihle-admin/` content migrates to `apps/kaihle-admin/src/pages/`. Both source directories are deleted after migration. Tracked in tasks M0-9-T2 and M0-9-T3.
+
+---
+
+*Kaihle Project Constitution v2.0 · March 2026*
+*LOAD THIS FILE IN EVERY KILOCODE SESSION — no exceptions.*
+*Key changes from v1.0: five-app architecture (ADR-001), mandatory password setup for all magic-link roles, two-layer student onboarding gate (global + per-class), explicit KaihleAdmin bypass rule (Rule 12), Celery dead-letter rule (Rule 18), empty question bank guard (Rule 17), PasswordSetupForm as shared package component, LiteLLM as provider-agnostic abstraction layer replacing individual provider adapters, question_generation and answer_scoring removed from LLM task routing (all questions are pre-built MCQ, scoring is deterministic).*
