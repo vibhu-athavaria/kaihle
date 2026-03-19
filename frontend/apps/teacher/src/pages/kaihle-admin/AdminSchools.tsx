@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AdminLayout } from "@kaihle/ui";
 import { Card, Badge, Button, Skeleton } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import { useAdminSchools } from "../../hooks/useKaihleAdmin";
 import { School } from "../../hooks/useKaihleAdmin";
 import { Plus, Filter } from "lucide-react";
@@ -123,6 +124,7 @@ function SchoolsTable({
 }
 
 export function AdminSchools() {
+  const { logout } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState<FilterTab>("ALL");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -145,6 +147,7 @@ export function AdminSchools() {
   return (
     <AdminLayout
       pageTitle="Schools"
+      onLogout={logout}
       topNavAction={
         <Button
           onClick={() => setShowCreateModal(true)}

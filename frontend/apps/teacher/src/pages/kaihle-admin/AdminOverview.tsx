@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { AdminLayout } from "@kaihle/ui";
 import { Card, Badge, Button, Skeleton } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import {
   usePlatformStats,
   useAdminSchools,
@@ -202,6 +203,7 @@ function RecentActivityList({ loading }: { loading?: boolean }) {
 }
 
 export function AdminOverview() {
+  const { logout } = useAuth();
   const { data: stats, isLoading: statsLoading } = usePlatformStats();
   const { data: schoolsData, isLoading: schoolsLoading } = useAdminSchools({
     page_size: 50,
@@ -218,6 +220,7 @@ export function AdminOverview() {
   return (
     <AdminLayout
       pageTitle="Platform overview"
+      onLogout={logout}
       topNavAction={
         <Link to="/kaihle-admin/schools?action=create">
           <Button>+ Add school</Button>
