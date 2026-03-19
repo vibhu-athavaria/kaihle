@@ -1,6 +1,46 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { PrivateRoute } from "@kaihle/auth";
+import { PrivateRoute, RoleRoute, useAuth } from "@kaihle/auth";
 import { LoginPage } from "./pages/LoginPage";
+import { DashboardLayout } from "@kaihle/ui";
+import { TeacherDashboard } from "./pages/dashboard/TeacherDashboard";
+import { Link } from "react-router-dom";
+import { Button } from "@kaihle/ui";
+import { Plus } from "lucide-react";
+
+function TeacherApp() {
+  const { user, logout } = useAuth();
+
+  const greeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
+  const teacherName = user?.email?.split("@")[0] || "Teacher";
+
+  return (
+    <DashboardLayout
+      variant="teacher"
+      pageTitle={`${greeting()}, ${teacherName}`}
+      onLogout={logout}
+      topNavAction={
+        <Link to="/teacher/assessments/new">
+          <Button
+            variant="primary"
+            size="sm"
+            className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
+          >
+            <Plus className="w-4 h-4" />
+            Assessment
+          </Button>
+        </Link>
+      }
+    >
+      <TeacherDashboard />
+    </DashboardLayout>
+  );
+}
 
 export default function App() {
   return (
@@ -11,10 +51,11 @@ export default function App() {
           path="/teacher/*"
           element={
             <PrivateRoute>
-              {/* Teacher routes — implemented in later milestones */}
-              <div className="p-8 text-gray-500">
-                Teacher dashboard — coming in M2
-              </div>
+              <RoleRoute
+                allowedRoles={["TEACHER", "SCHOOL_ADMIN", "KAIHLE_ADMIN"]}
+              >
+                <TeacherApp />
+              </RoleRoute>
             </PrivateRoute>
           }
         />
