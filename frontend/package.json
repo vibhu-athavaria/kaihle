@@ -14,9 +14,12 @@
     "test": "pnpm --filter './apps/*' test"
   },
   "devDependencies": {
-    "prettier": "^3.3.0",
+    "@playwright/test": "^1.45.0",
     "eslint": "^9.0.0",
-    "typescript": "^5.5.0",
-    "@playwright/test": "^1.45.0"
+    "prettier": "^3.3.0",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "lucide-react": "^0.383.0"
   }
 }

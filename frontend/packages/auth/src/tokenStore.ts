@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export interface User {
   id: string;
@@ -17,27 +18,34 @@ export interface AuthState {
   updateAccessToken: (access: string) => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  accessToken: null,
-  refreshToken: null,
-  user: null,
-  isAuthenticated: false,
-
-  setTokens: (access, refresh, user) =>
-    set({
-      accessToken: access,
-      refreshToken: refresh,
-      user,
-      isAuthenticated: true,
-    }),
-
-  clearTokens: () =>
-    set({
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
       accessToken: null,
       refreshToken: null,
       user: null,
       isAuthenticated: false,
-    }),
 
-  updateAccessToken: (access) => set({ accessToken: access }),
-}));
+      setTokens: (access, refresh, user) =>
+        set({
+          accessToken: access,
+          refreshToken: refresh,
+          user,
+          isAuthenticated: true,
+        }),
+
+      clearTokens: () =>
+        set({
+          accessToken: null,
+          refreshToken: null,
+          user: null,
+          isAuthenticated: false,
+        }),
+
+      updateAccessToken: (access) => set({ accessToken: access }),
+    }),
+    {
+      name: "kaihle-auth",
+    },
+  ),
+);

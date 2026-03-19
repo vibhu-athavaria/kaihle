@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { PrivateRoute, OnboardingRoute } from "@kaihle/auth";
+import { PrivateRoute, RoleRoute, OnboardingRoute } from "@kaihle/auth";
 import { LoginPage } from "./pages/LoginPage";
 import { OnboardingRouter } from "./pages/onboarding/OnboardingRouter";
 import { ProfileQuestionnaire } from "./pages/onboarding/ProfileQuestionnaire";
+import { StudentLayout } from "@kaihle/ui";
+import { StudentDashboard } from "./pages/dashboard/StudentDashboard";
 
 export default function App() {
   return (
@@ -13,7 +15,9 @@ export default function App() {
           path="/student/onboarding"
           element={
             <PrivateRoute>
-              <OnboardingRouter />
+              <RoleRoute allowedRoles={["STUDENT"]}>
+                <OnboardingRouter />
+              </RoleRoute>
             </PrivateRoute>
           }
         />
@@ -21,7 +25,9 @@ export default function App() {
           path="/student/onboarding/profile"
           element={
             <PrivateRoute>
-              <ProfileQuestionnaire />
+              <RoleRoute allowedRoles={["STUDENT"]}>
+                <ProfileQuestionnaire />
+              </RoleRoute>
             </PrivateRoute>
           }
         />
@@ -29,11 +35,13 @@ export default function App() {
           path="/student/*"
           element={
             <PrivateRoute>
-              <OnboardingRoute>
-                <div className="p-8 text-gray-500">
-                  Student dashboard — coming in M2
-                </div>
-              </OnboardingRoute>
+              <RoleRoute allowedRoles={["STUDENT"]}>
+                <OnboardingRoute>
+                  <StudentLayout pageTitle="Dashboard">
+                    <StudentDashboard />
+                  </StudentLayout>
+                </OnboardingRoute>
+              </RoleRoute>
             </PrivateRoute>
           }
         />
