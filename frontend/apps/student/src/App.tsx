@@ -6,6 +6,14 @@ import { ProfileQuestionnaire } from "./pages/onboarding/ProfileQuestionnaire";
 import { StudentLayout } from "@kaihle/ui";
 import { StudentDashboard } from "./pages/dashboard/StudentDashboard";
 
+function StudentApp() {
+  return (
+    <StudentLayout pageTitle="Dashboard">
+      <StudentDashboard />
+    </StudentLayout>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -37,9 +45,7 @@ export default function App() {
             <PrivateRoute>
               <RoleRoute allowedRoles={["STUDENT"]}>
                 <OnboardingRoute>
-                  <StudentLayout pageTitle="Dashboard">
-                    <StudentDashboard />
-                  </StudentLayout>
+                  <StudentApp />
                 </OnboardingRoute>
               </RoleRoute>
             </PrivateRoute>

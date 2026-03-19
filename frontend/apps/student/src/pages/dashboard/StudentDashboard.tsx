@@ -1,4 +1,3 @@
-import { StudentLayout } from "@kaihle/ui";
 import { SubjectScoreCard } from "./SubjectScoreCard";
 import { NextStepCard, EmptyNextSteps } from "./NextStepCard";
 import { StreakBadge } from "./StreakBadge";
@@ -51,11 +50,11 @@ export function StudentDashboard() {
 
   if (isError) {
     return (
-      <StudentLayout activeNav="home">
+      <div className="p-6">
         <div className="text-center py-8">
           <p className="text-brand-red">Failed to load dashboard data.</p>
         </div>
-      </StudentLayout>
+      </div>
     );
   }
 
@@ -137,76 +136,72 @@ export function StudentDashboard() {
   }
 
   return (
-    <StudentLayout activeNav="home">
-      <div className="space-y-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-display font-bold text-2xl text-brand-ink">
-              {greeting}
-              {firstName ? `, ${firstName}` : ""} 👋
-            </h1>
-            <StreakBadge days={streakDays} />
-          </div>
-          {gradeName && curriculumName && (
-            <p className="font-sans text-sm text-brand-muted mt-1">
-              {gradeName} · {curriculumName}
-            </p>
-          )}
+    <div className="p-6 space-y-6">
+      <div>
+        <div className="flex items-center gap-2">
+          <h1 className="font-display font-bold text-2xl text-brand-ink">
+            {greeting}
+            {firstName ? `, ${firstName}` : ""} 👋
+          </h1>
+          <StreakBadge days={streakDays} />
         </div>
+        {gradeName && curriculumName && (
+          <p className="font-sans text-sm text-brand-muted mt-1">
+            {gradeName} · {curriculumName}
+          </p>
+        )}
+      </div>
 
+      <div>
+        <div className="grid grid-cols-3 gap-3">
+          {isLoading
+            ? Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
+            : subjects
+                .slice(0, 3)
+                .map((subject) => (
+                  <SubjectScoreCard
+                    key={subject.subjectCode}
+                    subjectName={subject.subjectName}
+                    subjectCode={subject.subjectCode}
+                    score={subject.score}
+                  />
+                ))}
+        </div>
+      </div>
+
+      {nextSteps.length > 0 && (
         <div>
-          <div className="grid grid-cols-3 gap-3">
+          <h2 className="font-sans text-sm font-bold text-brand-muted uppercase tracking-wide mb-3">
+            What's waiting for you
+          </h2>
+          <div className="space-y-3">
             {isLoading
-              ? Array.from({ length: 3 }).map((_, i) => (
-                  <SkeletonCard key={i} />
+              ? Array.from({ length: 2 }).map((_, i) => (
+                  <SkeletonNextStep key={i} />
                 ))
-              : subjects
+              : nextSteps
                   .slice(0, 3)
-                  .map((subject) => (
-                    <SubjectScoreCard
-                      key={subject.subjectCode}
-                      subjectName={subject.subjectName}
-                      subjectCode={subject.subjectCode}
-                      score={subject.score}
+                  .map((step, index) => (
+                    <NextStepCard
+                      key={index}
+                      type={step.type}
+                      title={step.title}
+                      subtitle={step.subtitle}
+                      actionLabel={step.actionLabel}
                     />
                   ))}
           </div>
         </div>
+      )}
 
-        {nextSteps.length > 0 && (
-          <div>
-            <h2 className="font-sans text-sm font-bold text-brand-muted uppercase tracking-wide mb-3">
-              What's waiting for you
-            </h2>
-            <div className="space-y-3">
-              {isLoading
-                ? Array.from({ length: 2 }).map((_, i) => (
-                    <SkeletonNextStep key={i} />
-                  ))
-                : nextSteps
-                    .slice(0, 3)
-                    .map((step, index) => (
-                      <NextStepCard
-                        key={index}
-                        type={step.type}
-                        title={step.title}
-                        subtitle={step.subtitle}
-                        actionLabel={step.actionLabel}
-                      />
-                    ))}
-            </div>
-          </div>
-        )}
-
-        {nextSteps.length === 0 && !isLoading && (
-          <div>
-            <h2 className="font-sans text-sm font-bold text-brand-muted uppercase tracking-wide mb-3">
-              Keep going
-            </h2>
-            <EmptyNextSteps />
-          </div>
-        )}
-      </div>
-    </StudentLayout>
+      {nextSteps.length === 0 && !isLoading && (
+        <div>
+          <h2 className="font-sans text-sm font-bold text-brand-muted uppercase tracking-wide mb-3">
+            Keep going
+          </h2>
+          <EmptyNextSteps />
+        </div>
+      )}
+    </div>
   );
 }
