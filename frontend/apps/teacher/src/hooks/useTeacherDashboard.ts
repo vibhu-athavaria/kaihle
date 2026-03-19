@@ -24,23 +24,20 @@ export interface TeacherDashboardData {
   lessonPlan: LessonPlanInfo | null;
 }
 
-const QUERY_KEYS = {
-  classes: (schoolId: string) => ["teacher", "classes", schoolId] as const,
-  dashboard: (schoolId: string) => ["teacher", "dashboard", schoolId] as const,
-};
-
-async function fetchTeacherClasses(schoolId: string): Promise<TeacherClass[]> {
-  const response = await apiClient.get(
-    `/api/v1/schools/${schoolId}/classes?teacher_id=me`,
-  );
-  return response.data;
-}
-
-async function fetchClassAnalytics(
-  schoolId: string,
-): Promise<Record<string, number>> {
-  const response = await apiClient.get(`/api/v1/schools/${schoolId}/analytics`);
-  return response.data;
+async function fetchTeacherDashboard(schoolId: string): Promise<{
+  classes: TeacherClass[];
+  analytics: Record<string, number>;
+}> {
+  const [classesRes, analyticsRes] = await Promise.all([
+    apiClient.get(`/api/v1/schools/${schoolId}/classes`),
+    apiClient
+      .get(`/api/v1/schools/${schoolId}/analytics`)
+      .catch(() => ({ data: {} })),
+  ]);
+  return {
+    classes: classesRes.data,
+    analytics: analyticsRes.data,
+  };
 }
 
 async function fetchLessonPlan(
@@ -53,29 +50,23 @@ async function fetchLessonPlan(
 }
 
 export function useTeacherDashboard(schoolId: string | null) {
-  const classesQuery = useQuery({
-    queryKey: QUERY_KEYS.classes(schoolId || ""),
-    queryFn: () => fetchTeacherClasses(schoolId!),
+  const dashboardQuery = useQuery({
+    queryKey: ["teacher", "dashboard", schoolId],
+    queryFn: () => fetchTeacherDashboard(schoolId!),
     enabled: !!schoolId,
   });
 
-  const analyticsQuery = useQuery({
-    queryKey: QUERY_KEYS.dashboard(schoolId || ""),
-    queryFn: () => fetchClassAnalytics(schoolId!),
-    enabled: !!schoolId,
-  });
-
-  const lessonPlanQueries = useQuery({
+  const lessonPlanQuery = useQuery({
     queryKey: ["teacher", "lesson-plans", schoolId],
     queryFn: async () => {
-      if (!classesQuery.data) return null;
-      const classesWithPlans = classesQuery.data.filter(
-        (c) => c.lessonPlanStatus === "ready",
+      if (!dashboardQuery.data) return null;
+      const classesWithPlans = dashboardQuery.data.classes.filter(
+        (c: TeacherClass) => c.lessonPlanStatus === "ready",
       );
       if (classesWithPlans.length === 0) return null;
 
       const results = await Promise.all(
-        classesWithPlans.map((c) => fetchLessonPlan(c.id)),
+        classesWithPlans.map((c: TeacherClass) => fetchLessonPlan(c.id)),
       );
       const firstPlan = results.find((r) => r !== null);
       if (!firstPlan) return null;
@@ -89,18 +80,13 @@ export function useTeacherDashboard(schoolId: string | null) {
           }
         : null;
     },
-    enabled: !!classesQuery.data,
+    enabled: !!dashboardQuery.data,
   });
-
-  const isLoading =
-    classesQuery.isLoading ||
-    analyticsQuery.isLoading ||
-    lessonPlanQueries.isLoading;
 
   const pendingActions: PendingAction[] = [];
 
-  if (classesQuery.data) {
-    for (const cls of classesQuery.data) {
+  if (dashboardQuery.data) {
+    for (const cls of dashboardQuery.data.classes) {
       if (cls.avgMastery !== null && cls.avgMastery < 0.4) {
         pendingActions.push({
           type: "study-plan",
@@ -121,11 +107,11 @@ export function useTeacherDashboard(schoolId: string | null) {
 
   return {
     data: {
-      classes: classesQuery.data || [],
+      classes: dashboardQuery.data?.classes || [],
       pendingActions,
-      lessonPlan: lessonPlanQueries.data || null,
+      lessonPlan: lessonPlanQuery.data || null,
     } as TeacherDashboardData,
-    isLoading,
-    isError: classesQuery.isError || analyticsQuery.isError,
+    isLoading: dashboardQuery.isLoading || lessonPlanQuery.isLoading,
+    isError: dashboardQuery.isError,
   };
 }
