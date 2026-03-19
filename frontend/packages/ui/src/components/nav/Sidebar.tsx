@@ -10,12 +10,14 @@ import {
   Settings,
   Archive,
   Cog,
+  LogOut,
 } from "lucide-react";
 import { NavItem } from "./NavItem";
 
 interface SidebarProps {
   variant: "teacher" | "school-admin" | "admin";
   classId?: string;
+  onLogout?: () => void;
 }
 
 interface NavSection {
@@ -117,7 +119,7 @@ function resolveHref(href: string, classId?: string): string {
   return href;
 }
 
-export function Sidebar({ variant, classId }: SidebarProps) {
+export function Sidebar({ variant, classId, onLogout }: SidebarProps) {
   const sections =
     variant === "teacher"
       ? teacherSections
@@ -179,6 +181,18 @@ export function Sidebar({ variant, classId }: SidebarProps) {
           </div>
         ))}
       </nav>
+
+      {onLogout && (
+        <div className="border-t border-brand-border p-3">
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-brand-surface rounded-lg transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Log out
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

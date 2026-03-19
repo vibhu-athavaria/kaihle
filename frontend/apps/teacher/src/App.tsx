@@ -8,7 +8,7 @@ import { Button } from "@kaihle/ui";
 import { Plus } from "lucide-react";
 
 function TeacherApp() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const greeting = () => {
     const hour = new Date().getHours();
@@ -23,6 +23,7 @@ function TeacherApp() {
     <DashboardLayout
       variant="teacher"
       pageTitle={`${greeting()}, ${teacherName}`}
+      onLogout={logout}
       topNavAction={
         <Link to="/teacher/assessments/new">
           <Button
