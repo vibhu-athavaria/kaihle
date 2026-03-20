@@ -5,6 +5,7 @@ import { Card } from "@kaihle/ui";
 import { Badge } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
+import { UserRole } from "@kaihle/types";
 import { MoreVertical, Mail, UserX, UserCheck, RefreshCw } from "lucide-react";
 import {
   useSchoolUsers,
@@ -14,12 +15,15 @@ import {
 } from "../hooks/useSchoolAdmin";
 import { InviteUserModal } from "./InviteUserModal";
 
-type RoleTab = "TEACHER" | "STUDENT" | "PARENT";
+type RoleTab =
+  | typeof UserRole.TEACHER
+  | typeof UserRole.STUDENT
+  | typeof UserRole.PARENT;
 
 const roleTabs: { value: RoleTab; label: string }[] = [
-  { value: "TEACHER", label: "Teachers" },
-  { value: "STUDENT", label: "Students" },
-  { value: "PARENT", label: "Parents" },
+  { value: UserRole.TEACHER, label: "Teachers" },
+  { value: UserRole.STUDENT, label: "Students" },
+  { value: UserRole.PARENT, label: "Parents" },
 ];
 
 function getStatusBadge(status: User["status"]) {
