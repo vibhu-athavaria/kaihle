@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PrivateRoute, RoleRoute } from "@kaihle/auth";
+import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
 import { SchoolOverview } from "./pages/SchoolOverview";
 import { UserManagement } from "./pages/UserManagement";
@@ -29,7 +30,9 @@ export default function App() {
           path="/school-admin/*"
           element={
             <PrivateRoute>
-              <RoleRoute allowedRoles={["SCHOOL_ADMIN", "KAIHLE_ADMIN"]}>
+              <RoleRoute
+                allowedRoles={[UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN]}
+              >
                 <Routes>
                   <Route path="dashboard" element={<SchoolOverview />} />
                   <Route path="users" element={<UserManagement />} />

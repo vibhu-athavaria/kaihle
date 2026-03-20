@@ -4,6 +4,7 @@ import { Card } from "@kaihle/ui";
 import { Badge } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
+import { UserRole } from "@kaihle/types";
 import { Plus, X, BookOpen } from "lucide-react";
 import {
   useSchoolClasses,
@@ -229,8 +230,8 @@ export function ClassManagement() {
   const [selectedClass, setSelectedClass] = useState<Class | null>(null);
 
   const { data: classes, isLoading: classesLoading } = useSchoolClasses();
-  const { data: teachers } = useSchoolUsers("TEACHER");
-  const { data: students } = useSchoolUsers("STUDENT");
+  const { data: teachers } = useSchoolUsers(UserRole.TEACHER);
+  const { data: students } = useSchoolUsers(UserRole.STUDENT);
   const updateClass = useUpdateClass();
   const enrollStudents = useEnrollStudents(selectedClass?.id || "");
 

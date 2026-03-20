@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PrivateRoute, RoleRoute, useAuth } from "@kaihle/auth";
+import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardLayout } from "@kaihle/ui";
 import { TeacherDashboard } from "./pages/dashboard/TeacherDashboard";
@@ -52,7 +53,11 @@ export default function App() {
           element={
             <PrivateRoute>
               <RoleRoute
-                allowedRoles={["TEACHER", "SCHOOL_ADMIN", "KAIHLE_ADMIN"]}
+                allowedRoles={[
+                  UserRole.TEACHER,
+                  UserRole.SCHOOL_ADMIN,
+                  UserRole.KAIHLE_ADMIN,
+                ]}
               >
                 <TeacherApp />
               </RoleRoute>
