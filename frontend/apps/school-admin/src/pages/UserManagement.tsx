@@ -146,7 +146,7 @@ export function UserManagement() {
     first_name: string;
     last_name: string;
     email: string;
-    role: "TEACHER" | "STUDENT" | "PARENT";
+    role: RoleTab;
   }) => {
     await inviteUser.mutateAsync(data);
   };

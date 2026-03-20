@@ -8,7 +8,7 @@ export interface User {
   email: string;
   first_name: string;
   last_name: string;
-  role: Extract<UserRoleType, "TEACHER" | "STUDENT" | "PARENT">;
+  role: UserRoleType;
   status: "ACTIVE" | "INVITED" | "INACTIVE";
 }
 
