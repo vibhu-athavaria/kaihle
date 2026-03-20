@@ -50,18 +50,6 @@ FROM: frontend/apps/teacher/src/pages/kaihle-admin/AdminExtendTrialModal.tsx
 TO:   frontend/apps/kaihle-admin/src/pages/AdminExtendTrialModal.tsx
 ```
 
-Also move hooks and tests:
-
-```
-FROM: frontend/apps/teacher/src/hooks/useKaihleAdmin.ts
-TO:   frontend/apps/kaihle-admin/src/hooks/useKaihleAdmin.ts
-
-FROM: frontend/apps/teacher/src/tests/kaihle-admin.spec.ts
-TO:   frontend/apps/kaihle-admin/src/tests/kaihle-admin.spec.ts
-```
-
----
-
 ## Files to Delete After Migration
 
 ```
