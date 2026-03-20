@@ -188,10 +188,10 @@ async def test_login_inactive_user_returns_401(db_session: AsyncSession, client:
 
 
 @pytest.mark.asyncio
-async def test_magic_link_full_flow_send_verify_returns_jwt(
+async def test_magic_link_full_flow_send_verify_returns_setup_token(
     client: AsyncClient, user: User, db_session: AsyncSession
 ) -> None:
-    """Test full magic link flow - send → verify → returns JWT."""
+    """Test full magic link flow - send → verify → returns scoped setup token."""
     # Directly create and store a magic link token (bypassing email sending)
     magic_link_jwt = create_magic_link_token(user.id)
     token_hash = hash_token(magic_link_jwt)
@@ -205,9 +205,9 @@ async def test_magic_link_full_flow_send_verify_returns_jwt(
 
     assert response.status_code == 200
     data = response.json()
-    assert "access_token" in data
-    assert "refresh_token" in data
-    assert data["user"]["email"] == user.email
+    assert "setup_token" in data
+    assert data["requires_password_setup"] is True
+    assert data["token_type"] == "bearer"
 
 
 @pytest.mark.asyncio

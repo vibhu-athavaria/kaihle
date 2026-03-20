@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -160,6 +161,94 @@ class AuthService:
         if not user:
             raise InvalidTokenError("User not found")
 
+        access_token = create_access_token(user.id, user.school_id, user.role)
+        raw_refresh, hashed_refresh = generate_refresh_token()
+        await store_refresh_token(self.db, user.id, hashed_refresh)
+
+        return LoginResponse(
+            access_token=access_token,
+            refresh_token=raw_refresh,
+            token_type="bearer",
+            user={
+                "id": str(user.id),
+                "email": user.email,
+                "role": user.role,
+                "school_id": str(user.school_id) if user.school_id else None,
+            },
+        )
+
+    async def verify_magic_link_get_token(self, token: str) -> str:
+        """
+        Validate magic link token, mark as used, return the SAME scoped JWT token.
+        This is used when the user clicks the magic link - we return the token
+        that already has scope: password_setup.
+        Raises InvalidTokenError if token is invalid, expired, or already used.
+        """
+        try:
+            payload = decode_token(token)
+        except InvalidTokenError:
+            raise
+
+        if payload.get("type") != "magic_link":
+            raise InvalidTokenError("Not a magic link token")
+
+        user_id = uuid.UUID(payload["sub"])
+        token_hash = hash_token(token)
+
+        # Find token in DB — must exist, not used, not expired
+        auth_token = await self.db.scalar(
+            select(AuthToken).where(
+                AuthToken.user_id == user_id,
+                AuthToken.token_hash == token_hash,
+                AuthToken.type == AuthTokenType.MAGIC_LINK,
+                AuthToken.used_at.is_(None),
+                AuthToken.expires_at > datetime.now(UTC),
+            )
+        )
+        if not auth_token:
+            raise InvalidTokenError("Token invalid or already used")
+
+        # Mark as used
+        auth_token.used_at = datetime.now(UTC)
+        await self.db.flush()
+
+        user = await self.db.get(User, user_id)
+        if not user:
+            raise InvalidTokenError("User not found")
+
+        # Issue a NEW magic link JWT with the same scope: password_setup.
+        # The original token from the URL is a one-time use token; this new JWT
+        # is what the frontend receives to complete password setup.
+        scoped_token = create_magic_link_token(user.id)
+        return scoped_token
+
+    async def set_password_from_scoped_token(self, token_payload: dict[str, Any], new_password: str) -> LoginResponse:
+        """
+        Set password for a user who was invited via magic link.
+        The token payload must have scope: password_setup and type: magic_link.
+        Returns full-access JWT tokens after password is set.
+        Raises ValueError if user already has a password set.
+        """
+        if token_payload.get("type") != "magic_link":
+            raise ValueError("Invalid token type - expected magic link token")
+
+        if token_payload.get("scope") != "password_setup":
+            raise ValueError("Token does not have password_setup scope")
+
+        user_id = uuid.UUID(token_payload["sub"])
+
+        user = await self.db.get(User, user_id)
+        if not user:
+            raise InvalidTokenError("User not found")
+
+        if user.hashed_password is not None:
+            raise ValueError("Password already set for this user")
+
+        # Hash and set the new password
+        user.hashed_password = hash_password(new_password)
+        await self.db.flush()
+
+        # Generate full-access tokens
         access_token = create_access_token(user.id, user.school_id, user.role)
         raw_refresh, hashed_refresh = generate_refresh_token()
         await store_refresh_token(self.db, user.id, hashed_refresh)
