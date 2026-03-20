@@ -50,3 +50,19 @@ jobs:
             "https://api.render.com/v1/services/${{ secrets.RENDER_PARENT_SERVICE_ID }}/deploys" \
             -H "Content-Type: application/json" \
             -d '{}'
+
+      - name: Trigger Render deploy (school-admin app)
+        run: |
+          curl --fail -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_SCHOOL_ADMIN_SERVICE_ID }}/deploys" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+
+      - name: Trigger Render deploy (kaihle-admin app)
+        run: |
+          curl --fail -X POST \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_KAIHLE_ADMIN_SERVICE_ID }}/deploys" \
+            -H "Content-Type: application/json" \
+            -d '{}'

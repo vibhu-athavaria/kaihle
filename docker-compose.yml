@@ -116,6 +116,32 @@ services:
     environment:
       VITE_API_URL: http://localhost:8000
 
+  frontend-school-admin:
+    build:
+      context: ./frontend
+      dockerfile: apps/school-admin/Dockerfile.dev
+    container_name: kaihle_school_admin
+    ports:
+      - "3004:3004"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8000
+
+  frontend-kaihle-admin:
+    build:
+      context: ./frontend
+      dockerfile: apps/kaihle-admin/Dockerfile.dev
+    container_name: kaihle_kaihle_admin
+    ports:
+      - "3005:3005"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8000
+
 volumes:
   postgres_data:
   redis_data:
