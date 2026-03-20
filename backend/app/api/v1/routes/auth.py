@@ -1,10 +1,13 @@
 """Authentication API routes."""
 
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.deps import get_token_payload
 from app.core.security import InvalidTokenError
 from app.schemas.auth import (
     LoginRequest,
@@ -105,19 +108,22 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)) -> T
 @router.post("/set-password", response_model=LoginResponse)
 async def set_password(
     body: SetPasswordRequest,
+    token_payload: Annotated[dict[str, Any], Depends(get_token_payload)],
     db: AsyncSession = Depends(get_db),
 ) -> LoginResponse:
     """Set password for a magic-link-invited user on first login.
 
     Requires a JWT with scope: password_setup (issued by verify_magic_link).
     Returns a full-access JWT pair (access + refresh) on success.
-    Raises 403 if called with a full-access token (password already set).
+    Raises 400 if token is invalid or password already set.
     """
     service = AuthService(db)
     try:
-        return await service.set_password_from_scoped_token(body.password)
+        return await service.set_password_from_scoped_token(token_payload, body.password)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except InvalidTokenError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 
 @router.post("/logout")

@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -215,24 +216,54 @@ class AuthService:
         if not user:
             raise InvalidTokenError("User not found")
 
-        # The token already has scope: password_setup - just return it
-        # We need to create a new token with the same scope
+        # Issue a NEW magic link JWT with the same scope: password_setup.
+        # The original token from the URL is a one-time use token; this new JWT
+        # is what the frontend receives to complete password setup.
         scoped_token = create_magic_link_token(user.id)
         return scoped_token
 
-    async def set_password_from_scoped_token(self, new_password: str) -> LoginResponse:
+    async def set_password_from_scoped_token(self, token_payload: dict[str, Any], new_password: str) -> LoginResponse:
         """
         Set password for a user who was invited via magic link.
-        The token must have scope: password_setup.
+        The token payload must have scope: password_setup and type: magic_link.
         Returns full-access JWT tokens after password is set.
-        Raises ValueError if user already has a password.
-
-        Note: This is a stub - the actual implementation needs the token to be
-        passed from the endpoint. For now, this will raise a ValueError.
+        Raises ValueError if user already has a password set.
         """
-        raise ValueError("Token required - implement token passing from endpoint")
-        # from the Authorization header and we'll decode it here
-        pass
+        if token_payload.get("type") != "magic_link":
+            raise ValueError("Invalid token type - expected magic link token")
+
+        if token_payload.get("scope") != "password_setup":
+            raise ValueError("Token does not have password_setup scope")
+
+        user_id = uuid.UUID(token_payload["sub"])
+
+        user = await self.db.get(User, user_id)
+        if not user:
+            raise InvalidTokenError("User not found")
+
+        if user.hashed_password is not None:
+            raise ValueError("Password already set for this user")
+
+        # Hash and set the new password
+        user.hashed_password = hash_password(new_password)
+        await self.db.flush()
+
+        # Generate full-access tokens
+        access_token = create_access_token(user.id, user.school_id, user.role)
+        raw_refresh, hashed_refresh = generate_refresh_token()
+        await store_refresh_token(self.db, user.id, hashed_refresh)
+
+        return LoginResponse(
+            access_token=access_token,
+            refresh_token=raw_refresh,
+            token_type="bearer",
+            user={
+                "id": str(user.id),
+                "email": user.email,
+                "role": user.role,
+                "school_id": str(user.school_id) if user.school_id else None,
+            },
+        )
 
     async def refresh_access_token(self, raw_refresh_token: str) -> TokenResponse:
         """
