@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { AdminLayout } from "@kaihle/ui";
 import { Card, Badge, Button, Skeleton } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
-import { useAdminSchool, useSchoolAnalytics } from "../../hooks/useKaihleAdmin";
+import { useAdminSchool, useSchoolAnalytics } from "../hooks/useKaihleAdmin";
 import { AdminExtendTrialModal } from "./AdminExtendTrialModal";
 import {
   ArrowLeft,

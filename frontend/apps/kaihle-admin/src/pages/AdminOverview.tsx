@@ -6,11 +6,11 @@ import {
   usePlatformStats,
   useAdminSchools,
   useRecentActivity,
-} from "../../hooks/useKaihleAdmin";
+} from "../hooks/useKaihleAdmin";
 import {
   School,
   RecentActivity as RecentActivityType,
-} from "../../hooks/useKaihleAdmin";
+} from "../hooks/useKaihleAdmin";
 import { TrendingUp, Users, DollarSign, Activity } from "lucide-react";
 
 function KPICard({
