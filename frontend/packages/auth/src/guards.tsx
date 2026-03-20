@@ -35,11 +35,33 @@ export function RoleRoute({
   return <>{children}</>;
 }
 
+type DiagnosticsByClass = {
+  class_id: string;
+  class_name: string;
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+};
+
 type OnboardingStatus = {
   learning_profile_complete: boolean;
-  diagnostics_complete: boolean;
-  overall: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  diagnostics_by_class: DiagnosticsByClass[];
 };
+
+/**
+ * Check if onboarding is complete:
+ * - learning_profile_complete must be true
+ * - ALL diagnostics_by_class must have status COMPLETED
+ */
+function isOnboardingComplete(status: OnboardingStatus): boolean {
+  if (!status.learning_profile_complete) return false;
+  if (
+    !status.diagnostics_by_class ||
+    status.diagnostics_by_class.length === 0
+  ) {
+    // No classes enrolled yet - onboarding not complete
+    return false;
+  }
+  return status.diagnostics_by_class.every((d) => d.status === "COMPLETED");
+}
 
 /**
  * OnboardingRoute — for STUDENT role only.
@@ -61,7 +83,7 @@ export function OnboardingRoute({ children }: { children: React.ReactNode }) {
       return;
     }
     apiClient
-      .get<OnboardingStatus>("/api/v1/onboarding/status")
+      .get<OnboardingStatus>(`/api/v1/onboarding/status/${user.id}`)
       .then((res) => setStatus(res.data))
       .catch(() => setStatus(null))
       .finally(() => setLoading(false));
@@ -75,7 +97,7 @@ export function OnboardingRoute({ children }: { children: React.ReactNode }) {
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600" />
       </div>
     );
-  if (!status || status.overall !== "COMPLETED") {
+  if (!status || !isOnboardingComplete(status)) {
     return <Navigate to="/student/onboarding" replace />;
   }
   return <>{children}</>;
