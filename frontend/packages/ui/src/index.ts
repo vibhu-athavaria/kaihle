@@ -1,4 +1,8 @@
 export { LoginForm, type LoginFormProps } from "./LoginForm";
+export {
+  PasswordSetupForm,
+  type PasswordSetupFormProps,
+} from "./components/PasswordSetupForm";
 
 export { Button } from "./components/Button";
 export { Card } from "./components/Card";

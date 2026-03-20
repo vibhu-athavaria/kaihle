@@ -38,5 +38,24 @@ export function useAuth() {
     await apiClient.post("/api/v1/auth/magic-link", { email });
   }, []);
 
-  return { user, isAuthenticated, login, logout, sendMagicLink };
+  /**
+   * Set password for a magic-link-invited user.
+   * Posts to /api/v1/auth/set-password with the current scoped token.
+   * On success, stores the returned full JWT in the tokenStore.
+   * On failure, throws an error.
+   */
+  const setPassword = useCallback(
+    async (password: string) => {
+      const response = await apiClient.post("/api/v1/auth/set-password", {
+        password,
+        confirm_password: password,
+      });
+      const { access_token, refresh_token, user: userData } = response.data;
+      setTokens(access_token, refresh_token, userData);
+      return userData;
+    },
+    [setTokens],
+  );
+
+  return { user, isAuthenticated, login, logout, sendMagicLink, setPassword };
 }
