@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { Button } from "@kaihle/ui";
 import { Input } from "@kaihle/ui";
+import { UserRole } from "@kaihle/types";
 import { X } from "lucide-react";
+
+type SchoolRole =
+  | typeof UserRole.TEACHER
+  | typeof UserRole.STUDENT
+  | typeof UserRole.PARENT;
 
 interface InviteUserModalProps {
   isOpen: boolean;
@@ -10,22 +16,22 @@ interface InviteUserModalProps {
     first_name: string;
     last_name: string;
     email: string;
-    role: "TEACHER" | "STUDENT" | "PARENT";
+    role: SchoolRole;
   }) => void;
-  defaultRole?: "TEACHER" | "STUDENT" | "PARENT";
+  defaultRole?: SchoolRole;
 }
 
-const roleOptions = [
-  { value: "TEACHER", label: "Teacher" },
-  { value: "STUDENT", label: "Student" },
-  { value: "PARENT", label: "Parent" },
+const roleOptions: { value: SchoolRole; label: string }[] = [
+  { value: UserRole.TEACHER, label: "Teacher" },
+  { value: UserRole.STUDENT, label: "Student" },
+  { value: UserRole.PARENT, label: "Parent" },
 ];
 
 export function InviteUserModal({
   isOpen,
   onClose,
   onInvite,
-  defaultRole = "TEACHER",
+  defaultRole = UserRole.TEACHER,
 }: InviteUserModalProps) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -80,11 +86,11 @@ export function InviteUserModal({
 
   const getTitle = () => {
     switch (role) {
-      case "TEACHER":
+      case UserRole.TEACHER:
         return "Invite a teacher";
-      case "STUDENT":
+      case UserRole.STUDENT:
         return "Invite a student";
-      case "PARENT":
+      case UserRole.PARENT:
         return "Invite a parent";
     }
   };

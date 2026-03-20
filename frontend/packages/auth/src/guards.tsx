@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { UserRole, type UserRole as UserRoleType } from "@kaihle/types";
 import { useAuthStore } from "./tokenStore";
 import { apiClient } from "./apiClient";
 
@@ -24,7 +25,7 @@ export function RoleRoute({
   allowedRoles,
 }: {
   children: React.ReactNode;
-  allowedRoles: string[];
+  allowedRoles: UserRoleType[];
 }) {
   const user = useAuthStore((s) => s.user);
 
@@ -55,7 +56,7 @@ export function OnboardingRoute({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user || user.role !== "STUDENT") {
+    if (!user || user.role !== UserRole.STUDENT) {
       setLoading(false);
       return;
     }
@@ -67,7 +68,7 @@ export function OnboardingRoute({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "STUDENT") return <>{children}</>;
+  if (user.role !== UserRole.STUDENT) return <>{children}</>;
   if (loading)
     return (
       <div className="flex items-center justify-center h-screen">

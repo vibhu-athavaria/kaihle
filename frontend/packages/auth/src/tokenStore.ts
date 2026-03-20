@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { type UserRole as UserRoleType } from "@kaihle/types";
 
 const STORAGE_KEY = "kaihle-auth";
 
 export interface User {
   id: string;
   email: string;
-  role: "STUDENT" | "TEACHER" | "SCHOOL_ADMIN" | "PARENT" | "KAIHLE_ADMIN";
+  role: UserRoleType;
   school_id: string | null;
 }
 

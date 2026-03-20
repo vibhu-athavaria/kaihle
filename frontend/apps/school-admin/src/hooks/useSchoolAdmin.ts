@@ -1,13 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 import { useAuthStore } from "@kaihle/auth";
+import { UserRole, type UserRole as UserRoleType } from "@kaihle/types";
 
 export interface User {
   id: string;
   email: string;
   first_name: string;
   last_name: string;
-  role: "TEACHER" | "STUDENT" | "PARENT";
+  role: UserRoleType;
   status: "ACTIVE" | "INVITED" | "INACTIVE";
 }
 
@@ -77,7 +78,12 @@ export function useSchoolClasses() {
   });
 }
 
-export function useSchoolUsers(role: "TEACHER" | "STUDENT" | "PARENT") {
+export function useSchoolUsers(
+  role:
+    | typeof UserRole.TEACHER
+    | typeof UserRole.STUDENT
+    | typeof UserRole.PARENT,
+) {
   return useQuery({
     queryKey: ["school", "users", role],
     queryFn: async () => {
@@ -120,7 +126,10 @@ export function useInviteUser() {
       first_name: string;
       last_name: string;
       email: string;
-      role: "TEACHER" | "STUDENT" | "PARENT";
+      role:
+        | typeof UserRole.TEACHER
+        | typeof UserRole.STUDENT
+        | typeof UserRole.PARENT;
     }) => {
       const response = await apiClient.post(
         `/api/v1/schools/${schoolId}/users`,

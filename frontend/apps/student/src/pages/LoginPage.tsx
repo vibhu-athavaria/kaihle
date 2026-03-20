@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
+import { UserRole } from "@kaihle/types";
 import { LoginForm } from "@kaihle/ui";
 
 export function LoginPage() {
@@ -13,7 +14,7 @@ export function LoginPage() {
     try {
       const user = await login({ email, password });
       // Validate that only students can log in through student portal
-      if (user.role !== "STUDENT") {
+      if (user.role !== UserRole.STUDENT) {
         // Clear tokens since non-student logged in
         await logout();
         setError(
