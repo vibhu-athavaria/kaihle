@@ -145,6 +145,8 @@ jobs:
           pnpm --filter parent exec tsc --noEmit
           pnpm --filter student exec tsc --noEmit
           pnpm --filter teacher exec tsc --noEmit
+          pnpm --filter @kaihle/school-admin exec tsc --noEmit
+          pnpm --filter @kaihle/kaihle-admin exec tsc --noEmit
         working-directory: frontend
 
       - name: Run prettier check
@@ -183,6 +185,8 @@ jobs:
           pnpm --filter parent exec jest --passWithNoTests --coverage
           pnpm --filter student exec jest --passWithNoTests --coverage
           pnpm --filter teacher exec jest --passWithNoTests --coverage
+          pnpm --filter @kaihle/school-admin exec jest --passWithNoTests --coverage
+          pnpm --filter @kaihle/kaihle-admin exec jest --passWithNoTests --coverage
         working-directory: frontend
 
   # ─── YAML / INFRA ─────────────────────────────────────────────────────────
