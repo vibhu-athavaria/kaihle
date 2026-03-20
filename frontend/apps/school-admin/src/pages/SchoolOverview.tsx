@@ -4,10 +4,7 @@ import { Card } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
 import { Users, GraduationCap, TrendingUp, Plus } from "lucide-react";
-import {
-  useSchoolAnalytics,
-  useSchoolClasses,
-} from "../../hooks/useSchoolAdmin";
+import { useSchoolAnalytics, useSchoolClasses } from "../hooks/useSchoolAdmin";
 
 export function SchoolOverview() {
   const { logout } = useAuth();
@@ -77,7 +74,7 @@ export function SchoolOverview() {
             <h2 className="text-lg font-display font-bold text-brand-ink">
               Classes
             </h2>
-            <Link to="/school/classes">
+            <Link to="/school-admin/classes">
               <Button variant="primary" size="sm">
                 <Plus className="w-4 h-4 mr-1" />
                 Create class
@@ -128,7 +125,7 @@ export function SchoolOverview() {
                 {classes.length > 10 && (
                   <div className="p-3 text-center border-t border-brand-border">
                     <Link
-                      to="/school/classes"
+                      to="/school-admin/classes"
                       className="text-sm text-brand-primary hover:underline"
                     >
                       View all {classes.length} classes →
@@ -170,14 +167,6 @@ export function SchoolOverview() {
                 aria-valuemin={0}
                 aria-valuemax={100}
               />
-            </div>
-            <div className="mt-4 text-right">
-              <Link
-                to="/school/analytics"
-                className="text-sm text-brand-primary hover:underline font-medium"
-              >
-                View analytics →
-              </Link>
             </div>
           </Card>
         </section>

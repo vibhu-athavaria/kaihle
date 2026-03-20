@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { Button } from "@kaihle/ui";
 import { Input } from "@kaihle/ui";
+import { UserRole } from "@kaihle/types";
 import { X } from "lucide-react";
 import {
   useCurricula,
   useGrades,
   useSchoolUsers,
   useCreateClass,
-} from "../../hooks/useSchoolAdmin";
+} from "../hooks/useSchoolAdmin";
 
 interface CreateClassModalProps {
   isOpen: boolean;
@@ -39,7 +40,7 @@ export function CreateClassModal({
 
   const { data: curricula } = useCurricula();
   const { data: grades } = useGrades();
-  const { data: teachers } = useSchoolUsers("TEACHER");
+  const { data: teachers } = useSchoolUsers(UserRole.TEACHER);
   const createClass = useCreateClass();
 
   useEffect(() => {

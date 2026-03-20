@@ -5,21 +5,25 @@ import { Card } from "@kaihle/ui";
 import { Badge } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
+import { UserRole } from "@kaihle/types";
 import { MoreVertical, Mail, UserX, UserCheck, RefreshCw } from "lucide-react";
 import {
   useSchoolUsers,
   useInviteUser,
   useUpdateUser,
   type User,
-} from "../../hooks/useSchoolAdmin";
+} from "../hooks/useSchoolAdmin";
 import { InviteUserModal } from "./InviteUserModal";
 
-type RoleTab = "TEACHER" | "STUDENT" | "PARENT";
+type RoleTab =
+  | typeof UserRole.TEACHER
+  | typeof UserRole.STUDENT
+  | typeof UserRole.PARENT;
 
 const roleTabs: { value: RoleTab; label: string }[] = [
-  { value: "TEACHER", label: "Teachers" },
-  { value: "STUDENT", label: "Students" },
-  { value: "PARENT", label: "Parents" },
+  { value: UserRole.TEACHER, label: "Teachers" },
+  { value: UserRole.STUDENT, label: "Students" },
+  { value: UserRole.PARENT, label: "Parents" },
 ];
 
 function getStatusBadge(status: User["status"]) {
@@ -142,7 +146,7 @@ export function UserManagement() {
     first_name: string;
     last_name: string;
     email: string;
-    role: "TEACHER" | "STUDENT" | "PARENT";
+    role: RoleTab;
   }) => {
     await inviteUser.mutateAsync(data);
   };
@@ -157,7 +161,7 @@ export function UserManagement() {
   };
 
   const getTabHref = (tab: RoleTab) => {
-    return `/school/users?role=${tab.toLowerCase()}`;
+    return `/school-admin/users?role=${tab.toLowerCase()}`;
   };
 
   return (
