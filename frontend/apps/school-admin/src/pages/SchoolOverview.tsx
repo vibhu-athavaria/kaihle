@@ -168,14 +168,6 @@ export function SchoolOverview() {
                 aria-valuemax={100}
               />
             </div>
-            <div className="mt-4 text-right">
-              <Link
-                to="/school-admin/analytics"
-                className="text-sm text-brand-primary hover:underline font-medium"
-              >
-                View analytics →
-              </Link>
-            </div>
           </Card>
         </section>
       </div>
