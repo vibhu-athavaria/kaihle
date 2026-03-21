@@ -1,13 +1,13 @@
 """Shared Pydantic schemas used across all API domains."""
 
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, Field
 
 T = TypeVar("T")
 
 
-class Page(BaseModel, Generic[T]):
+class Page[T](BaseModel):
     """Standard pagination envelope. Every list endpoint returns this shape.
 
     Usage:
