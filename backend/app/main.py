@@ -58,11 +58,11 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3001",
-        "http://localhost:3002",
-        "http://localhost:3003",
-        "http://localhost:3004",
-        "http://localhost:3005",
+        "http://localhost:3001",  # apps/teacher
+        "http://localhost:3002",  # apps/student
+        "http://localhost:3003",  # apps/parent
+        "http://localhost:3004",  # apps/school-admin
+        "http://localhost:3005",  # apps/kaihle-admin
     ],
     allow_credentials=True,
     allow_methods=["*"],

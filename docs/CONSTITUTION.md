@@ -175,6 +175,8 @@ Any helper missing the KaihleAdmin bypass is a bug.
 
 **Rule 18 — Celery tasks must emit a CRITICAL log on final retry exhaustion.** When all retries are consumed, emit a structured `structlog` event at level `CRITICAL` including `class_id`, `student_id` (if applicable), task name, and `exc_info=True`. This is the operational dead-letter signal.
 
+**Rule 19 — API contracts are frozen once published.** Once an endpoint's path, HTTP method, request body schema, and response body schema are defined in any M0-10-T* task file, they are permanently frozen. Future milestones replace only the stub function body with real business logic. They never change the path, method, or schema shape. Any breaking change requires a new API version prefix (`/api/v2/`) and an ADR entry in `docs/adr/`. This rule exists to guarantee that frontend code written against a stub never needs to change when the real implementation ships.
+
 ---
 
 ## 5. Authentication and Onboarding Flows (CRITICAL)
