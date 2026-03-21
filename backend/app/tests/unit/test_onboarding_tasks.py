@@ -423,3 +423,91 @@ class TestCeleryTaskEventLoop:
         source = inspect.getsource(onboarding_tasks.trigger_onboarding_diagnostics)
         assert "asyncio.new_event_loop()" in source
         assert "loop.run_until_complete" in source
+
+
+# ── on_failure callback tests (Fix 5) ──────────────────────────────────────
+
+
+class TestOnFailureCallback:
+    """Tests for Celery task on_failure callbacks.
+
+    Verifies that CRITICAL logs are emitted when tasks exhaust all retries.
+    Per CONSTITUTION Rule 18.
+    """
+
+    def test_create_class_diagnostic_task_has_on_failure_method(self) -> None:
+        """Test that create_class_diagnostic_task has an on_failure method."""
+        from app.tasks import onboarding_tasks
+
+        task = onboarding_tasks.create_class_diagnostic_task
+        assert hasattr(task, "on_failure")
+        assert callable(task.on_failure)
+
+    def test_trigger_onboarding_diagnostics_has_on_failure_method(self) -> None:
+        """Test that trigger_onboarding_diagnostics has an on_failure method."""
+        from app.tasks import onboarding_tasks
+
+        task = onboarding_tasks.trigger_onboarding_diagnostics
+        assert hasattr(task, "on_failure")
+        assert callable(task.on_failure)
+
+    def test_create_class_diagnostic_on_failure_has_correct_signature(self) -> None:
+        """Test that on_failure method has the correct Celery signature."""
+        import inspect
+
+        from app.tasks import onboarding_tasks
+
+        task_func = onboarding_tasks.create_class_diagnostic_task
+        on_failure = task_func.on_failure
+
+        # Celery on_failure has signature: def on_failure(self, exc, task_id, args, kwargs, einfo)
+        sig = inspect.signature(on_failure)
+        param_names = list(sig.parameters.keys())
+
+        assert param_names == ["exc", "task_id", "args", "kwargs", "einfo"]
+
+    def test_create_class_diagnostic_on_failure_uses_logger_critical(self) -> None:
+        """Test that on_failure calls logger.critical with correct event name."""
+        import inspect
+
+        from app.tasks import onboarding_tasks
+
+        source = inspect.getsource(onboarding_tasks.create_class_diagnostic_task)
+        # Verify the on_failure method uses logger.critical
+        assert "logger.critical" in source
+        assert "celery_task_permanently_failed" in source
+        # Verify it includes required fields
+        assert "task_name=self.name" in source
+        assert "task_id=task_id" in source
+        assert "class_id=args[0]" in source or "class_id=kwargs.get" in source
+        assert "error=str(exc)" in source
+        assert "exc_info=True" in source
+
+    def test_trigger_onboarding_diagnostics_on_failure_has_correct_signature(self) -> None:
+        """Test that on_failure method has the correct Celery signature."""
+        import inspect
+
+        from app.tasks import onboarding_tasks
+
+        task_func = onboarding_tasks.trigger_onboarding_diagnostics
+        on_failure = task_func.on_failure
+
+        sig = inspect.signature(on_failure)
+        param_names = list(sig.parameters.keys())
+
+        assert param_names == ["exc", "task_id", "args", "kwargs", "einfo"]
+
+    def test_trigger_onboarding_diagnostics_on_failure_includes_student_id(self) -> None:
+        """Test that trigger_onboarding_diagnostics on_failure includes student_id in log."""
+        import inspect
+
+        from app.tasks import onboarding_tasks
+
+        source = inspect.getsource(onboarding_tasks.trigger_onboarding_diagnostics)
+        # Verify the on_failure method uses logger.critical
+        assert "logger.critical" in source
+        assert "celery_task_permanently_failed" in source
+        # Verify it includes student_id
+        assert "student_id=args[0]" in source or "student_id=kwargs.get" in source
+        assert "class_id=args[1]" in source or "class_id=kwargs.get" in source
+        assert "error=str(exc)" in source

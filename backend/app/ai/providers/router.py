@@ -81,7 +81,14 @@ async def complete(
         tokens_used=response.usage.total_tokens if response.usage else None,
     )
 
-    return response.choices[0].message.content
+    # Handle potential None content (e.g., tool calls, non-text responses)
+    content = response.choices[0].message.content
+    if content is None:
+        raise ValueError(
+            "LLM response content is None. The model may have returned a tool call "
+            "or non-text response. Ensure the model is configured for text output."
+        )
+    return content
 
 
 async def embed(text: str) -> list[float]:
@@ -92,7 +99,13 @@ async def embed(text: str) -> list[float]:
 
     Returns:
         A list of floats representing the embedding vector.
+
+    Raises:
+        ValueError: If text is empty.
     """
+    if not text or not text.strip():
+        raise ValueError("text must be a non-empty string for embedding generation")
+
     model = TASK_MODEL_MAP["embeddings"]
     api_base = TASK_API_BASE_MAP.get("embeddings")
 
@@ -102,4 +115,12 @@ async def embed(text: str) -> list[float]:
         input=text,
     )
 
-    return response.data[0]["embedding"]
+    # Validate response structure before accessing
+    if not response.data or len(response.data) == 0:
+        raise ValueError("Embedding API returned empty data array")
+
+    embedding = response.data[0].get("embedding")
+    if embedding is None:
+        raise ValueError("Embedding API response missing 'embedding' field")
+
+    return embedding
