@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import InvalidTokenError, decode_token, get_token_scope
 from app.models.school import ClassEnrollment
-from app.models.user import StudentProfile, User, UserRole
+from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
 
 # HTTPBearer for extracting Bearer token
 security = HTTPBearer()
@@ -222,8 +222,8 @@ async def require_diagnostic_complete(
 
     Only applies to STUDENT role. Teachers and admins bypass this gate.
     """
-    # Teachers and admins bypass the gate entirely
-    if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN):
+    # Teachers, admins, and parents bypass the gate entirely
+    if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN, UserRole.PARENT):
         return None
 
     result = await db.execute(
@@ -241,7 +241,7 @@ async def require_diagnostic_complete(
             detail="You are not enrolled in this class",
         )
 
-    if enrollment.onboarding_diagnostic_status != "COMPLETED":
+    if enrollment.onboarding_diagnostic_status != OnboardingStatus.COMPLETED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
