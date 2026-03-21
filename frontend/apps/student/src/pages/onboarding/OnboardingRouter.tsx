@@ -2,20 +2,19 @@ import { Navigate } from "react-router-dom";
 import { useOnboardingStatus } from "../../hooks/useOnboardingStatus";
 
 /**
- * Check if all onboarding steps are complete:
- * - learning_profile_complete must be true
- * - ALL diagnostics_by_class must have status COMPLETED
+ * OnboardingRouter - Gate 1 (Learning Profile) only.
+ *
+ * Gate 1 (global): Dashboard is inaccessible until the learning profile
+ * questionnaire is complete. Once complete, the student sees their dashboard
+ * with all class cards.
+ *
+ * Gate 2 (per-class): Each class card independently shows locked/unlocked state.
+ * This is handled by ClassCard component, NOT by this router.
+ *
+ * The diagnostic status per class does NOT block access to the dashboard.
+ * Students can always reach /student/dashboard once learning profile is complete.
+ * They will see locked class cards for classes where diagnostic is not yet complete.
  */
-function isOnboardingComplete(status: {
-  learning_profile_complete: boolean;
-  diagnostics_by_class?: Array<{ status: string }>;
-}): boolean {
-  if (!status.learning_profile_complete) return false;
-  if (!status.diagnostics_by_class || status.diagnostics_by_class.length === 0)
-    return false;
-  return status.diagnostics_by_class.every((d) => d.status === "COMPLETED");
-}
-
 export function OnboardingRouter() {
   const { status, isLoading } = useOnboardingStatus();
 
@@ -27,16 +26,12 @@ export function OnboardingRouter() {
     );
   }
 
-  // If onboarding is fully complete (learning profile + all diagnostics), go to dashboard
-  if (isOnboardingComplete(status)) {
-    return <Navigate to="/student/dashboard" replace />;
-  }
-
-  // If learning profile is complete but diagnostics are not, show diagnostics page
-  if (status.learning_profile_complete) {
+  // Gate 1: Learning profile must be complete before dashboard is accessible
+  if (!status.learning_profile_complete) {
     return <Navigate to="/student/onboarding/profile" replace />;
   }
 
-  // Otherwise, must complete questionnaire first
-  return <Navigate to="/student/onboarding/profile" replace />;
+  // Learning profile is complete - show dashboard
+  // Gate 2 (per-class diagnostic lock) is handled by ClassCard component
+  return <Navigate to="/student/dashboard" replace />;
 }
