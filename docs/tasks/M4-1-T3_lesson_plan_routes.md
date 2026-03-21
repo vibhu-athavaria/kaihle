@@ -1,201 +1,268 @@
-# M4-1-T3 — Lesson Plan API Routes
+# M4-1-T3 — Lesson Plan API Routes (Stub Replacement)
+**Milestone:** M4 · **Epic:** M4-1 · **Task:** T3
+**Depends on:** M4-1-T1 (LessonPlanService and LessonPlan DB rows must exist), M4-1-T2 (LessonPlanLLMOutput schema)
+**Blocks:** M4-1-T4 (teacher UI calls these endpoints)
+**Estimated effort:** 3–4 hours
 
-**Milestone:** M4 — Teacher Copilot
-**Epic:** M4-1 — Lesson Plan Generation
-**Task ID:** M4-1-T3
-**Depends on:** M4-1-T1 (Celery task + service), M4-1-T2 (schema + storage)
-**Blocks:** M4-1-T4 (UI needs these endpoints)
+---
+
+## Context and Critical Instruction
+
+The file `backend/app/api/v1/routes/lesson_plans.py` **already exists**. It was
+created by M0-10-T5. It contains five stub implementations, each marked:
+
+```python
+# STUB — M0-10-T5 | Real implementation: M4-1-T3
+# Replace this entire function body. Do not change the signature or response_model.
+```
+
+This task replaces those five stub bodies with real service calls. It does **not**
+create a new file. It does **not** change any route path, HTTP method, auth
+dependency, or response model. Those are frozen by CONSTITUTION Rule 19.
+
+Before writing any code, open the existing file and read every stub. Identify the
+five functions. Replace only their bodies.
 
 ---
 
 ## User Story
 
-As a teacher, I want to fetch, edit, regenerate, and mark my lesson plans as used via the API so the frontend can display and manage them.
+As a teacher, I want to view my weekly lesson plan, edit any section, regenerate
+when needed, and mark plans as used from the API.
 
 ---
 
-## What To Build
-
-Five REST endpoints for lesson plan management. All are teacher-scoped — a teacher can only access plans for their own classes.
-
----
-
-## Files To Create / Modify
+## Files to Modify (NOT Create)
 
 ```
-/backend/app/api/v1/routes/
-  lesson_plans.py               ← NEW
-
-/backend/app/api/v1/
-  router.py                     ← MODIFY — mount lesson_plans router
+backend/app/api/v1/routes/lesson_plans.py          ← MODIFY: replace stub bodies only
+backend/app/tests/integration/test_lesson_plan_routes.py  ← CREATE
 ```
 
 ---
 
-## Endpoints
+## Service Methods to Add to `LessonPlanService`
 
-### `GET /api/v1/classes/{class_id}/lesson-plans`
-List all lesson plans for a class, newest first.
+The Celery task creates plans. These additional methods support the API endpoints.
 
-**Auth:** Teacher (own class), KaihleAdmin
-**Response:**
-```json
-[
-  {
-    "id": "uuid",
-    "class_id": "uuid",
-    "week_start": "2026-03-02",
-    "status": "GENERATED",
-    "generated_plan": { ... },
-    "teacher_edits": null,
-    "created_at": "2026-03-02T06:00:00Z"
-  }
-]
-```
+### `list_class_lesson_plans`
 
----
-
-### `GET /api/v1/lesson-plans/{plan_id}`
-Fetch a single lesson plan by ID.
-
-**Auth:** Teacher of that class, KaihleAdmin
-
-**Response merge logic:** When returning to the frontend, merge `teacher_edits` over `generated_plan` so the UI always receives the teacher's latest version:
 ```python
-def merge_plan(generated: dict, edits: dict | None) -> dict:
+async def list_class_lesson_plans(
+    self,
+    class_id: uuid.UUID,
+    school_id: uuid.UUID,
+    teacher_id: uuid.UUID,
+    page: int,
+    page_size: int,
+) -> tuple[list[LessonPlan], int]:
+    """Return paginated lesson plans for a class, newest first.
+
+    Verifies the teacher owns the class before returning data.
+    Returns (plans_list, total_count).
+    """
+```
+
+### `get_lesson_plan`
+
+```python
+async def get_lesson_plan(
+    self,
+    plan_id: uuid.UUID,
+    school_id: uuid.UUID,
+    teacher_id: uuid.UUID,
+) -> LessonPlan:
+    """Return a single lesson plan with teacher_edits merged over generated_plan.
+
+    The merge is applied before returning so the route handler always
+    receives the teacher's latest version without knowing about the delta.
+    """
+```
+
+The merge logic is:
+
+```python
+def _merge_plan(generated: dict, edits: dict | None) -> dict:
+    """Merge teacher edits over generated plan. Edits are a sparse delta."""
     if not edits:
         return generated
     merged = generated.copy()
-    # Apply sparse delta — only top-level lesson_structure fields
-    structure = merged["lesson_structure"].copy()
-    if "starter_10min" in edits:
-        structure["starter_10min"] = edits["starter_10min"]
-    if "group_a_activity" in edits:
-        structure["main_activity_30min"]["group_A"] = edits["group_a_activity"]
-    # ... etc
-    merged["lesson_structure"] = structure
-    if "teacher_notes" in edits:
-        merged["teacher_notes"] = edits["teacher_notes"]
+    structure = merged.get("lesson_structure", {}).copy()
+    # Map edit keys to their positions in the lesson_structure
+    field_map = {
+        "starter_10min": ("lesson_structure", "starter_10min"),
+        "group_a_activity": ("lesson_structure", "main_activity_30min", "group_A"),
+        "group_b_activity": ("lesson_structure", "main_activity_30min", "group_B"),
+        "group_c_activity": ("lesson_structure", "main_activity_30min", "group_C"),
+        "plenary_10min": ("lesson_structure", "plenary_10min"),
+        "homework": ("lesson_structure", "homework"),
+        "teacher_notes": ("teacher_notes",),
+    }
+    for edit_key, path in field_map.items():
+        if edit_key in edits:
+            if len(path) == 1:
+                merged[path[0]] = edits[edit_key]
+            elif len(path) == 2:
+                merged[path[0]][path[1]] = edits[edit_key]
+            elif len(path) == 3:
+                merged[path[0]][path[1]][path[2]] = edits[edit_key]
     return merged
 ```
 
----
+### `save_lesson_plan_edits`
 
-### `PATCH /api/v1/lesson-plans/{plan_id}`
-Save teacher edits. Stores delta in `teacher_edits` column — never overwrites `generated_plan`.
+```python
+async def save_lesson_plan_edits(
+    self,
+    plan_id: uuid.UUID,
+    school_id: uuid.UUID,
+    teacher_id: uuid.UUID,
+    edits: LessonPlanEditRequest,
+) -> LessonPlan:
+    """Accumulate teacher edits in teacher_edits JSONB column.
 
-**Auth:** Teacher of that class
-
-**Request body:** `LessonPlanEditRequest` (partial — all fields optional)
-```json
-{
-  "starter_10min": "Updated starter activity description",
-  "teacher_notes": "Watch out for group B — they struggled last week"
-}
+    Never overwrites generated_plan. Each call merges new edits with
+    existing edits, so the teacher can make incremental changes.
+    Sets status to EDITED.
+    """
 ```
 
-**Logic:**
+Step 1 — Load and verify the plan. Check `plan.school_id == school_id` and that the
+class teacher is the requesting teacher. Step 2 — Merge:
+
 ```python
-# Merge new edits with existing edits (accumulate changes)
-existing_edits = plan.teacher_edits or {}
-updated_edits = {**existing_edits, **edit_request.model_dump(exclude_none=True)}
-plan.teacher_edits = updated_edits
+existing = plan.teacher_edits or {}
+updated = {**existing, **edits.model_dump(exclude_none=True)}
+plan.teacher_edits = updated
 plan.status = "EDITED"
 ```
 
-**Response:** Updated `LessonPlanResponse` with merged view
+Step 3 — Return the plan (the route will call `get_lesson_plan` to return the merged
+view to the client).
 
----
-
-### `POST /api/v1/lesson-plans/{plan_id}/regenerate`
-Regenerate the lesson plan using the current gap map. Discards previous `generated_plan` and `teacher_edits`.
-
-**Auth:** Teacher of that class
-
-**Request body:** None
-
-**Logic:**
-1. Load plan to get `class_id`, `teacher_id`, `school_id`, `week_start`
-2. Call `LessonPlanService.generate_for_class(class_id, teacher_id, school_id)`
-   - The service's `_store_plan` upserts on `(class_id, week_start)` — existing plan is overwritten
-   - `teacher_edits` reset to `null` by the upsert
-3. Do NOT re-send teacher notification email on manual regeneration
-
-**Response:** `{ "status": "regenerating", "message": "Your plan will be ready in ~30 seconds" }`
-
-> Note: Generation is synchronous in this endpoint (not queued). The 15s LLM timeout applies. If generation fails, return 503 with helpful message.
-
----
-
-### `PATCH /api/v1/lesson-plans/{plan_id}/status`
-Teacher marks plan as used or archives it.
-
-**Auth:** Teacher of that class
-
-**Request body:**
-```json
-{ "status": "USED" }
-```
-Valid values: `"USED"`, `"ARCHIVED"`
-
-**Response:** Updated `LessonPlanResponse`
-
----
-
-## Route Implementation Pattern
+### `regenerate_lesson_plan`
 
 ```python
-from fastapi import APIRouter, Depends, HTTPException, status
-from app.core.security import get_current_user, require_role
-from app.services.lesson_plan_service import LessonPlanService
-
-router = APIRouter(prefix="/lesson-plans", tags=["lesson-plans"])
-
-@router.get("/classes/{class_id}/lesson-plans", response_model=list[LessonPlanResponse])
-async def list_lesson_plans(
-    class_id: UUID,
-    current_user=Depends(get_current_user),
-    session=Depends(get_async_session),
-):
-    service = LessonPlanService(session)
-    await service.verify_class_access(class_id, current_user)  # raises 403 if not teacher
-    return await service.list_for_class(class_id)
-
-@router.patch("/{plan_id}", response_model=LessonPlanResponse)
-async def edit_lesson_plan(
-    plan_id: UUID,
-    body: LessonPlanEditRequest,
-    current_user=Depends(get_current_user),
-    session=Depends(get_async_session),
-):
-    service = LessonPlanService(session)
-    plan = await service.get_or_404(plan_id)
-    await service.verify_class_access(plan.class_id, current_user)
-    return await service.apply_edits(plan, body)
+async def regenerate_lesson_plan(
+    self,
+    plan_id: uuid.UUID,
+    school_id: uuid.UUID,
+    teacher_id: uuid.UUID,
+) -> LessonPlan:
+    """Queue regeneration of a lesson plan. Clears previous content."""
 ```
+
+Clear `generated_plan = None`, `teacher_edits = None`, `status = "GENERATING"`.
+Queue the Celery task `regenerate_single_plan.delay(str(plan_id))`. Return the plan
+in its clearing state so the UI can show a loading state immediately.
+
+Add a separate Celery task `regenerate_single_plan` in `lesson_plan_tasks.py` that
+calls `LessonPlanService.generate_for_class(class_)` for the specific plan's class
+and updates the existing plan row rather than creating a new one.
+
+### `update_lesson_plan_status`
+
+```python
+async def update_lesson_plan_status(
+    self,
+    plan_id: uuid.UUID,
+    school_id: uuid.UUID,
+    teacher_id: uuid.UUID,
+    new_status: str,
+) -> LessonPlan:
+    """Update plan status. Only USED and ARCHIVED are valid transitions."""
+```
+
+Valid status transitions: `GENERATED → USED`, `GENERATED → ARCHIVED`,
+`EDITED → USED`, `EDITED → ARCHIVED`. Anything else raises
+`ValueError("Invalid status transition")`.
+
+---
+
+## The Five Stubs to Replace
+
+### `list_class_lesson_plans` — `GET /classes/{class_id}/lesson-plans`
+
+Replace empty `Page` stub with a call to `LessonPlanService.list_class_lesson_plans`.
+
+Authorization: verify the teacher owns the class by checking `class_.teacher_id ==
+current_user.id`. KaihleAdmin bypasses this check (CONSTITUTION Rule 12).
+
+### `get_lesson_plan` — `GET /lesson-plans/{plan_id}`
+
+Replace 404 stub with `LessonPlanService.get_lesson_plan`. Return
+`LessonPlanResponse` built from the merged plan. Map `ValueError` → HTTP 404 or 403
+depending on whether the plan was not found or access was denied.
+
+### `edit_lesson_plan` — `PATCH /lesson-plans/{plan_id}`
+
+Replace 404 stub with `LessonPlanService.save_lesson_plan_edits`. After saving,
+call `get_lesson_plan` to return the merged view.
+
+### `regenerate_lesson_plan` — `POST /lesson-plans/{plan_id}/regenerate`
+
+Replace 404 stub with `LessonPlanService.regenerate_lesson_plan`. Return the plan
+in `GENERATING` status. The UI should poll or use websockets in future — for now, the
+teacher refreshes manually after ~30 seconds.
+
+### `update_lesson_plan_status` — `PATCH /lesson-plans/{plan_id}/status`
+
+Replace 404 stub with `LessonPlanService.update_lesson_plan_status`. Map
+`ValueError("Invalid status transition")` → HTTP 409.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] Integration test: teacher fetches this week's plan for own class → 200 with correct JSON
-- [ ] Integration test: teacher fetches plan for a different class → 403
-- [ ] Integration test: `PATCH` with `starter_10min` → `teacher_edits` updated, `status` = "EDITED", `generated_plan` unchanged
-- [ ] Integration test: second `PATCH` → edits accumulate (don't overwrite previous edits)
-- [ ] Integration test: `POST /regenerate` → plan updated, `teacher_edits` reset to null
-- [ ] Integration test: `PATCH /status` with `"USED"` → status updated
-- [ ] Integration test: `PATCH /status` with invalid value → 422
-- [ ] Integration test: KaihleAdmin can access any plan
-- [ ] Unit test: `merge_plan` with edits → correct merged output
-- [ ] Unit test: `merge_plan` with no edits → returns generated_plan unchanged
+**Integration tests — `test_lesson_plan_routes.py`**
+
+`test_list_class_plans_when_teacher_owns_class_then_200_with_page` — Seed two lesson
+plans for a class owned by the authenticated teacher. Call `GET /classes/{id}/lesson-plans`.
+Assert HTTP 200, `data` contains two items, `total == 2`, ordered newest first.
+
+`test_list_class_plans_when_teacher_does_not_own_class_then_403` — Call as a teacher
+who does not own the class. Assert HTTP 403.
+
+`test_get_lesson_plan_when_teacher_edits_exist_then_response_shows_merged_view` — Seed
+a plan with `generated_plan.lesson_structure.starter_10min = "Original starter"` and
+`teacher_edits = {"starter_10min": "Updated starter"}`. Call `GET /lesson-plans/{id}`
+as the teacher. Assert the response's `lesson_structure.starter_10min` equals
+"Updated starter" — not "Original starter".
+
+`test_get_lesson_plan_when_no_edits_then_returns_generated_plan` — Seed a plan with
+`teacher_edits = null`. Assert the response shows the generated plan content unchanged.
+
+`test_get_lesson_plan_when_different_school_then_403_or_404` — Call as a user from
+a different school. Assert HTTP 403 or 404 (not 200).
+
+`test_patch_lesson_plan_when_valid_edit_then_200_and_edit_stored` — PATCH with
+`{"starter_10min": "New starter"}`. Assert HTTP 200 and that the DB row's
+`teacher_edits` dict contains `starter_10min: "New starter"`.
+
+`test_patch_lesson_plan_accumulates_edits_across_calls` — PATCH once with
+`{"starter_10min": "A"}`, then again with `{"plenary_10min": "B"}`. Assert the
+DB row contains both keys in `teacher_edits`.
+
+`test_patch_lesson_plan_never_modifies_generated_plan` — After two PATCH calls,
+assert the DB row's `generated_plan` is identical to what was seeded. Only
+`teacher_edits` changes.
+
+`test_regenerate_lesson_plan_when_called_then_status_generating` — Call
+`POST /lesson-plans/{id}/regenerate`. Assert HTTP 200 and the response
+`status == "GENERATING"`. Assert the Celery task was queued (mock with
+`unittest.mock.patch`).
+
+`test_update_status_when_generated_to_used_then_200` — Seed a GENERATED plan. Call
+`PATCH /lesson-plans/{id}/status` with `{"status": "USED"}`. Assert HTTP 200 and
+the DB row `status == "USED"`.
+
+`test_update_status_when_invalid_transition_then_409` — Seed a CLOSED plan. Try to
+transition to GENERATED. Assert HTTP 409.
 
 ---
 
-## Output (what M4-1-T4 needs)
+## Do NOT Touch
 
-All five endpoints operational and tested:
-- `GET /api/v1/classes/{class_id}/lesson-plans`
-- `GET /api/v1/lesson-plans/{plan_id}`
-- `PATCH /api/v1/lesson-plans/{plan_id}`
-- `POST /api/v1/lesson-plans/{plan_id}/regenerate`
-- `PATCH /api/v1/lesson-plans/{plan_id}/status`
+Every route decorator, path string, `response_model`, `status_code`, and `Depends()`
+call in `routes/lesson_plans.py`. The `schemas/lesson_plans.py` file. `routes/assessments.py`.
+`backend/app/main.py` — router already registered.

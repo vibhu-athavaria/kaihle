@@ -1,179 +1,128 @@
-# M6-3-T5 — Pre-Launch Checklist
-**Task ID:** M6-3-T5
-**Milestone:** M6 — Analytics, Billing & Launch Polish
-**Epic:** M6-3 — Production Readiness
-**Depends on:** ALL prior tasks across ALL milestones
-**Blocks:** Nothing — this is the final task of the entire project
-
----
-
-## User Story
-
-As the platform operator, I want a complete verified checklist of every system, integration, and user journey that must work before handing credentials to the first real school — so I can launch with confidence and no surprises.
+# M6-3-T5 — Pre-Launch Verification Checklist
+**Milestone:** M6 · **Epic:** M6-3 · **Task:** T5
+**Depends on:** Every prior task in every milestone — this is the final task of the project
+**Blocks:** Nothing — this is the last task. Passing this checklist means the pilot is live.
+**Estimated effort:** 4–8 hours (time is spent verifying, not coding)
 
 ---
 
 ## Context
 
-This is not a coding task. It is a structured verification exercise performed in the **production** Render environment after the pilot school seed (M6-3-T4) has been run. Every item must be checked by a human, not inferred. Items marked ❌ block launch and must be fixed before proceeding.
+This task has no application code. It is a verification task. Every item must be
+checked and confirmed against the live production environment, not against staging.
+Items are grouped into sections. Each item has an explicit verification method —
+not just a description of what should be true.
 
-Assign one person to own this checklist end-to-end and sign off on it.
-
----
-
-## The Checklist
-
-### Section 1: Infrastructure
-
-- [ ] `GET https://api.kaihle.ai/health` returns `200` with `{ "status": "ok", "db": "connected", "redis": "connected" }`
-- [ ] `GET https://api.kaihle.ai/ready` returns `200`
-- [ ] Custom domain `api.kaihle.ai` resolves with valid SSL certificate (green padlock)
-- [ ] Frontend URLs (`app.kaihle.ai/student`, `/teacher`, `/parent`) load without console errors
-- [ ] Render PostgreSQL daily backups enabled and at least one backup visible in dashboard
-- [ ] Render Redis instance running and connected (verify via `/health`)
-- [ ] Celery worker service running — confirm in Render dashboard (status: Live)
-- [ ] All production environment variables set — cross-check against `kaihle_product_plan_v2_1.md` Part 6
+Do not mark this task complete until every checkbox is ticked. If any item fails,
+create a GitHub issue with the `launch-blocker` label and resolve it before proceeding.
 
 ---
 
-### Section 2: Authentication
+## Section 1 — Infrastructure
 
-- [ ] School Admin can log in with email + password → lands on admin dashboard
-- [ ] Magic link: School Admin requests magic link → email received within 60 seconds → clicking link logs in
-- [ ] Expired magic link (wait 11 minutes) → login attempt returns 401
-- [ ] Wrong password returns 401 (not 500)
-- [ ] Token refresh: access token expires → Axios interceptor auto-refreshes → user stays logged in
-- [ ] Logout invalidates refresh token → second logout attempt returns 401
-
----
-
-### Section 3: Email Delivery
-
-- [ ] Magic link email: received, sender shows `no-reply@kaihle.ai`, not marked as spam
-- [ ] Teacher invite email: School Admin invites a teacher → teacher receives invite with magic link
-- [ ] Lesson plan notification email: trigger a plan manually → teacher receives email with link
-- [ ] Parent report email: trigger a report manually → parent receives email with child's narrative
-- [ ] All emails render correctly on mobile (test via Gmail mobile app)
+- [ ] `GET https://api.kaihle.ai/health` returns `{"status": "ok", "db": "connected", "redis": "connected"}` — verify in a browser or via `curl`
+- [ ] `GET https://api.kaihle.ai/ready` returns 200 — verify via `curl`
+- [ ] Render PostgreSQL daily backups are enabled and at least one backup shows a "Completed" status in the Render dashboard
+- [ ] Render environment variables are all set: verify by listing them in the Render dashboard and confirming no `_PLACEHOLDER_` or empty values exist
+- [ ] Custom domain is configured and SSL certificate is valid — verify by navigating to the production frontend URL and checking the padlock icon
+- [ ] Celery workers are running — verify by checking the Render service logs and confirming a heartbeat log line appears within the last 60 seconds
+- [ ] Celery beat is running and the Monday lesson plan schedule is registered — run `celery -A app.tasks.celery_app inspect scheduled` and confirm `generate_weekly_lesson_plans` appears
 
 ---
 
-### Section 4: Full End-to-End Journey (Manual)
+## Section 2 — Authentication
 
-Run this complete flow in production with real users (or internal test accounts):
-
-**Step 1 — School Admin setup:**
-- [ ] School Admin logs in
-- [ ] Creates a Grade 8 class: "8A Mathematics"
-- [ ] Invites 1 teacher by email
-- [ ] Invites 3 test students by email
-
-**Step 2 — Teacher onboarding:**
-- [ ] Teacher receives invite, logs in via magic link
-- [ ] Teacher sees class "8A Mathematics" in their dashboard
-- [ ] Teacher creates a Tier 2 TOPIC_SPECIFIC assessment for Algebra, 10 questions, publishes it
-
-**Step 3 — Student onboarding (Tier 1):**
-- [ ] Student 1 logs in → redirected to `/student/onboarding/profile`
-- [ ] Student completes 10-question learning profile questionnaire → profile saved
-- [ ] Student redirected to `/student/onboarding/diagnostics`
-- [ ] Student sees Tier 1 diagnostic cards for each subject (Math, Science, English)
-- [ ] Student completes Math Tier 1 diagnostic (20 questions) → score summary shown
-- [ ] Student completes Science and English diagnostics
-- [ ] After all 3 complete → redirected to `/student/dashboard` (no more onboarding gate)
-- [ ] `student_profiles.onboarding_diagnostic_status` = `COMPLETED` in DB (verify)
-- [ ] `gap_states` rows populated for Student 1 (verify row count > 0)
-
-**Step 4 — Student takes Tier 2 assessment:**
-- [ ] Student 1 sees teacher's Algebra assessment on dashboard
-- [ ] Student takes it, submits → score summary shown
-- [ ] `gap_states` updated with new mastery scores (verify in DB or gap map)
-
-**Step 5 — Teacher views gap map:**
-- [ ] Teacher opens class gap map for 8A Mathematics
-- [ ] Cells render with correct Red/Amber/Green colours
-- [ ] Teacher clicks a red cell → side panel opens with student name, learning style icon, interests
-- [ ] Teacher assigns a study plan from the gap map → success toast
-- [ ] Student 1 sees the study plan on their dashboard
-
-**Step 6 — Student completes study plan:**
-- [ ] Student opens study plan → sees 3 curated resources
-- [ ] Student marks resources as watched
-- [ ] Student takes the 5-question quiz → score shown
-- [ ] `gap_states` updated after quiz submission (verify mastery_score changed)
-
-**Step 7 — Teacher lesson plan:**
-- [ ] Trigger `generate_weekly_lesson_plans` Celery task manually (or wait for Monday)
-- [ ] Teacher sees lesson plan in dashboard with 3 student group tabs
-- [ ] Teacher edits the starter activity → change saved
-- [ ] Teacher marks plan as "Used"
-
-**Step 8 — Parent portal:**
-- [ ] Link Parent account to Student 1 via `parent_student` table
-- [ ] Trigger `generate_parent_narratives` Celery task manually
-- [ ] Parent logs in → sees child's name and weekly narrative
-- [ ] Parent views simplified gap map (traffic lights, no scores)
+- [ ] `POST /api/v1/auth/login` with valid credentials returns a JWT — test using a real teacher account created via the seed script
+- [ ] `POST /api/v1/auth/magic-link` sends an email that arrives in the recipient's inbox within 2 minutes — test using a real email address
+- [ ] Magic link email link opens the frontend and completes the password setup flow — follow the link and set a password
+- [ ] `POST /api/v1/auth/refresh` with a valid refresh token returns a new access token — verify via API client (Postman or curl)
+- [ ] Rate limiting is active on login: 11 requests in under a minute from the same IP returns a 429 — test via script or Postman runner
 
 ---
 
-### Section 5: Performance Spot-Check
+## Section 3 — Email Delivery
 
-- [ ] Gap map loads for a class with 10+ students in under 2 seconds
-- [ ] Assessment with 20 MCQ questions — all scoring completes within 5 seconds of submit
-- [ ] Study plan generation (resources + quiz) completes within 15 seconds
-- [ ] No 500 errors in Render logs during the full E2E journey above
-
----
-
-### Section 6: Security Spot-Check
-
-- [ ] Student from School A cannot access School B's data (test with two test schools)
-- [ ] Student cannot access `/student/dashboard` before completing onboarding (verify redirect)
-- [ ] Teacher cannot access another teacher's class gap map (verify 403)
-- [ ] Trigger an intentional 500 error → response body contains no traceback or file paths
-- [ ] Rate limiting: 11 login attempts from same IP in 1 minute → 11th is rejected with 429
+- [ ] Magic link email renders correctly on mobile (test via Gmail mobile app)
+- [ ] Lesson plan notification email renders correctly — manually trigger `generate_weekly_lesson_plans` in a Celery worker shell and verify email arrives
+- [ ] Parent narrative email renders correctly — manually trigger `generate_parent_narratives` and verify email arrives at a test parent address
+- [ ] Resend API key is valid and email sending quota has not been exceeded — check the Resend dashboard
 
 ---
 
-### Section 7: Billing
+## Section 4 — Full End-to-End Journey
 
-- [ ] Trial school at 30 students → attempting to enroll 31st returns 402
-- [ ] Trial subscription `trial_end_date` set correctly to `created_at + 15 days` in DB
+This is the most important section. Run the complete journey from school setup to
+parent viewing a report. Use the pilot school accounts created by the seed script.
+
+**School Admin setup (estimated time: 15 minutes)**
+
+- [ ] School admin logs in via magic link, sets password, lands on the school admin dashboard
+- [ ] School admin creates a Grade 8 class: "8A Mathematics", assigns a teacher
+- [ ] School admin invites one test student via the invite user flow
+- [ ] The student receives their invite email and can click the magic link
+
+**Teacher setup (estimated time: 10 minutes)**
+
+- [ ] Teacher logs in, sees the class "8A Mathematics" in their dashboard
+- [ ] Teacher creates a Tier 2 TOPIC_SPECIFIC assessment for one Mathematics topic with 10 questions and publishes it
+- [ ] The published assessment appears in the teacher's class assessment list with status ACTIVE
+
+**Student onboarding and Tier 1 diagnostic (estimated time: 20 minutes)**
+
+- [ ] Student logs in, is redirected to the learning profile questionnaire
+- [ ] Student completes the 10-question questionnaire, profile is saved, student is redirected to the diagnostic hub
+- [ ] Student sees the Tier 1 diagnostic cards for Mathematics
+- [ ] Student completes the Mathematics Tier 1 diagnostic (20 questions), sees score summary
+- [ ] After completing the diagnostic, student is redirected to the student dashboard (onboarding gate is lifted)
+- [ ] In the database: `student_profiles.is_learning_profile_complete = TRUE`
+- [ ] In the database: `class_enrollments.onboarding_diagnostic_status = 'COMPLETED'` for the Mathematics class
+- [ ] In the database: `gap_states` rows exist for the student with non-null `mastery_score` values
+
+**Student takes Tier 2 assessment (estimated time: 10 minutes)**
+
+- [ ] Student sees the teacher's Tier 2 assessment in their class content page
+- [ ] Student takes and submits the Tier 2 assessment, sees score summary
+- [ ] Gap states are updated in the database after submission (verify by checking `last_assessed_at` timestamps)
+
+**Teacher views gap map and assigns study plan (estimated time: 10 minutes)**
+
+- [ ] Teacher navigates to the class gap map, sees coloured cells for the enrolled student
+- [ ] Teacher clicks a red or amber cell, sees the student side panel with learning style
+- [ ] Teacher assigns a study plan from the side panel, sees the "generating" confirmation
+
+**Student works through study plan (estimated time: 10 minutes)**
+
+- [ ] Student sees the assigned study plan in their study plans list
+- [ ] Student marks at least one resource as done, takes the quiz, sees their score
+- [ ] Gap state is updated after quiz submission
+
+**Teacher views lesson plan (estimated time: 5 minutes)**
+
+- [ ] Teacher dashboard shows a lesson plan (manually trigger the Celery task in the worker shell if Monday has not occurred yet)
+- [ ] Teacher views the plan, edits one section, saves the edit
+- [ ] Teacher marks the plan as Used
+
+**Parent views reports (estimated time: 5 minutes)**
+
+- [ ] A parent account is linked to the test student via the `parent_student` table (insert directly if no invite flow exists yet)
+- [ ] Parent logs in, sees the student's name on their dashboard
+- [ ] Parent views the child gap map — no numeric scores appear anywhere on the page
+- [ ] Manually trigger `generate_parent_narratives` in a Celery worker shell
+- [ ] Parent receives narrative email and can view the full report in the parent portal
 
 ---
 
-### Section 8: Sign-Off
+## Section 5 — Performance and Monitoring
 
-Complete this section when ALL items above are checked ✅:
-
-```
-Pre-launch checklist completed by: _______________
-Date: _______________
-Production URL verified: _______________
-Pilot school name: _______________
-School Admin email delivered to client: YES / NO
-
-Launch approved: YES / NO
-
-Notes:
-_____________________________________________
-_____________________________________________
-```
+- [ ] `GET /api/v1/classes/{id}/gap-map` with 20 enrolled students responds in under 500ms — verify via browser network tab or `curl --write-out "%{time_total}"`
+- [ ] `GET /health` does not appear in INFO-level logs (only DEBUG) — check Render log stream
+- [ ] No unhandled exceptions appear in the Render logs during the end-to-end journey above
+- [ ] Render metrics show CPU and memory within normal ranges (no spikes that would indicate an infinite loop or memory leak)
 
 ---
 
-## Acceptance Criteria
+## Definition of Done for the Entire Project
 
-- [ ] Every checkbox in Sections 1–7 is checked ✅ with no outstanding ❌ items
-- [ ] Section 8 sign-off is completed and dated
-- [ ] This checklist file is saved with checkboxes filled as a permanent record in `/docs/ops/launch_checklist_YYYYMMDD.md`
-- [ ] Pilot school admin has received their login credentials via secure channel
-
----
-
-## Output From This Task
-
-- Production system verified as launch-ready
-- Permanent record of launch verification saved in `/docs/ops/`
-- Pilot school live and accessible to the school's admin
-
-**🚀 This is the final task. After sign-off, Kaihle v1 is live.**
+If every checkbox above is ticked, the Bali pilot school is live and the project has
+achieved its v1 exit criteria. Record the date and time of launch completion in
+`docs/RUNBOOK.md` under a new "Launch Log" section.

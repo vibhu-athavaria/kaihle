@@ -1,182 +1,202 @@
 # M6-3-T1 — Rate Limiting
-
-**Milestone:** M6 — Analytics, Billing & Launch Polish
-**Epic:** M6-3 — Production Readiness
-**Task ID:** M6-3-T1
-**Depends on:** M0-1-T2 (Redis running), M0-3-T2 (auth routes to protect)
-**Blocks:** Nothing — can run in parallel with other M6 tasks
+**Milestone:** M6 · **Epic:** M6-3 · **Task:** T1
+**Depends on:** M0-1-T2 (Redis infrastructure)
+**Parallel with:** M6-1-T1, M6-2-T1, M6-3-T2
+**Estimated effort:** 2–3 hours
 
 ---
 
-## User Story
+## Context
 
-As the platform, I want rate limiting on sensitive routes so that brute-force attacks, LLM cost abuse, and assessment spamming are prevented in production.
+Rate limiting uses `slowapi` (a Starlette-compatible wrapper over the `limits` library,
+backed by Redis). It is applied as a FastAPI middleware and as per-route decorators on
+the four route groups that need protection. `slowapi` is already in the project
+requirements — verify it is present in `pyproject.toml` before starting, add it if
+missing.
+
+The limits below are v1 pilot limits appropriate for a school of up to 40 students.
+They will be revisited before the product scales beyond the pilot.
 
 ---
 
-## What To Build
+## Rate Limit Targets
 
-Add `slowapi` rate limiting to four route categories using Redis as the backend store. Each limit is per-IP or per-user depending on the route.
+| Route | Limit | Key |
+|---|---|---|
+| `POST /api/v1/auth/login` | 10 requests / minute | Per IP address |
+| `POST /api/v1/auth/magic-link` | 3 requests / minute | Per email in request body |
+| `POST /api/v1/attempts/{id}/responses` | 60 requests / minute | Per authenticated user |
+| Any route calling an LLM (lesson plan, study plan, analytics regenerate) | 20 requests / minute | Per school_id |
 
 ---
 
-## Files To Modify
+## Files to Create / Modify
 
 ```
-/backend/app/main.py              ← add SlowAPI middleware
-/backend/app/core/rate_limit.py   ← NEW — limiter instance + limit decorators
-/backend/app/api/v1/routes/
-  auth.py                         ← add limits to login + magic-link routes
-  assessments.py                  ← add limit to response submission
+backend/app/core/rate_limiting.py           ← CREATE: limiter instance + helpers
+backend/app/main.py                         ← MODIFY: register slowapi middleware
+backend/app/api/v1/routes/auth.py           ← MODIFY: add limiters to login + magic-link
+backend/app/api/v1/routes/attempts.py       ← MODIFY: add limiter to submit_response
+backend/app/tests/integration/test_rate_limiting.py  ← CREATE
 ```
 
 ---
 
-## Implementation
-
-### `core/rate_limit.py`
+## `rate_limiting.py`
 
 ```python
+"""Rate limiting configuration and helpers.
+
+Uses slowapi backed by Redis. Import `limiter` and apply it as a decorator
+on individual routes that need protection.
+"""
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from fastapi import Request
 
-def get_school_id_from_request(request: Request) -> str:
-    """
-    Rate limit key for school-scoped LLM routes.
-    Falls back to IP if school_id not in JWT (unauthenticated).
-    """
-    user = getattr(request.state, "user", None)
-    if user and hasattr(user, "school_id") and user.school_id:
-        return f"school:{user.school_id}"
-    return get_remote_address(request)
+# Global limiter instance backed by Redis (configured in main.py)
+limiter = Limiter(key_func=get_remote_address)
 
-def get_user_id_from_request(request: Request) -> str:
-    """Rate limit key for per-user routes."""
+
+def get_email_key(request: Request) -> str:
+    """Key function for magic-link endpoint — rate-limits per email address."""
+    try:
+        body = request.state.body   # set by a middleware that caches the body
+        return body.get("email", get_remote_address(request))
+    except Exception:
+        return get_remote_address(request)
+
+
+def get_user_key(request: Request) -> str:
+    """Key function for authenticated endpoints — rate-limits per user ID."""
+    # JWT is already validated by this point; user is in request.state
     user = getattr(request.state, "user", None)
     if user:
         return f"user:{user.id}"
     return get_remote_address(request)
 
-# Two limiters — one per IP, one per user/school
-ip_limiter = Limiter(key_func=get_remote_address, storage_uri=settings.REDIS_URL)
-user_limiter = Limiter(key_func=get_user_id_from_request, storage_uri=settings.REDIS_URL)
-school_limiter = Limiter(key_func=get_school_id_from_request, storage_uri=settings.REDIS_URL)
+
+def get_school_key(request: Request) -> str:
+    """Key function for LLM endpoints — rate-limits per school ID."""
+    user = getattr(request.state, "user", None)
+    if user and user.school_id:
+        return f"school:{user.school_id}"
+    return get_remote_address(request)
+
+
+# Convenience limiter instances with their key functions
+email_limiter = Limiter(key_func=get_email_key)
+user_limiter = Limiter(key_func=get_user_key)
+school_limiter = Limiter(key_func=get_school_key)
 ```
 
-### `main.py` additions
+---
+
+## `main.py` Changes
+
+Add the slowapi exception handler and middleware. These must be registered before any
+request reaches the route handlers:
 
 ```python
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from app.core.rate_limit import ip_limiter
+from slowapi.middleware import SlowAPIMiddleware
+from app.core.rate_limiting import limiter
 
-app.state.limiter = ip_limiter
+app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+```
+
+The `_rate_limit_exceeded_handler` from slowapi returns HTTP 429 with a body
+containing `error` and `detail` fields. However, this does not match our `ErrorDetail`
+schema from `schemas/common.py`. Override it with a custom handler that returns the
+correct shape:
+
+```python
+from app.schemas.common import ErrorDetail
+from fastapi.responses import JSONResponse
+
+async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content=ErrorDetail(
+            error_code="RATE_LIMIT_EXCEEDED",
+            message=f"Too many requests. Please wait before trying again.",
+            details={"retry_after": str(exc.retry_after)},
+        ).model_dump(),
+    )
+
+app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 ```
 
 ---
 
-## Rate Limits Per Route
+## Route Modifications
 
-### Auth routes (`routes/auth.py`)
+In `routes/auth.py`, add decorators to the login and magic-link handlers:
 
 ```python
-from app.core.rate_limit import ip_limiter
+from app.core.rate_limiting import limiter, email_limiter
 
 @router.post("/login")
-@ip_limiter.limit("10/minute")
-async def login(request: Request, ...):
+@limiter.limit("10/minute")
+async def login(request: Request, body: LoginRequest, ...):
     ...
 
 @router.post("/magic-link")
-@ip_limiter.limit("3/minute", key_func=lambda req: req.body_email)
-async def magic_link(request: Request, ...):
-    # Key by email to prevent email enumeration at scale
-    # Fallback: by IP if email not parseable
+@email_limiter.limit("3/minute")
+async def send_magic_link(request: Request, body: MagicLinkRequest, ...):
     ...
 ```
 
-### Assessment response submission (`routes/assessments.py`)
+Note that `request: Request` must be added as the first parameter to any route
+that uses a slowapi decorator — slowapi needs access to the request object.
+
+In `routes/attempts.py`, add the user-scoped limit:
 
 ```python
-from app.core.rate_limit import user_limiter
+from app.core.rate_limiting import user_limiter
 
-@router.post("/attempts/{attempt_id}/responses")
+@router.post("/{attempt_id}/responses", status_code=204)
 @user_limiter.limit("60/minute")
 async def submit_response(request: Request, attempt_id: UUID, ...):
     ...
-```
-
-### LLM-backed routes (study plans, lesson plan regeneration)
-
-```python
-from app.core.rate_limit import school_limiter
-
-# Applied to:
-# POST /classes/{class_id}/study-plans
-# POST /lesson-plans/{plan_id}/regenerate
-
-@router.post("/classes/{class_id}/study-plans")
-@school_limiter.limit("20/minute")
-async def assign_study_plans(request: Request, ...):
-    ...
-```
-
----
-
-## Rate Limit Table
-
-| Route | Limit | Key |
-|---|---|---|
-| `POST /auth/login` | 10 req/min | Per IP |
-| `POST /auth/magic-link` | 3 req/min | Per email (fallback: IP) |
-| `POST /attempts/{id}/responses` | 60 req/min | Per user |
-| `POST /classes/{id}/study-plans` | 20 req/min | Per school |
-| `POST /lesson-plans/{id}/regenerate` | 20 req/min | Per school |
-
----
-
-## 429 Response Format
-
-`slowapi` returns a default 429. Override to match Kaihle's structured error format:
-
-```python
-from slowapi.errors import RateLimitExceeded
-from fastapi.responses import JSONResponse
-
-async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    return JSONResponse(
-        status_code=429,
-        content={
-            "error_code": "RATE_LIMIT_EXCEEDED",
-            "message": f"Too many requests. Limit: {exc.limit}.",
-            "retry_after_seconds": exc.retry_after,
-        },
-        headers={"Retry-After": str(exc.retry_after)},
-    )
-
-app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 ```
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] Integration test: `POST /auth/login` 11 times in 60 seconds from same IP → 11th returns 429
-- [ ] Integration test: 10 login attempts from IP-A + 10 from IP-B → all 20 succeed (limits are per-IP)
-- [ ] Integration test: `POST /auth/magic-link` 4 times with same email in 60s → 4th returns 429
-- [ ] Integration test: 61 `POST /attempts/{id}/responses` from same user in 60s → 61st returns 429
-- [ ] Integration test: 429 response body contains `error_code`, `message`, `retry_after_seconds`
-- [ ] Integration test: `Retry-After` header present on 429 response
-- [ ] Integration test: LLM route `POST /study-plans` — 21 requests from same school in 60s → 21st returns 429
-- [ ] Unit test: `get_school_id_from_request` returns school-scoped key for authenticated user
-- [ ] Unit test: `get_school_id_from_request` falls back to IP for unauthenticated request
+**Integration tests — `test_rate_limiting.py`**
+
+`test_login_when_11_requests_in_one_minute_then_429_on_11th` — Send 10 login
+requests from the same mocked IP address. All return 400 (wrong credentials is fine).
+Send an 11th. Assert HTTP 429 on the 11th request.
+
+`test_login_rate_limit_when_different_ip_then_independent_counter` — Send 10 requests
+from IP A and 10 from IP B. Assert no 429 occurs for either IP (each IP has its own
+counter).
+
+`test_magic_link_when_4_requests_same_email_in_one_minute_then_429` — Send 3 magic
+link requests for `test@example.com`. Assert all return 200 or 404. Send a 4th.
+Assert HTTP 429.
+
+`test_magic_link_when_different_email_then_independent_counter` — 3 requests for
+`a@example.com` and 3 for `b@example.com`. Assert no 429 occurs.
+
+`test_rate_limit_response_has_correct_error_code` — Trigger any rate limit. Assert
+the response body has `error_code: "RATE_LIMIT_EXCEEDED"` and a `details.retry_after`
+field.
+
+`test_attempt_response_when_61_requests_same_user_then_429` — Send 60 authenticated
+requests to `POST /attempts/{id}/responses` as the same user. Assert all succeed.
+Send the 61st. Assert HTTP 429.
 
 ---
 
-## Output (what M6-3-T5 needs)
+## Do NOT Touch
 
-- All four rate limit categories active in production
-- 429 responses in correct Kaihle structured error format
-- Redis confirmed as rate limit backend (same Redis used for caching + Celery)
+`backend/app/schemas/common.py` — `ErrorDetail` is frozen.
+Any existing route decorator signatures except adding `request: Request` as first
+parameter where needed by slowapi.
