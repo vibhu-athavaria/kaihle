@@ -81,7 +81,9 @@ async def complete(
         tokens_used=response.usage.total_tokens if response.usage else None,
     )
 
-    # Handle potential None content (e.g., tool calls, non-text responses)
+    # Handle potential empty choices or None content (e.g., tool calls, non-text responses)
+    if not response.choices:
+        raise ValueError("LLM response has no choices. The model may have returned an empty response.")
     content = response.choices[0].message.content
     if content is None:
         raise ValueError(

@@ -230,12 +230,13 @@ async def enroll_students(
     school_id: uuid.UUID,
     class_id: uuid.UUID,
     body: EnrollRequest,
-    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
 ) -> EnrollResponse:
     """Enroll students in a class.
 
-    SchoolAdmin or Teacher can enroll students.
+    KaihleAdmin, SchoolAdmin, or Teacher can enroll students.
+    KaihleAdmin can enroll in any school's classes.
     Returns: {enrolled: int, skipped: int, errors: list}
     """
 
