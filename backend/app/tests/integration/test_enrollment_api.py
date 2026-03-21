@@ -358,7 +358,7 @@ async def test_enroll_05_enroll_student_triggers_diagnostic_status_pending(
 
 
 @pytest.mark.asyncio
-async def test_enroll_kaihle_admin_enrolls_students_returns_403(
+async def test_enroll_kaihle_admin_enrolls_students_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
     test_school: School,
@@ -367,7 +367,7 @@ async def test_enroll_kaihle_admin_enrolls_students_returns_403(
     students: list[User],
     student_profiles: list[StudentProfile],
 ) -> None:
-    """ENROLL: KaihleAdmin enrolls students → 403."""
+    """ENROLL: KaihleAdmin enrolls students → 200 (per CONSTITUTION Rule 12)."""
     headers = auth_header(kaihle_admin)
     enroll_data: dict = {
         "student_ids": [str(students[0].id)],
@@ -379,7 +379,7 @@ async def test_enroll_kaihle_admin_enrolls_students_returns_403(
         headers=headers,
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

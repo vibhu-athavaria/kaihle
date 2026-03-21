@@ -148,11 +148,14 @@ def _class_to_response(class_: Class) -> ClassResponse:
 
 def _check_school_access(school_id: uuid.UUID, current_user: CurrentUser) -> None:
     """Check if user can access school.
-    KaihleAdmin can access any school.
+
+    KaihleAdmin can access any school — explicit bypass required per CONSTITUTION Rule 12.
     SchoolAdmin can only access own school.
     Teachers can only access their own school.
-
     """
+    # KaihleAdmin can access any school
+    if current_user.role == UserRole.KAIHLE_ADMIN:
+        return
 
     # Other roles must match school_id
     if current_user.school_id != school_id:
@@ -227,12 +230,13 @@ async def enroll_students(
     school_id: uuid.UUID,
     class_id: uuid.UUID,
     body: EnrollRequest,
-    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
 ) -> EnrollResponse:
     """Enroll students in a class.
 
-    SchoolAdmin or Teacher can enroll students.
+    KaihleAdmin, SchoolAdmin, or Teacher can enroll students.
+    KaihleAdmin can enroll in any school's classes.
     Returns: {enrolled: int, skipped: int, errors: list}
     """
 

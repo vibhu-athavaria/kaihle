@@ -31,6 +31,16 @@ from app.models.user import User, UserRole
 
 logger = structlog.get_logger()
 
+
+class QuestionBankEmptyError(Exception):
+    """Raised when the question bank has no questions for the given subject/grade.
+
+    This is an expected condition during development before import_questions.py
+    has been run. The Celery task handles this by logging a warning and exiting
+    cleanly without creating an empty assessment.
+    """
+
+
 # Total questions selected into assessment_selected_questions at class creation.
 # This is the pool from which adaptive question selection draws at attempt time.
 MAX_DIAGNOSTIC_POOL = 60
@@ -88,6 +98,7 @@ class AssessmentService:
             The existing or newly created Assessment.
 
         Raises:
+            QuestionBankEmptyError: If no questions exist for this subject/grade.
             ValueError: If the class is not found.
         """
         # Load class
@@ -95,6 +106,26 @@ class AssessmentService:
         class_ = result.scalar_one_or_none()
         if class_ is None:
             raise ValueError(f"Class not found: class_id={class_id}")
+
+        # Count available questions before doing anything else
+        from sqlalchemy import func
+
+        question_count_result = await self.db.execute(
+            select(func.count(QuestionBank.id))
+            .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
+            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .where(
+                CurriculumTopic.subject_id == class_.subject_id,
+                CurriculumTopic.grade_id == class_.grade_id,
+            )
+        )
+        question_count = question_count_result.scalar() or 0
+
+        if not question_count:
+            raise QuestionBankEmptyError(
+                f"No questions in question_bank for subject={class_.subject_id} "
+                f"grade={class_.grade_id}. Run import_questions.py first."
+            )
 
         # Idempotency: check if system-generated assessment already exists
         existing = await self.db.execute(

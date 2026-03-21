@@ -39,13 +39,13 @@ def _parse_uuid(value: str, param_name: str) -> _uuid.UUID:
         raise ValueError(f"Invalid UUID for {param_name}: {value}")
 
 
-@celery_app.task(  # type: ignore[untyped-decorator]
+@celery_app.task(
     bind=True,
     max_retries=3,
     default_retry_delay=30,
     name="app.tasks.onboarding_tasks.create_class_diagnostic_task",
 )
-def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:  # type: ignore[no-untyped-def]
+def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:
     """Create a Tier 1 DIAGNOSTIC assessment for a newly created class.
 
     Fired when a class is created. Selects a pool of up to 60 questions
@@ -61,7 +61,7 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:  # t
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.core.config import settings
-    from app.services.assessment_service import AssessmentService
+    from app.services.assessment_service import AssessmentService, QuestionBankEmptyError
 
     logger.info("create_class_diagnostic_task_started", class_id=class_id)
 
@@ -102,6 +102,17 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:  # t
         )
         return run_result
 
+    except QuestionBankEmptyError as exc:
+        logger.warning(
+            "create_class_diagnostic_skipped_empty_question_bank",
+            class_id=class_id,
+            reason=str(exc),
+        )
+        # Return without creating assessment — task succeeded, just had nothing to do.
+        # The assessment will be created when the teacher manually triggers it after
+        # import_questions.py has been run.
+        return {"assessment_id": None, "class_id": class_id, "skipped": True}
+
     except Exception as exc:
         logger.error(
             "create_class_diagnostic_task_failed",
@@ -111,14 +122,29 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:  # t
         )
         raise self.retry(exc=exc)
 
+    def on_failure(self, exc, task_id, args, kwargs, einfo) -> None:
+        """Called by Celery when all retries are exhausted.
 
-@celery_app.task(  # type: ignore[untyped-decorator]
+        Emits a CRITICAL structured log event so the operations team is alerted.
+        Per CONSTITUTION Rule 18.
+        """
+        logger.critical(
+            "celery_task_permanently_failed",
+            task_name=self.name,
+            task_id=task_id,
+            class_id=args[0] if args else kwargs.get("class_id"),
+            error=str(exc),
+            exc_info=True,
+        )
+
+
+@celery_app.task(
     bind=True,
     max_retries=3,
     default_retry_delay=30,
     name="app.tasks.onboarding_tasks.trigger_onboarding_diagnostics",
 )
-def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict[str, object]:  # type: ignore[no-untyped-def]
+def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict[str, object]:
     """Create a StudentAttempt for the class diagnostic on student enrollment.
 
     Fired on student enrollment. The class must already have a system-generated
@@ -214,3 +240,19 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
             exc_info=True,
         )
         raise self.retry(exc=exc)
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo) -> None:
+        """Called by Celery when all retries are exhausted.
+
+        Emits a CRITICAL structured log event so the operations team is alerted.
+        Per CONSTITUTION Rule 18.
+        """
+        logger.critical(
+            "celery_task_permanently_failed",
+            task_name=self.name,
+            task_id=task_id,
+            student_id=args[0] if args else kwargs.get("student_id"),
+            class_id=args[1] if len(args) > 1 else kwargs.get("class_id"),
+            error=str(exc),
+            exc_info=True,
+        )
