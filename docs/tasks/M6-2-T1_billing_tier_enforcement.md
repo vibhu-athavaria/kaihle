@@ -1,225 +1,261 @@
 # M6-2-T1 — Billing Tier Enforcement
+**Milestone:** M6 · **Epic:** M6-2 · **Task:** T1
+**Depends on:** M0-2-T2 (ORM models — school_subscriptions, subscription_plans)
+**Parallel with:** M6-1-T1, M6-3-T1, M6-3-T2
+**Estimated effort:** 3–4 hours
 
-**Milestone:** M6 — Analytics, Billing & Launch Polish
-**Epic:** M6-2 — Billing Tier Enforcement
-**Task ID:** M6-2-T1
-**Depends on:** M0-2-T1 (subscription tables migrated), M0-4-T3 (enrollment endpoint — billing check hooks in here)
-**Blocks:** M6-3-T4 (pilot seed script must set up correct subscription tier)
+---
+
+## Context
+
+Billing enforcement is a lightweight service layer that intercepts two operations and
+rejects them if the school has exceeded its tier limits. It does not handle payment
+processing — that is out of scope for v1. It enforces limits so the platform stays
+within the operational commitments made during the pilot.
+
+Two enforcement points exist. First, student enrollment: before a student is added to
+any class, the system checks whether the school has reached its maximum active student
+count for its tier. Second, login: before issuing a JWT to any user at a TRIAL school,
+the system checks whether the trial period has expired.
+
+Both checks return HTTP 402 Payment Required with a structured `ErrorDetail` body. The
+`error_code` is machine-readable so frontend code can detect it and show an upgrade
+prompt.
+
+Read CONSTITUTION.md Rule 2 (school_id on every table) before writing any code.
+Read `schemas/common.py` for the `ErrorDetail` shape — use it exactly.
 
 ---
 
 ## User Story
 
-As Kaihle (the business), I want billing limits enforced automatically so that trial schools cannot exceed 30 students and expired trials are blocked from logging in, without requiring manual intervention.
+As the system, I want to prevent a school from exceeding its billing tier limits so
+that the platform stays within its operational commitments during the pilot.
 
 ---
 
-## What To Build
-
-A billing service with two core checks: student count limit enforcement (called before every enrollment) and trial expiry enforcement (called on every login for trial schools). Both return HTTP 402 on breach.
-
----
-
-## Files To Create / Modify
+## Files to Create / Modify
 
 ```
-/backend/app/core/
-  billing.py                    ← NEW — billing enforcement functions
-
-/backend/app/services/
-  enrollment_service.py         ← MODIFY — call billing check before INSERT
-  auth_service.py               ← MODIFY — call trial expiry check on login
-
-/backend/app/schemas/
-  billing.py                    ← NEW — 402 error response schema
+backend/app/services/billing_service.py         ← CREATE
+backend/app/api/v1/routes/classes.py            ← MODIFY: add student limit check
+backend/app/api/v1/routes/auth.py               ← MODIFY: add trial expiry check
+backend/app/tests/unit/test_billing_service.py
+backend/app/tests/integration/test_billing_enforcement.py
 ```
 
 ---
 
-## `billing.py`
+## Billing Tier Reference
+
+| Tier | Max active students | Trial days |
+|---|---|---|
+| TRIAL | 30 | 15 |
+| STARTER | 100 | — |
+| GROWTH | 500 | — |
+| SCALE | Unlimited | — |
+
+These constants must live in `billing_service.py` as a dict, not hardcoded in the
+route handlers:
 
 ```python
-from datetime import datetime, timezone
-from uuid import UUID
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
-from app.models import SchoolSubscription, SubscriptionPlan, ClassEnrollment, User
+TIER_LIMITS: dict[str, int | None] = {
+    "TRIAL": 30,
+    "STARTER": 100,
+    "GROWTH": 500,
+    "SCALE": None,   # None = unlimited
+}
+TRIAL_DURATION_DAYS = 15
+```
 
-class BillingEnforcement:
+---
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
+## `BillingService` — Full Method Signatures
 
-    async def check_student_limit(self, school_id: UUID) -> None:
-        """
-        Called before every new class enrollment.
-        Raises HTTP 402 if school has reached its subscription student limit.
-        """
-        subscription = await self._get_active_subscription(school_id)
-        if subscription is None:
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "error_code": "NO_ACTIVE_SUBSCRIPTION",
-                    "message": "This school does not have an active subscription.",
-                    "upgrade_url": "https://kaihle.ai/pricing",
-                }
-            )
+### `check_student_limit`
 
-        plan = await self._get_plan(subscription.plan_id)
+```python
+async def check_student_limit(
+    self,
+    school_id: uuid.UUID,
+) -> None:
+    """Raise HTTP 402 if the school has reached its active student limit.
 
-        if plan.max_students is None:
-            return  # SCALE tier — unlimited
+    Called before every class enrollment INSERT. If the school's tier allows
+    unlimited students (SCALE), this method returns immediately without querying.
 
-        # Count current active students (enrolled, not soft-deleted)
-        current_count = await self._count_active_students(school_id)
+    Raises:
+        HTTPException(402): if the school has reached its student limit.
+    """
+```
 
-        if current_count >= plan.max_students:
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "error_code": "STUDENT_LIMIT_REACHED",
-                    "message": (
-                        f"Your {plan.tier} plan allows up to {plan.max_students} students. "
-                        f"You currently have {current_count}. "
-                        f"Upgrade your plan to add more students."
-                    ),
-                    "current_count": current_count,
-                    "limit": plan.max_students,
-                    "upgrade_url": "https://kaihle.ai/pricing",
-                }
-            )
+Step 1 — Load the school's subscription:
 
-    async def check_trial_not_expired(self, school_id: UUID) -> None:
-        """
-        Called on every login attempt for TRIAL tier schools.
-        Raises HTTP 402 if trial has expired.
-        NOT called for paid tier schools.
-        """
-        subscription = await self._get_active_subscription(school_id)
-        if subscription is None:
-            return  # handled by check_student_limit on enrollment
+```python
+subscription = await self.db.scalar(
+    select(SchoolSubscription).where(
+        SchoolSubscription.school_id == school_id,
+        SchoolSubscription.is_active.is_(True),
+    )
+)
+if not subscription:
+    # No subscription row means the school was created without one — treat as TRIAL
+    tier = "TRIAL"
+else:
+    tier = subscription.plan.tier
+```
 
-        plan = await self._get_plan(subscription.plan_id)
-        if plan.tier != "TRIAL":
-            return  # only check trials
+Step 2 — Look up the limit. If `TIER_LIMITS[tier] is None`, return immediately.
 
-        if self.is_trial_expired(subscription):
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "error_code": "TRIAL_EXPIRED",
-                    "message": (
-                        f"Your free trial ended on {subscription.trial_end_date.strftime('%d %b %Y')}. "
-                        f"Upgrade to continue using Kaihle."
-                    ),
-                    "trial_end_date": subscription.trial_end_date.isoformat(),
-                    "upgrade_url": "https://kaihle.ai/pricing",
-                }
-            )
+Step 3 — Count current active students:
 
-    @staticmethod
-    def is_trial_expired(subscription) -> bool:
-        if subscription.trial_end_date is None:
-            return False
-        return datetime.now(timezone.utc) > subscription.trial_end_date
+```python
+current_count = await self.db.scalar(
+    select(func.count())
+    .select_from(User)
+    .where(
+        User.school_id == school_id,
+        User.role == "STUDENT",
+        User.is_active.is_(True),
+    )
+)
+```
 
-    async def _get_active_subscription(self, school_id: UUID):
-        result = await self.session.execute(
-            select(SchoolSubscription)
-            .where(SchoolSubscription.school_id == school_id)
-            .where(SchoolSubscription.status == "ACTIVE")
-        )
-        return result.scalar_one_or_none()
+Step 4 — If `current_count >= limit`, raise:
 
-    async def _count_active_students(self, school_id: UUID) -> int:
-        result = await self.session.execute(
-            select(func.count(User.id))
-            .where(User.school_id == school_id)
-            .where(User.role == "STUDENT")
-            .where(User.is_active == True)
-        )
-        return result.scalar_one()
+```python
+raise HTTPException(
+    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+    detail={
+        "error_code": "STUDENT_LIMIT_REACHED",
+        "message": (
+            f"Your school has reached its {tier} plan limit of "
+            f"{limit} active students. Upgrade to enroll more students."
+        ),
+        "upgrade_url": "https://kaihle.com/pricing",
+    },
+)
+```
+
+### `check_trial_expired`
+
+```python
+async def check_trial_expired(
+    self,
+    school_id: uuid.UUID,
+) -> None:
+    """Raise HTTP 402 if the school's trial period has expired.
+
+    Only checks TRIAL tier schools. Called during the login flow, before
+    issuing a JWT. Does nothing for non-TRIAL schools.
+
+    Raises:
+        HTTPException(402): if the trial has expired.
+    """
+```
+
+Step 1 — Load subscription. If tier is not TRIAL, return immediately.
+
+Step 2 — Check the trial start date:
+
+```python
+trial_start = subscription.created_at  # or school.created_at if no separate field
+trial_end = trial_start + timedelta(days=TRIAL_DURATION_DAYS)
+if datetime.now(timezone.utc) > trial_end:
+    raise HTTPException(
+        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+        detail={
+            "error_code": "TRIAL_EXPIRED",
+            "message": (
+                "Your free trial has ended. Upgrade to continue using Kaihle."
+            ),
+            "upgrade_url": "https://kaihle.com/pricing",
+            "trial_ended_at": trial_end.isoformat(),
+        },
+    )
 ```
 
 ---
 
 ## Integration Points
 
-### In `enrollment_service.py` — before INSERT into `class_enrollments`
-```python
-async def enroll_student(self, student_id, class_id, school_id, enrolled_by):
-    # Billing check FIRST — before any DB write
-    billing = BillingEnforcement(self.session)
-    await billing.check_student_limit(school_id)
+### In `routes/classes.py` — `create_enrollments` endpoint
 
-    # Proceed with enrollment
-    ...
-```
-
-### In `auth_service.py` — in the `login()` method, after verifying password
-```python
-async def login(self, email: str, password: str) -> TokenPair:
-    user = await self._verify_credentials(email, password)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    # Trial expiry check (only for non-KaihleAdmin users with a school)
-    if user.school_id and user.role != "KAIHLE_ADMIN":
-        billing = BillingEnforcement(self.session)
-        await billing.check_trial_not_expired(user.school_id)
-
-    return await self._create_token_pair(user)
-```
-
----
-
-## Tier Limits Reference
-
-| Tier | `max_students` | Trial days | `subscription_plans.trial_days` |
-|---|---|---|---|
-| TRIAL | 30 | 15 | 15 |
-| STARTER | 100 | — | NULL |
-| GROWTH | 500 | — | NULL |
-| SCALE | NULL (unlimited) | — | NULL |
-
----
-
-## 402 Error Response Schema (`schemas/billing.py`)
+Add the billing check immediately after verifying the class exists and before
+inserting the enrollment rows. The check is called once per enrollment request, not
+per individual student in the batch:
 
 ```python
-class BillingErrorDetail(BaseModel):
-    error_code: str     # STUDENT_LIMIT_REACHED | TRIAL_EXPIRED | NO_ACTIVE_SUBSCRIPTION
-    message: str        # Human-readable, suitable for showing to school admin
-    upgrade_url: str    # https://kaihle.ai/pricing
-    current_count: int | None = None
-    limit: int | None = None
-    trial_end_date: str | None = None
+# In create_enrollments(), after the class ownership check:
+billing = BillingService(db)
+await billing.check_student_limit(school_id=class_.school_id)
+# Then proceed with enrollment
 ```
 
-Frontend must handle 402 responses by showing a clear upgrade prompt to SchoolAdmin.
+### In `routes/auth.py` — `login` endpoint
+
+Add the trial expiry check after successful credential verification but before
+returning the JWT:
+
+```python
+# In login(), after service.login() succeeds:
+billing = BillingService(db)
+await billing.check_trial_expired(school_id=result.user.school_id)
+return result
+```
+
+Do not add the trial check to the magic link flow — if a user has a magic link, they
+should be able to reach the password setup page even if the trial has expired. The
+trial check fires on credential-based login only.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] Integration test: TRIAL school at 30 students → enrolling 31st returns 402 with `STUDENT_LIMIT_REACHED`
-- [ ] Integration test: STARTER school at 100 → enrolling 101st returns 402
-- [ ] Integration test: SCALE school → no limit, can enroll any number
-- [ ] Integration test: TRIAL school with `trial_end_date` 16 days ago → login returns 402 with `TRIAL_EXPIRED`
-- [ ] Integration test: TRIAL school with `trial_end_date` 5 days in future → login succeeds
-- [ ] Integration test: STARTER school (paid) → no trial expiry check on login
-- [ ] Integration test: KaihleAdmin login on expired trial school → NOT blocked (admin always passes)
-- [ ] Unit test: `is_trial_expired` with `trial_end_date` yesterday → True
-- [ ] Unit test: `is_trial_expired` with `trial_end_date` None → False
-- [ ] Unit test: `check_student_limit` with no active subscription → 402 `NO_ACTIVE_SUBSCRIPTION`
-- [ ] Unit test: SCALE tier (max_students=None) → `check_student_limit` returns without raising
+**Unit tests — `test_billing_service.py`**
+
+`test_check_student_limit_when_trial_at_30_then_raises_402` — Seed a TRIAL school
+with 30 active students. Call `check_student_limit`. Assert HTTP 402 is raised with
+`error_code: "STUDENT_LIMIT_REACHED"`.
+
+`test_check_student_limit_when_trial_at_29_then_no_error` — 29 active students on a
+TRIAL school. Assert the method returns without raising.
+
+`test_check_student_limit_when_scale_tier_then_never_raises` — 10,000 students on a
+SCALE school. Assert the method returns without raising (no query even needed).
+
+`test_check_student_limit_when_no_subscription_then_treated_as_trial` — A school with
+no `school_subscriptions` row. Assert the TRIAL limit (30) is applied.
+
+`test_check_trial_expired_when_trial_over_15_days_then_raises_402` — Seed a TRIAL
+subscription created 16 days ago. Call `check_trial_expired`. Assert HTTP 402 with
+`error_code: "TRIAL_EXPIRED"`.
+
+`test_check_trial_expired_when_trial_14_days_then_no_error` — 14 days since creation.
+Assert no exception raised.
+
+`test_check_trial_expired_when_starter_tier_then_no_error` — A STARTER school with no
+trial. Assert the method returns without raising regardless of subscription age.
+
+**Integration tests — `test_billing_enforcement.py`**
+
+`test_enrollment_when_trial_at_limit_then_enrollment_returns_402` — Seed a TRIAL
+school at exactly 30 active students. POST to `POST /classes/{id}/enrollments`.
+Assert HTTP 402 in the response.
+
+`test_enrollment_when_below_limit_then_enrollment_succeeds` — 29 active students.
+POST enrollment. Assert HTTP 200.
+
+`test_login_when_trial_expired_then_returns_402` — Seed a TRIAL school created 20
+days ago with valid credentials. POST to `POST /auth/login`. Assert HTTP 402.
+
+`test_login_when_trial_active_then_returns_jwt` — Trial school created 5 days ago.
+POST valid credentials. Assert HTTP 200 with access token returned.
 
 ---
 
-## Output (what M6-3-T4 needs)
+## Do NOT Touch
 
-- `BillingEnforcement` class importable and tested
-- `is_trial_expired` usable in pilot seed script to verify trial dates are set correctly
-- Enrollment endpoint correctly gated — pilot school can enroll up to tier limit
+`backend/app/api/v1/routes/assessments.py`. `backend/app/api/v1/routes/attempts.py`.
+`backend/app/schemas/common.py` — the `ErrorDetail` shape is frozen from M0-10-T1.
+Any existing migration file — add a new one if `school_subscriptions` table is missing.

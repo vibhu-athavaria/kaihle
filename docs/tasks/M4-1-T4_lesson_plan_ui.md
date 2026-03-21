@@ -1,237 +1,246 @@
-# M4-1-T4 — Lesson Plan UI (Teacher App)
+# M4-1-T4 — Lesson Plan Teacher UI (Teacher App)
+**Milestone:** M4 · **Epic:** M4-1 · **Task:** T4
+**Depends on:** M4-1-T3 (lesson plan routes return real data)
+**Blocks:** Nothing — final task of M4
+**Estimated effort:** 4–5 hours
 
-**Milestone:** M4 — Teacher Copilot
-**Epic:** M4-1 — Lesson Plan Generation
-**Task ID:** M4-1-T4
-**Depends on:** M4-1-T3 (all lesson plan API endpoints)
-**Blocks:** Nothing — last task of M4
+---
+
+## Context
+
+All code in this task lives in `frontend/apps/teacher`. No code goes in any other app.
+
+Read `docs/design/DESIGN_SYSTEM.md` §5.3 (Teacher) before writing anything. Action
+buttons use gold (`brand-gold`). Green is reserved for mastery indicators.
+
+The `useClassLessonPlans` hook already exists from M0-10-T9. It now returns real
+data after M4-1-T3 completes. This task builds the presentation layer on top of it.
+
+The "This Week" card placeholder on the teacher dashboard has been showing empty since
+M0. After this task ships, it renders real plan data.
 
 ---
 
 ## User Story
 
-As a teacher, I want to view my weekly AI-generated lesson plan in a clear, structured layout, edit any section inline, regenerate if it missed the mark, and mark it as used when I've delivered it.
+As a teacher, I want to view my AI-generated weekly lesson plan, edit any section,
+regenerate it if needed, and mark it as used so I can track which weeks I have planned.
 
 ---
 
-## What To Build
-
-A lesson plan dashboard in the teacher app. Teachers land here from the nav bar or from a notification badge. The current week's plan is shown prominently. Past plans are accessible in a history list.
-
----
-
-## Files To Create
+## Files to Create / Modify
 
 ```
-/frontend/apps/teacher/src/
-  pages/
-    lesson-plans/
-      LessonPlansPage.tsx           ← main page (route: /teacher/classes/:classId/lesson-plans)
-      LessonPlanDetail.tsx          ← full plan view (current week)
-      LessonPlanHistory.tsx         ← accordion list of past plans
+frontend/apps/teacher/src/pages/lesson-plans/
+  LessonPlanListPage.tsx        ← list of all plans for a class
+  LessonPlanDetailPage.tsx      ← single plan with editor
   components/
-    lesson-plans/
-      PlanStatusBadge.tsx           ← GENERATED | EDITED | USED | ARCHIVED badge
-      StudentGroupTabs.tsx          ← Group A / B / C tabs with activities
-      EditableSection.tsx           ← click-to-edit inline field
-      RegenerateModal.tsx           ← confirm before regenerating
-  hooks/
-    useLessonPlans.ts               ← React Query hooks for all lesson plan endpoints
+    LessonPlanCard.tsx          ← card shown in list and on dashboard
+    LessonEditor.tsx            ← inline section editor
+    StudentGroupPanel.tsx       ← shows A/B/C group activities
+
+frontend/apps/teacher/src/hooks/
+  useLessonPlanActions.ts       ← edit, regenerate, mark-used mutations
+
+frontend/apps/teacher/src/tests/
+  lesson-plans.spec.ts          ← Playwright E2E tests
+  LessonEditor.test.tsx         ← Jest unit tests
 ```
+
+Also update the teacher dashboard "This Week" card component (already exists as a
+placeholder from M0-9-T2) to render a `LessonPlanCard` when a plan exists.
 
 ---
 
-## Page Layout: `LessonPlansPage.tsx`
+## Routes
 
-```
-/teacher/classes/:classId/lesson-plans
+`/teacher/classes/:classId/lesson-plans` — `LessonPlanListPage`. Protected by
+`PrivateRoute` + `RoleRoute(['TEACHER'])`.
 
-┌─────────────────────────────────────────────────────────────┐
-│  Mathematics · Grade 9 · 3B                    [← Back]     │
-│                                                             │
-│  This Week's Plan  (week of 2 Mar 2026)                     │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │ LessonPlanDetail (current week's plan)                │  │
-│  └───────────────────────────────────────────────────────┘  │
-│                                                             │
-│  Previous Plans                                             │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │ LessonPlanHistory (accordion)                         │  │
-│  └───────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Loading state:** Skeleton cards while fetching.
-**Empty state:** "No lesson plan yet for this week. Plans are generated every Monday at 6am." (with a "Generate Now" button that calls `/regenerate` on the most recent plan or creates a blank trigger)
+`/teacher/lesson-plans/:planId` — `LessonPlanDetailPage`. Same guards.
 
 ---
 
-## `LessonPlanDetail.tsx`
+## Complete List of API Calls This UI Makes
 
-Shows the current week's plan in full. Sections:
+`GET /api/v1/classes/{classId}/lesson-plans` — called by `useClassLessonPlans(classId)`
+on the list page and for the dashboard "This Week" card (only fetches the latest plan).
 
-```
-┌─ Plan Header ───────────────────────────────────────────────┐
-│  Week of 2 Mar 2026                     [GENERATED badge]   │
-│  Focus: Algebraic Fractions, Ratio & Proportion             │
-│                                                             │
-│  Class Summary                                              │
-│  "60% of students are struggling with simplifying           │
-│   fractions. Group C is ready for mixed number work."       │
-└─────────────────────────────────────────────────────────────┘
+`GET /api/v1/lesson-plans/{planId}` — called by a `useLessonPlan(planId)` query on
+the detail page. Returns the merged view (teacher edits applied over generated plan).
 
-┌─ Student Groups ────────────────────────────────────────────┐
-│  [Group A — 8 students] [Group B — 12 students] [Group C — 5] │
-│                                                             │
-│  (selected tab content)                                     │
-│  Group A Focus: Foundational — identifying numerator/       │
-│  denominator from visual representations                    │
-└─────────────────────────────────────────────────────────────┘
+`PATCH /api/v1/lesson-plans/{planId}` — called by `useLessonPlanActions.saveEdits`
+when the teacher saves an edited section.
 
-┌─ Lesson Structure ──────────────────────────────────────────┐
-│  Starter (10 min)                                  [Edit ✎] │
-│  "Begin with a fraction wall visual on the board..."        │
-│                                                             │
-│  Main Activity (30 min)                            [Edit ✎] │
-│  [StudentGroupTabs showing group-specific activities]       │
-│                                                             │
-│  Plenary (10 min)                                  [Edit ✎] │
-│  "Exit ticket: students write one fraction fact..."         │
-│                                                             │
-│  Homework                                          [Edit ✎] │
-│  "Complete questions 1–5 from the worksheet..."             │
-└─────────────────────────────────────────────────────────────┘
+`POST /api/v1/lesson-plans/{planId}/regenerate` — called by
+`useLessonPlanActions.regenerate`.
 
-┌─ Teacher Notes ─────────────────────────────────────────────┐
-│  "Watch out for common misconception: students often..."    │
-│                                                    [Edit ✎] │
-└─────────────────────────────────────────────────────────────┘
+`PATCH /api/v1/lesson-plans/{planId}/status` — called by
+`useLessonPlanActions.markUsed` and `markArchived`.
 
-[Regenerate Plan]              [Mark as Used ✓]
-```
+Those are the only API calls. Do not fetch student data separately — student group
+counts come from the plan's `student_groups` object in the `generated_plan` JSON.
 
 ---
 
-## `EditableSection.tsx`
+## `useLessonPlanActions.ts`
 
-Click-to-edit pattern — no separate edit page.
+```typescript
+export const useLessonPlanActions = (planId: string) => {
+  const queryClient = useQueryClient()
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['teacher', 'lesson-plan', planId] })
+  }
 
-```tsx
-interface EditableSectionProps {
-  label: string
-  value: string
-  fieldKey: keyof LessonPlanEditRequest
-  planId: string
-  onSave: (fieldKey: string, value: string) => Promise<void>
+  const saveEdits = useMutation({
+    mutationFn: (edits: Partial<LessonPlanEditFields>) =>
+      apiClient.patch(`/lesson-plans/${planId}`, edits),
+    onSuccess: invalidate,
+  })
+
+  const regenerate = useMutation({
+    mutationFn: () => apiClient.post(`/lesson-plans/${planId}/regenerate`, {}),
+    onSuccess: invalidate,
+  })
+
+  const markUsed = useMutation({
+    mutationFn: () =>
+      apiClient.patch(`/lesson-plans/${planId}/status`, { status: 'USED' }),
+    onSuccess: invalidate,
+  })
+
+  const markArchived = useMutation({
+    mutationFn: () =>
+      apiClient.patch(`/lesson-plans/${planId}/status`, { status: 'ARCHIVED' }),
+    onSuccess: invalidate,
+  })
+
+  return { saveEdits, regenerate, markUsed, markArchived }
 }
-
-// Behaviour:
-// - Default state: shows text with small [Edit ✎] button on hover
-// - Click Edit: text becomes a <textarea> pre-filled with current value
-// - [Save] and [Cancel] buttons appear
-// - Save → calls PATCH /lesson-plans/{planId} with { [fieldKey]: newValue }
-// - On success: update local state, show saved indicator for 2 seconds
-// - On error: show inline error, keep edit mode open
 ```
 
 ---
 
-## `RegenerateModal.tsx`
+## Lesson Plan List Page (`LessonPlanListPage.tsx`)
 
-```tsx
-// Confirmation before regenerating — warn teacher their edits will be lost
-<Modal>
-  <h2>Regenerate lesson plan?</h2>
-  <p>
-    This will create a new plan based on your class's latest gap data.
-    Any edits you've made to the current plan will be lost.
-  </p>
-  <button onClick={onCancel}>Keep current plan</button>
-  <button onClick={onConfirm}>Yes, regenerate</button>
-</Modal>
+Shows all plans for a class, newest first. Each row shows the week start date, status
+badge, and the two focus subtopic names from `generated_plan.focus_subtopic_ids` (resolved
+to names from the plan JSON's `class_summary` or a separate lookup). The actions
+column shows "View" always, "Mark as Used" for GENERATED/EDITED plans, and "Archive"
+for any non-ARCHIVED plan.
 
-// On confirm:
-// - POST /lesson-plans/{planId}/regenerate
-// - Show loading spinner with "Generating... (this takes ~30 seconds)"
-// - On success: refresh plan data, close modal, show success toast
-// - On error: close modal, show error toast with "Regeneration failed — try again"
-```
+The most recent GENERATED or EDITED plan is highlighted with a subtle gold border.
+If it was generated in the last 24 hours, show a "New ✨" badge.
+
+Empty state: "No lesson plans generated yet. Plans are generated automatically every
+Monday morning. Check back on Monday!"
 
 ---
 
-## Notification Badge
+## Lesson Plan Detail Page (`LessonPlanDetailPage.tsx`)
 
-In the teacher app nav bar, show a badge on the "Lesson Plans" nav item when a new plan has been generated (status = "GENERATED" and `created_at` is this week).
+The page has three visual regions: a header bar, a lesson structure area, and a
+sidebar showing student groups.
 
-```tsx
-// In NavBar.tsx:
-const { data: plans } = useLessonPlans(classId)
-const hasNewPlan = plans?.some(
-  p => p.status === "GENERATED" &&
-       isThisWeek(new Date(p.created_at))
-)
-// <NavItem badge={hasNewPlan} />
-```
+**Header bar:** Plan week, subject, class name, status badge, and action buttons.
+The action buttons are: "Edit" (toggles edit mode), "Regenerate" (with confirmation
+modal), and "Mark as Used" (only for GENERATED/EDITED plans).
+
+**Lesson structure area (`LessonEditor`):** Shows the five lesson sections as
+expandable cards — Starter (10 min), Group A Activity, Group B Activity, Group C
+Activity, Plenary (10 min), and Homework. In view mode, each card shows the activity
+text. In edit mode, clicking a card reveals an inline textarea. The "Edit" button in
+the header switches all cards into edit mode simultaneously; a "Save Changes" button
+at the bottom of the page calls `saveEdits` with all modified fields.
+
+**Student groups sidebar (`StudentGroupPanel`):** A narrow column on the right
+(hidden on mobile, accessible via a "Groups" tab). Shows three collapsed sections
+labelled Group A, Group B, and Group C with their student counts and the focus
+description from `generated_plan.student_groups`.
+
+**Regenerate modal:** A confirmation dialog: "Regenerate this lesson plan? Your edits
+will be lost. A new plan will be generated based on your current class data. This takes
+about 30 seconds." Two buttons: "Cancel" and "Regenerate" (gold). On confirm, call
+`regenerate` mutation, close the modal, and show a loading state on the plan content
+area: the lesson sections are replaced by a skeleton with the text "Generating your
+new plan...". The page polls `GET /lesson-plans/{planId}` every 5 seconds until the
+status is no longer `GENERATING`.
 
 ---
 
-## `useLessonPlans.ts` Hooks
+## Dashboard "This Week" Card Update
 
-```ts
-// List plans for a class
-const useLessonPlans = (classId: string) =>
-  useQuery({
-    queryKey: ["lesson-plans", classId],
-    queryFn: () => apiClient.get(`/classes/${classId}/lesson-plans`),
-  })
+The teacher dashboard already has a "This Week" placeholder card from M0-9-T2.
+Locate this component and update it to:
 
-// Edit a plan field
-const useEditLessonPlan = (planId: string) =>
-  useMutation({
-    mutationFn: (body: LessonPlanEditRequest) =>
-      apiClient.patch(`/lesson-plans/${planId}`, body),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["lesson-plans"] }),
-  })
+Fetch `GET /api/v1/classes/{classId}/lesson-plans?page=1&page_size=1` for the most
+recent plan using the `useClassLessonPlans` hook. If a GENERATED or EDITED plan
+exists, show `LessonPlanCard` with the week label and the two focus subtopic names.
+A "View Full Plan" link goes to `/teacher/lesson-plans/{planId}`.
 
-// Regenerate
-const useRegenerateLessonPlan = (planId: string) =>
-  useMutation({
-    mutationFn: () => apiClient.post(`/lesson-plans/${planId}/regenerate`),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["lesson-plans"] }),
-  })
-
-// Mark as used
-const useUpdateLessonPlanStatus = (planId: string) =>
-  useMutation({
-    mutationFn: (status: "USED" | "ARCHIVED") =>
-      apiClient.patch(`/lesson-plans/${planId}/status`, { status }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["lesson-plans"] }),
-  })
-```
+If no plan exists, show the existing placeholder: "Your weekly lesson plan will
+appear here every Monday morning."
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] E2E test: teacher navigates to lesson plans page → sees this week's plan
-- [ ] E2E test: teacher clicks [Edit ✎] on starter → textarea opens with current text
-- [ ] E2E test: teacher types new text, clicks Save → text updated in UI, status badge changes to "EDITED"
-- [ ] E2E test: teacher clicks Cancel → original text restored, no API call made
-- [ ] E2E test: teacher clicks Regenerate → confirmation modal appears
-- [ ] E2E test: teacher confirms regenerate → loading spinner → plan refreshes with new content
-- [ ] E2E test: teacher clicks "Mark as Used" → status badge changes to "USED", button disabled
-- [ ] E2E test: nav badge shows when new plan available, clears after teacher views it
-- [ ] Unit test: `EditableSection` — save calls correct `fieldKey` in PATCH body
-- [ ] Unit test: `StudentGroupTabs` — clicking Group B tab shows Group B activity
-- [ ] Responsive: all sections readable at 768px (tablet — teacher's most likely device)
+**Playwright E2E tests in `lesson-plans.spec.ts`**
+
+`test_list_page_when_plans_exist_then_newest_first` — Seed three plans on different
+Mondays. Navigate to the list page. Assert the most recent plan appears first.
+
+`test_list_page_when_recent_plan_then_new_badge_shown` — Seed a plan created
+`datetime.now() - 1 hour`. Assert the "New ✨" badge is visible on that row.
+
+`test_list_page_when_no_plans_then_empty_state_shown` — Mock the API to return empty
+data. Assert the "No lesson plans generated yet" message is visible.
+
+`test_detail_page_when_loaded_then_five_sections_visible` — Navigate to a plan detail
+page. Assert five distinct section cards are present.
+
+`test_detail_page_when_edit_mode_then_textareas_visible` — Click the "Edit" button.
+Assert that at least one textarea is visible in the lesson structure area.
+
+`test_detail_page_when_save_changes_then_patch_api_called` — Enter edit mode, change
+the starter text, click "Save Changes." Assert a `PATCH /lesson-plans/{id}` request
+was made with the updated field.
+
+`test_detail_page_when_regenerate_confirmed_then_generating_skeleton_shown` — Click
+"Regenerate," confirm in the modal. Assert the lesson sections are replaced by a
+skeleton loading state.
+
+`test_detail_page_when_mark_as_used_then_status_badge_updates` — Click "Mark as Used."
+Assert the status badge changes to "USED" and the "Mark as Used" button disappears.
+
+`test_dashboard_card_when_plan_exists_then_shows_plan_data` — Navigate to the teacher
+dashboard. Mock the lesson plan API to return one GENERATED plan. Assert the "This
+Week" card shows the week label and "View Full Plan" link.
+
+`test_dashboard_card_when_no_plan_then_shows_placeholder` — Mock the API to return
+empty data. Assert the "Your weekly lesson plan will appear here every Monday morning"
+text is visible.
+
+**Jest unit tests in `LessonEditor.test.tsx`**
+
+`test_lesson_editor_view_mode_shows_activity_text` — Render `LessonEditor` in view
+mode with a starter text "Begin with a warm-up." Assert that text is visible and no
+textarea is rendered.
+
+`test_lesson_editor_edit_mode_shows_textarea_with_current_text` — Switch to edit mode.
+Assert a textarea is visible containing "Begin with a warm-up." as its value.
+
+`test_lesson_editor_save_calls_on_save_with_updated_value` — Change the textarea
+content and trigger save. Assert the `onSave` callback is called with the new text.
+
+`test_lesson_editor_cancel_restores_original_text` — Change the textarea content, then
+click Cancel. Assert the displayed text reverts to the original and no `onSave` is
+called.
 
 ---
 
-## Output (what M5 needs)
+## Do NOT Touch
 
-- Teacher lesson plan UI fully functional — teachers are engaged with the Copilot feature
-- `LessonPlanService.generate_for_class()` validated in production via teacher-triggered regeneration
-- Celery beat confirmed working (teachers see new plans every Monday)
+`frontend/apps/student/` — no code goes here. `frontend/apps/school-admin/` — no
+code goes here. Any backend file. The `useClassLessonPlans` hook from M0-10-T9 — use
+as-is, do not rewrite it.

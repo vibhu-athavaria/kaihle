@@ -1,145 +1,383 @@
 # M1-4-T3 — Gap State Calculation (Celery Task)
 **Milestone:** M1 · **Epic:** M1-4 · **Task:** T3
-**Depends on:** M0-2-T2 (ORM models — `gap_states`), M1-4-T2 (scoring service — responses must be scored before gaps can be calculated)
-**Triggered by:** M1-4-T1 (attempt submit endpoint)
+**Depends on:** M0-2-T2 (ORM models — `gap_states`), M1-4-T1 (attempt submit triggers this task)
+**Blocks:** M2-1-T1 (gap map service reads `gap_states` — needs real data)
+**Estimated effort:** 3–4 hours
+
+---
+
+## Context
+
+This task creates the Celery task that fires after every attempt submission and
+updates the student's mastery scores per curriculum subtopic. It is the core of
+Kaihle's diagnostic intelligence — every heatmap cell, study plan assignment, and
+lesson plan focus area derives from what this task writes.
+
+The task must be idempotent. If it fires twice for the same `attempt_id` (due to a
+retry), it must produce the same final state without creating duplicate rows or
+corrupting rolling averages.
+
+The task uses PostgreSQL's `INSERT ... ON CONFLICT DO UPDATE` (upsert) pattern — not
+a read-then-write pattern — to avoid race conditions when two attempts for the same
+student complete within the same second.
+
+Read CONSTITUTION.md Rule 2 (school_id on every table) and Rule 18 (dead-letter
+CRITICAL log on final retry) before writing any code.
 
 ---
 
 ## User Story
-As the system, after a student submits an assessment, I want to update their mastery scores per subtopic so the gap map reflects their latest performance.
+
+As the system, after a student submits an assessment, I want to update their mastery
+score for each curriculum subtopic covered by that assessment so the gap map reflects
+their latest performance.
 
 ---
 
-## Files to Create / Modify
+## Files to Create
 
 ```
 backend/app/tasks/gap_tasks.py
-backend/app/services/gap_service.py          # add: upsert_gap_state()
-backend/tests/unit/test_gap_calculation.py
-backend/tests/integration/test_gap_states_updated.py
+backend/app/services/gap_service.py         ← CREATE: upsert logic lives here
+backend/app/tests/unit/test_gap_calculation.py
+backend/app/tests/integration/test_gap_states_updated.py
 ```
 
 ---
 
-## Celery Task
+## The Mastery Calculation Algorithm
+
+This algorithm is the source of truth for all mastery scores in Kaihle. Do not
+deviate from it.
+
+A student's mastery score for a subtopic is the rolling average of their last three
+attempt scores for that subtopic. An "attempt score" for a subtopic within one attempt
+is the mean of all responses for that subtopic in that attempt. This means if a student
+answers five questions all mapped to "Algebraic Fractions" and gets three correct,
+their attempt score for that subtopic is 0.6.
+
+```
+attempt_score_for_subtopic =
+    count(is_correct=True for responses in this attempt mapped to subtopic)
+    / count(all responses in this attempt mapped to subtopic)
+
+mastery_score =
+    mean of last 3 attempt_scores for this (student_id, subtopic_id) pair
+    including the current attempt_score
+```
+
+The rolling average includes the current attempt. So on a student's first attempt,
+mastery equals that attempt's score exactly. On their second attempt, mastery is the
+average of two scores. From the third attempt onward, mastery is the average of the
+three most recent attempt scores — the oldest drops off.
+
+The "last 3" is determined by attempt `completed_at` timestamp, not by attempt ID.
+
+---
+
+## Celery Task: `calculate_gap_states`
 
 ```python
-# backend/app/tasks/gap_tasks.py
+@celery_app.task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=10,
+    name="app.tasks.gap_tasks.calculate_gap_states",
+)
+def calculate_gap_states(self, attempt_id: str) -> dict[str, object]:
+    """Update gap_states after a student attempt is submitted.
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=10)
-def calculate_gap_states(self, attempt_id: str):
+    Called by: AttemptService.submit_attempt (M1-4-T1)
+    Idempotent: safe to call multiple times for the same attempt_id.
+
+    Args:
+        attempt_id: UUID string of the completed StudentAttempt.
+
+    Returns:
+        Dict with subtopics_updated count and attempt_id.
     """
-    Fired after every student attempt submission.
-    Reads all scored responses for the attempt.
-    Upserts gap_states for each subtopic touched.
-    """
 ```
 
----
+The task uses `asyncio.new_event_loop()` + `run_until_complete()` + `loop.close()`
+(the same pattern as `onboarding_tasks.py` from M0-8-T1). Do not use `asyncio.run()`.
 
-## Calculation Logic
-
-```
-1. Load all student_responses for attempt_id WHERE scored_by IN ('RULE', 'LLM')
-   - Skip PENDING responses (LLM not yet returned)
-   - If all responses are PENDING, re-queue this task with 30s delay
-
-2. For each response:
-   - Get subtopic_id via: question_bank.subtopic_id
-   - Group responses by subtopic_id
-
-3. For each subtopic_id group:
-   - Load existing gap_state for (student_id, subtopic_id)
-   - Compute new mastery_score:
-
-     ROLLING AVERAGE of last 3 attempt scores for this subtopic:
-       scores_history = load_last_3_attempt_scores(student_id, subtopic_id)
-       # = list of per-attempt average scores, oldest first
-       this_attempt_score = mean(responses in this group)
-       scores_history.append(this_attempt_score)
-       new_mastery = mean(scores_history[-3:])  # last 3 attempts
-
-   - Update gap_state row (upsert):
-       mastery_score = new_mastery
-       attempt_count += 1
-       total_correct += count(is_correct=True in group)
-       total_attempted += count(responses in group)
-       confidence = min(1.0, attempt_count / 5)  # confidence grows with attempts
-       last_assessed_at = now()
-       needs_review = (new_mastery < 0.4)
-
-4. On DB error: retry up to 3 times
-```
-
----
-
-## `gap_service.upsert_gap_state()`
+The `on_failure` callback must emit a CRITICAL log per CONSTITUTION Rule 18:
 
 ```python
-async def upsert_gap_state(
-    student_id: UUID,
-    subtopic_id: UUID,
-    school_id: UUID,
-    class_id: UUID,
-    new_mastery: float,
-    correct_count: int,
-    attempted_count: int,
-    db: AsyncSession
-) -> GapState:
-    """
-    INSERT ... ON CONFLICT (student_id, subtopic_id) DO UPDATE
-    """
+def on_failure(self, exc, task_id, args, kwargs, einfo):
+    logger.critical(
+        "calculate_gap_states_permanently_failed",
+        task_id=task_id,
+        attempt_id=args[0] if args else kwargs.get("attempt_id"),
+        error=str(exc),
+        exc_info=True,
+    )
 ```
-
-Use PostgreSQL upsert (`ON CONFLICT DO UPDATE`) not a read-then-write pattern — avoids race conditions if multiple tasks run concurrently.
 
 ---
 
-## Key DB Details
+## Task Logic — Step by Step
+
+**Step 1 — Load the attempt.** Verify it exists and has `status="COMPLETED"`. If
+the attempt does not exist or is not completed, log at WARNING level and return early
+— do not raise, do not retry. This handles the edge case of a task firing before the
+DB commit lands.
+
+**Step 2 — Load all StudentResponse rows for this attempt.** Only load rows where
+the attempt's assessment has questions mapped to this student. This is a single query:
+
+```python
+responses = await db.scalars(
+    select(StudentResponse)
+    .where(StudentResponse.attempt_id == uuid.UUID(attempt_id))
+)
+responses = list(responses)
+```
+
+If no responses are found, log at WARNING and return early with `{"subtopics_updated": 0}`.
+
+**Step 3 — Map each response to its subtopic.** Each `StudentResponse` has a
+`question_id`. Each `QuestionBank` row has a `subtopic_id`. Join them:
+
+```python
+question_ids = [r.question_id for r in responses]
+questions = await db.scalars(
+    select(QuestionBank).where(QuestionBank.id.in_(question_ids))
+)
+question_map = {q.id: q for q in questions}
+```
+
+If a response's `question_id` is not in `question_map` (data integrity issue), log
+at ERROR level for that response and skip it — do not crash the whole task.
+
+**Step 4 — Group responses by subtopic and compute attempt scores.**
+
+```python
+subtopic_responses: dict[uuid.UUID, list[StudentResponse]] = defaultdict(list)
+for response in responses:
+    question = question_map.get(response.question_id)
+    if question:
+        subtopic_responses[question.subtopic_id].append(response)
+
+attempt_scores: dict[uuid.UUID, float] = {}
+for subtopic_id, sub_responses in subtopic_responses.items():
+    correct = sum(1 for r in sub_responses if r.is_correct)
+    attempt_scores[subtopic_id] = correct / len(sub_responses)
+```
+
+**Step 5 — For each subtopic, compute the rolling average.**
+
+Load the last 2 completed attempts (before this one) for this student and subtopic.
+"Before this one" means `completed_at < current_attempt.completed_at`:
+
+```python
+previous_scores = await db.scalars(
+    select(StudentAttemptSubtopicScore)  # a helper table or use gap_states history
+    .where(
+        StudentAttemptSubtopicScore.student_id == attempt.student_id,
+        StudentAttemptSubtopicScore.subtopic_id == subtopic_id,
+    )
+    .order_by(StudentAttemptSubtopicScore.attempted_at.desc())
+    .limit(2)
+)
+```
+
+Note on `StudentAttemptSubtopicScore`: this is a lightweight helper table that must
+be created in a new Alembic migration in this task. It stores one row per
+`(student_id, subtopic_id, attempt_id)` with the per-attempt score and timestamp.
+This avoids recomputing historical scores from `student_responses` on every task run.
+The table definition:
 
 ```sql
--- gap_states unique constraint (check kaihle_v2_1_schema.sql):
-UNIQUE (student_id, subtopic_id)
-
--- Fields to upsert:
-mastery_score     FLOAT
-confidence        FLOAT (0.0–1.0)
-attempt_count     INT
-total_correct     INT
-total_attempted   INT
-needs_review      BOOLEAN
-last_assessed_at  TIMESTAMPTZ
-class_id          UUID   -- update to latest class (student may switch classes)
-school_id         UUID
+CREATE TABLE student_attempt_subtopic_scores (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subtopic_id UUID NOT NULL REFERENCES subtopics(id) ON DELETE CASCADE,
+    attempt_id  UUID NOT NULL REFERENCES student_attempts(id) ON DELETE CASCADE,
+    score       FLOAT NOT NULL,
+    attempted_at TIMESTAMPTZ NOT NULL,
+    UNIQUE (student_id, subtopic_id, attempt_id)
+);
+CREATE INDEX idx_subtopic_scores_student_sub ON student_attempt_subtopic_scores(student_id, subtopic_id);
 ```
+
+With the history loaded, compute the rolling average:
+
+```python
+history = [row.score for row in previous_scores]
+history.append(attempt_scores[subtopic_id])  # add current attempt
+rolling_scores = history[-3:]  # last 3 only (may be 1, 2, or 3 entries)
+new_mastery = sum(rolling_scores) / len(rolling_scores)
+```
+
+**Step 6 — Upsert the `gap_states` row.** Use PostgreSQL's `ON CONFLICT DO UPDATE`
+to make this atomic and safe against concurrent updates. Do not use a read-then-write
+pattern.
+
+```python
+await db.execute(
+    insert(GapState)
+    .values(
+        id=uuid.uuid4(),
+        student_id=attempt.student_id,
+        subtopic_id=subtopic_id,
+        school_id=attempt_school_id,
+        class_id=assessment.class_id,
+        mastery_score=new_mastery,
+        attempt_count=len(rolling_scores),
+        last_assessed_at=attempt.completed_at,
+        needs_review=(new_mastery < 0.4),
+    )
+    .on_conflict_do_update(
+        index_elements=["student_id", "subtopic_id"],
+        set_={
+            "mastery_score": new_mastery,
+            "attempt_count": GapState.attempt_count + 1,
+            "last_assessed_at": attempt.completed_at,
+            "needs_review": (new_mastery < 0.4),
+        },
+    )
+)
+```
+
+**Step 7 — Insert the helper row for this attempt's per-subtopic score.**
+
+```python
+await db.execute(
+    insert(StudentAttemptSubtopicScore)
+    .values(
+        student_id=attempt.student_id,
+        subtopic_id=subtopic_id,
+        attempt_id=uuid.UUID(attempt_id),
+        score=attempt_scores[subtopic_id],
+        attempted_at=attempt.completed_at,
+    )
+    .on_conflict_do_nothing()   # idempotent: if row exists, skip
+)
+```
+
+**Step 8 — Commit and return.**
+
+```python
+await db.commit()
+logger.info(
+    "gap_states_updated",
+    attempt_id=attempt_id,
+    student_id=str(attempt.student_id),
+    subtopics_updated=len(attempt_scores),
+)
+return {"attempt_id": attempt_id, "subtopics_updated": len(attempt_scores)}
+```
+
+---
+
+## GapService: `upsert_gap_state`
+
+The upsert logic from Step 6 is encapsulated in `GapService.upsert_gap_state` so
+it can be unit-tested independently of the Celery task machinery.
+
+Full signature:
+
+```python
+class GapService:
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def upsert_gap_state(
+        self,
+        student_id: uuid.UUID,
+        subtopic_id: uuid.UUID,
+        school_id: uuid.UUID,
+        class_id: uuid.UUID,
+        new_mastery: float,
+        rolling_attempt_count: int,
+        last_assessed_at: datetime,
+    ) -> None:
+        """Atomically upsert a gap_state row using ON CONFLICT DO UPDATE.
+
+        This method is safe to call concurrently — it uses PostgreSQL's native
+        upsert and will not produce duplicate rows or lost updates.
+        """
+        ...
+```
+
+The Celery task calls this method rather than writing the SQL directly.
+
+---
+
+## Alembic Migration
+
+This task requires a new migration to create `student_attempt_subtopic_scores`.
+Run `alembic revision --autogenerate -m "add_student_attempt_subtopic_scores"` and
+review the output before committing. The migration must include a `downgrade()` that
+drops the table and index.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] First attempt, 3 questions on same subtopic: mastery = mean of those 3 scores
-- [ ] Second attempt on same subtopic: rolling avg of 2 attempt averages
-- [ ] Third+ attempt: rolling avg capped at last 3 attempt scores
-- [ ] `confidence` = `min(1.0, attempt_count / 5)` — grows to 1.0 after 5 attempts
-- [ ] `needs_review = True` when mastery < 0.4
-- [ ] Questions with `scored_by=PENDING` excluded from calculation
-- [ ] If ALL responses are PENDING: task re-queues itself with 30s delay
-- [ ] Gap states updated within 5 seconds of attempt submission
-- [ ] Subtopic with 0 scored responses: no gap_state row created / updated
-- [ ] Task retries up to 3 times on DB error
+**Unit tests — `test_gap_calculation.py`**
+
+Each test below specifies what to set up, what to call, and what to assert.
+
+`test_calculate_when_first_attempt_5_questions_all_correct_then_mastery_1_0` — Create
+a completed attempt with 5 responses all `is_correct=True` mapped to one subtopic.
+Call the gap calculation logic (extracted into a pure function for testability). Assert
+`gap_state.mastery_score == 1.0` and `attempt_count == 1`.
+
+`test_calculate_when_first_attempt_3_of_5_correct_then_mastery_0_6` — 3 correct out
+of 5. Assert `mastery_score == 0.6`.
+
+`test_calculate_when_second_attempt_higher_score_then_mastery_is_average` — First
+attempt score 0.4, second attempt score 0.8. Assert `mastery_score == 0.6` (average
+of two).
+
+`test_calculate_when_four_attempts_then_only_last_three_count` — Scores: [0.2, 0.4,
+0.6, 0.8]. After the fourth attempt, assert `mastery_score == 0.6` (average of
+0.4, 0.6, 0.8 — the oldest 0.2 drops off).
+
+`test_calculate_when_multiple_subtopics_then_each_updated_independently` — Create an
+attempt with 4 questions: 2 mapped to subtopic A, 2 mapped to subtopic B. Both
+correct for A, both wrong for B. Assert `gap_states` for subtopic A has
+`mastery_score == 1.0` and subtopic B has `mastery_score == 0.0`.
+
+`test_calculate_when_response_has_unknown_question_id_then_skipped_not_crashed` —
+Insert a `StudentResponse` with a `question_id` that does not exist in `question_bank`.
+Assert the task completes successfully and an ERROR log is emitted for that response.
+
+`test_upsert_gap_state_when_called_twice_same_values_then_one_row_only` — Call
+`GapService.upsert_gap_state` twice with identical parameters. Assert exactly one row
+exists in `gap_states` for `(student_id, subtopic_id)`.
+
+`test_upsert_gap_state_when_called_twice_different_values_then_row_updated` — Call
+once with `mastery_score=0.4`, then again with `mastery_score=0.8`. Assert the single
+row has `mastery_score=0.8`.
+
+`test_needs_review_when_mastery_below_0_4_then_true` — Assert `needs_review=True` when
+`mastery_score=0.39`.
+
+`test_needs_review_when_mastery_at_0_4_then_false` — Boundary: `mastery_score=0.4`
+should set `needs_review=False` (0.4 is the Developing threshold — not Needs Work).
+
+**Integration tests — `test_gap_states_updated.py`**
+
+`test_gap_states_updated_within_reasonable_time_after_submit` — Submit a complete
+attempt via the API, wait up to 5 seconds (with polling), then query `gap_states`
+directly. Assert at least one row exists for the student with a non-null `mastery_score`.
+
+`test_gap_states_correct_after_submit_10_correct_of_10` — Submit 10 correct answers.
+After the Celery task runs, assert `mastery_score == 1.0` for each subtopic covered.
+
+`test_celery_task_idempotent_when_called_twice` — Call `calculate_gap_states.delay`
+twice with the same `attempt_id`. Assert the final `gap_states` row is the same as
+after one call (no doubled counts, no duplicate rows).
 
 ---
 
-## Tests to Write
+## Do NOT Touch
 
-```python
-test_calculate_gap_states_when_first_attempt_then_mastery_is_mean()
-test_calculate_gap_states_when_second_attempt_then_rolling_avg()
-test_calculate_gap_states_when_third_attempt_then_last_3_only()
-test_calculate_gap_states_when_mastery_below_04_then_needs_review_true()
-test_calculate_gap_states_when_pending_responses_then_excluded()
-test_calculate_gap_states_when_all_pending_then_task_requeued()
-test_calculate_gap_states_when_db_error_then_task_retries()
-test_upsert_gap_state_when_row_exists_then_updated_not_duplicated()
-test_confidence_when_5_attempts_then_confidence_1()
-```
+`backend/app/tasks/onboarding_tasks.py` — do not modify.
+`backend/app/services/assessment_service.py` — do not modify.
+`backend/app/schemas/` — do not modify any existing schema file.
+Any existing Alembic migration — only add a new one.
