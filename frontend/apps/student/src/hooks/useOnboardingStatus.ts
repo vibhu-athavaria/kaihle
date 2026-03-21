@@ -2,8 +2,15 @@ import { useEffect, useState, useRef } from "react";
 import { apiClient } from "@kaihle/auth";
 import { useAuth } from "@kaihle/auth";
 
+export interface DiagnosticStatusByClass {
+  class_id: string;
+  class_name: string;
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+}
+
 export type OnboardingStatus = {
   learning_profile_complete: boolean;
+  diagnostics_by_class: DiagnosticStatusByClass[];
 };
 
 interface UseOnboardingStatusResult {
