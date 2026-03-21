@@ -1,7 +1,6 @@
 """Study plan schemas — personalised per-student gap remediation plans."""
 
 from datetime import datetime
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -17,12 +16,58 @@ class StudyPlanResource(BaseModel):
     is_watched: bool
 
 
+class StudyPlanQuizOption(BaseModel):
+    """Quiz option for study plan questions — matches AssessmentQuestion pattern."""
+
+    key: str  # e.g. "a", "b", "c", "d"
+    text: str
+
+
 class StudyPlanQuizQuestion(BaseModel):
     """Note: correct_answer is NEVER included — same rule as AssessmentQuestion."""
 
     question_index: int
     question_text: str
-    options: list[dict[str, Any]]
+    options: list[StudyPlanQuizOption]
+
+
+class StudyPlanItem(BaseModel):
+    """Individual study plan in an assign response."""
+
+    plan_id: UUID
+    student_id: UUID
+    status: str  # "GENERATING"
+
+
+class StudyPlanAssignRequest(BaseModel):
+    subtopic_id: UUID
+    student_ids: list[UUID] | None = Field(
+        None,
+        description="List of student UUIDs, or null to assign to all enrolled students",
+    )
+
+
+class StudyPlanAssignResponse(BaseModel):
+    status: str = "generating"
+    plans: list[StudyPlanItem]
+
+
+class QuizResponse(BaseModel):
+    """Individual quiz response in a submit request."""
+
+    question_index: int
+    answer: str
+
+
+class QuizSubmitRequest(BaseModel):
+    responses: list[QuizResponse]
+
+
+class QuizSubmitResponse(BaseModel):
+    score: float
+    correct_count: int
+    total_questions: int
+    plan_status: str
 
 
 class StudyPlanResponse(BaseModel):
@@ -36,27 +81,3 @@ class StudyPlanResponse(BaseModel):
     quiz_questions: list[StudyPlanQuizQuestion]
     quiz_score: float | None  # None until quiz submitted
     created_at: datetime
-
-
-class StudyPlanAssignRequest(BaseModel):
-    subtopic_id: UUID
-    student_ids: list[UUID] | None = Field(
-        None,
-        description="List of student UUIDs, or null to assign to all enrolled students",
-    )
-
-
-class StudyPlanAssignResponse(BaseModel):
-    status: str = "generating"
-    plans: list[dict[str, Any]]  # [{"plan_id": uuid, "student_id": uuid, "status": "GENERATING"}]
-
-
-class QuizSubmitRequest(BaseModel):
-    responses: list[dict[str, Any]]  # [{"question_index": int, "answer": str}]
-
-
-class QuizSubmitResponse(BaseModel):
-    score: float
-    correct_count: int
-    total_questions: int
-    plan_status: str
