@@ -16,6 +16,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token
+from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.school import Class, School
 from app.models.user import User, UserRole
 
@@ -356,29 +357,35 @@ async def test_kaihle_admin_can_create_class_in_any_school(
     db_session: AsyncSession,
     kaihle_admin: User,
     other_school: School,
-    test_teacher: User,
+    test_curriculum: Curriculum,
+    test_grade: Grade,
+    test_subject: Subject,
 ) -> None:
     """KaihleAdmin can POST to /api/v1/admin/schools/{any_school_id}/classes and get 201."""
     headers = make_auth_header(kaihle_admin)
 
-    # Create a grade and subject first for the other school
-    from app.models.curriculum import Grade, Subject
-
-    grade = Grade(id=uuid.uuid4(), name="Grade 8", level=8, is_active=True)
-    subject = Subject(id=uuid.uuid4(), name="Science", code="SCI", is_active=True)
-    db_session.add(grade)
-    db_session.add(subject)
-    await db_session.commit()
+    # Create a teacher that belongs to other_school
+    teacher = User(
+        id=uuid.uuid4(),
+        school_id=other_school.id,
+        email=f"teacher-other-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="OtherSchool",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(teacher)
+    await db_session.flush()
 
     response = await client.post(
         f"/api/v1/admin/schools/{other_school.id}/classes",
         headers=headers,
         json={
             "name": "Test Class",
-            "grade_id": str(grade.id),
-            "subject_id": str(subject.id),
-            "curriculum_id": str(uuid.uuid4()),
-            "teacher_id": str(test_teacher.id),
+            "grade_id": str(test_grade.id),
+            "subject_id": str(test_subject.id),
+            "curriculum_id": str(test_curriculum.id),
+            "teacher_id": str(teacher.id),
             "academic_year": "2026",
         },
     )
@@ -395,28 +402,33 @@ async def test_kaihle_admin_can_list_classes_in_any_school(
     db_session: AsyncSession,
     kaihle_admin: User,
     other_school: School,
-    test_teacher: User,
+    test_curriculum: Curriculum,
+    test_grade: Grade,
+    test_subject: Subject,
 ) -> None:
     """KaihleAdmin can GET /api/v1/admin/schools/{any_school_id}/classes and get 200."""
     headers = make_auth_header(kaihle_admin)
 
-    # Create a class in the other school
-    from app.models.curriculum import Grade, Subject
-
-    grade = Grade(id=uuid.uuid4(), name="Grade 9", level=9, is_active=True)
-    subject = Subject(id=uuid.uuid4(), name="Math", code="MATH", is_active=True)
-    curriculum_id = uuid.uuid4()
-    db_session.add(grade)
-    db_session.add(subject)
+    # Create a teacher that belongs to other_school
+    teacher = User(
+        id=uuid.uuid4(),
+        school_id=other_school.id,
+        email=f"list-teacher-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="ListTest",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(teacher)
     await db_session.flush()
 
     class_ = Class(
         id=uuid.uuid4(),
         school_id=other_school.id,
-        grade_id=grade.id,
-        subject_id=subject.id,
-        curriculum_id=curriculum_id,
-        teacher_id=test_teacher.id,
+        grade_id=test_grade.id,
+        subject_id=test_subject.id,
+        curriculum_id=test_curriculum.id,
+        teacher_id=teacher.id,
         name="Kaihle Test Class",
         academic_year="2026",
         is_active=True,
@@ -441,34 +453,39 @@ async def test_kaihle_admin_can_enroll_students_in_any_school(
     db_session: AsyncSession,
     kaihle_admin: User,
     other_school: School,
-    test_teacher: User,
+    test_curriculum: Curriculum,
+    test_grade: Grade,
+    test_subject: Subject,
 ) -> None:
     """KaihleAdmin can POST to /api/v1/admin/schools/{any_school_id}/classes/{class_id}/enroll."""
     headers = make_auth_header(kaihle_admin)
 
-    # Create a class, grade, subject in the other school
-    from app.models.curriculum import Grade, Subject
-
-    grade = Grade(id=uuid.uuid4(), name="Grade 10", level=10, is_active=True)
-    subject = Subject(id=uuid.uuid4(), name="English", code="ENG", is_active=True)
-    curriculum_id = uuid.uuid4()
-    db_session.add(grade)
-    db_session.add(subject)
+    # Create a teacher that belongs to other_school
+    teacher = User(
+        id=uuid.uuid4(),
+        school_id=other_school.id,
+        email=f"enroll-teacher-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="EnrollTest",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(teacher)
     await db_session.flush()
 
     class_ = Class(
         id=uuid.uuid4(),
         school_id=other_school.id,
-        grade_id=grade.id,
-        subject_id=subject.id,
-        curriculum_id=curriculum_id,
-        teacher_id=test_teacher.id,
+        grade_id=test_grade.id,
+        subject_id=test_subject.id,
+        curriculum_id=test_curriculum.id,
+        teacher_id=teacher.id,
         name="Enrollment Test Class",
         academic_year="2026",
         is_active=True,
     )
     db_session.add(class_)
-    await db_session.commit()
+    await db_session.flush()
 
     # Create a student in the other school
     student = User(
@@ -481,7 +498,7 @@ async def test_kaihle_admin_can_enroll_students_in_any_school(
         is_active=True,
     )
     db_session.add(student)
-    await db_session.commit()
+    await db_session.flush()
 
     response = await client.post(
         f"/api/v1/admin/schools/{other_school.id}/classes/{class_.id}/enroll",
