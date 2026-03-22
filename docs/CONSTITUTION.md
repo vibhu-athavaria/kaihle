@@ -177,6 +177,16 @@ Any helper missing the KaihleAdmin bypass is a bug.
 
 **Rule 19 — API contracts are frozen once published.** Once an endpoint's path, HTTP method, request body schema, and response body schema are defined in any M0-10-T* task file, they are permanently frozen. Future milestones replace only the stub function body with real business logic. They never change the path, method, or schema shape. Any breaking change requires a new API version prefix (`/api/v2/`) and an ADR entry in `docs/adr/`. This rule exists to guarantee that frontend code written against a stub never needs to change when the real implementation ships.
 
+**Rule 20 — Test-Driven Development is non-negotiable.** Every task file that
+creates or modifies backend service or route logic MUST include:
+1. Named unit test functions (e.g. `test_submit_when_duplicate_then_raises_409`)
+   with explicit mock setup, inputs, and assertions spelled out
+2. Named integration test functions that hit real DB or real HTTP endpoints
+3. The test file path(s) listed under "Files to Create / Modify"
+
+Acceptance criteria checkboxes alone are NOT sufficient. A coding agent must be
+able to implement the tests without making design decisions. If a task file does
+not name its tests, it is incomplete and must not be handed to a coding agent.
 ---
 
 ## 5. Authentication and Onboarding Flows (CRITICAL)
