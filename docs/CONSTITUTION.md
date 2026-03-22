@@ -427,6 +427,7 @@ These components are shared across all five apps. No app may define its own vers
 | Design tokens, component patterns, role palettes | `docs/design/DESIGN_SYSTEM.md` |
 | Architecture decisions | `docs/adr/ADR-*.md` |
 | Environment variables reference | `docs/kaihle_product_plan.md` Part 6 |
+| Screen design specs (per-role UI page inventory, component specs, data map) | `docs/design/screens/TEACHER_SCREENS.md` · `STUDENT_SCREENS.md` · `SCHOOL_ADMIN_SCREENS.md` · `KAIHLE_ADMIN_SCREENS.md` · `PARENT_SCREENS.md` |
 
 ---
 

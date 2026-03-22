@@ -127,6 +127,27 @@ the gap map.
 
 ---
 
+## Epic M2-2: Teacher Student Pages (Teacher App)
+
+**User Story:** As a teacher, I want a roster of all students in my class and a full
+profile page per student — showing their mastery by subject, learning style, and study
+plan history — so I understand where each student is and what support they need.
+
+### Tasks in This Milestone
+
+| Task ID | File | Description |
+|---|---|---|
+| M2-2-T1 | `M2/M2-2-T1_my_students_list_ui.md` | My Students class roster (apps/teacher) |
+| M2-2-T2 | `M2/M2-2-T2_student_profile_ui.md` | Student profile page — gap data, learning profile, study plan history (apps/teacher) |
+
+### Task Execution Order
+M2-1-T2 (gap map routes — real data)
+→ M2-2-T1 (My Students list) ← needs real gap map data for mastery column
+→ M2-2-T2 (Student Profile) ← linked from My Students row click + Gap Map side panel
+M2-2-T1 and M2-2-T2 can run in parallel with M2-1-T3 and M2-1-T4 once M2-1-T2 is live.
+
+---
+
 ## Definition of Done
 
 - Teacher sees colour-coded gap map for their class with real mastery data
@@ -135,6 +156,8 @@ the gap map.
 - Teacher dashboard class cards show real `avg_mastery` (no longer null)
 - Gap map reflects latest assessment results — re-fetching after a new submission
   shows updated colours within the React Query stale time window
+- Teacher can view My Students class roster with mastery and learning style at a glance
+- Teacher can view a student's full profile: gap data, learning profile, and study plan history
 - All M2 tests pass
 
 ---

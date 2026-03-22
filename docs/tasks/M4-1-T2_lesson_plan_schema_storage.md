@@ -1,4 +1,4 @@
-# M4-1-T2 — Lesson Plan JSON Schema & Storage
+# M4-1-T2 — Lesson Plan JSON Schema & Storage (UPDATED)
 
 **Milestone:** M4 — Teacher Copilot
 **Epic:** M4-1 — Lesson Plan Generation
@@ -8,17 +8,27 @@
 
 > Build this FIRST within M4. The schema is what everything else in this milestone depends on.
 
+> **UPDATED March 2026:** Schema expanded to support rich lesson plans with
+> per-activity timelines, diagnostic gap targeting (WHERE + HOW), Cambridge
+> objective codes, and VARK learning style embedding. The previous flat
+> 4-field `LessonStructure` is replaced by a `timeline` array + `diagnostic_gaps`
+> array. The old shape is preserved as `LessonStructureLegacy` for reference only
+> — do NOT use it in new code.
+
 ---
 
 ## User Story
 
-As a developer, I want a validated, versioned schema for lesson plan JSON so that LLM output is always structurally correct before it is stored or shown to a teacher.
+As a developer, I want a validated, versioned schema for lesson plan JSON so that LLM
+output is always structurally correct before it is stored or shown to a teacher.
 
 ---
 
 ## What To Build
 
-Pydantic models that validate the LLM-generated lesson plan JSON. A storage service method that persists a validated plan to `lesson_plans`. A response schema for the API. Unit tests covering validation edge cases.
+Pydantic models that validate the LLM-generated lesson plan JSON. A storage service
+method that persists a validated plan to `lesson_plans`. A response schema for the API.
+Unit tests covering validation edge cases.
 
 ---
 
@@ -40,196 +50,402 @@ Pydantic models that validate the LLM-generated lesson plan JSON. A storage serv
 ## Pydantic Models (`schemas/lesson_plan.py`)
 
 ```python
-from pydantic import BaseModel, field_validator, model_validator
-from datetime import date
+from __future__ import annotations
+
+from enum import Enum
+from typing import Optional
 from uuid import UUID
+from datetime import date
 
-# ── LLM output shape (what we parse from GPT-4.1 response) ──────────────────
+from pydantic import BaseModel, field_validator, model_validator
 
-class StudentGroupDetail(BaseModel):
-    count: int
-    focus: str
 
-    @field_validator("count")
+# ── Enums ────────────────────────────────────────────────────────────────────
+
+class LessonPhase(str, Enum):
+    WARMUP    = "warmup"
+    BRIDGE    = "bridge"
+    STATION   = "station"
+    DEBRIEF   = "debrief"
+    EXIT      = "exit"
+    ACTIVITY  = "activity"   # generic fallback for non-station plans
+
+
+class LearningStyleSlug(str, Enum):
+    VISUAL          = "visual"
+    KINESTHETIC     = "kinesthetic"
+    AUDITORY        = "auditory"
+    READING_WRITING = "reading_writing"
+    MIXED           = "mixed"   # class has no dominant style
+
+
+class PlanStatus(str, Enum):
+    GENERATED = "GENERATED"
+    EDITED    = "EDITED"
+    USED      = "USED"
+    ARCHIVED  = "ARCHIVED"
+
+
+# ── Sub-models — LLM output shape ────────────────────────────────────────────
+
+class LearningObjective(BaseModel):
+    """One Cambridge learning objective addressed by this plan."""
+    code: str        # e.g. "7Pf.01"
+    description: str # e.g. "Define force as a push or pull"
+
+    @field_validator("code")
     @classmethod
-    def count_non_negative(cls, v):
+    def code_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Learning objective code cannot be empty")
+        return v.strip()
+
+
+class DiagnosticGapTarget(BaseModel):
+    """
+    One diagnostic gap identified from Kaihle assessment data,
+    with explicit WHERE and HOW it is addressed in this plan.
+    """
+    gap_description: str    # e.g. "Confusing mass and weight"
+    addressed_where: str    # e.g. "Station 1 · Teacher checkpoint min 15"
+    addressed_how:   str    # e.g. "Students physically compare spring balance (N) vs
+                            #        digital balance (g) side-by-side"
+    mastery_band: Optional[str] = None  # "needs_work" | "developing" — from gap_state
+
+    @field_validator("gap_description", "addressed_where", "addressed_how")
+    @classmethod
+    def non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("DiagnosticGapTarget fields cannot be empty")
+        return v.strip()
+
+
+class TimelineItem(BaseModel):
+    """One activity block in the lesson timeline."""
+    phase:       LessonPhase
+    start_min:   int          # lesson minute this block starts, e.g. 0, 5, 8
+    duration_min: int         # length in minutes
+    title:       str          # short activity name, e.g. "Force Freeze — Body Simulation"
+    description: str          # teacher-facing instructions, 2–5 sentences
+    gap_targeted: Optional[str] = None   # gap_description from DiagnosticGapTarget, if applicable
+    kinesthetic_tag: Optional[str] = None  # short tag shown in UI, e.g. "Physical card sort"
+    assess_tag: Optional[str] = None       # e.g. "Diagnostic data collected"
+
+    @field_validator("start_min", "duration_min")
+    @classmethod
+    def non_negative(cls, v: int) -> int:
         if v < 0:
-            raise ValueError("Student group count cannot be negative")
+            raise ValueError("Timeline timings cannot be negative")
         return v
 
-class StudentGroups(BaseModel):
-    A: StudentGroupDetail
-    B: StudentGroupDetail
-    C: StudentGroupDetail
+    @field_validator("title", "description")
+    @classmethod
+    def non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("TimelineItem title and description cannot be empty")
+        return v.strip()
 
-class MainActivity(BaseModel):
-    group_A: str
-    group_B: str
-    group_C: str
 
-class LessonStructure(BaseModel):
-    starter_10min: str
-    main_activity_30min: MainActivity
-    plenary_10min: str
-    homework: str
+class ResourceItem(BaseModel):
+    """One physical or digital resource needed for the lesson."""
+    description: str   # e.g. "Digital balance + spring balance (newton meter)"
+
+
+class StudentGroupActivity(BaseModel):
+    """Per-mastery-group activity for differentiated main activities."""
+    group_a: str   # mastery < 0.4 — foundational
+    group_b: str   # mastery 0.4–0.7 — developing
+    group_c: str   # mastery > 0.7 — extension
+
+
+# ── Top-level LLM output ─────────────────────────────────────────────────────
 
 class LessonPlanLLMOutput(BaseModel):
-    """Validates raw JSON string returned by GPT-4.1."""
-    week_start: date
-    focus_subtopic_ids: list[UUID]
-    class_summary: str
-    student_groups: StudentGroups
-    lesson_structure: LessonStructure
-    teacher_notes: str
+    """
+    Validates raw JSON returned by the LLM.
 
-    @field_validator("focus_subtopic_ids")
-    @classmethod
-    def at_least_one_subtopic(cls, v):
-        if not v:
-            raise ValueError("focus_subtopic_ids cannot be empty")
-        return v
+    The LLM is asked to return this shape via lesson_plan.jinja2.
+    All fields are required. Validation failures trigger a retry.
 
-    @field_validator("class_summary")
-    @classmethod
-    def summary_not_empty(cls, v):
-        if not v.strip():
-            raise ValueError("class_summary cannot be blank")
-        return v
+    Design note: `timeline` is the primary lesson structure and drives
+    the teacher UI. `student_groups` is preserved for differentiated
+    classes where Group A/B/C activities differ within a station.
+    """
+    week_start:        date
+    class_summary:     str   # 1–2 sentence gap summary for this class
+    learning_style:    LearningStyleSlug
+    lesson_duration_min: int
+
+    learning_objectives: list[LearningObjective]   # min 1, max 6
+    diagnostic_gaps:     list[DiagnosticGapTarget] # min 1, max 5
+    timeline:            list[TimelineItem]         # min 3 blocks
+    resources:           list[ResourceItem]         # min 1
+    teacher_notes:       str                        # safety, pacing, checkpoint tips
+
+    # Optional — present when the class has mastery-band differentiation
+    student_groups: Optional[dict] = None  # {"A": {...}, "B": {...}, "C": {...}}
 
     @model_validator(mode="after")
-    def total_students_positive(self):
-        total = (
-            self.student_groups.A.count
-            + self.student_groups.B.count
-            + self.student_groups.C.count
-        )
-        if total == 0:
-            raise ValueError("Total students across all groups must be > 0")
+    def validate_timeline_coverage(self) -> "LessonPlanLLMOutput":
+        total = sum(item.duration_min for item in self.timeline)
+        if total > self.lesson_duration_min + 5:  # allow 5 min slack
+            raise ValueError(
+                f"Timeline total ({total} min) exceeds lesson duration "
+                f"({self.lesson_duration_min} min) by more than 5 minutes"
+            )
+        if len(self.learning_objectives) < 1:
+            raise ValueError("At least one learning objective is required")
+        if len(self.diagnostic_gaps) < 1:
+            raise ValueError("At least one diagnostic gap target is required")
+        if len(self.timeline) < 3:
+            raise ValueError("Timeline must have at least 3 activity blocks")
         return self
 
 
-# ── API request/response schemas ─────────────────────────────────────────────
+# ── API response shape (sent to frontend) ────────────────────────────────────
 
 class LessonPlanResponse(BaseModel):
-    id: UUID
-    class_id: UUID
-    teacher_id: UUID
-    week_start: date
-    status: str                        # GENERATED | EDITED | USED | ARCHIVED
-    generated_plan: LessonPlanLLMOutput
-    teacher_edits: dict | None         # sparse delta — only fields teacher changed
-    created_at: datetime
+    """Returned by GET /lesson-plans/:id — merges teacher_edits over generated_plan."""
+    id:           UUID
+    class_id:     UUID
+    week_start:   date
+    status:       PlanStatus
+    plan:         LessonPlanLLMOutput   # merged view (teacher edits applied)
+    generated_at: str
+    ai_model:     str                   # e.g. "claude-sonnet-4-6" — for UI badge
 
-    model_config = ConfigDict(from_attributes=True)
+
+class LessonPlanSummary(BaseModel):
+    """Returned by GET /classes/:classId/lesson-plans (list view)."""
+    id:           UUID
+    week_start:   date
+    status:       PlanStatus
+    class_summary: str
+    learning_style: LearningStyleSlug
+    gap_count:    int
+    generated_at: str
+
+
+# ── Edit request (PATCH) ──────────────────────────────────────────────────────
 
 class LessonPlanEditRequest(BaseModel):
-    """Teacher PATCH body — partial update, only changed fields."""
-    starter_10min: str | None = None
-    group_a_activity: str | None = None
-    group_b_activity: str | None = None
-    group_c_activity: str | None = None
-    plenary_10min: str | None = None
-    homework: str | None = None
-    teacher_notes: str | None = None
+    """
+    Sparse delta stored in teacher_edits JSONB column.
+    Teacher can edit any timeline item description or teacher_notes.
+    Never overwrites generated_plan — edits layer on top at read time.
+    """
+    timeline_edits: Optional[dict[int, str]] = None
+    # key = timeline item index (0-based), value = updated description
+    # e.g. {0: "Updated warm-up instructions..."}
 
-class LessonPlanStatusUpdate(BaseModel):
-    status: Literal["USED", "ARCHIVED"]
+    teacher_notes: Optional[str] = None
+    class_summary: Optional[str] = None
 ```
 
 ---
 
-## Storage Method (add to `lesson_plan_service.py`)
+## Storage Service Addition (`lesson_plan_service.py`)
+
+Add these two methods to the existing `LessonPlanService` class:
 
 ```python
-def _parse_and_validate(self, llm_json_str: str) -> LessonPlanLLMOutput:
+import json
+from app.schemas.lesson_plan import LessonPlanLLMOutput
+from pydantic import ValidationError
+import structlog
+
+logger = structlog.get_logger()
+
+async def _parse_and_validate(self, raw_json: str) -> LessonPlanLLMOutput | None:
     """
-    Parse and validate raw LLM JSON string.
-    Strips markdown fences if present (LLM sometimes adds them despite instructions).
-    Raises ValueError if JSON is invalid or schema validation fails.
+    Parse and validate LLM output JSON.
+    Returns None on validation failure (caller will retry).
+    Strips markdown fences if LLM wraps output in ```json ... ```.
     """
-    clean = llm_json_str.strip()
-    if clean.startswith("```"):
-        clean = clean.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    data = json.loads(clean)
-    return LessonPlanLLMOutput.model_validate(data)
+    cleaned = raw_json.strip()
+    if cleaned.startswith("```"):
+        # Strip ```json ... ``` fences
+        lines = cleaned.split("\n")
+        cleaned = "\n".join(
+            line for line in lines
+            if not line.strip().startswith("```")
+        )
+    try:
+        data = json.loads(cleaned)
+        return LessonPlanLLMOutput(**data)
+    except (json.JSONDecodeError, ValidationError) as exc:
+        logger.warning(
+            "lesson_plan_validation_failed",
+            error=str(exc),
+            raw_length=len(raw_json),
+        )
+        return None
+
 
 async def _store_plan(
     self,
     class_id: UUID,
     teacher_id: UUID,
-    school_id: UUID,
-    week_start: date,
-    plan_data: LessonPlanLLMOutput,
-    focus_subtopics: list,
+    validated: LessonPlanLLMOutput,
+    ai_model: str,
 ) -> LessonPlan:
     """
-    Upsert lesson plan. If one already exists for (class_id, week_start),
-    update it (regeneration case). Otherwise insert.
+    Persist a validated lesson plan to the lesson_plans table.
+    Sets status = GENERATED. Does NOT send email — caller handles that.
     """
-    stmt = (
-        insert(LessonPlan)
-        .values(
-            class_id=class_id,
-            teacher_id=teacher_id,
-            school_id=school_id,
-            week_start=week_start,
-            status="GENERATED",
-            generated_plan=plan_data.model_dump(mode="json"),
-            teacher_edits=None,
-        )
-        .on_conflict_do_update(
-            index_elements=["class_id", "week_start"],
-            set_={"generated_plan": plan_data.model_dump(mode="json"),
-                  "status": "GENERATED",
-                  "updated_at": func.now()}
-        )
-        .returning(LessonPlan)
+    plan = LessonPlan(
+        class_id=class_id,
+        teacher_id=teacher_id,
+        week_start=validated.week_start,
+        status="GENERATED",
+        generated_plan=validated.model_dump(mode="json"),
+        teacher_edits=None,
+        ai_model=ai_model,
     )
-    result = await self.session.execute(stmt)
+    self.session.add(plan)
     await self.session.commit()
-    return result.scalar_one()
+    await self.session.refresh(plan)
+    logger.info(
+        "lesson_plan_stored",
+        plan_id=str(plan.id),
+        class_id=str(class_id),
+        week_start=str(validated.week_start),
+        gap_count=len(validated.diagnostic_gaps),
+        timeline_items=len(validated.timeline),
+    )
+    return plan
 ```
 
 ---
 
-## `lesson_plans` Table Reference
+## ORM Model Check (`models/lesson_plan.py`)
 
-From `kaihle_v2_1_schema.sql`:
-```sql
-lesson_plans
-  id                UUID PK
-  class_id          UUID FK → classes
-  teacher_id        UUID FK → users
-  school_id         UUID FK → schools
-  week_start        DATE NOT NULL
-  status            lesson_plan_status  -- GENERATED|EDITED|USED|ARCHIVED
-  generated_plan    JSONB NOT NULL      -- LessonPlanLLMOutput stored here
-  teacher_edits     JSONB               -- sparse delta only
-  created_at        TIMESTAMPTZ
-  updated_at        TIMESTAMPTZ
-  UNIQUE(class_id, week_start)
+Verify these columns exist on the `LessonPlan` SQLAlchemy model.
+Add `ai_model` if missing — it was not in the original schema:
+
+```python
+class LessonPlan(Base):
+    __tablename__ = "lesson_plans"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    class_id      = Column(UUID(as_uuid=True), ForeignKey("classes.id"), nullable=False)
+    teacher_id    = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    week_start    = Column(Date, nullable=False)
+    status        = Column(String, nullable=False, default="GENERATED")
+    generated_plan = Column(JSONB, nullable=True)   # LessonPlanLLMOutput as JSON
+    teacher_edits  = Column(JSONB, nullable=True)   # sparse delta from PATCH
+    ai_model       = Column(String, nullable=True)  # ← ADD IF MISSING
+    created_at     = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at     = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("class_id", "week_start", name="uq_lesson_plan_class_week"),
+    )
+```
+
+If `ai_model` is missing, generate an Alembic migration:
+```bash
+alembic revision --autogenerate -m "add ai_model to lesson_plans"
+```
+
+---
+
+## Unit Tests
+
+```
+/backend/tests/unit/test_lesson_plan_schema.py
+```
+
+```python
+import pytest
+from datetime import date
+from app.schemas.lesson_plan import (
+    LessonPlanLLMOutput, LearningObjective, DiagnosticGapTarget,
+    TimelineItem, LessonPhase, ResourceItem, LearningStyleSlug
+)
+
+def make_valid_plan(**overrides) -> dict:
+    base = {
+        "week_start": "2026-03-02",
+        "class_summary": "Students struggle with mass vs weight.",
+        "learning_style": "kinesthetic",
+        "lesson_duration_min": 60,
+        "learning_objectives": [
+            {"code": "7Pf.01", "description": "Define force"}
+        ],
+        "diagnostic_gaps": [
+            {
+                "gap_description": "Confusing mass and weight",
+                "addressed_where": "Station 1",
+                "addressed_how": "Spring balance vs digital balance comparison"
+            }
+        ],
+        "timeline": [
+            {"phase": "warmup",   "start_min": 0,  "duration_min": 5,  "title": "Warm up",  "description": "Students act out forces."},
+            {"phase": "station",  "start_min": 5,  "duration_min": 30, "title": "Station",  "description": "Hands-on activity."},
+            {"phase": "exit",     "start_min": 50, "duration_min": 10, "title": "Exit task","description": "Assessment."},
+        ],
+        "resources": [{"description": "Spring balance"}],
+        "teacher_notes": "Keep transitions snappy.",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_valid_plan_parses():
+    plan = LessonPlanLLMOutput(**make_valid_plan())
+    assert plan.learning_style == LearningStyleSlug.KINESTHETIC
+    assert len(plan.timeline) == 3
+    assert len(plan.diagnostic_gaps) == 1
+
+
+def test_empty_objective_code_raises():
+    data = make_valid_plan()
+    data["learning_objectives"] = [{"code": "", "description": "Something"}]
+    with pytest.raises(Exception):
+        LessonPlanLLMOutput(**data)
+
+
+def test_timeline_overflow_raises():
+    data = make_valid_plan()
+    # Total = 70 min, lesson = 60 min, slack = 5 → should fail
+    data["timeline"][1]["duration_min"] = 55
+    with pytest.raises(Exception):
+        LessonPlanLLMOutput(**data)
+
+
+def test_missing_diagnostic_gap_raises():
+    data = make_valid_plan()
+    data["diagnostic_gaps"] = []
+    with pytest.raises(Exception):
+        LessonPlanLLMOutput(**data)
+
+
+def test_fewer_than_3_timeline_items_raises():
+    data = make_valid_plan()
+    data["timeline"] = data["timeline"][:2]
+    with pytest.raises(Exception):
+        LessonPlanLLMOutput(**data)
+
+
+def test_negative_start_min_raises():
+    data = make_valid_plan()
+    data["timeline"][0]["start_min"] = -1
+    with pytest.raises(Exception):
+        LessonPlanLLMOutput(**data)
 ```
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] Unit test: valid LLM JSON → `LessonPlanLLMOutput` validates without error
-- [ ] Unit test: missing `lesson_structure` field → Pydantic raises `ValidationError`
-- [ ] Unit test: `focus_subtopic_ids = []` → raises `ValueError`
-- [ ] Unit test: `class_summary = ""` → raises `ValueError`
-- [ ] Unit test: all group counts = 0 → raises `ValueError`
-- [ ] Unit test: `_parse_and_validate` with markdown fences → strips correctly, validates
-- [ ] Unit test: `_parse_and_validate` with invalid JSON → raises `ValueError`
-- [ ] Integration test: `_store_plan` inserts new row with correct columns
-- [ ] Integration test: calling `_store_plan` twice with same `(class_id, week_start)` → upserts (one row, updated content)
-- [ ] Unit test: `LessonPlanEditRequest` with all None fields → valid (partial patch)
-
----
-
-## Output (what M4-1-T1 and M4-1-T3 need)
-
-- `LessonPlanLLMOutput` Pydantic model importable by `lesson_plan_service.py`
-- `_parse_and_validate()` and `_store_plan()` methods available on `LessonPlanService`
-- `LessonPlanResponse` Pydantic model importable by route handlers
-- `lesson_plans` table UNIQUE constraint on `(class_id, week_start)` confirmed working
+- [ ] `LessonPlanLLMOutput` validates a well-formed plan with all required fields
+- [ ] Missing `learning_objectives` raises `ValidationError`
+- [ ] Empty `diagnostic_gaps` list raises `ValidationError`
+- [ ] Timeline total > lesson duration + 5 min raises `ValidationError`
+- [ ] `_parse_and_validate()` strips markdown fences before parsing
+- [ ] `_parse_and_validate()` returns `None` on malformed JSON (does not raise)
+- [ ] `_store_plan()` writes a row to `lesson_plans` with `status = "GENERATED"`
+- [ ] `ai_model` column exists on `lesson_plans` table (via migration if needed)
+- [ ] All unit tests in `test_lesson_plan_schema.py` pass
+- [ ] `tsc --noEmit` unaffected (backend-only change)

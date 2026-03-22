@@ -112,6 +112,7 @@ This replaces the entire `scoring_service.py` module, `scoring_tasks.py`, and
 | M1-3-T1 | `M1/M1-3-T1_assessment_generation_service.md` | Tier 2 assessment creation service |
 | M1-3-T2 | `M1/M1-3-T2_assessment_api_routes.md` | Replace assessment stubs with real logic |
 | M1-3-T3 | `M1/M1-3-T3_assessment_creation_ui.md` | Teacher assessment wizard (apps/teacher) |
+| M1-3-T4 | `M1/M1-3-T4_assessment_results_ui.md` | Teacher assessment results UI — class overview + per-student answer breakdown (apps/teacher) |
 | M1-4-T1 | `M1/M1-4-T1_student_attempt_api.md` | Replace attempt stubs with real logic |
 | ~~M1-4-T2~~ | ~~`M1/M1-4-T2_answer_scoring_service.md`~~ | **RETIRED** — MCQ scoring is inline, no LLM |
 | M1-4-T3 | `M1/M1-4-T3_gap_state_calculation.md` | Celery task: calculate_gap_states |
@@ -128,6 +129,7 @@ M1-2-T1 (curriculum seeding) ← MUST run first — everything else depends on i
     → M1-3-T1 (assessment service) ← needs question_bank populated
       → M1-3-T2 (assessment routes) ← replace stubs, needs service
         → M1-3-T3 (teacher UI) ← needs real routes returning data
+          → M1-3-T4 (teacher results UI) ← depends on M1-3-T3 (assessments list) + M1-4-T1 (attempt results endpoint)
       → M1-4-T1 (attempt routes) ← replace stubs, needs assessment service
         → M1-4-T3 (gap states Celery) ← triggered by attempt submit
         → M1-4-T4 (student UI) ← needs real attempt routes
