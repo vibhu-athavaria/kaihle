@@ -65,7 +65,7 @@ async def get_lesson_plan(
 async def edit_lesson_plan(
     plan_id: UUID,
     body: LessonPlanEditRequest,
-    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> LessonPlanResponse:
     # STUB — M0-10-T5 | Real implementation: M4-1-T3
@@ -77,7 +77,7 @@ async def edit_lesson_plan(
 @router.post("/lesson-plans/{plan_id}/regenerate", response_model=LessonPlanResponse)
 async def regenerate_lesson_plan(
     plan_id: UUID,
-    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> LessonPlanResponse:
     # STUB — M0-10-T5 | Real implementation: M4-1-T3
@@ -90,7 +90,7 @@ async def regenerate_lesson_plan(
 async def update_lesson_plan_status(
     plan_id: UUID,
     body: LessonPlanStatusRequest,
-    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> LessonPlanResponse:
     # STUB — M0-10-T5 | Real implementation: M4-1-T3
