@@ -72,7 +72,7 @@ async def school_admin_other(db_session: AsyncSession, other_school: School) -> 
 
 
 class TestCreateSchool:
-    """Tests for POST /api/v1/admin/schools"""
+    """Tests for POST /api/v1/schools"""
 
     @pytest.mark.asyncio
     async def test_create_school_when_kaihle_admin_then_201(self, client: AsyncClient, kaihle_admin: User) -> None:
@@ -85,7 +85,7 @@ class TestCreateSchool:
             "timezone": "Asia/Jakarta",
         }
 
-        response = await client.post("/api/v1/admin/schools", json=payload, headers=headers)
+        response = await client.post("/api/v1/schools", json=payload, headers=headers)
 
         assert response.status_code == 201
         data = response.json()
@@ -104,7 +104,7 @@ class TestCreateSchool:
             "slug": f"new-school-{uuid.uuid4().hex[:8]}",
         }
 
-        response = await client.post("/api/v1/admin/schools", json=payload, headers=headers)
+        response = await client.post("/api/v1/schools", json=payload, headers=headers)
 
         assert response.status_code == 403
 
@@ -119,7 +119,7 @@ class TestCreateSchool:
             "slug": test_school.slug,
         }
 
-        response = await client.post("/api/v1/admin/schools", json=payload, headers=headers)
+        response = await client.post("/api/v1/schools", json=payload, headers=headers)
 
         assert response.status_code == 409
         assert "already exists" in response.json()["detail"]
@@ -132,13 +132,13 @@ class TestCreateSchool:
             "slug": f"new-school-{uuid.uuid4().hex[:8]}",
         }
 
-        response = await client.post("/api/v1/admin/schools", json=payload)
+        response = await client.post("/api/v1/schools", json=payload)
 
         assert response.status_code == 401
 
 
 class TestListSchools:
-    """Tests for GET /api/v1/admin/schools"""
+    """Tests for GET /api/v1/schools"""
 
     @pytest.mark.asyncio
     async def test_list_schools_when_kaihle_admin_then_returns_paginated_list(
@@ -158,7 +158,7 @@ class TestListSchools:
 
         headers = make_auth_header(kaihle_admin)
 
-        response = await client.get("/api/v1/admin/schools?page=1&page_size=3", headers=headers)
+        response = await client.get("/api/v1/schools?page=1&page_size=3", headers=headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -174,7 +174,7 @@ class TestListSchools:
         """Test that Teacher cannot list schools."""
         headers = make_auth_header(test_teacher)
 
-        response = await client.get("/api/v1/admin/schools", headers=headers)
+        response = await client.get("/api/v1/schools", headers=headers)
 
         assert response.status_code == 403
 
@@ -183,13 +183,13 @@ class TestListSchools:
         """Test that SchoolAdmin cannot list all schools."""
         headers = make_auth_header(school_admin_other)
 
-        response = await client.get("/api/v1/admin/schools", headers=headers)
+        response = await client.get("/api/v1/schools", headers=headers)
 
         assert response.status_code == 403
 
 
 class TestGetSchool:
-    """Tests for GET /api/v1/admin/schools/{school_id}"""
+    """Tests for GET /api/v1/schools/{school_id}"""
 
     @pytest.mark.asyncio
     async def test_get_school_when_kaihle_admin_then_200(
@@ -198,7 +198,7 @@ class TestGetSchool:
         """Test that KaihleAdmin can get any school."""
         headers = make_auth_header(kaihle_admin)
 
-        response = await client.get(f"/api/v1/admin/schools/{test_school.id}", headers=headers)
+        response = await client.get(f"/api/v1/schools/{test_school.id}", headers=headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -212,7 +212,7 @@ class TestGetSchool:
         """Test that SchoolAdmin can get their own school."""
         headers = make_auth_header(school_admin_other)
 
-        response = await client.get(f"/api/v1/admin/schools/{other_school.id}", headers=headers)
+        response = await client.get(f"/api/v1/schools/{other_school.id}", headers=headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -228,7 +228,7 @@ class TestGetSchool:
         """Test that SchoolAdmin cannot get other schools."""
         headers = make_auth_header(school_admin_other)
 
-        response = await client.get(f"/api/v1/admin/schools/{test_school.id}", headers=headers)
+        response = await client.get(f"/api/v1/schools/{test_school.id}", headers=headers)
 
         assert response.status_code == 403
 
@@ -239,7 +239,7 @@ class TestGetSchool:
         """Test that Teacher cannot get school details."""
         headers = make_auth_header(test_teacher)
 
-        response = await client.get(f"/api/v1/admin/schools/{test_school.id}", headers=headers)
+        response = await client.get(f"/api/v1/schools/{test_school.id}", headers=headers)
 
         assert response.status_code == 403
 
@@ -249,13 +249,13 @@ class TestGetSchool:
         headers = make_auth_header(kaihle_admin)
         non_existent_id = uuid.uuid4()
 
-        response = await client.get(f"/api/v1/admin/schools/{non_existent_id}", headers=headers)
+        response = await client.get(f"/api/v1/schools/{non_existent_id}", headers=headers)
 
         assert response.status_code == 404
 
 
 class TestUpdateSchool:
-    """Tests for PATCH /api/v1/admin/schools/{school_id}"""
+    """Tests for PATCH /api/v1/schools/{school_id}"""
 
     @pytest.mark.asyncio
     async def test_update_school_when_kaihle_admin_then_200(
@@ -269,7 +269,7 @@ class TestUpdateSchool:
         }
 
         response = await client.patch(
-            f"/api/v1/admin/schools/{test_school.id}",
+            f"/api/v1/schools/{test_school.id}",
             json=payload,
             headers=headers,
         )
@@ -289,7 +289,7 @@ class TestUpdateSchool:
         payload = {"name": "Updated Name"}
 
         response = await client.patch(
-            f"/api/v1/admin/schools/{other_school.id}",
+            f"/api/v1/schools/{other_school.id}",
             json=payload,
             headers=headers,
         )
@@ -305,7 +305,7 @@ class TestUpdateSchool:
         payload = {"name": "Updated Name"}
 
         response = await client.patch(
-            f"/api/v1/admin/schools/{test_school.id}",
+            f"/api/v1/schools/{test_school.id}",
             json=payload,
             headers=headers,
         )
@@ -320,7 +320,7 @@ class TestUpdateSchool:
         payload = {"name": "Updated Name"}
 
         response = await client.patch(
-            f"/api/v1/admin/schools/{non_existent_id}",
+            f"/api/v1/schools/{non_existent_id}",
             json=payload,
             headers=headers,
         )
@@ -336,7 +336,7 @@ class TestUpdateSchool:
         payload = {"is_active": False}
 
         response = await client.patch(
-            f"/api/v1/admin/schools/{test_school.id}",
+            f"/api/v1/schools/{test_school.id}",
             json=payload,
             headers=headers,
         )
@@ -361,7 +361,7 @@ async def test_kaihle_admin_can_create_class_in_any_school(
     test_grade: Grade,
     test_subject: Subject,
 ) -> None:
-    """KaihleAdmin can POST to /api/v1/admin/schools/{any_school_id}/classes and get 201."""
+    """KaihleAdmin can POST to /api/v1/schools/{any_school_id}/classes and get 201."""
     headers = make_auth_header(kaihle_admin)
 
     # Create a teacher that belongs to other_school
@@ -378,7 +378,7 @@ async def test_kaihle_admin_can_create_class_in_any_school(
     await db_session.flush()
 
     response = await client.post(
-        f"/api/v1/admin/schools/{other_school.id}/classes",
+        f"/api/v1/schools/{other_school.id}/classes",
         headers=headers,
         json={
             "name": "Test Class",
@@ -406,7 +406,7 @@ async def test_kaihle_admin_can_list_classes_in_any_school(
     test_grade: Grade,
     test_subject: Subject,
 ) -> None:
-    """KaihleAdmin can GET /api/v1/admin/schools/{any_school_id}/classes and get 200."""
+    """KaihleAdmin can GET /api/v1/schools/{any_school_id}/classes and get 200."""
     headers = make_auth_header(kaihle_admin)
 
     # Create a teacher that belongs to other_school
@@ -437,7 +437,7 @@ async def test_kaihle_admin_can_list_classes_in_any_school(
     await db_session.commit()
 
     response = await client.get(
-        f"/api/v1/admin/schools/{other_school.id}/classes",
+        f"/api/v1/schools/{other_school.id}/classes",
         headers=headers,
     )
 
@@ -457,7 +457,7 @@ async def test_kaihle_admin_can_enroll_students_in_any_school(
     test_grade: Grade,
     test_subject: Subject,
 ) -> None:
-    """KaihleAdmin can POST to /api/v1/admin/schools/{any_school_id}/classes/{class_id}/enroll."""
+    """KaihleAdmin can POST to /api/v1/classes/{class_id}/enrollments."""
     headers = make_auth_header(kaihle_admin)
 
     # Create a teacher that belongs to other_school
@@ -501,7 +501,7 @@ async def test_kaihle_admin_can_enroll_students_in_any_school(
     await db_session.flush()
 
     response = await client.post(
-        f"/api/v1/admin/schools/{other_school.id}/classes/{class_.id}/enroll",
+        f"/api/v1/classes/{class_.id}/enrollments",
         headers=headers,
         json={"student_ids": [str(student.id)]},
     )
@@ -523,7 +523,7 @@ async def test_school_admin_cannot_access_different_school_classes(
 
     # Try to list classes in the other school (school, not other_school)
     response = await client.get(
-        f"/api/v1/admin/schools/{test_school.id}/classes",
+        f"/api/v1/schools/{test_school.id}/classes",
         headers=headers,
     )
 
