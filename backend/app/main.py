@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
-from app.api.v1.routes import auth, gap_map, health, onboarding, schools, student_content, users
+from app.api.v1.routes import assessments, attempts, auth, gap_map, health, onboarding, schools, student_content, users
 from app.core.config import settings
 
 # Import CurrentUser type for documentation
@@ -70,6 +70,8 @@ app.add_middleware(
 )
 
 # Register API routers
+app.include_router(assessments.router, prefix="/api/v1")
+app.include_router(attempts.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(gap_map.router, prefix="/api/v1")
 app.include_router(schools.router, prefix="/api/v1")
