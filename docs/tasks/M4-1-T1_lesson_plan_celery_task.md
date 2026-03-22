@@ -1,374 +1,559 @@
-# M4-1-T1 — Weekly Lesson Plan Celery Beat Task
-**Milestone:** M4 · **Epic:** M4-1 · **Task:** T1
-**Depends on:** M4-1-T2 (LessonPlanLLMOutput schema must be defined before this task can store output), M2-1-T1 (GapService.get_class_gap_map must exist), M0-1-T2 (Celery infrastructure)
-**Blocks:** M4-1-T3 (routes read from lesson_plans table), M4-1-T4 (UI)
-**Estimated effort:** 4–5 hours
+# M4-1-T1 — Weekly Lesson Plan Celery Beat Task (UPDATED)
 
----
+**Milestone:** M4 — Teacher Copilot
+**Epic:** M4-1 — Lesson Plan Generation
+**Task ID:** M4-1-T1
+**Depends on:** M4-1-T2 (lesson plan schema), M2-1-T1 (gap map service), M0-1-T2 (Celery infra)
+**Blocks:** M4-1-T3, M4-1-T4
 
-## Context
-
-This task builds the Celery beat task that automatically generates weekly lesson plans
-every Monday at 06:00. Read CONSTITUTION.md Rule 18 (dead-letter CRITICAL log on final
-retry) and Rule 8 (LiteLLM routing via `app.ai.providers.router`) before writing any code.
-
-**Critical — async pattern.** The correct pattern for calling async code inside a
-synchronous Celery task is the event loop pattern established in `M0-8-T1`
-(`onboarding_tasks.py`). Do NOT use `asyncio.run()` — it fails in some Celery worker
-configurations. Use:
-
-```python
-loop = asyncio.new_event_loop()
-try:
-    result = loop.run_until_complete(_async_function())
-finally:
-    loop.close()
-```
-
-**Critical — LiteLLM routing.** All LLM calls in this task go through
-`app.ai.providers.router.complete(task="lesson_plan", prompt=...)`. Never import
-OpenAI, Gemini, or any other provider SDK directly. Per CONSTITUTION §8, the
-`lesson_plan` task routes to GPT-4.1 with a 15-second hard timeout.
+> **UPDATED March 2026:** Prompt template replaced with a rich, Vidhya-quality
+> curriculum-anchored prompt derived from `test_lesson_gen.py` (standalone research
+> harness). Key additions:
+> - VARK learning style injection — profile description + preferred/avoid activity lists
+> - Explicit diagnostic gap targeting — LLM must state WHERE and HOW each gap is addressed
+> - Cambridge objective codes required in output
+> - Full timeline with per-item timings (not flat 4-section structure)
+> - LLM model sourced from `LLM_LESSON_PLAN_MODEL` env var (defaults to Claude Sonnet 4.6
+>   via OpenRouter); GPT-4.1 hardcode removed
 
 ---
 
 ## User Story
 
-As a teacher, I want to automatically receive an AI-generated weekly lesson plan
-every Monday morning so I can start the week prepared without extra admin work.
+As a teacher, I want to automatically receive an AI-generated weekly lesson plan every
+Monday morning so I can start the week prepared without extra admin work.
 
 ---
 
-## Files to Create / Modify
+## Files To Create / Modify
 
 ```
-backend/app/tasks/lesson_plan_tasks.py     ← CREATE
-backend/app/services/lesson_plan_service.py ← CREATE
-backend/app/ai/prompts/lesson_plan.jinja2  ← CREATE
-backend/app/tasks/celery_app.py            ← MODIFY: add beat schedule entry
-backend/app/tests/unit/test_lesson_plan_service.py
-backend/app/tests/integration/test_lesson_plan_generation.py
-```
+/backend/app/tasks/
+  lesson_plan_tasks.py              ← NEW (replaces placeholder)
+  celery_app.py                     ← MODIFY — add beat schedule entry
 
----
+/backend/app/services/
+  lesson_plan_service.py            ← NEW
 
-## Beat Schedule Entry
-
-Add to the `beat_schedule` dict in `celery_app.py`:
-
-```python
-"generate-weekly-lesson-plans": {
-    "task": "app.tasks.lesson_plan_tasks.generate_weekly_lesson_plans",
-    "schedule": crontab(hour=6, minute=0, day_of_week=1),  # Every Monday 06:00
-},
-```
-
-The existing `generate-parent-narratives` entry will be added by M5-1-T1 — leave a
-comment placeholder:
-
-```python
-# M5-1-T1 will add: "generate-parent-narratives" here
+/backend/app/ai/prompts/
+  lesson_plan_system.jinja2         ← NEW (system prompt)
+  lesson_plan_user.jinja2           ← NEW (user prompt — per-class context injected here)
 ```
 
 ---
 
-## `lesson_plan_tasks.py`
+## Environment Variables
+
+Add to `.env.example` and Render dashboard:
+
+```
+# Lesson plan generation
+LLM_LESSON_PLAN_MODEL=openrouter/anthropic/claude-sonnet-4-6
+LLM_LESSON_PLAN_TIMEOUT_S=90
+LLM_LESSON_PLAN_MAX_TOKENS=4000
+LLM_LESSON_PLAN_TEMPERATURE=0.7
+```
+
+**Why 90s timeout?** Rich lesson plans require ~3500 tokens of output. Claude Sonnet
+takes ~85s for a high-quality plan (observed in test harness). The previous 15s timeout
+guaranteed failures on any quality model. OpenRouter is the provider; self-hosted vLLM
+via RunPod Serverless is the eventual target.
+
+---
+
+## Implementation
+
+### `lesson_plan_tasks.py`
 
 ```python
-"""Celery task for weekly lesson plan generation."""
-
+from celery import shared_task
+from app.services.lesson_plan_service import LessonPlanService
+from app.core.database import get_async_session
 import asyncio
 import structlog
-from celery import shared_task
-from app.core.database import get_async_session
-from app.services.lesson_plan_service import LessonPlanService
 
 logger = structlog.get_logger()
 
 
-@shared_task(
-    bind=True,
-    name="app.tasks.lesson_plan_tasks.generate_weekly_lesson_plans",
-    max_retries=0,   # Beat tasks do not retry — next Monday will run again
-)
-def generate_weekly_lesson_plans(self) -> dict:
-    """Celery beat task — runs every Monday 06:00.
-
-    Generates one lesson plan per active class that has at least one
-    completed assessment. Does not raise on individual class failures —
-    logs errors and continues to the next class.
+@shared_task(name="tasks.generate_weekly_lesson_plans")
+def generate_weekly_lesson_plans() -> None:
     """
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(_generate_all())
-    finally:
-        loop.close()
+    Celery beat task — runs every Monday 06:00.
+    Generates one lesson plan per active class with completed assessments.
+    """
+    asyncio.run(_generate_all())
 
 
-async def _generate_all() -> dict:
+async def _generate_all() -> None:
     async with get_async_session() as session:
         service = LessonPlanService(session)
-        return await service.generate_for_all_active_classes()
+        await service.generate_for_all_active_classes()
+```
+
+### Beat schedule entry in `celery_app.py`
+
+```python
+app.conf.beat_schedule = {
+    "generate-weekly-lesson-plans": {
+        "task": "tasks.generate_weekly_lesson_plans",
+        "schedule": crontab(hour=6, minute=0, day_of_week=1),  # Monday 06:00
+    },
+    # M5 adds: "generate-parent-narratives"
+}
 ```
 
 ---
 
-## `LessonPlanService` — Method Signatures
-
-All four methods belong to the same `LessonPlanService` class.
-
-### `generate_for_all_active_classes`
+### `lesson_plan_service.py`
 
 ```python
-async def generate_for_all_active_classes(self) -> dict:
-    """Entry point called by the Celery beat task.
+import os
+import asyncio
+from uuid import UUID
+from datetime import date, timedelta
 
-    Loads all active classes that have at least one completed assessment,
-    then calls generate_for_class() for each. Errors in individual classes
-    are caught and logged — they do not abort the whole batch.
+import litellm
+import structlog
+from jinja2 import Environment, FileSystemLoader
+from sqlalchemy.ext.asyncio import AsyncSession
 
-    Returns:
-        dict with keys: total_classes, generated, skipped, errors
-    """
-```
+from app.schemas.lesson_plan import LessonPlanLLMOutput, LearningStyleSlug
+from app.services.gap_service import GapService
+from app.models.lesson_plan import LessonPlan
+from app.core.email import send_lesson_plan_email
 
-Step-by-step logic:
+logger = structlog.get_logger()
 
-Step 1 — Load all active classes that have at least one `student_attempts` row with
-`status = "COMPLETED"`. Use a subquery to filter:
+# ── VARK profiles — mirrors test_lesson_gen.py LearningStyleProfile ──────────
+# Sourced from student learning profile (onboarding questionnaire).
+# If a class has mixed styles, LearningStyleSlug.MIXED is passed and the
+# prompt defaults to a balanced multi-modal approach.
 
-```python
-classes_with_data = await self.db.scalars(
-    select(Class)
-    .where(
-        Class.is_active.is_(True),
-        Class.id.in_(
-            select(StudentAttempt.class_id)
-            .join(Assessment, Assessment.id == StudentAttempt.assessment_id)
-            .where(StudentAttempt.status == "COMPLETED")
-            .distinct()
+VARK_PROFILES = {
+    LearningStyleSlug.VISUAL: {
+        "label": "Visual Learner",
+        "description": (
+            "Learns best through diagrams, charts, colour-coding, and spatial organisation. "
+            "Thinks in pictures. Struggles with dense text-only explanations."
         ),
-    )
-)
-```
+        "preferred": [
+            "mind maps and concept webs",
+            "annotated diagrams and labelling tasks",
+            "colour-coded notes and graphic organisers",
+            "video demonstrations and animations",
+            "comparing before/after visuals",
+        ],
+        "avoid": [
+            "long unbroken blocks of text",
+            "purely verbal instruction without visual anchor",
+        ],
+    },
+    LearningStyleSlug.KINESTHETIC: {
+        "label": "Kinesthetic Learner",
+        "description": (
+            "Learns through doing, experimenting, and physical engagement. "
+            "Needs to touch, build, or move to consolidate understanding. "
+            "Gets restless with passive seat-work."
+        ),
+        "preferred": [
+            "hands-on experiments and lab work",
+            "role-play and physical simulations",
+            "building models or prototypes",
+            "card-sort and matching activities",
+            "station rotations with physical tasks",
+        ],
+        "avoid": [
+            "extended listening or watching without action",
+            "lengthy written tasks as the primary mode",
+        ],
+    },
+    LearningStyleSlug.AUDITORY: {
+        "label": "Auditory Learner",
+        "description": (
+            "Learns through listening, discussion, and verbalising ideas. "
+            "Benefits from talking through problems aloud."
+        ),
+        "preferred": [
+            "think-pair-share discussions",
+            "teacher-led questioning and Socratic dialogue",
+            "peer explanation (teach-back) tasks",
+            "verbal summarising and oral quizzes",
+        ],
+        "avoid": [
+            "silent independent work as the main activity",
+            "reading-heavy tasks without discussion follow-up",
+        ],
+    },
+    LearningStyleSlug.READING_WRITING: {
+        "label": "Reading/Writing Learner",
+        "description": (
+            "Learns through reading, note-taking, and written expression. "
+            "Thrives with lists, definitions, and structured notes."
+        ),
+        "preferred": [
+            "structured Cornell or two-column note-taking",
+            "reading and annotating source texts",
+            "written summaries and paraphrasing tasks",
+            "definition glossaries and vocabulary banks",
+        ],
+        "avoid": [
+            "tasks that require no writing at all",
+            "heavily visual tasks with no written component",
+        ],
+    },
+    LearningStyleSlug.MIXED: {
+        "label": "Mixed / No Dominant Style",
+        "description": "Class has no dominant learning style. Use a balanced multi-modal approach.",
+        "preferred": [
+            "varied activity types across visual, kinesthetic, and discussion",
+            "student choice in how they demonstrate understanding",
+        ],
+        "avoid": [
+            "designing for only one modality",
+        ],
+    },
+}
 
-Step 2 — For each class, call `generate_for_class(class_)`. Wrap in try/except — if
-generation fails for one class, log at ERROR level with `class_id` and continue.
+_PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "../ai/prompts")
+_jinja_env = Environment(loader=FileSystemLoader(_PROMPTS_DIR))
 
-Step 3 — Return the summary dict so the Celery task result is inspectable.
+MODEL       = os.getenv("LLM_LESSON_PLAN_MODEL", "openrouter/anthropic/claude-sonnet-4-6")
+TIMEOUT_S   = float(os.getenv("LLM_LESSON_PLAN_TIMEOUT_S", "90"))
+MAX_TOKENS  = int(os.getenv("LLM_LESSON_PLAN_MAX_TOKENS", "4000"))
+TEMPERATURE = float(os.getenv("LLM_LESSON_PLAN_TEMPERATURE", "0.7"))
+API_KEY     = os.getenv("OPENROUTER_API_KEY", "")
 
-### `generate_for_class`
 
-```python
-async def generate_for_class(
-    self,
-    class_: Class,
-) -> LessonPlan:
-    """Generate a lesson plan for one class.
+class LessonPlanService:
 
-    Identifies the two weakest subtopics, clusters students into groups,
-    retrieves RAG context, calls LLM, stores result, emails teacher.
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+        self.gap_service = GapService(session)
 
-    Args:
-        class_: The Class ORM object to generate for.
+    # ── Entry point ───────────────────────────────────────────────────────────
 
-    Returns:
-        The created LessonPlan row.
+    async def generate_for_all_active_classes(self) -> None:
+        """Called by Celery beat every Monday 06:00."""
+        active_classes = await self._get_active_classes()
+        logger.info("lesson_plan_batch_start", class_count=len(active_classes))
 
-    Raises:
-        LessonPlanGenerationError: if LLM fails after retry.
-    """
-```
+        for cls in active_classes:
+            try:
+                await self._generate_for_class(cls)
+            except Exception as exc:
+                logger.error(
+                    "lesson_plan_class_failed",
+                    class_id=str(cls.id),
+                    error=str(exc),
+                )
+                # Continue to next class — one failure must not block others
 
-Step-by-step logic:
+    # ── Per-class generation ──────────────────────────────────────────────────
 
-Step 1 — Load the class gap map using `GapService.get_class_gap_map`. Identify the
-two subtopics with the lowest `class_average` (exclude nodes where `class_average is None`
-— cannot plan around unassessed subtopics). If fewer than two subtopics have data,
-generate a plan for whatever data exists (minimum one).
+    async def _generate_for_class(self, cls) -> None:
+        gap_map        = await self.gap_service.get_class_gap_map(cls.id)
+        focus_subtopics = self._get_weakest_subtopics(gap_map, n=2)
+        student_groups  = self._cluster_students(gap_map, focus_subtopics)
+        rag_context     = await self._get_rag_context(focus_subtopics)
+        learning_style  = await self._get_dominant_style(cls.id)
+        vark_profile    = VARK_PROFILES[learning_style]
+        week_start      = self._current_week_start()
 
-Step 2 — Cluster enrolled students into three groups based on their mastery score for
-the focus subtopics (use the average across the focus subtopics if there are two):
+        system_prompt = self._render_system_prompt()
+        user_prompt   = self._render_user_prompt(
+            cls=cls,
+            gap_map=gap_map,
+            focus_subtopics=focus_subtopics,
+            student_groups=student_groups,
+            rag_context=rag_context,
+            vark_profile=vark_profile,
+            week_start=week_start,
+        )
 
-Group A: `mastery_score < 0.4` — Foundational support
-Group B: `mastery_score >= 0.4 and <= 0.7` — Developing
-Group C: `mastery_score > 0.7` — Extension
+        validated = await self._call_llm_with_retry(system_prompt, user_prompt)
+        if validated is None:
+            logger.error("lesson_plan_generation_failed", class_id=str(cls.id))
+            return  # Do NOT store partial plan, do NOT email teacher
 
-Students with no mastery data go into Group A by default.
+        plan = await self._store_plan(
+            class_id=cls.id,
+            teacher_id=cls.teacher_id,
+            validated=validated,
+            ai_model=MODEL,
+        )
+        await send_lesson_plan_email(teacher_id=cls.teacher_id, plan_id=plan.id)
+        logger.info("lesson_plan_complete", class_id=str(cls.id), plan_id=str(plan.id))
 
-Step 3 — Retrieve RAG context. For each focus subtopic, fetch the 3 most similar
-`curriculum_chunks` using pgvector cosine similarity against `subtopic.embedding`:
+    # ── LLM call ──────────────────────────────────────────────────────────────
 
-```python
-chunks = await self.db.scalars(
-    select(CurriculumChunk)
-    .where(CurriculumChunk.curriculum_id == class_.curriculum_id)
-    .order_by(
-        CurriculumChunk.embedding.cosine_distance(focus_subtopic.embedding)
-    )
-    .limit(3)
-)
-```
+    async def _call_llm_with_retry(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> LessonPlanLLMOutput | None:
+        """
+        Call LLM with TIMEOUT_S timeout. Retry once on failure or validation error.
+        Returns None if both attempts fail — caller handles gracefully.
+        """
+        is_openrouter = MODEL.startswith("openrouter/")
+        kwargs: dict = dict(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
+            max_tokens=MAX_TOKENS,
+            temperature=TEMPERATURE,
+        )
+        if API_KEY and is_openrouter:
+            kwargs["api_key"] = API_KEY
 
-Step 4 — Build and call the LLM. Load the Jinja2 template from
-`app/ai/prompts/lesson_plan.jinja2`. Render with the class context, student groups,
-and RAG chunks. Call via:
+        for attempt in range(2):
+            try:
+                response = await asyncio.wait_for(
+                    litellm.acompletion(**kwargs),
+                    timeout=TIMEOUT_S,
+                )
+                raw = response.choices[0].message.content or ""
+                validated = await self._parse_and_validate(raw)
+                if validated is not None:
+                    return validated
+                logger.warning(
+                    "lesson_plan_validation_retry",
+                    attempt=attempt + 1,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("lesson_plan_timeout", attempt=attempt + 1, timeout=TIMEOUT_S)
+            except Exception as exc:
+                logger.warning("lesson_plan_llm_error", attempt=attempt + 1, error=str(exc))
 
-```python
-from app.ai.providers.router import get_router
-router = get_router()
-response = await router.complete(
-    task="lesson_plan",
-    prompt=rendered_template,
-)
-```
+        return None  # Both attempts failed
 
-On timeout (>15 seconds), retry once. If the second attempt also times out, log at
-ERROR level with `class_id` and `school_id` and raise `LessonPlanGenerationError`.
-Do NOT store a partial plan. Do NOT email the teacher for a failed generation.
+    # ── Prompt rendering ──────────────────────────────────────────────────────
 
-Step 5 — Parse and validate the LLM response against `LessonPlanLLMOutput` from
-M4-1-T2. If validation fails, log at ERROR with the raw response (truncated to 500
-characters) and raise `LessonPlanGenerationError`.
+    def _render_system_prompt(self) -> str:
+        tmpl = _jinja_env.get_template("lesson_plan_system.jinja2")
+        return tmpl.render()
 
-Step 6 — Store the plan:
+    def _render_user_prompt(self, *, cls, gap_map, focus_subtopics,
+                            student_groups, rag_context, vark_profile,
+                            week_start: date) -> str:
+        tmpl = _jinja_env.get_template("lesson_plan_user.jinja2")
+        return tmpl.render(
+            curriculum_code=cls.curriculum_code,
+            grade_level=cls.grade_level,
+            subject_name=cls.subject_name,
+            lesson_duration_min=60,
+            week_start=week_start.isoformat(),
+            focus_subtopics=[s.name for s in focus_subtopics],
+            learning_objectives=self._get_learning_objectives(focus_subtopics),
+            diagnostic_gaps=[s.gap_description for s in focus_subtopics],
+            gap_summary=gap_map.summary_text,
+            total_students=gap_map.total_students,
+            group_a_count=len(student_groups["A"]),
+            group_b_count=len(student_groups["B"]),
+            group_c_count=len(student_groups["C"]),
+            rag_context=rag_context,
+            vark_label=vark_profile["label"],
+            vark_description=vark_profile["description"],
+            vark_preferred=vark_profile["preferred"],
+            vark_avoid=vark_profile["avoid"],
+        )
 
-```python
-plan = LessonPlan(
-    id=uuid.uuid4(),
-    school_id=class_.school_id,
-    class_id=class_.id,
-    week_start=_current_monday(),
-    status="GENERATED",
-    generated_plan=validated_output.model_dump(),
-    teacher_edits=None,
-)
-self.db.add(plan)
-await self.db.flush()
-```
+    # ── Helpers ───────────────────────────────────────────────────────────────
 
-Step 7 — Send email to the teacher via Resend. Use the existing email utility pattern
-from auth (magic link emails). Subject: "Your lesson plan for this week is ready".
-Body: teacher's first name, class name, a brief summary of the two focus subtopics,
-and a link to `{FRONTEND_URL}/teacher/classes/{class_id}/lesson-plans`. If the email
-fails, log at WARNING level — do not raise. The plan is already stored; missing the
-email is recoverable.
+    def _get_weakest_subtopics(self, gap_map, n: int = 2):
+        return sorted(gap_map.subtopics, key=lambda s: s.class_average_mastery)[:n]
 
-### `_current_monday`
+    def _cluster_students(self, gap_map, focus_subtopics) -> dict:
+        student_scores: dict[str, list[float]] = {}
+        for subtopic in focus_subtopics:
+            for student in subtopic.student_scores:
+                student_scores.setdefault(str(student.student_id), []).append(
+                    student.mastery_score
+                )
+        groups: dict[str, list] = {"A": [], "B": [], "C": []}
+        for student_id, scores in student_scores.items():
+            avg = sum(scores) / len(scores)
+            if avg < 0.4:
+                groups["A"].append(student_id)
+            elif avg <= 0.7:
+                groups["B"].append(student_id)
+            else:
+                groups["C"].append(student_id)
+        return groups
 
-```python
-def _current_monday() -> date:
-    """Return the date of the most recent Monday (or today if Monday)."""
-    today = date.today()
-    return today - timedelta(days=today.weekday())
+    async def _get_rag_context(self, focus_subtopics) -> str:
+        # Retrieve 3 curriculum chunks per subtopic via pgvector cosine similarity
+        chunks = []
+        for subtopic in focus_subtopics:
+            results = await self.gap_service.get_rag_chunks(subtopic.id, k=3)
+            chunks.extend([r.content for r in results])
+        return "\n\n---\n\n".join(chunks[:6])  # cap at 6 total chunks
+
+    async def _get_dominant_style(self, class_id: UUID) -> LearningStyleSlug:
+        """
+        Returns the most common learning style across enrolled students in this class.
+        Falls back to MIXED if no clear majority or no profiles exist.
+        """
+        profiles = await self.gap_service.get_class_learning_profiles(class_id)
+        if not profiles:
+            return LearningStyleSlug.MIXED
+        style_counts: dict[str, int] = {}
+        for p in profiles:
+            if p.dominant_learning_style:
+                style_counts[p.dominant_learning_style] = (
+                    style_counts.get(p.dominant_learning_style, 0) + 1
+                )
+        if not style_counts:
+            return LearningStyleSlug.MIXED
+        dominant = max(style_counts, key=style_counts.__getitem__)
+        # Only use dominant style if > 50% of students share it
+        if style_counts[dominant] / len(profiles) > 0.5:
+            return LearningStyleSlug(dominant)
+        return LearningStyleSlug.MIXED
+
+    @staticmethod
+    def _current_week_start() -> date:
+        today = date.today()
+        return today - timedelta(days=today.weekday())  # Monday of current week
+
+    @staticmethod
+    def _get_learning_objectives(focus_subtopics) -> list[str]:
+        objectives = []
+        for subtopic in focus_subtopics:
+            objectives.extend(subtopic.learning_objectives or [])
+        return objectives[:6]  # cap — prompt gets too large beyond 6
 ```
 
 ---
 
-## Jinja2 Prompt Template (`lesson_plan.jinja2`)
+## Prompt Templates
+
+### `lesson_plan_system.jinja2`
 
 ```jinja2
-System: You are an experienced {{ curriculum_code }} {{ subject_name }} teacher
-        creating a differentiated weekly lesson plan.
-        Return ONLY valid JSON — no preamble, no markdown fences.
+You are an expert curriculum designer and classroom teacher specialising in
+Cambridge Lower Secondary education (Grades 6–8) for small international schools.
 
-Class: {{ class_name }}, Grade {{ grade_level }}, {{ academic_year }}
+You create lesson plans that are:
+- Curriculum-anchored: every activity maps to explicit Cambridge learning objectives
+  with objective codes (e.g. 7Pf.01)
+- Practically executable: a real teacher can pick this up and teach it today
+- Differentiation-aware: activities are specifically shaped to the student's learning style
+- Diagnostic-responsive: gaps identified from Kaihle assessment data are explicitly
+  addressed — you must state WHERE in the lesson and HOW each gap is tackled
+- Time-realistic: all activities fit within the stated lesson duration
 
-Focus areas this week (lowest mastery in the class):
-{% for subtopic in focus_subtopics %}
-- {{ subtopic.name }} (class average: {{ "%.0f"|format(subtopic.class_average * 100) }}%)
+Return ONLY valid JSON — no preamble, no markdown fences, no explanation.
+The JSON must exactly match this structure:
+
+{
+  "week_start": "YYYY-MM-DD",
+  "class_summary": "1-2 sentence summary of the class gap situation",
+  "learning_style": "visual|kinesthetic|auditory|reading_writing|mixed",
+  "lesson_duration_min": 60,
+  "learning_objectives": [
+    {"code": "7Pf.01", "description": "Define force as a push or pull"}
+  ],
+  "diagnostic_gaps": [
+    {
+      "gap_description": "Confusing mass and weight",
+      "addressed_where": "Station 1 · Teacher checkpoint min 15",
+      "addressed_how": "Students physically compare spring balance (N) vs digital balance (g)"
+    }
+  ],
+  "timeline": [
+    {
+      "phase": "warmup|bridge|station|debrief|exit|activity",
+      "start_min": 0,
+      "duration_min": 5,
+      "title": "Short activity name",
+      "description": "Teacher-facing instructions, 2-5 sentences",
+      "gap_targeted": "gap_description value if this activity targets a gap, else null",
+      "kinesthetic_tag": "Short UI tag if movement-based, else null",
+      "assess_tag": "Short UI tag if assessment happens here, else null"
+    }
+  ],
+  "resources": [
+    {"description": "Resource name and any relevant detail"}
+  ],
+  "teacher_notes": "Safety, pacing, and checkpoint tips for the teacher"
+}
+```
+
+### `lesson_plan_user.jinja2`
+
+```jinja2
+Generate a complete lesson plan for the following context:
+
+CURRICULUM: {{ curriculum_code }}
+GRADE: {{ grade_level }}
+SUBJECT: {{ subject_name }}
+TOPIC: {{ focus_subtopics | join(', ') }}
+LESSON DURATION: {{ lesson_duration_min }} minutes
+WEEK OF: {{ week_start }}
+
+LEARNING OBJECTIVES:
+{% for obj in learning_objectives %}
+  - {{ obj }}
 {% endfor %}
 
-Student groups:
-- Group A ({{ group_a_count }} students, foundational): mastery below 40%
-- Group B ({{ group_b_count }} students, developing): mastery 40–70%
-- Group C ({{ group_c_count }} students, extension): mastery above 70%
+CLASS GAP SUMMARY: {{ gap_summary }}
 
-Curriculum context:
+DIAGNOSTIC GAPS (from Kaihle assessment data — these MUST be addressed):
+{% for gap in diagnostic_gaps %}
+  - {{ gap }}
+{% endfor %}
+For each gap, the output JSON must include an entry in diagnostic_gaps with
+addressed_where (which activity and minute) and addressed_how (the specific
+mechanism used — not just "discussed", but the hands-on method).
+
+STUDENT GROUPS:
+- Group A ({{ group_a_count }} students, mastery < 40%): foundational support needed
+- Group B ({{ group_b_count }} students, mastery 40–70%): developing
+- Group C ({{ group_c_count }} students, mastery > 70%): ready for extension
+
+TOTAL CLASS SIZE: {{ total_students }} students
+
+TARGET LEARNING STYLE: {{ vark_label }}
+Profile description: {{ vark_description }}
+
+Preferred activity types for this learner:
+{% for activity in vark_preferred %}
+  - {{ activity }}
+{% endfor %}
+
+Activities to minimise or avoid:
+{% for item in vark_avoid %}
+  - {{ item }}
+{% endfor %}
+
+Design the lesson so that the delivery methods, task types, and resources are
+authentically suited to a {{ vark_label }}. Do not just mention the learning
+style — embed it structurally throughout every timeline item.
+
+CURRICULUM CONTEXT (use to ensure activities are aligned to learning objectives):
 {{ rag_context }}
 
-Return this JSON structure exactly:
-{
-  "week_start": "{{ week_start }}",
-  "focus_subtopic_ids": {{ focus_subtopic_ids | tojson }},
-  "class_summary": "<2 sentences summarising the main gap and opportunity>",
-  "student_groups": {
-    "A": { "count": {{ group_a_count }}, "focus": "<activity description, max 40 words>" },
-    "B": { "count": {{ group_b_count }}, "focus": "<activity description, max 40 words>" },
-    "C": { "count": {{ group_c_count }}, "focus": "<activity description, max 40 words>" }
-  },
-  "lesson_structure": {
-    "starter_10min": "<whole-class activity, max 50 words>",
-    "main_activity_30min": {
-      "group_A": "<tailored activity for foundational group, max 60 words>",
-      "group_B": "<tailored activity for developing group, max 60 words>",
-      "group_C": "<tailored activity for extension group, max 60 words>"
-    },
-    "plenary_10min": "<whole-class closing, max 50 words>",
-    "homework": "<optional homework suggestion, max 40 words>"
-  },
-  "teacher_notes": "<optional tip for the teacher, max 40 words>"
-}
+Be specific. Avoid generic advice. Every timeline item should be actionable by
+a teacher who has never seen this lesson before.
 ```
 
 ---
 
 ## Acceptance Criteria
 
-**Unit tests — `test_lesson_plan_service.py`**
-
-`test_cluster_students_when_mastery_below_0_4_then_group_a` — Call the clustering
-logic with a student mastery of 0.35. Assert the student is placed in Group A.
-
-`test_cluster_students_when_mastery_0_4_exactly_then_group_b` — Mastery = 0.4 is
-the lower boundary of Group B. Assert placement in Group B, not Group A.
-
-`test_cluster_students_when_mastery_0_7_exactly_then_group_c` — Mastery = 0.7 is
-the lower boundary of Group C. Assert placement in Group C.
-
-`test_cluster_students_when_no_mastery_data_then_group_a` — A student with
-`mastery_score = None` should default to Group A. Assert this.
-
-`test_focus_subtopics_when_multiple_subtopics_then_two_lowest_selected` — Build a
-gap map with five subtopics with averages [0.8, 0.3, 0.6, 0.2, 0.5]. Assert the two
-selected focus subtopics have averages 0.2 and 0.3.
-
-`test_focus_subtopics_when_all_unassessed_then_skips_class` — Build a gap map where
-all nodes have `class_average = None`. Assert the service skips this class without
-calling the LLM.
-
-`test_generate_for_class_when_llm_timeout_then_retries_once_and_raises` — Mock the
-LLM router to always raise `TimeoutError`. Assert `LessonPlanGenerationError` is
-raised after exactly two LLM call attempts (one + one retry).
-
-`test_generate_for_class_when_llm_returns_invalid_json_then_raises` — Mock the LLM
-to return a string that is not valid JSON. Assert `LessonPlanGenerationError` is
-raised and no `LessonPlan` row is written to the DB.
-
-`test_generate_for_all_classes_when_one_fails_then_others_still_generated` — Set up
-two classes. Mock the LLM to succeed for the first class and raise an error for the
-second. Assert the first class has a `LessonPlan` row in the DB and the error summary
-dict shows `errors: 1` and `generated: 1`.
-
-`test_current_monday_when_tuesday_then_returns_last_monday` — Call `_current_monday()`
-on a Tuesday. Assert the returned date is the previous Monday (not the upcoming Monday).
-
-**Integration tests — `test_lesson_plan_generation.py`**
-
-`test_task_when_class_has_completed_assessments_then_plan_created` — Seed a class
-with one completed assessment and gap states. Run `_generate_all()` with a mocked
-LLM router. Assert one `LessonPlan` row is created in the DB with
-`status = "GENERATED"`.
-
-`test_task_when_class_has_no_completed_assessments_then_no_plan_created` — Seed a
-class with no completed assessments. Run the task. Assert no `LessonPlan` row is
-created.
-
----
-
-## Do NOT Touch
-
-`backend/app/services/gap_service.py` — use `GapService.get_class_gap_map()` as-is.
-`backend/app/schemas/lesson_plans.py` — defined in M0-10-T1, do not modify.
-`backend/app/api/v1/routes/lesson_plans.py` — defined in M0-10-T5, do not modify here.
-Any existing Celery task file (`onboarding_tasks.py`, `gap_tasks.py`).
+- [ ] Beat task fires every Monday 06:00 (unit test with frozen clock)
+- [ ] Plan generated for each active class with ≥ 1 completed assessment
+- [ ] `_get_dominant_style()` returns MIXED when < 50% share a style
+- [ ] `_get_dominant_style()` returns correct slug when > 50% share a style
+- [ ] VARK profile is injected into user prompt (verify via prompt string assertion in unit test)
+- [ ] Diagnostic gaps appear in rendered user prompt
+- [ ] On LLM timeout: retry once → if second fails → log error → no plan stored → no email
+- [ ] On validation failure: retry once → if second fails → log error → no plan stored
+- [ ] On success: plan stored with `status = "GENERATED"`, teacher email sent
+- [ ] `ai_model` stored on plan row matches `LLM_LESSON_PLAN_MODEL` env var value
+- [ ] One class failure does not prevent other classes from generating
+- [ ] Unit test: student grouping — scores [0.2, 0.3, 0.55, 0.65, 0.9] → A:2, B:2, C:1
+- [ ] Integration test: beat trigger → plans stored for all active classes

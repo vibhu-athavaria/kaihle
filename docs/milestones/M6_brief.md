@@ -88,7 +88,9 @@ environment.
 |---|---|---|
 | M6-1-T1 | `M6/M6-1-T1_analytics_service_routes.md` | Replace analytics stubs + impersonation |
 | M6-1-T2 | `M6/M6-1-T2_analytics_ui.md` | School admin analytics dashboard (apps/school-admin) |
+| M6-1-T3 | `M6/M6-1-T3_class_gap_map_admin_ui.md` | Class gap map — read-only admin view (apps/school-admin) |
 | M6-2-T1 | `M6/M6-2-T1_billing_tier_enforcement.md` | Billing limits + trial expiry |
+| M6-2-T2 | `M6/M6-2-T2_billing_ui_school_admin.md` | Billing page UI — plan, usage bars, invoice list, trial banner (apps/school-admin) |
 | M6-3-T1 | `M6/M6-3-T1_rate_limiting.md` | slowapi rate limiting |
 | M6-3-T2 | `M6/M6-3-T2_error_handling.md` | Global error handler + structured responses |
 | M6-3-T3 | `M6/M6-3-T3_data_backup.md` | Render PostgreSQL backups + RUNBOOK |
@@ -102,7 +104,9 @@ environment.
 ```
 M6-1-T1 (analytics service) ← start here
   → M6-1-T2 (analytics UI)  ← apps/school-admin, needs real routes
+  → M6-1-T3 (class gap map admin UI) ← parallel with T2, read-only component, same endpoint
 M6-2-T1 (billing)           ← parallel with analytics
+  → M6-2-T2 (billing UI)    ← apps/school-admin, depends on subscription endpoint from T1
 M6-3-T1 (rate limiting)     ← parallel
 M6-3-T2 (error handling)    ← parallel — note: uses ErrorDetail from schemas/common.py
 M6-3-T3 (backup)            ← parallel

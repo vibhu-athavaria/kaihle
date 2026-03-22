@@ -70,6 +70,7 @@ the teacher see the lesson structure, edit any section, regenerate, and mark as 
 | M4-1-T1 | `M4/M4-1-T1_lesson_plan_celery_task.md` | Celery beat: weekly lesson plan generation |
 | M4-1-T3 | `M4/M4-1-T3_lesson_plan_routes.md` | Replace lesson plan stubs with real logic |
 | M4-1-T4 | `M4/M4-1-T4_lesson_plan_ui.md` | Teacher lesson plan UI (apps/teacher) |
+| M4-1-T5 | `M4/M4-1-T5_student_lesson_plan_preview_ui.md` | Per-student personalised lesson plan preview — read-only teacher view (apps/teacher) |
 
 ---
 
@@ -80,6 +81,7 @@ M4-1-T2 (schema + storage) ← MUST run first — all other tasks import from it
   → M4-1-T1 (Celery task)  ← needs schema to validate and store LLM output
   → M4-1-T3 (routes)       ← replace stubs, needs schema for response types
     → M4-1-T4 (UI)         ← apps/teacher, needs real routes returning data
+      → M4-1-T5 (student lesson plan preview) ← depends on T4 Students tab existing
 ```
 
 ---

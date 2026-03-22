@@ -84,6 +84,9 @@ Working local dev environment, CI/CD pipeline, complete authentication system (i
 | M0-9-T4 | `M0/M0-9-T4_password_setup_flow.md` | NEW — Scoped JWT, set-password endpoint, PasswordSetupForm | Todo |
 | M0-9-T5 | `M0/M0-9-T5_per_class_diagnostic_gate.md` | NEW — Per-class content gate backend and student UI | Todo |
 | M0-9-T6 | `M0/M0-9-T6_backend_spec_corrections.md` | NEW — KaihleAdmin bypass bug, LiteLLM, type:ignore, Celery guards | Todo |
+| M0-7-T2b | `M0/M0-7-T2b_teacher_settings_ui.md` | NEW — Teacher settings page (account, password) | Todo |
+| M0-7-T3b | `M0/M0-7-T3b_student_settings_ui.md` | NEW — Student settings page (account, learning profile retake) | Todo |
+| M0-7-T4b | `M0/M0-7-T4b_school_admin_settings_ui.md` | NEW — School Admin settings page (account, school profile view) | Todo |
 
 ---
 
@@ -92,6 +95,10 @@ Working local dev environment, CI/CD pipeline, complete authentication system (i
 The M0-1 through M0-8 tasks are complete. The M0-9 tasks must be completed before M1 can begin. They are largely independent of each other and can be parallelised across agents.
 
 M0-9-T1 must come first since it creates the scaffold that T2 and T3 migrate into. M0-9-T2 and M0-9-T3 can then run in parallel with each other once T1 is done. M0-9-T4, T5, and T6 have no dependency on T1 through T3 and can run in parallel with all of the above. All six M0-9 tasks must be complete and CI passing before M1 begins.
+
+**M0-7-T2b and M0-7-T3b** (teacher settings and student settings) can run in parallel with M0-10 — they touch only `apps/teacher/src/pages/settings/` and `apps/student/src/pages/settings/` with zero overlap with M0-10 changes. Queue them immediately.
+
+**M0-7-T4b** (school admin settings) must wait until M0-10 completes — M0-10-T10 is modifying `apps/school-admin` hooks and running in parallel risks a merge conflict on `useSchoolAdmin.ts`.
 
 ---
 
