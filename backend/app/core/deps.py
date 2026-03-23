@@ -24,6 +24,25 @@ CurrentUser = User
 T = TypeVar("T", bound=User)
 
 
+def _check_school_access(school_id: uuid.UUID, current_user: CurrentUser) -> None:
+    """Verify the requesting user can access the given school's data.
+
+    CONSTITUTION Rule 12: KaihleAdmin bypass must be explicit and first.
+    All other roles must belong to the same school as the resource.
+
+    This is a helper function for use within route handlers when access
+    needs to be checked after fetching an object. For route-level checks
+    where school_id is available as a path parameter, use require_school_match.
+    """
+    if current_user.role == UserRole.KAIHLE_ADMIN:
+        return  # KaihleAdmin can access any school — explicit bypass per Rule 12
+    if current_user.school_id != school_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to this school's data",
+        )
+
+
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     db: Annotated[AsyncSession, Depends(get_db)],

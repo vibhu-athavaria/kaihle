@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, require_role
+from app.core.deps import CurrentUser, _check_school_access, require_role
 from app.models.school import Class
 from app.models.user import UserRole
 from app.schemas.class_enrollment import (
@@ -44,20 +44,6 @@ def _class_to_response(class_: Class) -> ClassResponse:
         academic_year=class_.academic_year,
         is_active=class_.is_active,
     )
-
-
-def _check_school_access(school_id: uuid.UUID, current_user: CurrentUser) -> None:
-    """Verify the requesting user can access the given school's data.
-
-    CONSTITUTION Rule 12: KaihleAdmin bypass must be explicit and first.
-    """
-    if current_user.role == UserRole.KAIHLE_ADMIN:
-        return  # KaihleAdmin can access any school — explicit bypass per Rule 12
-    if current_user.school_id != school_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied to this school's data",
-        )
 
 
 # ── School-scoped class list + create ────────────────────────────────────────
