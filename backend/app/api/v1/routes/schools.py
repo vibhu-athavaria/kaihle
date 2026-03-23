@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, require_role
+from app.core.deps import CurrentUser, _check_school_access, require_role
 from app.models.user import UserRole
 from app.schemas.school import (
     SchoolCreate,
@@ -75,13 +75,7 @@ async def get_school(
     db: AsyncSession = Depends(get_db),
 ) -> SchoolResponse:
     """Get a single school. KaihleAdmin sees any school. SchoolAdmin sees own only."""
-    # CONSTITUTION Rule 12: KaihleAdmin bypass must be explicit
-    if current_user.role != UserRole.KAIHLE_ADMIN:
-        if current_user.school_id != school_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot access school from different organization",
-            )
+    _check_school_access(school_id, current_user)
     service = SchoolService(db)
     try:
         school = await service.get_school(school_id)
