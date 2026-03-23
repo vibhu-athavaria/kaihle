@@ -2,12 +2,12 @@
 
 import uuid
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.school import Class, ClassEnrollment
+from app.models.school import Class
 from app.models.user import User, UserRole
 from app.schemas.class_enrollment import ClassCreate
 from app.services.class_service import ClassService
@@ -171,10 +171,11 @@ class TestEnrollStudents:
     """Tests for ClassService.enroll_students method."""
 
     @pytest.mark.asyncio
+    @patch("app.services.class_service.trigger_onboarding_diagnostics")
     async def test_enroll_students_when_valid_then_enrolls(
-        self, class_service: ClassService, mock_db: MagicMock
+        self, mock_trigger: MagicMock, class_service: ClassService, mock_db: MagicMock
     ) -> None:
-        """Test enrolling valid students."""
+        """Test enrolling valid students using batch queries."""
         # Arrange
         class_id = uuid.uuid4()
         school_id = uuid.uuid4()
@@ -192,34 +193,28 @@ class TestEnrollStudents:
         )
         mock_db.get = AsyncMock(return_value=class_)
 
-        # Mock student lookup
+        # Mock student lookup (batch query returns list)
         student = User(
             id=student_id,
             school_id=school_id,
             role=UserRole.STUDENT,
         )
         mock_student_result = MagicMock()
-        mock_student_result.scalar_one_or_none.return_value = student
+        mock_student_result.scalars.return_value.all.return_value = [student]
 
-        # Mock no existing enrollment
+        # Mock no existing enrollments (batch query returns empty list)
         mock_enrollment_result = MagicMock()
-        mock_enrollment_result.scalar_one_or_none.return_value = None
+        mock_enrollment_result.scalars.return_value.all.return_value = []
 
-        # Mock no student profile
-        mock_profile_result = MagicMock()
-        mock_profile_result.scalar_one_or_none.return_value = None
-
-        # Set up execute to return different results
+        # Set up execute to return different results for batch queries
         call_count = [0]
 
         async def mock_execute(query: Any) -> Any:
             call_count[0] += 1
             if call_count[0] == 1:
                 return mock_student_result
-            elif call_count[0] == 2:
-                return mock_enrollment_result
             else:
-                return mock_profile_result
+                return mock_enrollment_result
 
         mock_db.execute = AsyncMock(side_effect=mock_execute)
 
@@ -231,10 +226,11 @@ class TestEnrollStudents:
         assert result.skipped == 0
 
     @pytest.mark.asyncio
+    @patch("app.services.class_service.trigger_onboarding_diagnostics")
     async def test_enroll_students_when_already_enrolled_then_skips(
-        self, class_service: ClassService, mock_db: MagicMock
+        self, mock_trigger: MagicMock, class_service: ClassService, mock_db: MagicMock
     ) -> None:
-        """Test that already enrolled students are skipped."""
+        """Test that already enrolled students are skipped using batch queries."""
         # Arrange
         class_id = uuid.uuid4()
         school_id = uuid.uuid4()
@@ -252,22 +248,19 @@ class TestEnrollStudents:
         )
         mock_db.get = AsyncMock(return_value=class_)
 
-        # Mock student lookup
+        # Mock student lookup (batch query returns list)
         student = User(
             id=student_id,
             school_id=school_id,
             role=UserRole.STUDENT,
         )
         mock_student_result = MagicMock()
-        mock_student_result.scalar_one_or_none.return_value = student
+        mock_student_result.scalars.return_value.all.return_value = [student]
 
-        # Mock existing enrollment
-        existing_enrollment = ClassEnrollment(
-            class_id=class_id,
-            student_id=student_id,
-        )
+        # Mock existing enrollment (batch query returns list of student_ids)
         mock_enrollment_result = MagicMock()
-        mock_enrollment_result.scalar_one_or_none.return_value = existing_enrollment
+        # Return list of student_ids that are already enrolled
+        mock_enrollment_result.scalars.return_value.all.return_value = [student_id]
 
         call_count = [0]
 

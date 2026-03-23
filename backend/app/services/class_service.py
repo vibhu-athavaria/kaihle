@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.school import Class, ClassEnrollment
-from app.models.user import OnboardingStatus, User, UserRole
+from app.models.user import User, UserRole
 from app.schemas.class_enrollment import (
     ClassCreate,
     EnrollResponse,
@@ -137,6 +137,8 @@ class ClassService:
     ) -> EnrollResponse:
         """Enroll students in a class.
 
+        Optimized to use batch queries instead of N+1 queries.
+
         Args:
             class_id: The class UUID
             student_ids: List of student UUIDs to enroll
@@ -144,7 +146,6 @@ class ClassService:
         Returns:
             EnrollResponse with enrolled count, skipped count, and any errors
         """
-        # Get the class to find the school_id
         class_ = await self.get_class(class_id)
         school_id = class_.school_id
 
@@ -152,62 +153,57 @@ class ClassService:
         skipped = 0
         errors: list[str] = []
 
+        # Batch 1: Fetch ALL students in ONE query
+        result = await self.db.execute(
+            select(User).where(
+                User.id.in_(student_ids),
+                User.school_id == school_id,
+                User.role == UserRole.STUDENT,
+            )
+        )
+        valid_students = {u.id: u for u in result.scalars().all()}
+
+        # Track which students were not found
         for student_id in student_ids:
-            try:
-                # 1. Validate student belongs to this school
-                result = await self.db.execute(
-                    select(User).where(
-                        User.id == student_id,
-                        User.school_id == school_id,
-                        User.role == UserRole.STUDENT,
-                    )
-                )
-                student = result.scalar_one_or_none()
-                if not student:
-                    errors.append(f"Student {student_id} not found in this school")
-                    continue
+            if student_id not in valid_students:
+                errors.append(f"Student {student_id} not found in this school")
 
-                # 2. Check if already enrolled (skip if already enrolled)
-                result = await self.db.execute(
-                    select(ClassEnrollment).where(
-                        ClassEnrollment.class_id == class_id,
-                        ClassEnrollment.student_id == student_id,
-                    )
+        # Batch 2: Fetch existing enrollments only for valid students
+        if valid_students:
+            result = await self.db.execute(
+                select(ClassEnrollment.student_id).where(
+                    ClassEnrollment.class_id == class_id,
+                    ClassEnrollment.student_id.in_(valid_students.keys()),
                 )
-                existing_enrollment = result.scalar_one_or_none()
-                if existing_enrollment:
-                    skipped += 1
-                    continue
+            )
+            existing = set(result.scalars().all())
+        else:
+            existing = set()
 
-                # 4. Insert class_enrollments row
-                enrollment = ClassEnrollment(
+        # Batch 3: Create all new enrollments
+        new_enrollments = []
+        for student_id in valid_students.keys():
+            if student_id in existing:
+                skipped += 1
+                continue
+            new_enrollments.append(
+                ClassEnrollment(
                     class_id=class_id,
                     student_id=student_id,
                     is_active=True,
                 )
-                self.db.add(enrollment)
-                enrolled += 1
+            )
+            enrolled += 1
 
-                # 5. Check onboarding status and trigger diagnostics (v2.1: check class_enrollments)
-                # Only trigger if enrollment status is PENDING
-                result = await self.db.execute(
-                    select(ClassEnrollment).where(
-                        ClassEnrollment.class_id == class_id,
-                        ClassEnrollment.student_id == student_id,
-                        ClassEnrollment.is_active.is_(True),
-                    )
-                )
-                enrollment_row = result.scalar_one_or_none()
-                if (
-                    enrollment_row and enrollment_row.onboarding_diagnostic_status == OnboardingStatus.PENDING  # type: ignore[attr-defined]
-                ):
-                    # Trigger onboarding diagnostics task
-                    trigger_onboarding_diagnostics.delay(str(student_id), str(class_id))
+        # Batch add all + flush in transaction
+        if new_enrollments:
+            self.db.add_all(new_enrollments)
+            await self.db.flush()
 
-            except Exception as e:
-                errors.append(f"Error enrolling student {student_id}: {str(e)}")
+            # Trigger diagnostics for new enrollments
+            for enrollment in new_enrollments:
+                trigger_onboarding_diagnostics.delay(str(enrollment.student_id), str(class_id))
 
-        await self.db.flush()
         return EnrollResponse(enrolled=enrolled, skipped=skipped, errors=errors)
 
     async def get_class_students(
