@@ -19,14 +19,14 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models.school import Class
 from app.models.user import UserRole
-from app.schemas.school import (
+from app.schemas.class_enrollment import (
     ClassCreate,
     ClassResponse,
     EnrollRequest,
     EnrollResponse,
     StudentSummary,
 )
-from app.services.school_service import SchoolService
+from app.services.class_service import ClassService
 
 router = APIRouter(tags=["classes"])
 
@@ -76,7 +76,7 @@ async def create_class(
 ) -> ClassResponse:
     """Create a class for a school. SchoolAdmin or KaihleAdmin only."""
     _check_school_access(school_id, current_user)
-    service = SchoolService(db)
+    service = ClassService(db)
     try:
         class_ = await service.create_class(school_id, body)
         return _class_to_response(class_)
@@ -92,7 +92,7 @@ async def list_classes(
 ) -> list[ClassResponse]:
     """List classes. Teacher sees own classes only. SchoolAdmin/KaihleAdmin see all."""
     _check_school_access(school_id, current_user)
-    service = SchoolService(db)
+    service = ClassService(db)
     teacher_id = current_user.id if current_user.role == UserRole.TEACHER else None
     classes = await service.list_classes(school_id, teacher_id)
     return [_class_to_response(c) for c in classes]
@@ -108,7 +108,7 @@ async def get_class(
     db: AsyncSession = Depends(get_db),
 ) -> ClassResponse:
     """Get a single class by ID."""
-    service = SchoolService(db)
+    service = ClassService(db)
     try:
         class_ = await service.get_class(class_id)
     except ValueError:
@@ -127,7 +127,7 @@ async def list_enrollments(
     db: AsyncSession = Depends(get_db),
 ) -> list[StudentSummary]:
     """List students enrolled in a class."""
-    service = SchoolService(db)
+    service = ClassService(db)
     try:
         class_ = await service.get_class(class_id)
     except ValueError:
@@ -155,7 +155,7 @@ async def create_enrollments(
 
     Idempotent: enrolling an already-enrolled student is counted as skipped, not an error.
     """
-    service = SchoolService(db)
+    service = ClassService(db)
     try:
         class_ = await service.get_class(class_id)
     except ValueError:
