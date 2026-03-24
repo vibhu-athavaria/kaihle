@@ -242,7 +242,7 @@ async def test_enroll_01_school_admin_enrolls_valid_students_returns_200(
         "student_ids": [str(students[0].id)],
     }
 
-    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+    with patch("app.services.class_service.trigger_onboarding_diagnostics"):
         response = await client.post(
             f"/api/v1/classes/{class_with_teacher.id}/enrollments",
             json=enroll_data,
@@ -272,7 +272,7 @@ async def test_enroll_03_teacher_enrolls_students_returns_200(
         "student_ids": [str(students[0].id)],
     }
 
-    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+    with patch("app.services.class_service.trigger_onboarding_diagnostics"):
         response = await client.post(
             f"/api/v1/classes/{class_with_teacher.id}/enrollments",
             json=enroll_data,
@@ -302,7 +302,7 @@ async def test_enroll_04_enroll_multiple_students_returns_correct_count(
         "student_ids": [str(s.id) for s in students[:3]],
     }
 
-    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+    with patch("app.services.class_service.trigger_onboarding_diagnostics"):
         response = await client.post(
             f"/api/v1/classes/{class_with_teacher.id}/enrollments",
             json=enroll_data,
@@ -332,7 +332,7 @@ async def test_enroll_05_enroll_student_triggers_diagnostic_status_pending(
         "student_ids": [str(students[0].id)],
     }
 
-    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+    with patch("app.services.class_service.trigger_onboarding_diagnostics"):
         response = await client.post(
             f"/api/v1/classes/{class_with_teacher.id}/enrollments",
             json=enroll_data,

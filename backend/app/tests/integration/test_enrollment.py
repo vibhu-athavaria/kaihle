@@ -316,7 +316,7 @@ async def test_enroll_students_when_valid_then_enrollment_rows_created(
     }
 
     # Act
-    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+    with patch("app.services.class_service.trigger_onboarding_diagnostics"):
         response = await client.post(
             f"/api/v1/classes/{test_class.id}/enrollments",
             json=enroll_data,
@@ -362,7 +362,7 @@ async def test_enroll_students_when_onboarding_pending_then_celery_task_fired(
     }
 
     # Act
-    with patch("app.services.school_service.trigger_onboarding_diagnostics") as mock_task:
+    with patch("app.services.class_service.trigger_onboarding_diagnostics") as mock_task:
         response = await client.post(
             f"/api/v1/classes/{test_class.id}/enrollments",
             json=enroll_data,
@@ -403,7 +403,7 @@ async def test_enroll_students_when_onboarding_in_progress_then_celery_task_not_
     }
 
     # Act
-    with patch("app.services.school_service.trigger_onboarding_diagnostics") as mock_task:
+    with patch("app.services.class_service.trigger_onboarding_diagnostics") as mock_task:
         response = await client.post(
             f"/api/v1/classes/{test_class.id}/enrollments",
             json=enroll_data,
