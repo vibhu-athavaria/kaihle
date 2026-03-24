@@ -107,6 +107,7 @@ This replaces the entire `scoring_service.py` module, `scoring_tasks.py`, and
 | Task ID | File | Description |
 |---|---|---|
 | M1-1-T1 | `M1/M1-1-T1_question_bank_import.md` | Import 7,000 MCQ questions into `question_bank` |
+| M1-2-T3 | `M1/M1-2-T3_curriculum_content_review.md` | **MUST RUN FIRST** — Vidhya reviews cambridge_v1.json for accuracy |
 | M1-2-T1 | `M1/M1-2-T1_curriculum_graph_seeding.md` | Seed curriculum hierarchy JSON → DB |
 | M1-2-T2 | `M1/M1-2-T2_curriculum_pdf_ingestion.md` | PDF → chunks → embeddings → pgvector |
 | M1-3-T1 | `M1/M1-3-T1_assessment_generation_service.md` | Tier 2 assessment creation service |
@@ -123,16 +124,17 @@ This replaces the entire `scoring_service.py` module, `scoring_tasks.py`, and
 ## Task Execution Order
 
 ```
-M1-2-T1 (curriculum seeding) ← MUST run first — everything else depends on it
-  → M1-1-T1 (question import) ← needs subtopic_id from seeded curriculum
-  → M1-2-T2 (PDF ingestion)  ← needs subtopic_id from seeded curriculum
-    → M1-3-T1 (assessment service) ← needs question_bank populated
-      → M1-3-T2 (assessment routes) ← replace stubs, needs service
-        → M1-3-T3 (teacher UI) ← needs real routes returning data
-          → M1-3-T4 (teacher results UI) ← depends on M1-3-T3 (assessments list) + M1-4-T1 (attempt results endpoint)
-      → M1-4-T1 (attempt routes) ← replace stubs, needs assessment service
-        → M1-4-T3 (gap states Celery) ← triggered by attempt submit
-        → M1-4-T4 (student UI) ← needs real attempt routes
+M1-2-T3 (curriculum content review) ← MUST complete before M1-2-T1
+  → M1-2-T1 (curriculum graph seeding) ← now approved by Vidhya
+    → M1-1-T1 (question import) ← needs subtopic_id from seeded curriculum
+    → M1-2-T2 (PDF ingestion)  ← needs subtopic_id from seeded curriculum
+      → M1-3-T1 (assessment service) ← needs question_bank populated
+        → M1-3-T2 (assessment routes) ← replace stubs, needs service
+          → M1-3-T3 (teacher UI) ← needs real routes returning data
+            → M1-3-T4 (teacher results UI) ← depends on M1-3-T3 (assessments list) + M1-4-T1 (attempt results endpoint)
+        → M1-4-T1 (attempt routes) ← replace stubs, needs assessment service
+          → M1-4-T3 (gap states Celery) ← triggered by attempt submit
+          → M1-4-T4 (student UI) ← needs real attempt routes
 ```
 
 ---

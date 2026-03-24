@@ -121,7 +121,7 @@ Group D — Frontend updates (all parallel, depend on T7)
 | M0-10-T10 | `M0-10/M0-10-T10_school_admin_app_update.md` | Update apps/school-admin to new API paths |
 | M0-10-T11 | `M0-10/M0-10-T11_kaihle_admin_app_update.md` | Update apps/kaihle-admin to new API paths |
 | M0-10-T12 | `M0-10/M0-10-T12_parent_app_update.md` | Update apps/parent to new API paths |
-
+| M0-10-T14 | `M0-10/M0-10-T14_user_self_service_endpoints.md` | User self-service: POST /auth/change-password + GET/PATCH /users/me |
 ---
 
 ## Definition of Done
@@ -140,7 +140,9 @@ Group D — Frontend updates (all parallel, depend on T7)
 - [ ] CONSTITUTION.md contains the frozen contract rule
 - [ ] `mypy app/` passes with zero errors
 - [ ] CI passes: ruff, mypy, pytest, Playwright E2E
-
+- [ ] `POST /auth/change-password` returns 204 for correct current password, 400 for wrong
+- [ ] `GET /users/me` returns current user data for any authenticated role
+- [ ] `PATCH /users/me` updates first_name and last_name only
 ---
 
 ## Retired Task

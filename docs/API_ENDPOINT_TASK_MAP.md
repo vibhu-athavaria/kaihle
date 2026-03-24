@@ -19,7 +19,9 @@
 | `POST /auth/set-password` | 📋 Task exists | `M0/M0-9-T4_password_setup_flow.md` | Exchanges scoped JWT for full JWT |
 | `POST /auth/refresh` | ✅ Built | `M0/M0-3-T2_auth_routes.md` | |
 | `POST /auth/logout` | ✅ Built | `M0/M0-3-T2_auth_routes.md` | |
-
+| `POST /auth/change-password` | ✅ Built | `M0-10/M0-10-T14_user_self_service_endpoints.md` | Any authenticated role; requires full-access JWT |
+| `GET /users/me` | ✅ Built | `M0-10/M0-10-T14_user_self_service_endpoints.md` | Any authenticated role |
+| `PATCH /users/me` | ✅ Built | `M0-10/M0-10-T14_user_self_service_endpoints.md` | first_name + last_name only |
 ---
 
 ## Platform Management `/api/v1/platform`
@@ -28,6 +30,17 @@
 |---|---|---|---|
 | `GET /platform/stats` | 🔧 Stubbed | `M0-10/M0-10-T6_parent_analytics_stubs.md` | Real impl: `M6/M6-1-T1_analytics_service_routes.md` |
 | `POST /platform/schools/{id}/impersonate` | 🔧 Stubbed | `M0-10/M0-10-T6_parent_analytics_stubs.md` | Returns 501 stub; real impl: `M6/M6-1-T1_analytics_service_routes.md` |
+
+---
+
+## Platform Operations `/api/v1/platform`
+
+| Endpoint | Status | Task File | Notes |
+|---|---|---|---|
+| `POST /admin/schools/{id}/trial-extension` | 📋 Task exists | `M6/M6-1-T4_platform_ops_endpoints.md` | KaihleAdmin only |
+| `GET /platform/activity` | 📋 Task exists | `M6/M6-1-T4_platform_ops_endpoints.md` | KaihleAdmin only |
+| `GET /platform/logs` | 📋 Task exists | `M6/M6-1-T4_platform_ops_endpoints.md` | KaihleAdmin only |
+| `GET /platform/users` | 📋 Task exists | `M0/M0-7-T5d...md` | KaihleAdmin only; stub in M0-7-T5d |
 
 ---
 
