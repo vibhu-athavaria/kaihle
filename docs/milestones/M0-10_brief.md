@@ -76,17 +76,22 @@ Group A — Foundation (must complete first, everything depends on it)
      CORS fix, pagination envelope, error shape)
 
 Group B — New stub endpoints (all parallel, all depend on T1)
-  M0-10-T2: Gap map + class summary stubs
-  M0-10-T3: Assessments + attempts stubs
-  M0-10-T4: Study plans stubs
-  M0-10-T5: Lesson plans stubs
-  M0-10-T6: Parent portal + analytics stubs
+  M0-10-T2:  Gap map + class summary stubs
+  M0-10-T2b: Curriculum read endpoints (GET /curricula, /grades, /subjects, /topics)
+             ← Fully implemented (not just stubs) — data is static, no business logic
+             ← CRITICAL PATH: unblocks M1-3-T3 teacher assessment wizard
+  M0-10-T3:  Assessments + attempts stubs
+  M0-10-T4:  Study plans stubs
+  M0-10-T5:  Lesson plans stubs
+  M0-10-T6:  Parent portal + analytics stubs
 
 Group C — Hard cutover of existing routes (sequential, depend on all of Group B)
   M0-10-T7: Backend rename + restructure
     (schools prefix fix, classes.py split,
      enrollments rename, KaihleAdmin bypass fix,
      all backend tests updated)
+    + T7 Addendum: 7 missing CRUD stubs + learning profile path rename
+    Load M0-10-T7_addendum_missing_stubs.md alongside M0-10-T7_backend_hard_cutover.md
 
 Group D — Frontend updates (all parallel, depend on T7)
   M0-10-T8:  apps/student API client update
@@ -104,11 +109,13 @@ Group D — Frontend updates (all parallel, depend on T7)
 |---|---|---|
 | M0-10-T1 | `M0-10/M0-10-T1_api_contract_foundation.md` | Shared schemas, CONSTITUTION update, CORS, envelope |
 | M0-10-T2 | `M0-10/M0-10-T2_gap_map_stubs.md` | Gap map + class summary stub routes |
+| M0-10-T2b | `M0-10/M0-10-T2b_curriculum_read_endpoints.md` | **CRITICAL PATH** — Curriculum read endpoints (fully implemented, not stubs) |
 | M0-10-T3 | `M0-10/M0-10-T3_assessment_attempt_stubs.md` | Assessment + attempt stub routes |
 | M0-10-T4 | `M0-10/M0-10-T4_study_plan_stubs.md` | Study plan stub routes |
 | M0-10-T5 | `M0-10/M0-10-T5_lesson_plan_stubs.md` | Lesson plan stub routes |
 | M0-10-T6 | `M0-10/M0-10-T6_parent_analytics_stubs.md` | Parent portal + analytics stub routes |
-| M0-10-T7 | `M0-10/M0-10-T7_backend_hard_cutover.md` | Rename + restructure all existing routes |
+| M0-10-T7 | `M0-10-T7_backend_hard_cutover.md` + `M0-10-T7_addendum_missing_stubs.md` + `M0-10-T7_addendum_b_student_class_access.md` | Rename + restructure + CRUD stubs + learning profile rename + **student class access fix** |
+| M0-10-T13 | `M0-10/M0-10-T13_billing_endpoints.md` | Billing read + update endpoints (GET/PATCH /schools/{id}/billing) |
 | M0-10-T8 | `M0-10/M0-10-T8_student_app_update.md` | Update apps/student to new API paths |
 | M0-10-T9 | `M0-10/M0-10-T9_teacher_app_update.md` | Update apps/teacher to new API paths |
 | M0-10-T10 | `M0-10/M0-10-T10_school_admin_app_update.md` | Update apps/school-admin to new API paths |
@@ -124,6 +131,9 @@ Group D — Frontend updates (all parallel, depend on T7)
 - [ ] Zero routes use verb-based paths (`/enroll`, `/submit` as path segments)
 - [ ] `grep -r "/admin/schools" backend/` returns zero results
 - [ ] `grep -r "/enroll" backend/app/api/` returns zero results
+- [ ] `grep -r "onboarding/learning-profile" backend/app/api/` returns zero results
+- [ ] All six curriculum read endpoints return 200 with empty lists before seeding
+- [ ] All seven missing CRUD stubs exist and return correct HTTP codes
 - [ ] All existing integration tests pass against new paths
 - [ ] All five frontend apps make zero API calls to old paths
 - [ ] All new stub read endpoints return 200 with empty/zero data
