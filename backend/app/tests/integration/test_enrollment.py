@@ -140,7 +140,7 @@ async def test_create_class_when_valid_then_teacher_can_list(
 
     # Act - Create class
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes",
+        f"/api/v1/schools/{test_school.id}/classes",
         json=class_data,
         headers=headers,
     )
@@ -154,7 +154,7 @@ async def test_create_class_when_valid_then_teacher_can_list(
     # Act - Teacher can list their classes
     teacher_headers = auth_header(test_teacher)
     response = await client.get(
-        f"/api/v1/admin/schools/{test_school.id}/classes",
+        f"/api/v1/schools/{test_school.id}/classes",
         headers=teacher_headers,
     )
 
@@ -210,7 +210,7 @@ async def test_create_class_when_teacher_not_in_school_then_400(
 
     # Act
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes",
+        f"/api/v1/schools/{test_school.id}/classes",
         json=class_data,
         headers=headers,
     )
@@ -282,7 +282,7 @@ async def test_list_classes_when_teacher_then_only_own_classes_returned(
     # Act - First teacher lists classes
     teacher_headers = auth_header(test_teacher)
     response = await client.get(
-        f"/api/v1/admin/schools/{test_school.id}/classes",
+        f"/api/v1/schools/{test_school.id}/classes",
         headers=teacher_headers,
     )
 
@@ -316,9 +316,9 @@ async def test_enroll_students_when_valid_then_enrollment_rows_created(
     }
 
     # Act
-    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+    with patch("app.services.class_service.trigger_onboarding_diagnostics"):
         response = await client.post(
-            f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
+            f"/api/v1/classes/{test_class.id}/enrollments",
             json=enroll_data,
             headers=headers,
         )
@@ -362,9 +362,9 @@ async def test_enroll_students_when_onboarding_pending_then_celery_task_fired(
     }
 
     # Act
-    with patch("app.services.school_service.trigger_onboarding_diagnostics") as mock_task:
+    with patch("app.services.class_service.trigger_onboarding_diagnostics") as mock_task:
         response = await client.post(
-            f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
+            f"/api/v1/classes/{test_class.id}/enrollments",
             json=enroll_data,
             headers=headers,
         )
@@ -403,9 +403,9 @@ async def test_enroll_students_when_onboarding_in_progress_then_celery_task_not_
     }
 
     # Act
-    with patch("app.services.school_service.trigger_onboarding_diagnostics") as mock_task:
+    with patch("app.services.class_service.trigger_onboarding_diagnostics") as mock_task:
         response = await client.post(
-            f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
+            f"/api/v1/classes/{test_class.id}/enrollments",
             json=enroll_data,
             headers=headers,
         )
@@ -434,7 +434,7 @@ async def test_enroll_students_when_already_enrolled_then_skipped_not_error(
 
     # First enrollment
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
+        f"/api/v1/classes/{test_class.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -443,7 +443,7 @@ async def test_enroll_students_when_already_enrolled_then_skipped_not_error(
 
     # Second enrollment (same students)
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
+        f"/api/v1/classes/{test_class.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -474,7 +474,7 @@ async def test_enroll_students_when_wrong_school_then_400(
 
     # Act
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
+        f"/api/v1/classes/{test_class.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -518,7 +518,7 @@ async def test_enroll_when_different_school_admin_then_403(
 
     # Act
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
+        f"/api/v1/classes/{test_class.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -565,7 +565,7 @@ async def test_create_class_when_different_school_admin_then_403(
 
     # Act
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes",
+        f"/api/v1/schools/{test_school.id}/classes",
         json=class_data,
         headers=headers,
     )
@@ -592,7 +592,7 @@ async def test_get_class_students_when_teacher_then_only_own_class(
         "student_ids": [str(s.id) for s in students],
     }
     await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
+        f"/api/v1/classes/{test_class.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -600,7 +600,7 @@ async def test_get_class_students_when_teacher_then_only_own_class(
     # Act - Teacher views students
     teacher_headers = auth_header(test_teacher)
     response = await client.get(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/students",
+        f"/api/v1/classes/{test_class.id}/enrollments",
         headers=teacher_headers,
     )
 
@@ -655,7 +655,7 @@ async def test_get_class_students_when_other_teacher_then_403(
         "student_ids": [str(s.id) for s in students],
     }
     await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/enroll",
+        f"/api/v1/classes/{test_class.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -663,7 +663,7 @@ async def test_get_class_students_when_other_teacher_then_403(
     # Act - Other teacher tries to view students
     teacher_headers = auth_header(other_teacher)
     response = await client.get(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{test_class.id}/students",
+        f"/api/v1/classes/{test_class.id}/enrollments",
         headers=teacher_headers,
     )
 

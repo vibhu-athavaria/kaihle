@@ -6,25 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, require_role
+from app.core.deps import CurrentUser, _check_school_access, require_role
 from app.models.user import UserRole
 from app.schemas.user import UserInvite, UserListResponse, UserResponse, UserUpdate
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/schools/{school_id}/users", tags=["users"])
-
-
-def _check_school_access(school_id: uuid.UUID, current_user: CurrentUser) -> None:
-    """
-    KaihleAdmin can access any school.
-    SchoolAdmin can only access own school.
-    Teachers and Parents cannot manage users (403).
-    """
-    # SchoolAdmin can only access their own school
-    if current_user.role == UserRole.SCHOOL_ADMIN and current_user.school_id != school_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-
-    return
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

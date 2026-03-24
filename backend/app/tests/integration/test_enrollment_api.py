@@ -242,9 +242,9 @@ async def test_enroll_01_school_admin_enrolls_valid_students_returns_200(
         "student_ids": [str(students[0].id)],
     }
 
-    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+    with patch("app.services.class_service.trigger_onboarding_diagnostics"):
         response = await client.post(
-            f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+            f"/api/v1/classes/{class_with_teacher.id}/enrollments",
             json=enroll_data,
             headers=headers,
         )
@@ -272,9 +272,9 @@ async def test_enroll_03_teacher_enrolls_students_returns_200(
         "student_ids": [str(students[0].id)],
     }
 
-    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+    with patch("app.services.class_service.trigger_onboarding_diagnostics"):
         response = await client.post(
-            f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+            f"/api/v1/classes/{class_with_teacher.id}/enrollments",
             json=enroll_data,
             headers=headers,
         )
@@ -302,9 +302,9 @@ async def test_enroll_04_enroll_multiple_students_returns_correct_count(
         "student_ids": [str(s.id) for s in students[:3]],
     }
 
-    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+    with patch("app.services.class_service.trigger_onboarding_diagnostics"):
         response = await client.post(
-            f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+            f"/api/v1/classes/{class_with_teacher.id}/enrollments",
             json=enroll_data,
             headers=headers,
         )
@@ -332,9 +332,9 @@ async def test_enroll_05_enroll_student_triggers_diagnostic_status_pending(
         "student_ids": [str(students[0].id)],
     }
 
-    with patch("app.services.school_service.trigger_onboarding_diagnostics"):
+    with patch("app.services.class_service.trigger_onboarding_diagnostics"):
         response = await client.post(
-            f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+            f"/api/v1/classes/{class_with_teacher.id}/enrollments",
             json=enroll_data,
             headers=headers,
         )
@@ -374,7 +374,7 @@ async def test_enroll_kaihle_admin_enrolls_students_returns_200(
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -399,7 +399,7 @@ async def test_enroll_teacher_tries_to_enroll_returns_403(
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -425,7 +425,7 @@ async def test_enroll_06_school_admin_enrolls_to_wrong_school_returns_403(
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -452,7 +452,7 @@ async def test_enroll_07_enroll_nonexistent_student_id_returns_error_in_skipped(
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -481,7 +481,7 @@ async def test_enroll_08_enroll_already_enrolled_student_handled_gracefully(
     }
 
     first_response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -489,7 +489,7 @@ async def test_enroll_08_enroll_already_enrolled_student_handled_gracefully(
     assert first_response.json()["enrolled"] == 1
 
     second_response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -516,7 +516,7 @@ async def test_enroll_09_empty_student_ids_list_returns_422(
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -525,21 +525,20 @@ async def test_enroll_09_empty_student_ids_list_returns_422(
 
 
 @pytest.mark.asyncio
-async def test_enroll_10_invalid_school_id_uuid_returns_422(
+async def test_enroll_10_malformed_class_id_returns_422(
     client: AsyncClient,
     db_session: AsyncSession,
     school_admin: User,
-    class_with_teacher: Class,
     students: list[User],
 ) -> None:
-    """ENROLL-10: Invalid school_id UUID → 422."""
+    """ENROLL-10: Malformed class_id UUID → 422."""
     headers = auth_header(school_admin)
     enroll_data: dict = {
         "student_ids": [str(students[0].id)],
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/not-a-uuid/classes/{class_with_teacher.id}/enroll",
+        "/api/v1/classes/not-a-uuid/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -563,7 +562,7 @@ async def test_enroll_11_invalid_class_id_uuid_returns_404(
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{nonexistent_class_id}/enroll",
+        f"/api/v1/classes/{nonexistent_class_id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -585,7 +584,7 @@ async def test_enroll_12_unauthenticated_returns_401(
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
         json=enroll_data,
     )
 
@@ -593,7 +592,7 @@ async def test_enroll_12_unauthenticated_returns_401(
 
 
 @pytest.mark.asyncio
-async def test_enroll_11_class_not_in_school_returns_404(
+async def test_enroll_11_class_not_in_school_returns_403(
     client: AsyncClient,
     db_session: AsyncSession,
     test_school: School,
@@ -602,20 +601,23 @@ async def test_enroll_11_class_not_in_school_returns_404(
     students: list[User],
     student_profiles: list[StudentProfile],
 ) -> None:
-    """Test that enrolling to a class not belonging to the school returns 404."""
+    """Test that enrolling to a class not belonging to the school returns 403.
+
+    Per CONSTITUTION Rule 7: Cross-school access returns 403 Forbidden, not 404.
+    """
     headers = auth_header(school_admin)
     enroll_data: dict = {
         "student_ids": [str(students[0].id)],
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{another_school_class.id}/enroll",
+        f"/api/v1/classes/{another_school_class.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
 
-    assert response.status_code == 404
-    assert "Class not found" in response.json()["detail"]
+    assert response.status_code == 403
+    assert "Access denied" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -635,7 +637,7 @@ async def test_enroll_response_structure_has_required_fields(
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -679,7 +681,7 @@ async def test_enroll_student_from_different_school_in_errors(
     }
 
     response = await client.post(
-        f"/api/v1/admin/schools/{test_school.id}/classes/{class_with_teacher.id}/enroll",
+        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
         json=enroll_data,
         headers=headers,
     )

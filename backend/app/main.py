@@ -8,9 +8,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
 
 from app.api.v1.routes import (
-    analytics, assessments, attempts, auth,
-    gap_map, health, lesson_plans, onboarding,
-    parent, schools, student_content, study_plans, users
+    analytics,
+    assessments,
+    attempts,
+    auth,
+    classes,
+    gap_map,
+    health,
+    lesson_plans,
+    onboarding,
+    parent,
+    schools,
+    student_content,
+    study_plans,
+    users,
 )
 from app.core.config import settings
 
@@ -78,6 +89,7 @@ app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(assessments.router, prefix="/api/v1")
 app.include_router(attempts.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(classes.router, prefix="/api/v1")
 app.include_router(gap_map.router, prefix="/api/v1")
 app.include_router(lesson_plans.router, prefix="/api/v1")
 app.include_router(parent.router, prefix="/api/v1")

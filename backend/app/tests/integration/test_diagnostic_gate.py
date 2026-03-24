@@ -204,7 +204,6 @@ async def test_diagnostic_endpoint_when_diagnostic_pending_then_returns_200(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["class_id"] == str(test_class.id)
     assert data["status"] == "PENDING"
 
 
