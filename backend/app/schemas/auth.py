@@ -72,3 +72,23 @@ class RefreshRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+
+class ChangePasswordRequest(BaseModel):
+    """Request body for POST /api/v1/auth/change-password."""
+
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+    confirm_password: str
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> "ChangePasswordRequest":
+        if self.new_password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
+
+    @model_validator(mode="after")
+    def new_differs_from_current(self) -> "ChangePasswordRequest":
+        if self.current_password == self.new_password:
+            raise ValueError("New password must differ from current password")
+        return self

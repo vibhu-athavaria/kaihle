@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User, UserRole
-from app.schemas.user import UserInvite, UserUpdate
+from app.schemas.user import UserInvite, UserSelfUpdate, UserUpdate
 from app.services.user_service import UserService
 
 
@@ -483,3 +483,149 @@ class TestDeactivateUser:
         # Act & Assert
         with pytest.raises(ValueError, match="User not found"):
             await user_service.deactivate_user(school_id, user_id)
+
+
+# ==============================================================================
+# Tests for get_me()
+# ==============================================================================
+
+
+class TestGetMe:
+    """Tests for UserService.get_me method."""
+
+    @pytest.mark.asyncio
+    async def test_get_me_when_user_exists_then_returns_user(
+        self,
+        user_service: UserService,
+        mock_db: MagicMock,
+        school_id: uuid.UUID,
+    ) -> None:
+        """Test get_me returns user when user exists."""
+        # Arrange
+        user_id = uuid.uuid4()
+        user = User(
+            id=user_id,
+            email="me@school.com",
+            first_name="Me",
+            last_name="User",
+            role=UserRole.TEACHER,
+            school_id=school_id,
+            is_active=True,
+        )
+        mock_db.get = AsyncMock(return_value=user)
+
+        # Act
+        result = await user_service.get_me(user_id)
+
+        # Assert
+        assert result == user
+        mock_db.get.assert_called_once_with(User, user_id)
+
+    @pytest.mark.asyncio
+    async def test_get_me_when_user_not_found_then_raises_error(
+        self,
+        user_service: UserService,
+        mock_db: MagicMock,
+    ) -> None:
+        """Test get_me raises ValueError when user not found."""
+        # Arrange
+        user_id = uuid.uuid4()
+        mock_db.get = AsyncMock(return_value=None)
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="User not found"):
+            await user_service.get_me(user_id)
+
+
+# ==============================================================================
+# Tests for update_me()
+# ==============================================================================
+
+
+class TestUpdateMe:
+    """Tests for UserService.update_me method."""
+
+    @pytest.mark.asyncio
+    async def test_update_me_when_valid_first_name_then_updates(
+        self,
+        user_service: UserService,
+        mock_db: MagicMock,
+        school_id: uuid.UUID,
+    ) -> None:
+        """Test update_me updates first_name when valid."""
+        # Arrange
+        user_id = uuid.uuid4()
+        user = User(
+            id=user_id,
+            email="me@school.com",
+            first_name="OldFirst",
+            last_name="LastName",
+            role=UserRole.TEACHER,
+            school_id=school_id,
+            is_active=True,
+        )
+        mock_db.get = AsyncMock(return_value=user)
+        data = UserSelfUpdate(first_name="NewFirst")
+
+        # Act
+        result = await user_service.update_me(
+            user_id=user_id,
+            data=data,
+        )
+
+        # Assert
+        assert result.first_name == "NewFirst"
+        assert result.last_name == "LastName"
+        mock_db.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_update_me_when_valid_last_name_then_updates(
+        self,
+        user_service: UserService,
+        mock_db: MagicMock,
+        school_id: uuid.UUID,
+    ) -> None:
+        """Test update_me updates last_name when valid."""
+        # Arrange
+        user_id = uuid.uuid4()
+        user = User(
+            id=user_id,
+            email="me@school.com",
+            first_name="FirstName",
+            last_name="OldLast",
+            role=UserRole.TEACHER,
+            school_id=school_id,
+            is_active=True,
+        )
+        mock_db.get = AsyncMock(return_value=user)
+        data = UserSelfUpdate(last_name="NewLast")
+
+        # Act
+        result = await user_service.update_me(
+            user_id=user_id,
+            data=data,
+        )
+
+        # Assert
+        assert result.first_name == "FirstName"
+        assert result.last_name == "NewLast"
+        mock_db.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_update_me_when_user_not_found_then_raises_error(
+        self,
+        user_service: UserService,
+        mock_db: MagicMock,
+    ) -> None:
+        """Test update_me raises ValueError when user not found."""
+        # Arrange
+        user_id = uuid.uuid4()
+        mock_db.get.return_value = None
+        data = UserSelfUpdate(first_name="New")
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="User not found"):
+            await user_service.update_me(
+                user_id=user_id,
+                data=data,
+            )

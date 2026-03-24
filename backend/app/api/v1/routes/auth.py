@@ -7,9 +7,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_token_payload
+from app.core.deps import CurrentUser, get_token_payload, require_full_access
 from app.core.security import InvalidTokenError
 from app.schemas.auth import (
+    ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -132,3 +133,22 @@ async def logout(body: LogoutRequest, db: AsyncSession = Depends(get_db)) -> dic
     service = AuthService(db)
     await service.logout(body.refresh_token)
     return {"message": "Logged out"}
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: CurrentUser = Depends(require_full_access),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Change the current user's password.
+
+    Requires a full-access JWT (not a password_setup scoped token).
+    Returns 204 on success with no response body.
+    Returns 400 if current password is incorrect.
+    """
+    service = AuthService(db)
+    try:
+        await service.change_password(current_user.id, body.current_password, body.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

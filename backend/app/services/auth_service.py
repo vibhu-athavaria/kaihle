@@ -337,3 +337,19 @@ class AuthService:
             # In test environment or if Resend fails, we still want to succeed
             # because the token is already stored in the database
             pass
+
+    async def change_password(self, user_id: uuid.UUID, current_password: str, new_password: str) -> None:
+        """
+        Change a user's password after verifying the current password.
+
+        Raises ValueError if user not found or current password is incorrect.
+        """
+        user = await self.db.get(User, user_id)
+        if not user:
+            raise ValueError("User not found")
+        if user.hashed_password is None:
+            raise ValueError("User has no password set")
+        if not verify_password(current_password, user.hashed_password):
+            raise ValueError("Current password is incorrect")
+        user.hashed_password = hash_password(new_password)
+        await self.db.flush()
