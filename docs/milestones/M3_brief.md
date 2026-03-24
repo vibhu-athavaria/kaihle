@@ -70,6 +70,7 @@ builds in `apps/teacher` as an extension of the gap map heatmap from M2-1-T3.
 |---|---|---|
 | M3-1-T1 | `M3/M3-1-T1_content_curator.md` | Resource curation with learning profile weighting |
 | M3-1-T2 | `M3/M3-1-T2_quiz_generator.md` | Quiz generation with interest injection via LiteLLM |
+| M3-1-T3 | `M3/M3-1-T3_quiz_quality_validation.md` | Quiz quality gate: semantic similarity validation before questions reach students |
 | M3-2-T1 | `M3/M3-2-T1_study_plan_service.md` | Study plan orchestration service |
 | M3-2-T2 | `M3/M3-2-T2_study_plan_routes.md` | Replace study plan stubs with real logic |
 | M3-2-T3 | `M3/M3-2-T3_student_study_plan_ui.md` | Student study plan UI (apps/student) |
@@ -82,10 +83,11 @@ builds in `apps/teacher` as an extension of the gap map heatmap from M2-1-T3.
 ```
 M3-1-T1 (content curator) ← parallel start
 M3-1-T2 (quiz generator)  ← parallel start
-  → M3-2-T1 (study plan service) ← needs both curator and generator
-    → M3-2-T2 (study plan routes) ← replace stubs, calls service
-      → M3-2-T3 (student UI)   ← apps/student, needs real routes
-      → M3-2-T4 (teacher UI)   ← apps/teacher, needs real routes
+  → M3-1-T3 (quiz quality validation) ← add validator to generator
+    → M3-2-T1 (study plan service) ← needs both curator and generator
+      → M3-2-T2 (study plan routes) ← replace stubs, calls service
+        → M3-2-T3 (student UI)   ← apps/student, needs real routes
+        → M3-2-T4 (teacher UI)   ← apps/teacher, needs real routes
 ```
 
 M3-2-T3 and M3-2-T4 can be built in parallel once M3-2-T2 is live.

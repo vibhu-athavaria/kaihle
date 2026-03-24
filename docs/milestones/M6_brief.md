@@ -89,6 +89,7 @@ environment.
 | M6-1-T1 | `M6/M6-1-T1_analytics_service_routes.md` | Replace analytics stubs + impersonation |
 | M6-1-T2 | `M6/M6-1-T2_analytics_ui.md` | School admin analytics dashboard (apps/school-admin) |
 | M6-1-T3 | `M6/M6-1-T3_class_gap_map_admin_ui.md` | Class gap map — read-only admin view (apps/school-admin) |
+| M6-1-T4 | `M6/M6-1-T4_platform_ops_endpoints.md` | Trial extension + platform activity + platform logs endpoints |
 | M6-2-T1 | `M6/M6-2-T1_billing_tier_enforcement.md` | Billing limits + trial expiry |
 | M6-2-T2 | `M6/M6-2-T2_billing_ui_school_admin.md` | Billing page UI — plan, usage bars, invoice list, trial banner (apps/school-admin) |
 | M6-3-T1 | `M6/M6-3-T1_rate_limiting.md` | slowapi rate limiting |
@@ -96,7 +97,7 @@ environment.
 | M6-3-T3 | `M6/M6-3-T3_data_backup.md` | Render PostgreSQL backups + RUNBOOK |
 | M6-3-T4 | `M6/M6-3-T4_pilot_seed_script.md` | Seed script for Bali pilot school |
 | M6-3-T5 | `M6/M6-3-T5_prelaunch_checklist.md` | Pre-launch verification checklist |
-
+| M6-3-T6 | `M6/M6-3-T6_runbook.md` | Operations RUNBOOK.md — full operational documentation |
 ---
 
 ## Task Execution Order
@@ -110,8 +111,9 @@ M6-2-T1 (billing)           ← parallel with analytics
 M6-3-T1 (rate limiting)     ← parallel
 M6-3-T2 (error handling)    ← parallel — note: uses ErrorDetail from schemas/common.py
 M6-3-T3 (backup)            ← parallel
-M6-3-T4 (pilot seed)        ← needs all prior tasks complete and tested
-  → M6-3-T5 (pre-launch checklist) ← last task of the entire project
+M6-3-T4 (pilot seed)
+  → M6-3-T6 (runbook) ← write before final checklist
+    → M6-3-T5 (pre-launch checklist) ← RUNBOOK must exist before checklist is verified
 ```
 
 ---

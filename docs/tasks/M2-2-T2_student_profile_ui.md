@@ -1,259 +1,279 @@
-# M2-2-T2 — Student Profile Page UI (Teacher App)
-**Milestone:** M2 · **Epic:** M2-2 · **Task:** T2
-**Depends on:** M2-2-T1 (my students list — entry point), M2-1-T2 (student gap map routes), M2-1-T3 (gap map side panel — "View full profile →" links here)
-**Blocks:** Nothing — final task of M2-2 epic
-**Estimated effort:** 4–5 hours
+# M2-2-T2 — Student Profile Page UI
+**Milestone:** M2 · **Epic:** M2-2
+**Authors:** Kramer (engineering) · Pixel (design) · Vidhya (education)
+**Depends on:** M2-2-T1 (roster), M2-1-T2 (gap map routes), M3-2-T2 (study plan routes)
+**Effort:** 4–5 hours
 
 ---
 
-## Context
+## Vidhya — Educational Context
 
-All code in this task lives in `frontend/apps/teacher`. No code goes in any other app.
+**The student profile is the richest teaching tool in the entire platform.**
 
-Read `docs/design/DESIGN_SYSTEM.md` §5.3 (Teacher) before writing any component.
-Gold is the action color. Green is mastery data only — never green buttons.
+A well-designed student profile replaces the informal mental model every experienced teacher carries about each student — "Emma is strong in algebra but struggles with data interpretation, she's a visual learner and interested in football, she's been active lately." Making that model visible and structured means teachers can act on it systematically rather than relying on memory.
 
-This page is the full teacher view of a single student. It is reached from two
-entry points:
-1. "View profile →" link in `MyStudentsPage` (`M2-2-T1`)
-2. "View full profile →" button in `StudentSidePanel` on the gap map (`M2-1-T3`)
+**The four-tab structure maps to how teachers think about a student:**
 
-It is a read-only page for teachers. Teachers cannot edit any student data here.
+1. **Gap Map tab** — *"Where are they now?"* — The current mastery picture. This is a read-only view. The teacher can see the gaps but cannot assign a study plan from this page (that action belongs on the main class gap map where they have full context). Do not add an assign button here — it would fragment the workflow.
 
----
+2. **Learning Profile tab** — *"How do they learn?"* — The modality breakdown and interests. A teacher preparing a lesson for Emma will glance at this and remember to include a visual component and use football analogies in the maths problems. Display dominant modality prominently. Show all four bars for completeness, but make the dominant one clearly stand out.
 
-## User Story
+3. **Study Plans tab** — *"What have we tried?"* — History of assigned study plans and their outcomes. A teacher who is about to assign another study plan should first check if Emma already has an active one or recently completed one covering the same subtopic. Show this history clearly. If a plan was completed and Emma's quiz score was still low, that's important context for the teacher's next decision.
 
-As a teacher, I want to see a single student's full gap profile, learning style, and
-study plan history so I can understand where they are struggling and what support has
-already been assigned.
+4. **Assessments tab** — *"How has performance trended?"* — Score history over time. A single low score is data; a pattern of improving scores despite starting low is a success story. Show assessment type, date, and score together so the teacher can read a trend.
+
+**What this page is NOT:** It is not the student's own view of themselves. The teacher sees things the student doesn't — correct answers in the question breakdown, the full gap map with all scores, historical study plan details. This is the teacher's professional view.
+
+**Dominant modality in gold.** On the teacher-facing learning profile view, the dominant modality bar renders in `bg-brand-gold` (`#c9932a`) — the teacher's action colour. This reinforces: "this is information you should act on." All other bars render in `bg-gray-200`. This is the opposite of the student settings page where all bars use the student's green scheme.
 
 ---
 
-## Files to Create
+## Pixel — Design Spec
+
+### Page layout
+
+```
+Header section (bg-white border-b border-gray-100):
+  ← Back to students  |  Emma Rodriguez  |  [Grade 9] [Maths 9B] [Science 9A]
+  Avatar (large, w-16 h-16) | Learning style tag | Interest pills
+
+Subject mastery cards (grid-cols-3 md:grid-cols-3 gap-4 p-6):
+  Read-only mini-cards, no links, no CTAs
+
+Tab nav (sticky, bg-white border-b):
+  [Gap Map] [Learning Profile] [Study Plans] [Assessments]
+
+Tab content:
+  Scrollable below sticky tab nav
+```
+
+### Component: StudentProfileHeader
+
+```
+Component: StudentProfileHeader
+──────────────────────────────────────────────────────────
+Avatar:     w-16 h-16 rounded-full bg-brand-light text-brand-primary
+            font-fraunces text-2xl — initials
+
+Name:       font-fraunces text-2xl text-ink
+Grade:      bg-gray-100 text-gray-600 rounded-full px-2.5 py-1 text-xs font-medium
+Class tags: bg-gray-100 text-gray-600 rounded-full px-2.5 py-1 text-xs
+            One per enrolled class — truncate class name to 20 chars with tooltip
+
+Learning style row (below name):
+  Dominant modality pill: bg-amber-50 text-amber-700 (gold context — teacher view)
+  icon + "Visual learner" or "Hands-on learner" etc.
+  Interest pills: up to 4 shown, "+ N more" if there are more
+    bg-gray-100 text-gray-600 text-xs rounded-full px-2 py-0.5
+
+If profile null: "Learning profile not completed" — text-gray-400 text-sm italic
+──────────────────────────────────────────────────────────
+Back link:  ← Back to My Students  — text-brand-gold text-sm, top-left
+```
+
+### Component: SubjectMasteryCards (read-only)
+
+```
+Component: SubjectMasteryCards
+──────────────────────────────────────────────────────────
+Cards:      grid-cols-3 gap-4 (no horizontal scroll — max 3 subjects in v1)
+Card:       bg-white rounded-xl border-l-4 border border-gray-100 p-4
+            Left border color from getMasteryStyle(score).borderClass
+Subject:    font-fraunces text-sm font-semibold text-ink
+Score:      text-2xl font-fraunces color from getMasteryStyle(score).textClass
+Band:       font-nunito text-xs text-gray-400 mt-0.5
+──────────────────────────────────────────────────────────
+CRITICAL: No links. No "View gap map →". No CTAs whatsoever.
+This is read-only display. (Vidhya: teacher is here to understand, not act)
+score=null: "—" in text-gray-400, "Not assessed" sub text
+```
+
+### Tabs (sticky)
+
+```
+Tab nav:    position sticky top-0 z-10 bg-white border-b border-gray-100
+Tab item:   px-4 py-3 text-sm font-nunito font-medium
+Active:     border-b-2 border-brand-gold text-brand-gold (gold underline)
+Inactive:   text-gray-500 hover:text-gray-700 transition-colors
+```
+
+### Tab 1 — Gap Map
+
+Simple list view (NOT the heatmap grid — too dense for a profile page):
+
+```
+Subject tabs → pill toggle: [Mathematics] [Science] [English]
+  Active: bg-brand-light text-brand-primary border border-brand-primary
+
+Topic group header:
+  Topic name — font-fraunces text-base text-ink + chevron + avg badge
+
+Subtopic row:
+  Mastery circle (24px SVG, stroke colour from band) | Subtopic name | "Last assessed {date}"
+  score=null: gray circle + "—" + "Not yet assessed"
+──────────────────────────────────────────────────────────
+Banner at top of tab (Vidhya):
+  "This view shows this student's gaps. To assign a study plan, use the
+   class Gap Map and select this student's cell."
+  bg-blue-50 border border-blue-100 text-blue-700 text-xs p-3 rounded-xl
+  [Go to Gap Map →] link
+```
+
+### Tab 2 — Learning Profile
+
+```
+Modality bars (4 rows):
+  Bar container: flex items-center gap-3 py-2
+  Label: font-nunito text-sm w-32 flex-shrink-0 text-gray-700
+  Bar:   h-2.5 rounded-full flex-1
+         Dominant: bg-brand-gold (teacher gold — Vidhya's requirement)
+         Others:   bg-gray-200
+  Pct:   font-nunito text-sm text-gray-500 w-10 text-right
+
+Work style chips (2 × 2 grid):
+  Each: rounded-xl border p-3 text-center
+  Preferred option: bg-amber-50 border-amber-200 text-amber-700
+  Other option:     bg-gray-50 border-gray-100 text-gray-400
+  Label: text-xs font-nunito font-medium
+  Examples:
+    [Solo learner ✓]  [Group learner  ]
+    [Short sessions ] [Long sessions ✓]
+
+Interest pills: all interests shown (not just top 2)
+  bg-gray-100 text-gray-700 rounded-full px-3 py-1 text-xs
+
+Completed date: "Profile completed {date}" text-xs text-gray-400 mt-4
+If null: "This student hasn't completed their learning profile yet."
+```
+
+### Tab 3 — Study Plans
+
+```
+Plan card:  bg-white rounded-xl border border-gray-100 p-4 mb-3
+Header:     Subject dot (mastery colour) | Subtopic name (Fraunces)
+            Status badge | Assigned {date}
+
+Status badges:
+  ACTIVE:      bg-green-50 text-green-700
+  GENERATING:  bg-amber-50 text-amber-700 (+ pulsing dot)
+  COMPLETED:   bg-gray-100 text-gray-500
+
+Completed plan:  Quiz score pill (getMasteryStyle) + Completed {date}
+                 "View plan →" ghost link — text-brand-gold text-sm
+
+Empty state: "No study plans assigned yet. Assign from the class Gap Map
+              when this student needs support on a specific subtopic."
+  font-nunito text-sm text-gray-400 text-center py-12
+```
+
+### Tab 4 — Assessments
+
+```
+Attempt row:  flex items-center gap-4 py-4 border-b border-gray-50
+Type badge:   (same as assessment results page — purple/blue/orange/gray)
+Name:         font-fraunces text-sm text-ink
+Date:         font-nunito text-xs text-gray-400
+Score:        getMasteryStyle pill
+"View answers →": text-brand-gold text-sm (→ assessment results student detail)
+
+Empty state:  "No assessments taken yet."
+```
+
+---
+
+## Kramer — Engineering Spec
+
+### Files
 
 ```
 frontend/apps/teacher/src/pages/students/
-  StudentProfilePage.tsx         ← page shell
+  StudentProfilePage.tsx
 
 frontend/apps/teacher/src/components/students/
-  StudentGapProfileTab.tsx       ← subject-tabbed subtopic mastery list
-  StudentLearningProfileCard.tsx ← modality bars + work style + interests
-  StudentStudyPlanHistory.tsx    ← list of assigned plans with status
+  StudentProfileHeader.tsx
+  SubjectMasteryCards.tsx
+  StudentGapMapTab.tsx
+  LearningProfileTab.tsx
+  StudyPlanHistoryTab.tsx
+  AssessmentHistoryTab.tsx
 
 frontend/apps/teacher/src/hooks/
-  useStudentProfile.ts           ← React Query hooks for student profile data
+  useStudentProfile.ts
 
 frontend/apps/teacher/src/tests/
-  student-profile.spec.ts        ← Playwright E2E tests
+  student-profile.spec.ts
+  subject-mastery-cards.test.tsx
+  learning-profile-tab.test.tsx
 ```
 
----
+### Route
 
-## Route
+`/teacher/students/:studentId` → `StudentProfilePage.tsx`
 
-`/teacher/students/:studentId` — `StudentProfilePage`.
-Protected by `PrivateRoute` + `RoleRoute(['TEACHER', 'SCHOOL_ADMIN', 'KAIHLE_ADMIN'])`.
-
-Back navigation: breadcrumb shows origin context:
-- Came from gap map side panel → "← Gap map"
-- Came from students list → "← My students"
-Use `history.back()` for simplicity — do not attempt to reconstruct origin route.
-
----
-
-## Complete List of API Calls This UI Makes
-
-`GET /api/v1/students/{studentId}/gap-map?subject_id={subjectId}` — called via
-`useStudentGapMap(studentId, subjectId)`. Called on mount and on subject tab change.
-
-`GET /api/v1/onboarding/learning-profile?student_id={studentId}` — called once on
-mount. Returns full `StudentLearningProfileResponse` including `modality_scores`,
-`work_style`, `interests`, `completed_at`.
-
-`GET /api/v1/students/{studentId}/study-plans` — called once on mount. Returns
-`Page[StudyPlanResponse]` for all plans assigned to this student, any status.
-
-Those are the only three API calls. Do not call assessment or class endpoints here.
-
----
-
-## Page Layout
-
-Three regions: header card (full width) → two-column content (gap profile left,
-learning profile + study plan history right).
-
-```
-┌───────────────────────────────────────────────────────────────┐
-│  ← Back  |  Aisha Rahman — Student profile         [read only]│
-├───────────────────────────────────────────────────────────────┤
-│  Student header card (full width)                             │
-│  name · grade · class · curriculum · enrolled date           │
-├─────────────────────────────────┬─────────────────────────────┤
-│  Gap profile (left)             │  Right column               │
-│  Subject tabs                   │  Learning profile card      │
-│  Expandable topic groups        │  Study plan history         │
-│  Subtopic mastery circles       │                             │
-└─────────────────────────────────┴─────────────────────────────┘
-```
-
-Grid: `grid-cols-[1.2fr_1fr]` gap-14. On mobile (md:): stack vertically.
-
----
-
-## Student Header Card
-
-```tsx
-<div className="bg-white border border-role-teacher-border rounded-2xl p-5 flex items-center gap-5">
-  {/* Avatar initials circle */}
-  {/* Name (font-display font-bold text-xl) */}
-  {/* Grade · Class · Curriculum (muted meta) */}
-  {/* Enrolled date */}
-  {/* Overall mastery ring (small, 48px) */}
-</div>
-```
-
-Avatar: initials from `first_name[0] + last_name[0]`, `bg-brand-primary text-white`.
-Overall mastery: aggregate average across all subjects from gap map response.
-If no assessments yet: ring is gray, "No assessments yet" label.
-
----
-
-## Gap Profile Tab (`StudentGapProfileTab.tsx`)
-
-Subject tabs across the top of the left column.
-Below tabs: expandable topic groups, each with subtopic rows.
-
-This reuses the same visual pattern as the student's own My Progress page
-(`M2-1-T4`) but reads from `GET /students/{id}/gap-map` (teacher endpoint)
-rather than the `/me` shortcut.
+### React Query
 
 ```typescript
-interface StudentGapProfileTabProps {
-  studentId: string
-  subjectId: string
-  onSubjectChange: (subjectId: string) => void
+export function useStudentProfile(studentId: string) {
+  return {
+    student:        useQuery({ queryKey: ['student', studentId], ... }),
+    gapMap:         useQuery({ queryKey: ['student-gap-map', studentId], ... }),
+    learningProfile:useQuery({ queryKey: ['learning-profile', studentId], ... }),
+    studyPlans:     useQuery({ queryKey: ['student-study-plans', studentId], ... }),
+    attempts:       useQuery({ queryKey: ['student-attempts', studentId], ... }),
+  }
 }
 ```
 
-Subtopic row: mastery circle (SVG, `getMasteryStyle`) + subtopic name +
-last assessed date + band badge. Identical to `SubtopicProgressRow` in the
-student app but lives in `apps/teacher` — do not import across apps.
+### API Calls
 
-Empty state (no assessments): "No assessment data yet for this subject.
-Students will appear here after completing their first diagnostic."
-
----
-
-## Learning Profile Card (`StudentLearningProfileCard.tsx`)
-
-```tsx
-<div className="bg-white border border-role-teacher-border rounded-2xl p-5">
-  <SectionLabel>Learning profile</SectionLabel>
-
-  {/* Modality bars — 4 bars */}
-  {/* Work style preferences — 2-col grid of boolean badges */}
-  {/* Interests — pill tags */}
-  {/* Completed date or "Not yet completed" */}
-</div>
-```
-
-**Modality bars:**
-```
-Kinesthetic  [████████░░]  80%   ← dominant (show gold #c9932a, matching lesson plan)
-Visual       [█████░░░░░]  55%
-Reading      [███░░░░░░░]  30%
-Auditory     [██░░░░░░░░]  20%
-```
-Dominant modality bar uses gold `#c9932a`. Others use `#9ca3af`.
-Dominant = `argmax(modality_scores)`.
-
-**Work style** (from `work_style` JSONB):
-
-```
-Prefers:  Solo study      Short sessions   Task-based
-```
-Show as small badge pills. True values shown in `bg-brand-light text-brand-primary`,
-false values omitted (show only what is true — "Prefers solo" not "Does not prefer group").
-
-**Interests:** pill tags `bg-gray-100 text-gray-700 rounded-full`.
-
-If `completed_at = null`: show single muted message "Learning profile not yet completed."
-Do not show empty bars — hide the entire modality section.
-
-This is read-only. Teachers cannot edit the student's learning profile.
+| Data | Endpoint |
+|---|---|
+| Student | `GET /api/v1/schools/{id}/users/{studentId}` |
+| Gap map | `GET /api/v1/students/{studentId}/gap-map` |
+| Learning profile | `GET /api/v1/students/{studentId}/learning-profile` |
+| Study plans | `GET /api/v1/students/{studentId}/study-plans` |
+| Assessment history | Derived from attempts listing |
 
 ---
 
-## Study Plan History (`StudentStudyPlanHistory.tsx`)
+## Playwright E2E + Jest Unit Tests
 
-```tsx
-<div className="bg-white border border-role-teacher-border rounded-2xl p-5">
-  <SectionLabel>Study plans</SectionLabel>
-  {/* List of assigned plans */}
-</div>
+```typescript
+// E2E
+test('profile_header_shows_name_grade_classes', ...)
+test('profile_header_shows_modality_in_gold_pill', ...)          // Vidhya + Pixel
+test('profile_gap_map_tab_has_reroute_banner_not_assign_button',...)// Vidhya
+test('profile_learning_profile_dominant_bar_uses_gold', ...)     // Vidhya + Pixel
+test('profile_study_plans_empty_state_has_guidance', ...)        // Vidhya
+test('profile_assessments_view_answers_link_present', ...)
+test('profile_null_mastery_shows_dash_not_zero', ...)            // Vidhya
+test('profile_back_link_returns_to_roster', ...)
+
+// Unit
+describe('SubjectMasteryCards', () => {
+  it('no links or CTAs rendered (read-only)', ...)               // Vidhya + Pixel
+  it('null score shows dash not zero', ...)                      // Vidhya
+  it('left border colour from mastery band', ...)                // Pixel
+})
+
+describe('LearningProfileTab', () => {
+  it('dominant modality bar uses bg-brand-gold', ...)            // Vidhya + Pixel
+  it('non-dominant bars use bg-gray-200', ...)                   // Pixel
+  it('preferred work style chip highlighted amber', ...)         // Pixel
+})
 ```
-
-One row per plan, showing:
-- Subtopic name + subject (from `study_plan.subtopic_name`)
-- Status badge: GENERATING (amber pulse) / ACTIVE (green) / COMPLETED (gray tick)
-- Quiz score if COMPLETED: "Quiz: 80%"
-- Assigned date: "Assigned 12 Mar 2026"
-
-Sort: ACTIVE first, GENERATING second, COMPLETED last. Within COMPLETED, most recent first.
-
-Empty state: "No study plans assigned yet. Assign plans from the Gap Map →"
-The "Gap Map →" text is a link to `/teacher/classes/{classId}/gap-map`.
-`classId` comes from the student's enrollment in this teacher's class — use the
-first match if enrolled in multiple of the teacher's classes.
 
 ---
 
 ## Acceptance Criteria
 
-**Playwright E2E tests in `student-profile.spec.ts`**
-
-`test_profile_page_when_loaded_then_header_shows_student_name` — Navigate to
-`/teacher/students/{studentId}`. Assert the student's name is visible in the header.
-
-`test_profile_page_when_learning_profile_complete_then_modality_bars_visible` — Mock
-a completed learning profile. Assert four labelled bars are visible in the learning
-profile card.
-
-`test_profile_page_when_learning_profile_incomplete_then_not_yet_completed_message` —
-Mock `completed_at=null`. Assert "Learning profile not yet completed." message is
-visible and no bars are shown.
-
-`test_profile_page_when_subject_tab_changed_then_gap_data_updates` — Click the
-Science tab. Assert a new API call is made for the Science subject ID.
-
-`test_profile_page_when_study_plan_completed_then_quiz_score_shown` — Mock a
-COMPLETED plan with `quiz_score=0.8`. Assert "Quiz: 80%" text is visible.
-
-`test_profile_page_when_no_study_plans_then_empty_state_shown` — Mock empty study
-plans response. Assert the empty state message with "Assign plans from the Gap Map →"
-link is visible.
-
-`test_profile_page_when_gap_map_null_score_then_dash_shown` — Mock a subtopic with
-`mastery_score=null`. Assert "–" appears inside that subtopic's circle.
-
-**Jest unit tests**
-
-`test_learning_profile_card_when_kinesthetic_dominant_then_bar_uses_gold` — Render
-card with `kinesthetic: 0.8, visual: 0.5`. Assert the kinesthetic bar has the gold
-color class.
-
-`test_learning_profile_card_when_prefers_solo_true_then_badge_shown` — Render with
-`work_style.prefers_solo=true`. Assert "Solo study" badge is visible.
-
-`test_learning_profile_card_when_prefers_solo_false_then_no_badge` — `prefers_solo=false`.
-Assert "Solo study" badge is NOT visible.
-
----
-
-## Do NOT Touch
-
-`frontend/apps/student/` — no code goes here.
-`frontend/apps/school-admin/` — no code goes here.
-`frontend/packages/ui/` — do not add teacher-specific profile components here.
-Any backend file.
+- [ ] Header shows name, grade, class tags, modality pill in gold (Pixel + Vidhya)
+- [ ] Gap Map tab has reroute banner — no assign button on this page (Vidhya)
+- [ ] Learning Profile dominant bar renders in `bg-brand-gold` not green (Vidhya + Pixel)
+- [ ] Work style chips: preferred highlighted, others muted (Pixel)
+- [ ] Subject mastery cards: read-only, no links, no CTAs (Vidhya + Pixel)
+- [ ] `score=null` → "—" everywhere, never "0%" (Vidhya)
+- [ ] Study plan history shows quiz scores and completion status (Vidhya)
+- [ ] Assessment history "View answers →" links work (Kramer)
+- [ ] No green action buttons (Teacher design spec)
+- [ ] All tabs keyboard navigable (Pixel)

@@ -69,6 +69,14 @@ Working local dev environment, CI/CD pipeline, complete authentication system (i
 | M0-6-T2 | `M0/M0-6-T2_tier1_diagnostic_trigger.md` | Celery: auto-create Tier 1 diagnostics | Done |
 | M0-6-T3 | `M0/M0-6-T3_onboarding_completion_tracking.md` | Onboarding completion check service | Done |
 | M0-6-T4 | `M0/M0-6-T4_onboarding_ui.md` | Student onboarding UI | Done |
+| M0-6-T5  | `M0/M0-6-T5_questionnaire_content_review.md` | Questionnaire interest review + VARK rationale | Todo |
+| M0-8-T5  | `M0/M0-8-T5_shared_components_extension.md` | ScoreRing + LearningStyleTag → packages/ui | Todo |
+| M0-8-T6  | `M0/M0-8-T6_toast_error_boundary_motion.md` | Toast system + ErrorBoundary + prefers-reduced-motion | Todo |
+| M0-8-T7  | `M0/M0-8-T7_shared_modal_component.md` | Shared Modal component (Radix UI Dialog) → packages/ui | Todo |
+| M0-9-T7  | `M0/M0-9-T7_playwright_five_app_config.md` | Playwright config for all 5 apps | Todo |
+| M0-7-T3b | `M0/M0-7-T3b_student_settings_ui.md` | Student settings UI | Todo |
+| M0-7-T5b/c/d | `M0/M0-7-T5b_c_d_kaihle_admin_billing_logs_config_users.md` | Kaihle Admin billing, logs, config, users UI | Todo |
+| M0-7-T6  | `M0/M0-7-T6_parent_settings_ui.md` | Parent settings UI | Todo |
 | M0-7-T1 | `M0/M0-7-T1_layout_wrappers.md` | Shared layout wrappers in packages/ui | Done |
 | M0-7-T2 | `M0/M0-7-T2_teacher_dashboard.md` | Teacher dashboard scaffold (apps/teacher) | Done |
 | M0-7-T3 | `M0/M0-7-T3_student_dashboard.md` | Student dashboard scaffold (apps/student) | Done |
@@ -99,6 +107,13 @@ M0-9-T1 must come first since it creates the scaffold that T2 and T3 migrate int
 **M0-7-T2b and M0-7-T3b** (teacher settings and student settings) can run in parallel with M0-10 — they touch only `apps/teacher/src/pages/settings/` and `apps/student/src/pages/settings/` with zero overlap with M0-10 changes. Queue them immediately.
 
 **M0-7-T4b** (school admin settings) must wait until M0-10 completes — M0-10-T10 is modifying `apps/school-admin` hooks and running in parallel risks a merge conflict on `useSchoolAdmin.ts`.
+
+M0-10-T14 must run before any settings UI tasks (M0-7-T2b, M0-7-T3b, M0-7-T4b, M0-7-T6).
+M0-8-T7 (Modal) must run before any task that creates a modal component.
+M0-8-T5 must run before M1-3-T4, M2-2-T1, M2-2-T2 (ScoreRing + LearningStyleTag required).
+M0-8-T6 must run before any settings UI tasks (toast system required by all forms).
+M0-9-T7 can run in parallel with M0-8-T5, M0-8-T6, M0-8-T7.
+M0-6-T5 must run before M1-2-T1 (questionnaire interests locked before curriculum seeds).
 
 ---
 

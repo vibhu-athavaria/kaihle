@@ -187,6 +187,18 @@ creates or modifies backend service or route logic MUST include:
 Acceptance criteria checkboxes alone are NOT sufficient. A coding agent must be
 able to implement the tests without making design decisions. If a task file does
 not name its tests, it is incomplete and must not be handed to a coding agent.
+
+**Rule 21 — All modals must trap focus.** Any component that opens as a modal overlay
+MUST use the `Modal` component from `packages/ui` (Radix UI Dialog wrapper). This
+guarantees: Tab cycles within modal, Escape closes, focus returns to trigger.
+Custom div-based modals without focus trapping are WCAG 2.1 Level AA violations.
+See `docs/design/DESIGN_SYSTEM_ACCESSIBILITY_ADDENDUM.md` §9 for the canonical pattern.
+
+**Rule 22 — Loading states must follow the loading state standard.** Page initial
+loads use skeletons. Button actions use button spinners. Background generation uses
+pulsing badges. No spinner on full-page initial data load. Every list component must
+have an explicit empty state. See `docs/design/DESIGN_SYSTEM_ACCESSIBILITY_ADDENDUM.md`
+§10 for the full standard.
 ---
 
 ## 5. Authentication and Onboarding Flows (CRITICAL)
@@ -438,6 +450,9 @@ These components are shared across all five apps. No app may define its own vers
 | Architecture decisions | `docs/adr/ADR-*.md` |
 | Environment variables reference | `docs/kaihle_product_plan.md` Part 6 |
 | Screen design specs (per-role UI page inventory, component specs, data map) | `docs/design/screens/TEACHER_SCREENS.md` · `STUDENT_SCREENS.md` · `SCHOOL_ADMIN_SCREENS.md` · `KAIHLE_ADMIN_SCREENS.md` · `PARENT_SCREENS.md` |
+| Mastery threshold rationale | `docs/design/MASTERY_THRESHOLD_RATIONALE.md` |
+| Questionnaire design decisions | `docs/design/QUESTIONNAIRE_DESIGN_RATIONALE.md` |
+| Modal + loading state standards | `docs/design/DESIGN_SYSTEM_ACCESSIBILITY_ADDENDUM.md` |
 
 ---
 

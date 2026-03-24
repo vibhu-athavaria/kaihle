@@ -71,7 +71,8 @@ shown (wired to study plans in M3).
 | M2-1-T2 | `M2/M2-1-T2_gap_map_routes.md` | Replace gap map stubs with real logic |
 | M2-1-T3 | `M2/M2-1-T3_gap_map_heatmap_ui.md` | Teacher heatmap UI (apps/teacher) |
 | M2-1-T4 | `M2/M2-1-T4_student_gap_profile_ui.md` | Student progress profile UI (apps/student) |
-
+| M2-2-T1 | `M2/M2-2-T1_student_progress_ui.md` | Student views their own progress profile with traffic-light colour coding per subtopic
+| M2-2-T2 | `M2/M2-2-T2_student_progress_ui.md` | Student views their own progress profile with traffic-light colour coding per subtopic
 ---
 
 ## Task Execution Order

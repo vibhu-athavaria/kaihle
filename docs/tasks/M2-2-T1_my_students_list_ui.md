@@ -1,208 +1,223 @@
-# M2-2-T1 — My Students List UI (Teacher App)
-**Milestone:** M2 · **Epic:** M2-2 · **Task:** T1
-**Depends on:** M2-1-T2 (gap map routes return real data), M0-7-T1 (layout wrappers), M0-8-T4 (shared components)
-**Blocks:** M2-2-T2 (student profile page — list links to it)
-**Estimated effort:** 3–4 hours
+# M2-2-T1 — My Students Class Roster UI
+**Milestone:** M2 — Gap Map & Teacher Dashboard · **Epic:** M2-2
+**Authors:** Kramer (engineering) · Pixel (design) · Vidhya (education)
+**Depends on:** M2-1-T2 (gap map routes), M1-4-T1 (attempt routes)
+**Blocks:** M2-2-T2 (student profile)
+**Effort:** 3–4 hours
 
 ---
 
-## Context
+## Vidhya — Educational Context
 
-All code in this task lives in `frontend/apps/teacher`. No code goes in any other app.
+**What teachers actually use a roster for:**
 
-Read `docs/design/DESIGN_SYSTEM.md` §5.3 (Teacher) before writing any component.
-Gold is the action color. Green is mastery data only.
+A class roster is not a gradebook. Teachers look at a roster to answer fast questions:
+- Who hasn't been assessed yet? (Learning gap — can't assign a study plan without data)
+- Who has a very different learning style from the rest of the class? (Instructional planning)
+- Who was active this week and who has gone quiet? (Engagement signal)
 
-This page is the class roster — a teacher's view of every student in a selected class.
-It is the entry point to the Student Profile page (`M2-2-T2`). It also surfaces at
-a glance each student's overall mastery, learning style, and whether they have any
-active study plans, so a teacher can prioritise who needs attention.
+The roster should surface those three signals without requiring the teacher to click into each student. Dense data tables fail teachers — the cognitive load of scanning 28 rows of numbers is too high during a lesson or planning period.
 
-The sidebar link "My Students" routes here with the last active `classId` pre-selected.
+**Learning style tags matter educationally.** A teacher seeing "👁 Visual" next to a student's name will adapt their in-class support instinctively. This is called *differentiated instruction* — the best teachers do it naturally; a good tool makes it visible for the rest. The tag must show the dominant modality from the student's learning profile, not a generic label.
 
----
+**Mastery "not yet assessed" is different from mastery 0%.** A student who hasn't taken any assessments yet has a null gap map. Displaying this as 0% is educationally misleading — it implies they attempted and failed, not that there's simply no data. Always use "—" for null. Teachers understand this distinction immediately.
 
-## User Story
-
-As a teacher, I want to see my full class roster with each student's mastery overview
-and learning style so I can quickly identify who needs attention and navigate to a
-student's full profile.
+**Sort order:** Default should be alphabetical by last name — that's how teachers think of their class. Unlike the assessment results page (lowest-first for instructional urgency), the roster is a reference view, not a triage view.
 
 ---
 
-## Files to Create
+## Pixel — Design Spec
+
+### Overall approach
+
+This is a **reference table**, not a dashboard. The visual tone should be calm and scannable — white background, generous row height, restrained typography. Teachers will open this page mid-lesson to look up a student quickly. It must load fast and scan faster.
+
+Avoid adding too many columns. Six columns is the maximum before the table becomes a horizontal scroll nightmare on laptops. Keep it to: Student · Mastery · Style · Last active · →
+
+### Component: LearningStyleTag
+
+```
+Component: LearningStyleTag
+──────────────────────────────────────────────────────────
+Base:       inline-flex items-center gap-1.5 rounded-full
+            px-2.5 py-1 text-xs font-medium
+            bg-gray-100 text-gray-700
+
+Variants (modality → icon + label):
+  visual:          👁  "Visual"
+  auditory:        👂  "Auditory"
+  reading_writing: 📖  "Reader"
+  kinesthetic:     🤲  "Hands-on"
+  null:            "—" text-gray-400 (no pill, just a dash)
+──────────────────────────────────────────────────────────
+Note: Do not use brand colours for these tags. They are not
+status indicators — they are descriptors. Gray keeps them
+visually quiet next to the mastery badge which IS coloured.
+──────────────────────────────────────────────────────────
+Accessibility: aria-label="Learning style: {label}"
+               Icon is presentational (aria-hidden="true")
+```
+
+### Component: StudentRosterTable
+
+```
+Component: StudentRosterTable
+──────────────────────────────────────────────────────────
+Table:      bg-white rounded-2xl border border-gray-100 overflow-hidden
+Header:     bg-gray-50 border-b border-gray-100
+            th: font-nunito text-[11px] uppercase tracking-wide
+            text-gray-400 px-4 py-3
+Row height: 60px — generous, prevents visual cramping
+Row hover:  bg-gray-50 transition-colors duration-75 cursor-pointer
+Last row:   no bottom border (no double border with card edge)
+──────────────────────────────────────────────────────────
+Avatar:     w-9 h-9 rounded-full bg-brand-light text-brand-primary
+            font-fraunces text-sm flex-shrink-0
+            Initials from first_name[0] + last_name[0]
+Name:       font-fraunces text-sm font-semibold text-ink
+Grade:      font-nunito text-xs text-gray-400 mt-0.5
+──────────────────────────────────────────────────────────
+Mastery:    getMasteryStyle(score).pill — coloured pill
+            score=null: "—" text-gray-400 text-sm (Vidhya: not "0%")
+──────────────────────────────────────────────────────────
+Last active: "Today" / "2 days ago" / "1 week ago"
+             Use date-fns formatDistanceToNow
+             "—" if no activity yet
+             > 2 weeks: text-amber-600 (soft urgency signal)
+──────────────────────────────────────────────────────────
+Arrow:      text-gray-300 →, group-hover:text-brand-gold transition-colors
+──────────────────────────────────────────────────────────
+Empty state:
+  Illustration: simple empty classroom SVG or plain icon
+  Heading: "No students enrolled yet" — font-fraunces text-lg
+  Sub: "Ask your school admin to enrol students in this class."
+  font-nunito text-sm text-gray-400 text-center py-16
+──────────────────────────────────────────────────────────
+Loading: Skeleton rows (5 rows) with animate-pulse
+         Avatar circle + two text bars per row
+```
+
+### Search + Sort Bar
+
+```
+Layout: flex justify-between items-center mb-4
+Search: flex-1 max-w-xs
+        Input — rounded-xl border border-gray-200 px-4 py-2 text-sm
+        Placeholder: "Search students..."
+        Icon: 🔍 left-side, text-gray-400
+Sort:   <select> rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-600
+        Options:  Name A–Z (default) | Mastery ↑ | Mastery ↓ | Last active
+```
+
+---
+
+## Kramer — Engineering Spec
+
+### Files
 
 ```
 frontend/apps/teacher/src/pages/students/
-  MyStudentsPage.tsx             ← page shell with class selector and student table
+  MyStudentsPage.tsx
 
 frontend/apps/teacher/src/components/students/
-  StudentRosterTable.tsx         ← sortable table of students
-  LearningStyleTag.tsx           ← modality icon + label pill
+  StudentRosterTable.tsx
+  StudentRosterRow.tsx
+  LearningStyleTag.tsx
 
 frontend/apps/teacher/src/hooks/
-  useClassStudents.ts            ← React Query hooks for student list
+  useMyStudents.ts
 
 frontend/apps/teacher/src/tests/
-  my-students.spec.ts            ← Playwright E2E tests
+  my-students.spec.ts
+  learning-style-tag.test.tsx
 ```
 
----
+### Route
 
-## Route
+`/teacher/classes/:classId/students` → `MyStudentsPage.tsx`
 
-`/teacher/classes/:classId/students` — `MyStudentsPage`.
-Protected by `PrivateRoute` + `RoleRoute(['TEACHER'])`.
+### Data Strategy
 
-`classId` is read from the URL param. If the teacher navigates via the sidebar,
-the last active classId is used.
-
----
-
-## Complete List of API Calls This UI Makes
-
-`GET /api/v1/schools/{schoolId}/classes?teacher_id=me` — called on mount to populate
-the class selector dropdown. Reuses the same hook as the dashboard.
-
-`GET /api/v1/classes/{classId}/gap-map?subject_id={subjectId}` — called to derive
-per-student mastery aggregates. Use the first enrolled subject by default.
-Reuses `useClassGapMap` from M0-10-T9.
-
-`GET /api/v1/onboarding/learning-profile?student_id={id}` — called per student
-to get modality data. Batch these in parallel using `Promise.all` — do not make
-sequential requests. Cache with React Query so switching subjects does not re-fetch.
-
-Those are the only API calls. Do not call study plan or assessment endpoints here —
-the table shows only mastery and learning style data.
-
----
-
-## Page Layout
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  ← Classes  |  Mathematics 9B — My students         [classId ▼] │
-│  28 students                                                     │
-├──────────────────────────────────────────────────────────────────┤
-│  Subject tabs: [Mathematics] [Science] [English]                 │
-├──────────────────────────────────────────────────────────────────┤
-│  Search: [____________]          Sort: [Name ▼]                  │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐    │
-│  │  Student    │ Mastery │ Band       │ Learning style │ →  │    │
-│  │  Aisha R.   │   57%   │ Developing │ ✋ Kinesthetic  │ →  │    │
-│  │  Ben K.     │   74%   │ Strong     │ 👁 Visual      │ →  │    │
-│  │  Citra D.   │   89%   │ Strong     │ 📖 Reading     │ →  │    │
-│  │  Dani P.    │   32%   │ Needs work │ ✋ Kinesthetic  │ →  │    │
-│  └──────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### Class selector dropdown
-
-Teacher may teach multiple classes. Show the current class name in the topbar with a
-dropdown chevron. Selecting a different class navigates to
-`/teacher/classes/{newClassId}/students`.
-
-### Subject tabs
-
-One tab per subject the class is enrolled in. Switching subject tab changes which
-gap map data is used for the Mastery column. Default: first subject alphabetically
-unless there is recent activity in another.
-
----
-
-## Student Roster Table (`StudentRosterTable.tsx`)
-
-### Columns
-
-| Column | Width | Content | Sortable |
-|---|---|---|---|
-| Student | 28% | Full name (Fraunces, font-semibold) + grade badge | Yes (alpha) |
-| Mastery | 12% | Percentage, colored by `getMasteryStyle` | Yes (numeric) |
-| Band | 14% | Band label pill badge (Strong/Developing/Needs work/Not assessed) | Yes |
-| Learning style | 20% | `LearningStyleTag` — modality icon + label | No |
-| Last active | 14% | ISO date formatted "18 Mar 2026", or "—" | Yes |
-| → | 12% | "View profile →" link → `/teacher/students/{studentId}` | No |
-
-Default sort: Mastery ascending (lowest first — teacher attention to struggling students).
-
-Students with `mastery=null` (no assessments yet): show "—" and band "Not assessed".
-Sort these to the bottom regardless of sort direction.
-
-### `LearningStyleTag.tsx`
+Enrollment list from `GET /classes/{classId}/enrollments`. Then `useQueries` for mastery + learning profile per student (capped at 40 students per CONSTITUTION Rule — class size limit).
 
 ```typescript
-interface LearningStyleTagProps {
-  dominantModality: 'visual' | 'auditory' | 'reading_writing' | 'kinesthetic' | null
+export function useMyStudents(classId: string) {
+  const enrollments = useQuery({
+    queryKey: ['enrollments', classId],
+    queryFn: () => apiClient.get(`/api/v1/classes/${classId}/enrollments`),
+  })
+
+  const studentIds = enrollments.data?.map(e => e.student_id) ?? []
+
+  const profiles = useQueries({
+    queries: studentIds.map(id => ({
+      queryKey: ['student-learning-profile', id],
+      queryFn: () => apiClient.get(`/api/v1/students/${id}/learning-profile`),
+      staleTime: 5 * 60_000,
+    })),
+  })
+
+  const masteryScores = useQueries({
+    queries: studentIds.map(id => ({
+      queryKey: ['student-gap-map-summary', id],
+      queryFn: () => apiClient.get(`/api/v1/students/${id}/gap-map`),
+      staleTime: 2 * 60_000,
+      select: (data) => computeOverallMastery(data), // average across subjects
+    })),
+  })
+
+  return { enrollments, profiles, masteryScores }
 }
 ```
 
-Render as pill: `bg-gray-100 text-gray-700 rounded-full px-2 py-1 text-xs`.
+---
 
-Modality → icon + label:
-- `visual` → 👁 Visual
-- `auditory` → 👂 Auditory
-- `reading_writing` → 📖 Reading
-- `kinesthetic` → ✋ Hands-on
-- `null` → "—" (profile not yet complete)
+## Playwright E2E
 
-Dominant modality = `argmax(modality_scores)`. If profile not yet completed
-(`completed_at = null`), show "—".
+```typescript
+test('roster_loads_and_shows_student_rows', ...)
+test('roster_avatar_shows_initials', ...)                  // Pixel
+test('roster_null_mastery_shows_dash_not_zero', ...)       // Vidhya
+test('roster_search_filters_by_name', ...)
+test('roster_sort_alphabetical_by_default', ...)           // Vidhya
+test('roster_sort_by_mastery_works', ...)
+test('roster_stale_student_last_active_amber', ...)        // Pixel: > 2 weeks amber
+test('roster_row_click_navigates_to_profile', ...)
+test('roster_empty_state_when_no_enrollments', ...)        // Pixel
+test('roster_loading_shows_skeleton_rows', ...)            // Pixel
+test('roster_learning_style_tag_has_aria_label', ...)      // Pixel
+test('roster_no_green_buttons', ...)                       // Teacher design spec
+```
 
-### Loading state
+---
 
-Show skeleton rows (same column widths, animated pulse) while data is loading.
-Never show a full-page spinner — skeleton rows give the teacher a sense of layout.
+## Jest Unit Tests
 
-### Empty state
-
-If class has no enrolled students: "No students enrolled in this class yet. Students
-are enrolled by the school admin."
+```typescript
+describe('LearningStyleTag', () => {
+  it('visual: shows 👁 icon and "Visual" label', ...)
+  it('auditory: shows 👂 icon and "Auditory" label', ...)
+  it('reading_writing: shows 📖 icon and "Reader" label', ...)
+  it('kinesthetic: shows 🤲 icon and "Hands-on" label', ...)
+  it('null modality: renders "—" not a pill', ...)          // Vidhya: null ≠ 0
+  it('icon is aria-hidden', ...)                            // Pixel
+  it('has aria-label with modality name', ...)              // Pixel
+})
+```
 
 ---
 
 ## Acceptance Criteria
 
-**Playwright E2E tests in `my-students.spec.ts`**
-
-`test_students_page_when_loaded_then_roster_table_visible` — Navigate to
-`/teacher/classes/{classId}/students`. Assert a table with at least one student row
-is visible.
-
-`test_students_page_when_sort_by_mastery_then_lowest_first` — Assert default sort
-places lowest-mastery student at top row.
-
-`test_students_page_when_search_by_name_then_table_filters` — Type a student name
-in the search input. Assert only matching rows remain visible.
-
-`test_students_page_when_subject_tab_changed_then_mastery_updates` — Click the
-Science tab. Assert the Mastery column values change (different subject gap map data).
-
-`test_students_page_when_view_profile_clicked_then_navigates` — Click "View profile →"
-for a student. Assert the URL changes to `/teacher/students/{studentId}`.
-
-`test_students_page_when_no_profile_then_learning_style_shows_dash` — Mock a student
-with no completed learning profile (`completed_at=null`). Assert "—" appears in the
-Learning style column for that row.
-
-`test_students_page_when_null_mastery_then_sorted_to_bottom` — Mock one student with
-null mastery and one with 0.3. With mastery ascending sort, assert the null student
-appears below the 0.3 student.
-
-**Jest unit tests**
-
-`test_learning_style_tag_when_kinesthetic_then_shows_hands_on` — Render
-`LearningStyleTag` with `dominantModality="kinesthetic"`. Assert "Hands-on" text
-is present.
-
-`test_learning_style_tag_when_null_then_shows_dash` — `dominantModality=null`.
-Assert "—" is rendered.
-
----
-
-## Do NOT Touch
-
-`frontend/apps/student/` — no code goes here.
-`frontend/apps/school-admin/` — no code goes here.
-Any backend file.
+- [ ] Default sort alphabetical by last name (Vidhya — roster is a reference view)
+- [ ] `score=null` renders "—" not "0%" anywhere on the page (Vidhya)
+- [ ] Learning style tag shows correct icon + label per modality (Vidhya)
+- [ ] `LearningStyleTag` null state renders "—" not empty pill (Vidhya)
+- [ ] Avatar shows initials, not a broken image (Pixel)
+- [ ] Last active > 2 weeks renders in amber (Pixel — soft urgency)
+- [ ] Loading state shows skeleton rows, not blank table (Pixel)
+- [ ] Empty state has heading + explanation, not a blank page (Pixel)
+- [ ] Search filters client-side, no spinner on keypress (Pixel)
+- [ ] All icons are `aria-hidden`, tags have `aria-label` (Pixel)
+- [ ] Row click navigates to student profile page (Kramer)
+- [ ] No green action buttons (Teacher design spec)

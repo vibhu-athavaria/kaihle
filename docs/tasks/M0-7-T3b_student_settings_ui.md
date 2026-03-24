@@ -1,262 +1,251 @@
-# M0-7-T3b — Student Settings UI (Student App)
-**Milestone:** M0 · **Epic:** M0-7 · **Task:** T3b
-**Depends on:** M0-7-T3 (student dashboard), M0-6-T4 (onboarding questionnaire UI), M0-3-T4 (auth frontend)
-**Blocks:** Nothing — standalone settings page
-**Estimated effort:** 2–3 hours
+# M0-7-T3b — Student Settings UI
+**Milestone:** M0 · **Epic:** M0-7
+**Authors:** Kramer (engineering) · Pixel (design) · Vidhya (education)
+**Depends on:** M0-8-T3, M0-8-T4, M0-7-T3, M0-10-T14
+**Effort:** 3–4 hours
 
 ---
 
-## Context
+## Vidhya — Educational Context
 
-All code in this task lives in `frontend/apps/student`. No code goes in any other app.
+**The learning profile retake is educationally significant.** Students' learning preferences evolve — a 12-year-old who identified as a hands-on learner in September may discover a genuine love of reading by March. Restricting retakes would mean the personalisation system gradually becomes less accurate. The retake must be frictionless: one button, clear explanation, no warning dialogs.
 
-Read `docs/design/DESIGN_SYSTEM.md` §5.4 (Student) before writing any component.
-Green `#1a5c38` is the action color. Page background `#f9fafb`. No sidebar —
-`StudentLayout` only.
+**The explanation copy matters.** "Updating your profile improves future personalisation" is technically accurate but educationally inert. Students aged 11–18 respond to concrete relevance. The copy should say something like: *"Retaking the questionnaire updates how your study plans and lesson activities are personalised for you. Takes about 5 minutes."*
 
-This page is reached via the avatar/profile icon in the top-right of the student
-topbar — it is NOT in the bottom nav. The URL is accessible directly.
+**What students should NOT be able to change:** Email (managed by school — confused students sometimes try to change this and then lose access to their account). Role, grade, and class assignments are all managed by the school admin. Make the boundary clear with a short, non-technical explanation: "Managed by school."
 
-Two main concerns: account details (name, password) and learning profile (view current
-profile, retake questionnaire). Email is managed by the school — not self-service.
+**The settings page is an honesty moment.** Students land here when something is wrong — forgot password, name is misspelled, wants to update interests. The UX should feel calm, competent, and safe. No alarm-bell colours, no threatening warnings, no confirmation dialogs for non-destructive actions.
 
 ---
 
-## User Story
+## Pixel — Design Spec
 
-As a student, I want to update my name, change my password, and retake my learning
-profile questionnaire if my preferences have changed, so that Kaihle can better
-personalise my study experience.
+### Layout
+
+Max-width `max-w-xl mx-auto px-4 py-8`. Three stacked section cards with `gap-4`. No sidebar or bottom nav active state — settings is a detached destination.
+
+```
+Page title: "Settings" — font-fraunces text-2xl text-ink mb-6
+Sections:   bg-white rounded-2xl border border-gray-100 shadow-sm
+            Divide sections with h-px bg-gray-100 inside the card
+```
+
+### Component: AccountSection
+
+```
+Section heading: font-fraunces text-base text-ink px-6 pt-5 pb-3
+                 border-b border-gray-50
+
+Row base:   flex items-center justify-between px-6 py-4
+Label:      font-nunito text-sm font-medium text-ink
+Value:      font-nunito text-sm text-gray-400
+
+Name row:
+  Value: "{firstName} {lastName}"
+  Action: "Edit" — text-brand-primary text-sm font-medium cursor-pointer
+  Inline expansion: slides down with max-height transition 200ms ease-out
+  Do NOT replace the row — expand below it
+
+Email row:
+  Value: email string (muted)
+  Badge: "Managed by school"
+         bg-gray-100 text-gray-400 text-xs rounded-full px-2 py-0.5
+
+Password row:
+  Value: "Last changed {date}" or "—"
+  Action: "Change" — text-brand-primary text-sm
+```
+
+### Component: InlineEditName
+
+```
+Component: InlineEditName
+──────────────────────────────────────────────────────────
+Container:  px-6 pb-4 pt-1 bg-gray-50/50
+            border-b border-gray-100
+Inputs:     grid-cols-2 gap-3 (stacked on mobile: grid-cols-1)
+            rounded-lg border border-gray-200 px-3 py-2 text-sm
+            focus: border-brand-primary ring-1 ring-brand-primary/20
+            transition: border-color 100ms, box-shadow 100ms
+Validation: error text text-red-500 text-xs mt-1
+Buttons:    flex gap-2 mt-3
+  Save:     bg-brand-primary text-white rounded-lg px-4 py-2 text-sm
+            Loading: spinner inside, disabled + opacity-60
+  Cancel:   border border-gray-200 text-gray-600 rounded-lg px-4 py-2 text-sm
+Rule:       Only one inline form open at a time. Opening password
+            collapses name and vice versa.
+──────────────────────────────────────────────────────────
+Success:    Toast notification (bottom-right) — "Name updated"
+            bg-gray-900 text-white text-sm px-4 py-2 rounded-xl
+            auto-dismiss after 3 seconds
+```
+
+### Component: InlineChangePassword
+
+```
+Component: InlineChangePassword
+──────────────────────────────────────────────────────────
+Same container style as InlineEditName
+Inputs stacked (always, never grid):
+  Current password · New password · Confirm new password
+  type="password" — show/hide toggle (👁 icon, right-inside)
+Validation (client-side before submit):
+  New ≥ 8 chars: error below field as user types
+  Confirm must match: error on blur
+  Never show errors before interaction (Pixel: don't blame the user early)
+API call on submit: POST /auth/change-password
+  204: toast "Password updated", collapse form, clear all fields
+  400: inline error below Current password field — "Incorrect password"
+  422: inline errors per field
+──────────────────────────────────────────────────────────
+Note (Pixel): Password show/hide on each field is a UX must.
+Students on shared devices (school computers) need to be able to
+type passwords confidently without shoulder-surfing risk.
+```
+
+### Component: LearningProfileSection
+
+```
+Section:    bg-white rounded-2xl border border-gray-100 shadow-sm
+Heading:    "Learning profile" — font-fraunces text-base
+
+Modality bars (4 rows, matching student progress page):
+  Row:      flex items-center gap-3 py-2 px-6
+  Label:    text-sm text-gray-700 w-36 font-nunito
+  Bar:      h-2 rounded-full flex-1 bg-gray-100
+  Fill:     h-full rounded-full bg-brand-primary for dominant,
+            bg-gray-300 for others
+            Width = score * 100%
+            Transition: width 600ms ease on mount
+  Pct:      text-sm text-gray-500 w-10 text-right
+
+  Note (Pixel): Student app uses green (brand-primary), not gold.
+  Green = action/mastery in student app. Gold is teacher-only.
+  Note (Vidhya): Show ALL four modality bars, not just dominant.
+  Students should see a complete picture of themselves.
+
+Interests:  flex flex-wrap gap-2 px-6 pb-4
+  Pill:     bg-green-50 text-brand-primary border border-green-200
+            text-xs rounded-full px-3 py-1
+
+Completed:  "Completed {date}" — text-xs text-gray-400 px-6 pb-4
+
+Retake btn: mx-6 mb-6
+  Style:    border border-brand-primary text-brand-primary
+            rounded-xl px-4 py-2 text-sm font-medium w-full
+            hover: bg-green-50 transition-colors
+  Label:    "Retake questionnaire"
+  Note below (Vidhya's copy):
+    "Retaking updates how your study plans and lesson activities
+     are personalised for you. Takes about 5 minutes."
+    text-xs text-gray-400 mt-2 text-center
+```
+
+### Component: AccountActionsSection
+
+```
+Section:    bg-white rounded-2xl border border-red-100 shadow-sm
+  (Light red border signals this section has irreversible actions)
+
+Sign out:
+  Description: "You'll need to sign in again on this device"
+               font-nunito text-sm text-gray-400
+  Button:   border border-red-200 text-red-600 rounded-xl px-4 py-2 text-sm
+            bg-white hover:bg-red-50 transition-colors
+            NOT filled red — outlined only (Pixel: filled red = danger zone)
+```
 
 ---
 
-## Files to Create
+## Kramer — Engineering Spec
+
+### Files
 
 ```
 frontend/apps/student/src/pages/settings/
-  StudentSettingsPage.tsx        ← page shell
+  StudentSettings.tsx
+
+frontend/apps/student/src/components/settings/
+  AccountSection.tsx
+  InlineEditName.tsx
+  InlineChangePassword.tsx
+  LearningProfileSection.tsx
+  AccountActionsSection.tsx
 
 frontend/apps/student/src/tests/
-  student-settings.spec.ts       ← Playwright E2E tests
+  student-settings.spec.ts
+  inline-change-password.test.tsx
+  learning-profile-section.test.tsx
+```
+
+### Route
+
+`/student/settings` — via avatar dropdown in `StudentLayout`.
+Add to `App.tsx` inside `PrivateRoute > PasswordSetupRoute > OnboardingRoute > RoleRoute(['STUDENT'])`.
+
+### API Calls
+
+| Action | Endpoint |
+|---|---|
+| Load current user | `GET /api/v1/users/me` |
+| Load learning profile | `GET /api/v1/students/me/learning-profile` |
+| Update name | `PATCH /api/v1/users/me` |
+| Change password | `POST /api/v1/auth/change-password` |
+| Sign out | `POST /api/v1/auth/logout` |
+
+---
+
+## Playwright E2E
+
+```typescript
+test('settings_three_sections_visible', ...)
+test('settings_name_edit_expands_with_two_inputs', ...)
+test('settings_name_save_calls_patch_and_updates_display', ...)
+test('settings_password_change_show_hide_toggle_works', ...)     // Pixel
+test('settings_password_confirm_mismatch_error_on_blur', ...)    // Pixel
+test('settings_wrong_current_password_inline_error', ...)
+test('settings_modality_bars_all_four_shown', ...)               // Vidhya
+test('settings_dominant_bar_uses_brand_primary_not_gold', ...)   // Pixel (student=green)
+test('settings_retake_navigates_to_onboarding', ...)             // Vidhya
+test('settings_retake_copy_mentions_personalisation', ...)       // Vidhya
+test('settings_sign_out_clears_tokens_redirects', ...)
+test('settings_email_row_shows_managed_by_school', ...)          // Vidhya
 ```
 
 ---
 
-## Route
+## Jest Unit Tests
 
-`/student/settings` — `StudentSettingsPage`.
-Protected by `PrivateRoute` + `OnboardingRoute` (student must have completed
-learning profile to access settings).
+```typescript
+describe('InlineChangePassword', () => {
+  it('shows password-toggle button on each field', ...)           // Pixel
+  it('does not show error before user interacts with field', ...) // Pixel
+  it('confirm field error appears on blur not on type', ...)      // Pixel
+  it('disables submit when new password under 8 chars', ...)
+  it('disables submit when confirm does not match', ...)
+})
 
-The settings page is not part of the bottom nav tab set. It is reached by tapping
-the avatar in the topnav. On desktop, clicking the avatar could show a small dropdown:
-"Settings" and "Sign out". On mobile, both options can be in the settings page itself.
-
----
-
-## Complete List of API Calls This UI Makes
-
-`GET /api/v1/onboarding/learning-profile` — called on mount (no `student_id` param —
-student reads their own profile). Returns `StudentLearningProfileResponse`.
-
-`PATCH /api/v1/users/me` — called when student saves a name change. Body:
-`{ first_name: string, last_name: string }`. Returns updated `UserResponse`.
-
-`POST /api/v1/auth/change-password` — called on password change submission. Body:
-`{ current_password: string, new_password: string }`. Returns 200 or 400/422.
-
-`POST /api/v1/auth/logout` — called on sign out. Returns 200. Then clear tokens,
-redirect to `/login`.
-
-Note: Retake questionnaire does NOT call an endpoint from this page — it navigates
-to `/student/onboarding/profile` which handles the questionnaire flow. The existing
-`POST /api/v1/onboarding/questionnaire/submit` endpoint is idempotent — re-submitting
-updates the existing `student_learning_profiles` row.
-
----
-
-## Page Layout
-
-Uses `StudentLayout` — top nav tabs visible on desktop, bottom nav on mobile.
-No active tab highlighted (settings is not one of the 4 nav items).
-
-Content max-width: `max-w-lg mx-auto` — narrow reading column suits settings pages.
-
+describe('LearningProfileSection', () => {
+  it('renders all four modality bars', ...)                       // Vidhya
+  it('dominant bar uses bg-brand-primary (green)', ...)           // Pixel
+  it('non-dominant bars use bg-gray-300', ...)                    // Pixel
+  it('shows all interests not just top 2', ...)                   // Vidhya
+  it('retake copy mentions personalisation and time', ...)        // Vidhya
+})
 ```
-Settings
-Aisha Rahman · Grade 7 · Green Valley International School
-
-ACCOUNT
-┌─────────────────────────────────────────────────────────────┐
-│  Name          Aisha Rahman                        [Edit]   │
-│  ─────────────────────────────────────────────────────────  │
-│  Email         aisha@greenvalley.edu   [Managed by school]  │
-│  ─────────────────────────────────────────────────────────  │
-│  Password      Last changed 3 months ago          [Change]  │
-└─────────────────────────────────────────────────────────────┘
-
-LEARNING PROFILE
-┌─────────────────────────────────────────────────────────────┐
-│  Your learning profile             Completed 12 Jan 2026    │
-│                                                             │
-│  Learning style:                                            │
-│  Kinesthetic  [████████░░]  80%                             │
-│  Visual       [█████░░░░░]  55%                             │
-│  Reading      [███░░░░░░░]  30%                             │
-│  Auditory     [██░░░░░░░░]  20%                             │
-│                                                             │
-│  Interests: ⚽ Football  🎮 Gaming  🎨 Art                   │
-│                                                             │
-│  [↺ Retake questionnaire]                                   │
-│  Updating your profile improves future personalisation.     │
-│  Takes about 5 minutes.                                     │
-└─────────────────────────────────────────────────────────────┘
-
-ACCOUNT ACTIONS
-┌─────────────────────────────────────────────────────────────┐
-│  Sign out                                      [Sign out]   │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Account section
-
-Card: `bg-white border border-role-student-border rounded-2xl`.
-`role-student-border` = student app border token.
-
-**Name row:**
-- Label + current name (muted)
-- "Edit" link → inline form expands below row
-- Form: First name + Last name inputs, "Save" (green button, `bg-brand-primary`) +
-  "Cancel" (ghost)
-- Validation: both required
-- On success: toast "Name updated", collapse form
-
-**Email row:**
-- Label + email address (muted)
-- Right: "Managed by school" (muted, no edit action)
-
-**Password row:**
-- Label + "Last changed {relative time}" (muted)
-- "Change" link → inline form expands
-- Form: Current password · New password · Confirm new password (all type="password")
-- Validation: new/confirm must match client-side; min 8 chars
-- On 400: inline error "Current password is incorrect"
-- On success: toast "Password updated", collapse form, clear fields
-
-Only one inline form open at a time — opening one collapses the other.
-
----
-
-## Learning profile section
-
-Card: `bg-white border border-role-student-border rounded-2xl p-5`.
-
-Shows current profile data — read only display:
-
-**Modality bars** (4 bars, one per modality):
-```
-Kinesthetic  [████████░░]  80%
-Visual       [█████░░░░░]  55%
-Reading      [███░░░░░░░]  30%
-Auditory     [██░░░░░░░░]  20%
-```
-Dominant modality bar uses gold `#c9932a` (matching lesson plan rationale shown to
-teacher — consistency signal if student and teacher compare notes).
-Others use `#9ca3af`.
-
-Bar: `h-6px bg-gray-100 rounded-full` bg, fill colored.
-Score = `modality_scores[key] * 100` rounded to nearest integer.
-
-**Work style** (from `work_style` JSONB):
-Show as compact true-value badges: "Solo study" / "Short sessions" / "Task-based" /
-"Group learning" / "Concept first". Only show TRUE values.
-
-**Interests:**
-Pill badges from `interests[]`. Use `bg-gray-100 text-gray-700 rounded-full`.
-
-**Completed date:**
-"Completed {date formatted as '12 Jan 2026'}" — small muted text top-right of card.
-
-**If profile not yet complete** (`completed_at = null`):
-Do not show bars, work style, or interests. Show: "Your learning profile is not yet
-complete. Complete the questionnaire to personalise your experience." with a primary
-"Complete profile →" green button linking to `/student/onboarding/profile`.
-(This state should be rare since the student must complete the profile before reaching
-the dashboard, but handle it gracefully.)
-
-**Retake questionnaire button:**
-```tsx
-<button
-  onClick={() => navigate('/student/onboarding/profile')}
-  className="flex items-center gap-2 border border-brand-mid text-brand-primary rounded-full px-4 py-2 text-sm font-bold hover:bg-brand-light"
->
-  ↺ Retake questionnaire
-</button>
-```
-Below button: "Updating your profile improves future study plan and quiz
-personalisation. Takes about 5 minutes." (muted, 11px).
-
----
-
-## Account actions section
-
-Card: `bg-white border border-red-200 rounded-2xl`.
-
-**Sign out row:**
-- Label: "Sign out" (font-semibold)
-- Sub: "You will need to sign in again" (muted, 11px)
-- Button: outline red `border border-red-200 text-red-600 rounded-full` — NOT filled
-- On click: `POST /api/v1/auth/logout` → clear tokens → redirect `/login`
-
-No account deletion in v1.
 
 ---
 
 ## Acceptance Criteria
 
-**Playwright E2E tests in `student-settings.spec.ts`**
-
-`test_settings_page_when_loaded_then_three_sections_visible` — Navigate to
-`/student/settings`. Assert Account, Learning profile, and Account actions sections
-are all visible.
-
-`test_settings_page_when_profile_complete_then_modality_bars_shown` — Mock a
-completed learning profile. Assert four bar rows are visible.
-
-`test_settings_page_when_profile_incomplete_then_complete_profile_cta_shown` — Mock
-`completed_at=null`. Assert "Complete profile →" button is visible. Assert no bars
-are shown.
-
-`test_settings_page_when_edit_name_opened_then_two_inputs_visible` — Click "Edit"
-on Name row. Assert first name and last name inputs are present.
-
-`test_settings_page_when_name_saved_then_row_updates` — Fill in new name, click Save.
-Mock `PATCH /users/me` → 200. Assert the row now shows the new name.
-
-`test_settings_page_when_retake_clicked_then_navigates_to_questionnaire` — Click
-"Retake questionnaire". Assert URL changes to `/student/onboarding/profile`.
-
-`test_settings_page_when_sign_out_clicked_then_redirects_to_login` — Click sign out.
-Mock `POST /auth/logout` → 200. Assert URL becomes `/login`.
-
-`test_settings_page_when_password_form_open_and_name_edit_clicked_then_password_form_closes` —
-Open password form. Click "Edit" on name row. Assert password form is no longer visible.
-
-**Jest unit tests**
-
-`test_modality_bars_when_kinesthetic_dominant_then_gold_fill` — Render bars with
-`kinesthetic: 0.8, visual: 0.5`. Assert kinesthetic bar has gold color.
-
-`test_modality_bars_when_all_zero_then_all_bars_empty` — All `modality_scores=0`.
-Assert all bars show 0% fill.
-
----
-
-## Do NOT Touch
-
-`frontend/apps/teacher/` — no code goes here.
-`frontend/apps/school-admin/` — no code goes here.
-`frontend/packages/ui/` — do not add settings-specific components here.
-Any backend file — all endpoints already exist.
+- [ ] All four modality bars shown — student sees full picture (Vidhya)
+- [ ] Dominant bar green (`bg-brand-primary`), others muted — student palette (Pixel)
+- [ ] Retake copy mentions personalisation and ~5 minutes (Vidhya)
+- [ ] Email row shows "Managed by school" with gentle explanation (Vidhya)
+- [ ] Password fields have show/hide toggles (Pixel)
+- [ ] No errors shown before user has interacted with a field (Pixel)
+- [ ] Confirm mismatch error appears on blur, not on every keypress (Pixel)
+- [ ] Sign out button is outlined red, NOT filled red (Pixel)
+- [ ] One inline form open at a time (name collapses password and vice versa) (Pixel)
+- [ ] Success toast auto-dismisses after 3 seconds (Pixel)
+- [ ] All inputs keyboard navigable with visible focus ring (Pixel)
