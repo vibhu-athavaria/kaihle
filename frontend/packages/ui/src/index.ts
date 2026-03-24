@@ -12,6 +12,9 @@ export { Skeleton, SkeletonCard } from "./components/Skeleton";
 export { EmptyState } from "./components/EmptyState";
 export { ProgressBar } from "./components/ProgressBar";
 
+export { ScoreRing } from "./components/ScoreRing";
+export { LearningStyleTag } from "./components/LearningStyleTag";
+
 export { DashboardLayout } from "./layouts/DashboardLayout";
 export { StudentLayout } from "./layouts/StudentLayout";
 export { ParentLayout } from "./layouts/ParentLayout";
