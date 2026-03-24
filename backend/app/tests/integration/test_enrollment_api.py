@@ -525,21 +525,20 @@ async def test_enroll_09_empty_student_ids_list_returns_422(
 
 
 @pytest.mark.asyncio
-async def test_enroll_10_invalid_school_id_uuid_returns_422(
+async def test_enroll_10_malformed_class_id_returns_422(
     client: AsyncClient,
     db_session: AsyncSession,
     school_admin: User,
-    class_with_teacher: Class,
     students: list[User],
 ) -> None:
-    """ENROLL-10: Invalid school_id UUID → 422."""
+    """ENROLL-10: Malformed class_id UUID → 422."""
     headers = auth_header(school_admin)
     enroll_data: dict = {
         "student_ids": [str(students[0].id)],
     }
 
     response = await client.post(
-        f"/api/v1/classes/{class_with_teacher.id}/enrollments",
+        "/api/v1/classes/not-a-uuid/enrollments",
         json=enroll_data,
         headers=headers,
     )
@@ -593,7 +592,7 @@ async def test_enroll_12_unauthenticated_returns_401(
 
 
 @pytest.mark.asyncio
-async def test_enroll_11_class_not_in_school_returns_404(
+async def test_enroll_11_class_not_in_school_returns_403(
     client: AsyncClient,
     db_session: AsyncSession,
     test_school: School,
@@ -602,7 +601,10 @@ async def test_enroll_11_class_not_in_school_returns_404(
     students: list[User],
     student_profiles: list[StudentProfile],
 ) -> None:
-    """Test that enrolling to a class not belonging to the school returns 404."""
+    """Test that enrolling to a class not belonging to the school returns 403.
+
+    Per CONSTITUTION Rule 7: Cross-school access returns 403 Forbidden, not 404.
+    """
     headers = auth_header(school_admin)
     enroll_data: dict = {
         "student_ids": [str(students[0].id)],
@@ -614,8 +616,8 @@ async def test_enroll_11_class_not_in_school_returns_404(
         headers=headers,
     )
 
-    assert response.status_code == 404
-    assert "Class not found" in response.json()["detail"]
+    assert response.status_code == 403
+    assert "Access denied" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
