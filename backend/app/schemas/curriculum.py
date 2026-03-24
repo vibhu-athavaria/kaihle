@@ -9,7 +9,7 @@ class GradeResponse(BaseModel):
     id: UUID
     name: str  # e.g. "Grade 9"
     level: int  # e.g. 9
-    curriculum_id: UUID
+    curriculum_id: UUID | None = None  # None when no curriculum filter applied
 
 
 class SubjectResponse(BaseModel):
