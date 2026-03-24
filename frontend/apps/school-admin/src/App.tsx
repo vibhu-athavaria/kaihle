@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PrivateRoute, RoleRoute, PasswordSetupRoute } from "@kaihle/auth";
+import { ErrorBoundary } from "@kaihle/ui";
 import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
 import { PasswordSetupPage } from "./pages/PasswordSetupPage";
@@ -32,15 +33,17 @@ export default function App() {
                 <RoleRoute
                   allowedRoles={[UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN]}
                 >
-                  <Routes>
-                    <Route path="dashboard" element={<SchoolOverview />} />
-                    <Route path="users" element={<UserManagement />} />
-                    <Route path="classes" element={<ClassManagement />} />
-                    <Route
-                      index
-                      element={<Navigate to="dashboard" replace />}
-                    />
-                  </Routes>
+                  <ErrorBoundary role="school-admin">
+                    <Routes>
+                      <Route path="dashboard" element={<SchoolOverview />} />
+                      <Route path="users" element={<UserManagement />} />
+                      <Route path="classes" element={<ClassManagement />} />
+                      <Route
+                        index
+                        element={<Navigate to="dashboard" replace />}
+                      />
+                    </Routes>
+                  </ErrorBoundary>
                 </RoleRoute>
               </PasswordSetupRoute>
             </PrivateRoute>

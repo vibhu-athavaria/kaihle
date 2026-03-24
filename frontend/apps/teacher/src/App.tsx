@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PrivateRoute, RoleRoute, useAuth } from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
-import { DashboardLayout } from "@kaihle/ui";
+import { DashboardLayout, ErrorBoundary } from "@kaihle/ui";
 import { TeacherDashboard } from "./pages/dashboard/TeacherDashboard";
 import { Link } from "react-router-dom";
 import { Button } from "@kaihle/ui";
@@ -59,7 +59,9 @@ export default function App() {
                   UserRole.KAIHLE_ADMIN,
                 ]}
               >
-                <TeacherApp />
+                <ErrorBoundary role="teacher">
+                  <TeacherApp />
+                </ErrorBoundary>
               </RoleRoute>
             </PrivateRoute>
           }

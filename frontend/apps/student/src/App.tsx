@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PrivateRoute, OnboardingRoute } from "@kaihle/auth";
+import { ErrorBoundary } from "@kaihle/ui";
 import { LoginPage } from "./pages/LoginPage";
 import { OnboardingRouter } from "./pages/onboarding/OnboardingRouter";
 import { ProfileQuestionnaire } from "./pages/onboarding/ProfileQuestionnaire";
@@ -31,7 +32,9 @@ export default function App() {
           element={
             <PrivateRoute>
               <OnboardingRoute>
-                <StudentDashboard />
+                <ErrorBoundary role="student">
+                  <StudentDashboard />
+                </ErrorBoundary>
               </OnboardingRoute>
             </PrivateRoute>
           }

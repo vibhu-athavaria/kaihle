@@ -1,5 +1,6 @@
 import React from "react";
 import { Sidebar, TopNav } from "../components/nav";
+import { Toaster } from "../toast";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -27,6 +28,7 @@ export function AdminLayout({
         />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
+      <Toaster />
     </div>
   );
 }
