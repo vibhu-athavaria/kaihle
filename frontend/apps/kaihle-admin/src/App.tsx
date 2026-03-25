@@ -5,6 +5,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { PasswordSetupPage } from "./pages/PasswordSetupPage";
 import { AdminOverview } from "./pages/AdminOverview";
 import { AdminBilling } from "./pages/AdminBilling";
+import { AdminLogs } from "./pages/AdminLogs";
 import { AdminSchools } from "./pages/AdminSchools";
 import { AdminSchoolDetail } from "./pages/AdminSchoolDetail";
 
@@ -31,6 +32,7 @@ export default function App() {
                     <Routes>
                       <Route path="dashboard" element={<AdminOverview />} />
                       <Route path="billing" element={<AdminBilling />} />
+                      <Route path="logs" element={<AdminLogs />} />
                       <Route path="schools" element={<AdminSchools />} />
                       <Route
                         path="schools/:schoolId"
