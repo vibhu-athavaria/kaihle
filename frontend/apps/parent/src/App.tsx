@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { PrivateRoute } from "@kaihle/auth";
+import { ErrorBoundary } from "@kaihle/ui";
 import { LoginPage } from "./pages/LoginPage";
 
 export default function App() {
@@ -11,10 +12,12 @@ export default function App() {
           path="/parent/*"
           element={
             <PrivateRoute>
-              {/* Parent routes — implemented in later milestones */}
-              <div className="p-8 text-gray-500">
-                Parent dashboard — coming in M5
-              </div>
+              <ErrorBoundary role="parent">
+                {/* Parent routes — implemented in later milestones */}
+                <div className="p-8 text-gray-500">
+                  Parent dashboard — coming in M5
+                </div>
+              </ErrorBoundary>
             </PrivateRoute>
           }
         />

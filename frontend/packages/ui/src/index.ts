@@ -23,3 +23,7 @@ export { AuthLayout } from "./layouts/AuthLayout";
 export { OnboardingLayout } from "./layouts/OnboardingLayout";
 
 export { NavItem, Sidebar, TopNav, BottomNav } from "./components/nav";
+
+export { ErrorBoundary } from "./components/ErrorBoundary";
+export { toast } from "./toast";
+export { Toaster } from "sonner";

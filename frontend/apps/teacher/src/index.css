@@ -5,3 +5,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Respect OS-level "Reduce Motion" preference.
+   Users with vestibular disorders or epilepsy may have enabled this.
+   This rule disables all CSS animations and transitions globally.
+   Components that need motion use motion-safe: Tailwind prefix for exceptions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

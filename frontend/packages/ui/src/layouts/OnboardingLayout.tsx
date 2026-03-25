@@ -1,4 +1,5 @@
 import React from "react";
+import { Toaster } from "../toast";
 
 interface OnboardingLayoutProps {
   children: React.ReactNode;
@@ -24,6 +25,7 @@ export function OnboardingLayout({
         </div>
       </header>
       <main className="p-4 md:p-8 max-w-2xl mx-auto">{children}</main>
+      <Toaster />
     </div>
   );
 }

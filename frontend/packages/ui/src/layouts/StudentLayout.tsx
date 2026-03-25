@@ -1,5 +1,6 @@
 import React from "react";
 import { TopNav, BottomNav } from "../components/nav";
+import { Toaster } from "../toast";
 
 interface StudentLayoutProps {
   children: React.ReactNode;
@@ -23,6 +24,7 @@ export function StudentLayout({
       />
       <main className="pb-20 md:pb-6 p-4 md:p-6">{children}</main>
       <BottomNav activeItem={activeNav} />
+      <Toaster />
     </div>
   );
 }
