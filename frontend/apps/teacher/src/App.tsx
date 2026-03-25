@@ -4,6 +4,7 @@ import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardLayout, ErrorBoundary } from "@kaihle/ui";
 import { TeacherDashboard } from "./pages/dashboard/TeacherDashboard";
+import { TeacherSettingsPage } from "./pages/settings/TeacherSettingsPage";
 import { Link } from "react-router-dom";
 import { Button } from "@kaihle/ui";
 import { Plus } from "lucide-react";
@@ -43,11 +44,33 @@ function TeacherApp() {
   );
 }
 
+function TeacherSettingsApp() {
+  const { logout } = useAuth();
+
+  return (
+    <DashboardLayout variant="teacher" pageTitle="Settings" onLogout={logout}>
+      <TeacherSettingsPage />
+    </DashboardLayout>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/teacher/settings"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+                <ErrorBoundary role="teacher">
+                  <TeacherSettingsApp />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
         <Route
           path="/teacher/*"
           element={
