@@ -135,7 +135,7 @@ QUESTIONNAIRE_V1: dict[str, Any] = {
                 {"key": "art", "text": "Art & Design", "emoji": "🎨"},
                 {"key": "technology", "text": "Technology", "emoji": "💻"},
                 {"key": "nature", "text": "Nature", "emoji": "🌿"},
-                {"key": "fashion", "text": "Fashion", "emoji": "👗"},
+                {"key": "design", "text": "Design", "emoji": "🎨"},
                 {"key": "travel", "text": "Travel", "emoji": "✈️"},
             ],
         },
@@ -185,3 +185,40 @@ def get_option_by_key(question_id: str, option_key: str) -> dict[str, Any] | Non
         if option["key"] == option_key:
             return cast(dict[str, Any], option)
     return None
+
+
+# Subject-to-interest compatibility mapping.
+# Used by quiz_generator.py to validate that a chosen interest is relevant
+# before injecting it into the LLM prompt.
+# If a student's top interests don't map to the current subject, the prompt
+# is generated without personalisation rather than injecting a mismatched interest.
+SUBJECT_INTEREST_MAP: dict[str, list[str]] = {
+    "MATH": ["sports", "music", "gaming", "cooking", "art", "technology"],
+    "SCI": ["animals", "cooking", "nature", "sports"],
+    "ENG": ["travel", "music", "art", "nature"],
+    "BIO": ["animals", "nature", "cooking", "sports"],
+    "CHEM": ["cooking", "nature", "technology"],
+    "PHY": ["sports", "music", "gaming", "technology"],
+    "ENGL": ["travel", "music", "art"],
+}
+
+
+def get_compatible_interests(
+    subject_code: str,
+    student_interests: list[str],
+) -> list[str]:
+    """Return the student's interests that are compatible with the given subject.
+
+    Called by quiz_generator.py before building the personalisation prompt section.
+    Returns an empty list if no compatible interests exist — the caller then skips
+    personalisation entirely rather than injecting an irrelevant interest.
+
+    Args:
+        subject_code: e.g. "MATH", "BIO", "PHY"
+        student_interests: list of interest keys from the student's profile
+
+    Returns:
+        Filtered list of interest keys compatible with the subject.
+    """
+    compatible = SUBJECT_INTEREST_MAP.get(subject_code.upper(), [])
+    return [i for i in student_interests if i in compatible]

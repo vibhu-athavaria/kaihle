@@ -146,16 +146,96 @@ needed. A/B testing protocol:
 
 ---
 
+## Part 3: Interest Options Review (V-4)
+
+### Interest Options Canonical List
+
+The v1 questionnaire includes 10 interest options in Q6-Q10. Vidhya reviewed these
+against 5 criteria: age appropriateness, modality diversity, subject coverage,
+international school context, and gender neutrality.
+
+| Key | Label | Emoji | Status | Rationale |
+|---|---|---|---|---|
+| `sports` | Sports | ⚽ | **Kept** | Broad appeal across 11-16. Works for MATH (statistics/probability), PHY (forces/motion), BIO (physiology). International school context strong. Minor concern: "sports" can vary by region, but the generic label is acceptable. |
+| `music` | Music | 🎵 | **Kept** | Excellent age fit. Maps to PHY (waves/sound), MATH (rhythm/patterns), ENGL (poetry/lyrics). Gender-neutral. Strong Bali/international context. |
+| `gaming` | Gaming | 🎮 | **Kept** | Strong for Grade 9-10 Technology/CS context. Works for MATH (probability/logic), PHY (digital physics). Slightly less universal at Grade 6 but still acceptable. |
+| `animals` | Animals | 🐾 | **Kept** | Excellent for Biology (IGCSE core topic). Universal appeal across all grades. Strong gender neutrality. Works for nature interest context. |
+| `cooking` | Cooking | 🍳 | **Kept** | Good for Chemistry (reactions, measurements). Appeals to wide range. Strong for female-skewing classes. Universal international context. |
+| `art` | Art & Design | 🎨 | **Kept** | Geometry/symmetry for MATH. Design thinking for Technology. ENGL visual analysis. Gender-neutral. Works across all grades. |
+| `technology` | Technology | 💻 | **Kept** | Physics, CS, Maths (algorithms). Strong for Bali international school demographic. Age-appropriate for full 11-16 range. |
+| `nature` | Nature | 🌿 | **Kept** | Biology, environmental science. Universal across ages. Strong international school context. Works for CHEM environmental topics. |
+| `fashion` | Fashion | 👗 | **Replaced** | Replaced with `design` — see below |
+| `design` | Design | 🎨 | **Added** | Replaces `fashion`. Gender-neutral alternative that maps to Technology (product design), MATH (geometry/symmetry), Art & Design. Broader subject coverage than fashion. |
+| `travel` | Travel | ✈️ | **Kept** | Geography, languages, cultural contexts. Excellent international school context (Bali/SE Asia). ENGL descriptive writing. |
+
+### Why `fashion` was replaced with `design`
+
+**Gender neutrality concern:** "Fashion" is stereotypically associated with female students
+in many cultures, which can affect selection rates and create implicit bias in the
+personalisation system.
+
+**Subject coverage:** "Fashion" maps primarily to Art & Design and perhaps Business Studies.
+It has limited natural injection points in the 7 core subjects (MATH, SCI, ENG, BIO, CHEM, PHY, ENGL).
+
+**Design as replacement:** "Design" is:
+- Gender-neutral — appeals equally to all students
+- Maps to Technology (product/industrial design), MATH (geometry/symmetry), Art & Design
+- Has natural injection in Physics (ergonomics, engineering design)
+- Still resonates in the Bali/international school context where design thinking is valued
+
+### Subject-to-Interest Injection Map
+
+The quiz generator uses this map to validate that an interest can be naturally injected
+into a subject's questions. If no compatible interests exist for a student's profile,
+the prompt is generated without personalisation rather than injecting a mismatched interest.
+
+| Subject | Compatible interests | Min count |
+|---|---|---|
+| Mathematics | sports, music, gaming, cooking, art, technology | 6 |
+| Integrated Science (Gr.6-8) | animals, cooking, nature, sports | 4 |
+| English Language | travel, music, art, nature | 4 |
+| Biology (Gr.9-10) | animals, nature, cooking, sports | 4 |
+| Chemistry (Gr.9-10) | cooking, nature, technology | 3 |
+| Physics (Gr.9-10) | sports, music, gaming, technology | 4 |
+| English Literature (Gr.9-10) | travel, music, art | 3 |
+
+**Minimum coverage rule:** All subjects have at least 3 compatible interests,
+ensuring no subject is un-representable. ENGL has only 3, which is acceptable
+since the quiz generator only uses the top 2 interests.
+
+### Modality Diversity in Interest Options
+
+The interest options span multiple VARK modalities to avoid reinforcing a single style:
+
+| Modality | Related interests |
+|---|---|
+| Visual | art, design, nature, animals |
+| Kinesthetic | sports, gaming, cooking |
+| Auditory | music |
+| Reading/Writing | travel (narratives, cultural writing) |
+
+This diversity ensures students with different modality preferences can find
+at least 2 interests that resonate with their learning style.
+
+### Implementation Note for M3-1-T2
+
+The quiz generator (M3-1-T2) must use `get_compatible_interests()` to filter
+student interests before injection. The current implementation using `interests[:2]`
+directly is insufficient — it may inject an incompatible interest (e.g., travel
+for a MATH quiz) which reduces personalisation quality.
+
+---
+
 ## Related files
 
 | File | Relationship |
 |---|---|
-| `backend/app/core/questionnaire_config.py` | Contains the v1 questionnaire definition |
+| `backend/app/core/questionnaire_config.py` | Contains the v1 questionnaire definition and SUBJECT_INTEREST_MAP |
 | `backend/app/services/onboarding_service.py` | Contains the VARK scoring logic |
 | `backend/app/tasks/parent_tasks.py` | Contains the narrative generation task |
 | `backend/app/ai/prompts/parent_narrative.jinja2` | The prompt with 150-word limit |
 | `docs/design/MASTERY_THRESHOLD_RATIONALE.md` | Related educational decisions |
-| `docs/tasks/M0/M0-6-T5_questionnaire_content_review.md` | Interest options rationale |
+| `docs/tasks/M0-6-T5_questionnaire_content_review.md` | Source task for this review |
 
 ---
 
