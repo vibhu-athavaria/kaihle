@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import userEvent from "@testing-library/user-event";
@@ -51,7 +50,7 @@ describe("ErrorBoundary", () => {
   });
 
   it("calls_onError_callback_when_error_is_caught", () => {
-    const onError = vi.fn();
+    const onError = jest.fn();
     render(
       <ErrorBoundary onError={onError}>
         <ThrowError />
@@ -116,7 +115,7 @@ describe("ErrorBoundary", () => {
 
   it("reload_button_triggers_page_reload", async () => {
     const user = userEvent.setup();
-    const reloadMock = vi.fn();
+    const reloadMock = jest.fn();
     Object.defineProperty(window, "location", {
       value: { reload: reloadMock },
       writable: true,
@@ -170,7 +169,7 @@ describe("ErrorBoundary", () => {
 
   it("calls_onReload_callback_when_provided_instead_of_window_location_reload", async () => {
     const user = userEvent.setup();
-    const onReload = vi.fn();
+    const onReload = jest.fn();
 
     render(
       <ErrorBoundary onReload={onReload}>

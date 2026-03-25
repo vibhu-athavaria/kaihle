@@ -27,3 +27,4 @@ export { NavItem, Sidebar, TopNav, BottomNav } from "./components/nav";
 export { ErrorBoundary } from "./components/ErrorBoundary";
 export { toast } from "./toast";
 export { Toaster } from "sonner";
+export { Modal } from "./components/Modal";
