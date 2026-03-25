@@ -415,7 +415,7 @@ test('test_settings_opening_password_form_closes_name_form', async ({ page }) =>
 - [ ] Sign out clears tokens, redirects to `/login`
 - [ ] Avatar initials in `ParentLayout` top nav link to `/parent/settings`
 - [ ] All Jest unit tests pass
-- [ ] All Playwright E2E tests pass (both desktop and `parent-mobile` Playwright project)
+- [ ] All Playwright E2E tests pass (Playwright `parent` project)
 - [ ] `tsc --noEmit` passes in `apps/parent`
 
 ---

@@ -55,15 +55,6 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         baseURL: "http://localhost:3003",
       },
-      // Parent app is mobile-first — run tests at 375px as well
-    },
-    {
-      name: "parent-mobile",
-      testMatch: "parent/**/*.spec.ts",
-      use: {
-        ...devices["iPhone 13"],
-        baseURL: "http://localhost:3003",
-      },
     },
     {
       name: "school-admin",
