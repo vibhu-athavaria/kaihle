@@ -2,38 +2,26 @@
 **Milestone:** M6 — Analytics, Billing & Launch Polish
 **Epic:** M6-3 — Production Hardening
 **Task ID:** M6-3-T6
-**Depends on:** M6-3-T3 (backup procedures), M6-3-T4 (pilot seed script), all prior M6 tasks
+**Depends on:** M6-3-T3 (backup procedures documented), M6-3-T4 (pilot seed script exists), all prior M6 tasks
 **Blocks:** M6-3-T5 (pre-launch checklist requires RUNBOOK.md to exist)
-**Estimated effort:** 3–4 hours (Kramer writes, Vidhya reviews onboarding section, Pixel reviews UI section)
-**Output:** `docs/RUNBOOK.md`
+**Estimated effort:** 3–4 hours
+**Executor:** Human (Vibhu)
+**Output:** `docs/RUNBOOK.md` committed to repo
 
-> **Why this task is separate from M6-3-T3:**
-> M6-3-T3 covers backup/restore only. A complete runbook for a live pilot school needs
-> six additional sections beyond backup: deploy procedure, rollback, Celery beat health,
-> new school onboarding, common errors, and UI troubleshooting. Without this, Vibhu is
-> the only person who can operate the platform — a single point of failure.
-
----
-
-## Vidhya — Review Scope
-
-Vidhya reviews the "New School Onboarding" section to verify:
-- The school setup sequence matches the intended pedagogical rollout
-- The teacher setup instructions are realistic for Cambridge/IB teachers
-- The student onboarding success criteria match what a real student would experience
+> **Why this is a human task:**
+> A runbook describes how to operate a live production system. It contains real
+> environment variable names, real database queries, real Render.com steps, and
+> real troubleshooting procedures. A coding agent cannot write this — it has never
+> seen the live system, doesn't know which errors actually occur, and cannot verify
+> that SQL queries produce the right results against production data.
+>
+> **What Vibhu does:** use the template below as the starting point, fill in the
+> bracketed placeholders with real values from the live system, verify each
+> command actually works, then commit the file.
 
 ---
 
-## Pixel — Review Scope
-
-Pixel reviews the "UI Troubleshooting" section to verify:
-- Browser compatibility notes are accurate
-- Common UI issues and their solutions reference the correct component/design system decisions
-- The instructions are clear enough for a non-technical school admin to follow
-
----
-
-## Kramer — RUNBOOK Content
+## Template for Vibhu to complete
 
 The runbook is a single Markdown file at `docs/RUNBOOK.md`. It is operational
 documentation — written for Vibhu and future team members, not for students or
@@ -221,8 +209,6 @@ celery_app.send_task('tasks.generate_weekly_lesson_plans')
 
 ## 5. New School Onboarding
 
-*Reviewed by Vidhya — matches intended pedagogical rollout.*
-
 ### Prerequisites (before creating any accounts)
 
 1. Cambridge curriculum seed must be run: `python scripts/seed_curriculum_graph.py`
@@ -371,8 +357,6 @@ WHERE student_id = '[STUDENT_UUID]'
 
 ## 7. UI Troubleshooting
 
-*Reviewed by Pixel — instructions reflect actual component and design system decisions.*
-
 ### Teacher sees blank page after login
 
 **Most likely cause:** The teacher has no classes assigned. The dashboard class grid
@@ -443,10 +427,10 @@ See `docs/kaihle_product_plan.md` Part 6 for the full list. Critical variables:
 - [ ] `docs/RUNBOOK.md` exists at the correct path
 - [ ] All 8 sections are present and complete
 - [ ] §3 (backup/restore) is consistent with M6-3-T3 implementation
-- [ ] §5 (school onboarding) reviewed and approved by Vidhya
-- [ ] §7 (UI troubleshooting) reviewed and approved by Pixel
-- [ ] SQL queries in §5 and §6 use the correct table and column names from `kaihle_v2_1_schema.sql`
-- [ ] Environment variables in §8 match the actual env var names in `docs/kaihle_product_plan.md` Part 6
+- [ ] §5 onboarding sequence matches the actual production setup flow
+- [ ] §7 UI troubleshooting steps verified against the live apps
+- [ ] SQL queries in §5 and §6 run successfully against staging/production DB
+- [ ] All environment variable names in §8 verified against actual Render.com dashboard
 - [ ] M6-3-T5 pre-launch checklist includes: "RUNBOOK.md reviewed and complete" as a checklist item
 - [ ] `docs/RUNBOOK.md` renders correctly as Markdown (no broken tables or code blocks)
 
