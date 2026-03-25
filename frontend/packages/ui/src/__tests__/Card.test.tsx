@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Card } from "../components/Card";
 
@@ -36,7 +35,7 @@ describe("Card", () => {
   });
 
   it("handles onClick", () => {
-    const handleClick = vi.fn();
+    const handleClick = jest.fn();
     render(<Card onClick={handleClick}>Clickable</Card>);
     const card = document.querySelector(".rounded-2xl");
     card?.click();

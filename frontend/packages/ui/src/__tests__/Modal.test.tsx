@@ -1,10 +1,9 @@
-import "@testing-library/jest-dom/vitest";
+import "@testing-library/jest-dom";
 import { render, screen, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi } from "vitest";
 import { Modal } from "../components/Modal";
 
-function TestModal({ open = true, onOpenChange = vi.fn() }) {
+function TestModal({ open = true, onOpenChange = jest.fn() }) {
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Test modal">
       <button>Inside button</button>
@@ -32,7 +31,7 @@ describe("Modal", () => {
 
   it("test_close_button_calls_onOpenChange", async () => {
     const user = userEvent.setup();
-    const onOpenChange = vi.fn();
+    const onOpenChange = jest.fn();
     render(<TestModal onOpenChange={onOpenChange} />);
     await user.click(screen.getByLabelText("Close"));
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -40,7 +39,7 @@ describe("Modal", () => {
 
   it("test_escape_key_calls_onOpenChange", async () => {
     const user = userEvent.setup();
-    const onOpenChange = vi.fn();
+    const onOpenChange = jest.fn();
     render(<TestModal onOpenChange={onOpenChange} />);
     await user.keyboard("{Escape}");
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -64,7 +63,7 @@ describe("Modal", () => {
     render(
       <Modal
         open={true}
-        onOpenChange={vi.fn()}
+        onOpenChange={jest.fn()}
         title="Test"
         description="Test desc"
       >
@@ -87,7 +86,7 @@ describe("Modal", () => {
     render(
       <Modal
         open={true}
-        onOpenChange={vi.fn()}
+        onOpenChange={jest.fn()}
         title="T"
         hideCloseButton={true}
       >
@@ -101,7 +100,7 @@ describe("Modal", () => {
     render(
       <Modal
         open={true}
-        onOpenChange={vi.fn()}
+        onOpenChange={jest.fn()}
         title="Admin title"
         titleClassName="font-inter text-xl font-bold"
       >
