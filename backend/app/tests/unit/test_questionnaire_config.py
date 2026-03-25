@@ -49,15 +49,15 @@ class TestGetOptionByKey:
         assert result["key"] == "watch_video"
         assert result["maps_to"]["modality"] == "visual"
 
-    def test_get_option_by_key_q6_design(self):
-        result = get_option_by_key("q6_to_q10", "design")
-        assert result is not None
-        assert result["key"] == "design"
-        assert result["text"] == "Design"
-        assert result["emoji"] == "🎨"
-
-    def test_get_option_by_key_q6_fashion_not_exists(self):
+    def test_get_option_by_key_q6_fashion_exists(self):
         result = get_option_by_key("q6_to_q10", "fashion")
+        assert result is not None
+        assert result["key"] == "fashion"
+        assert result["text"] == "Fashion"
+        assert result["emoji"] == "👗"
+
+    def test_get_option_by_key_q6_design_not_exists(self):
+        result = get_option_by_key("q6_to_q10", "design")
         assert result is None
 
     def test_get_option_by_key_nonexistent_question(self):
@@ -65,53 +65,87 @@ class TestGetOptionByKey:
         assert result is None
 
 
+KNOWN_INTEREST_KEYS = {
+    "sports",
+    "music",
+    "gaming",
+    "animals",
+    "cooking",
+    "art",
+    "technology",
+    "nature",
+    "fashion",
+    "travel",
+}
+
+EXPECTED_SUBJECT_CODES = {"MATH", "SCI", "ENG", "BIO", "CHEM", "PHY", "ENGL"}
+
+
 class TestSubjectInterestMap:
-    def test_subject_interest_map_math_has_six_interests(self):
-        assert "MATH" in SUBJECT_INTEREST_MAP
-        assert len(SUBJECT_INTEREST_MAP["MATH"]) == 6
+    def test_map_contains_exactly_seven_cambridge_subject_codes(self) -> None:
+        assert set(SUBJECT_INTEREST_MAP.keys()) == EXPECTED_SUBJECT_CODES
 
-    def test_subject_interest_map_all_subjects_have_at_least_two(self):
+    def test_all_interest_values_are_known_option_keys(self) -> None:
         for subject, interests in SUBJECT_INTEREST_MAP.items():
-            assert len(interests) >= 2, f"{subject} has fewer than 2 interests"
+            unknown = set(interests) - KNOWN_INTEREST_KEYS
+            assert unknown == set(), f"{subject} contains unknown interest keys: {unknown}"
 
-    def test_subject_interest_map_design_not_in_math(self):
-        assert "design" not in SUBJECT_INTEREST_MAP["MATH"]
+    def test_fashion_not_in_any_subject(self) -> None:
+        for subject, interests in SUBJECT_INTEREST_MAP.items():
+            assert "fashion" not in interests, f"'fashion' must not appear in {subject} — see M0-6-T5 rationale"
+
+    def test_each_subject_has_at_least_two_interests(self) -> None:
+        for subject, interests in SUBJECT_INTEREST_MAP.items():
+            assert len(interests) >= 2, (
+                f"{subject} has only {len(interests)} compatible interest(s) — "
+                f"minimum 2 required for personalisation to be meaningful"
+            )
 
 
 class TestGetCompatibleInterests:
-    def test_get_compatible_when_student_has_relevant_interests_then_returns_them(
-        self,
-    ):
-        result = get_compatible_interests("MATH", ["sports", "design", "gaming"])
-        assert "sports" in result
-        assert "gaming" in result
-        assert "design" not in result
+    def test_returns_matching_interests_preserving_student_order(self) -> None:
+        result = get_compatible_interests("PHY", ["sports", "fashion", "music"])
+        assert result == ["sports", "music"]  # fashion excluded, order preserved
 
-    def test_get_compatible_when_no_relevant_interests_then_returns_empty(self):
-        result = get_compatible_interests("MATH", ["design", "travel"])
+    def test_returns_empty_when_no_interests_compatible(self) -> None:
+        result = get_compatible_interests("MATH", ["fashion"])
         assert result == []
 
-    def test_get_compatible_when_empty_interests_then_returns_empty(self):
+    def test_returns_empty_when_student_has_no_interests(self) -> None:
         assert get_compatible_interests("BIO", []) == []
 
-    def test_get_compatible_when_unknown_subject_then_returns_empty(self):
-        assert get_compatible_interests("UNKNOWN_SUBJECT", ["sports", "music"]) == []
+    def test_returns_empty_for_unknown_subject_code(self) -> None:
+        assert get_compatible_interests("UNKNOWN", ["sports", "music"]) == []
 
-    def test_get_compatible_is_case_insensitive_on_subject_code(self):
+    def test_case_insensitive_subject_code(self) -> None:
         assert get_compatible_interests("math", ["sports"]) == get_compatible_interests("MATH", ["sports"])
 
-    def test_get_compatible_returns_max_available_not_capped(self):
+    def test_returns_all_matching_uncapped(self) -> None:
+        # get_compatible_interests does not cap — caller does [:2]
         all_math = ["sports", "music", "gaming", "cooking", "art", "technology"]
         result = get_compatible_interests("MATH", all_math)
         assert len(result) == 6
 
-    def test_get_compatible_preserves_order_from_student_interests(self):
-        result = get_compatible_interests("MATH", ["gaming", "sports", "music"])
-        assert result == ["gaming", "sports", "music"]
+    def test_caller_slice_pattern(self) -> None:
+        # Confirm the top-2 pattern used in quiz_generator.py works correctly
+        result = get_compatible_interests("PHY", ["sports", "music", "gaming", "technology"])
+        assert result[:2] == ["sports", "music"]
 
-    def test_get_compatible_math_maps_to_six_interests(self):
-        result = get_compatible_interests(
-            "MATH", ["sports", "music", "gaming", "cooking", "art", "technology", "design"]
-        )
-        assert len(result) == 6
-        assert "design" not in result
+    def test_sci_map(self) -> None:
+        assert get_compatible_interests("SCI", ["animals", "fashion", "cooking"]) == [
+            "animals",
+            "cooking",
+        ]
+
+    def test_engl_map_smallest_set(self) -> None:
+        # ENGL has only 3 compatible interests
+        assert get_compatible_interests("ENGL", ["sports", "travel", "gaming", "art"]) == [
+            "travel",
+            "art",
+        ]
+
+    def test_chem_map(self) -> None:
+        assert get_compatible_interests("CHEM", ["sports", "cooking", "nature", "gaming"]) == [
+            "cooking",
+            "nature",
+        ]
