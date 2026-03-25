@@ -29,6 +29,12 @@ interface ErrorBoundaryProps {
    * Use this for error reporting services (Sentry, Datadog, etc.).
    */
   onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
+  /**
+   * Optional callback invoked when the user clicks the reload button.
+   * Defaults to window.location.reload() if not provided.
+   * Useful for testability and custom reload behavior.
+   */
+  onReload?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -47,9 +53,11 @@ interface ErrorBoundaryState {
 function KaihleErrorFallback({
   role = "teacher",
   error,
+  onReload,
 }: {
   role?: Role;
   error: Error | null;
+  onReload?: () => void;
 }) {
   const isKaihleAdmin = role === "kaihle-admin";
 
@@ -96,7 +104,7 @@ function KaihleErrorFallback({
       </p>
       <button
         className={buttonClass}
-        onClick={() => window.location.reload()}
+        onClick={() => (onReload ?? window.location.reload)()}
         type="button"
       >
         Reload page
@@ -143,7 +151,11 @@ export class ErrorBoundary extends React.Component<
         return this.props.fallback;
       }
       return (
-        <KaihleErrorFallback role={this.props.role} error={this.state.error} />
+        <KaihleErrorFallback
+          role={this.props.role}
+          error={this.state.error}
+          onReload={this.props.onReload}
+        />
       );
     }
 

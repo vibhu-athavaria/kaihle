@@ -167,4 +167,18 @@ describe("ErrorBoundary", () => {
     );
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
   });
+
+  it("calls_onReload_callback_when_provided_instead_of_window_location_reload", async () => {
+    const user = userEvent.setup();
+    const onReload = vi.fn();
+
+    render(
+      <ErrorBoundary onReload={onReload}>
+        <ThrowError />
+      </ErrorBoundary>,
+    );
+
+    await user.click(screen.getByRole("button", { name: /reload page/i }));
+    expect(onReload).toHaveBeenCalledTimes(1);
+  });
 });
