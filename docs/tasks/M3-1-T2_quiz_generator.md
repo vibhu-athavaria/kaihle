@@ -188,3 +188,42 @@ test_generate_quiz_when_invalid_json_then_retry_once()
 test_generate_quiz_when_timeout_then_retry_and_raise()
 test_generated_quiz_has_4_mcq_and_1_short_answer()
 ```
+
+---
+
+## Do NOT Touch — Corrections from M0-6-T5
+
+### Step 2 (Load Student Interests) — CORRECTED
+
+**Problem:** The code below uses `interests[:2]` directly, which may inject an interest
+that is incompatible with the current subject (e.g., "travel" for a MATH quiz).
+
+**Solution:** Use `get_compatible_interests()` from `questionnaire_config.py` to filter
+student interests to only those relevant to the subject. Only inject if compatible
+interests exist.
+
+```python
+### 2. Load Student Interests
+from app.core.questionnaire_config import get_compatible_interests
+
+profile = await db.get(StudentLearningProfile, student_id)
+student_interests = profile.interests if profile and profile.interests else []
+
+# Filter to only interests compatible with this subject
+compatible = get_compatible_interests(
+    subject_code=subtopic.subject_code,
+    student_interests=student_interests,
+)
+# compatible is [] if student has no relevant interests for this subject
+top_2_interests = compatible[:2]  # use first 2 only — empty list if none
+```
+
+**Note:** The Jinja2 template already handles empty `top_2_interests` correctly:
+```jinja2
+{% if top_2_interests %}
+Personalisation: ...
+{% endif %}
+```
+
+**Reference:** See `docs/design/QUESTIONNAIRE_DESIGN_RATIONALE.md` Part 3 for the
+subject-to-interest injection map that `get_compatible_interests()` uses.

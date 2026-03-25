@@ -142,6 +142,63 @@ QUESTIONNAIRE_V1: dict[str, Any] = {
     ],
 }
 
+# Subject-to-interest compatibility mapping.
+#
+# Purpose: prevents injecting irrelevant student interests into quiz generation prompts.
+# quiz_generator.py calls get_compatible_interests() before building the LLM prompt.
+# Only interests that fit the subject's Cambridge curriculum content are passed through.
+#
+# If a student's interests produce an empty list for the current subject, the quiz
+# is generated without personalisation. A plain quiz is always better than a
+# forced scenario that damages question quality.
+#
+# Decision rationale: docs/tasks/M0/M0-6-T5_questionnaire_content_review.md
+# Vidhya review: docs/design/QUESTIONNAIRE_DESIGN_RATIONALE.md
+SUBJECT_INTEREST_MAP: dict[str, list[str]] = {
+    "MATH": ["sports", "music", "gaming", "cooking", "art", "technology"],
+    "SCI": ["animals", "cooking", "nature", "sports"],
+    "ENG": ["travel", "music", "art", "nature"],
+    "BIO": ["animals", "nature", "cooking", "sports"],
+    "CHEM": ["cooking", "nature", "technology"],
+    "PHY": ["sports", "music", "gaming", "technology"],
+    "ENGL": ["travel", "music", "art"],
+    # Note: 'fashion' is absent from all subjects intentionally.
+    # Students who select it receive unpersonalised quizzes — not a bug.
+}
+
+
+def get_compatible_interests(
+    subject_code: str,
+    student_interests: list[str],
+) -> list[str]:
+    """Return the student's interests that are compatible with the given subject.
+
+    Called by quiz_generator.py before building the personalisation prompt section.
+    Returns an empty list if no compatible interests exist — the caller then skips
+    personalisation entirely rather than injecting a mismatched interest.
+
+    Args:
+        subject_code: Cambridge subject code e.g. "MATH", "BIO", "PHY".
+                      Case-insensitive — "math" and "MATH" produce the same result.
+        student_interests: List of interest keys from student_learning_profiles.interests.
+                           Preserves the student's original preference order.
+
+    Returns:
+        Filtered list of interest keys compatible with this subject.
+        Empty list if none match or if subject_code is unknown.
+
+    Example:
+        student has interests = ["fashion", "sports", "music"]
+
+        get_compatible_interests("PHY", ["fashion", "sports", "music"])
+        → ["sports", "music"]   # fashion excluded; sports + music in PHY map
+
+        get_compatible_interests("PHY", ["fashion"])
+        → []   # no compatible interests → caller skips personalisation
+    """
+    compatible = SUBJECT_INTEREST_MAP.get(subject_code.upper(), [])
+    return [interest for interest in student_interests if interest in compatible]
+
 
 def get_questionnaire_definition() -> dict[str, Any]:
     """Return the full questionnaire definition.
