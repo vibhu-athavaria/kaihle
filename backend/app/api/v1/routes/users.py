@@ -6,12 +6,42 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, _check_school_access, require_role
+from app.core.deps import CurrentUser, _check_school_access, require_full_access, require_role
 from app.models.user import UserRole
-from app.schemas.user import UserInvite, UserListResponse, UserResponse, UserUpdate
+from app.schemas.user import MeResponse, UserInvite, UserListResponse, UserResponse, UserSelfUpdate, UserUpdate
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/schools/{school_id}/users", tags=["users"])
+
+
+@router.get("/me", response_model=MeResponse)
+async def get_me(
+    school_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_full_access),
+    db: AsyncSession = Depends(get_db),
+) -> MeResponse:
+    """Get the current user's own profile."""
+    _check_school_access(school_id, current_user)
+    service = UserService(db)
+    user = await service.get_me(current_user.id)
+    return MeResponse.model_validate(user)
+
+
+@router.patch("/me", response_model=MeResponse)
+async def update_me(
+    school_id: uuid.UUID,
+    body: UserSelfUpdate,
+    current_user: CurrentUser = Depends(require_full_access),
+    db: AsyncSession = Depends(get_db),
+) -> MeResponse:
+    """Update the current user's own first_name and/or last_name."""
+    _check_school_access(school_id, current_user)
+    service = UserService(db)
+    try:
+        user = await service.update_me(current_user.id, body)
+        return MeResponse.model_validate(user)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

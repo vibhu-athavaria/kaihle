@@ -16,7 +16,7 @@ from app.core.security import (
     store_magic_link_token,
 )
 from app.models.user import TeacherProfile, User, UserRole
-from app.schemas.user import UserInvite, UserUpdate
+from app.schemas.user import UserInvite, UserSelfUpdate, UserUpdate
 
 logger = structlog.get_logger()
 
@@ -195,3 +195,26 @@ class UserService:
                 error_type=type(e).__name__,
                 error_message=str(e),
             )
+
+    async def get_me(self, user_id: uuid.UUID) -> User:
+        """Get the current user's own record."""
+        user = await self.db.get(User, user_id)
+        if not user:
+            raise ValueError("User not found")
+        return user
+
+    async def update_me(self, user_id: uuid.UUID, data: UserSelfUpdate) -> User:
+        """Update the current user's own first_name and/or last_name.
+
+        Email, role, and school_id are NOT updatable here — never touch them.
+        """
+        user = await self.db.get(User, user_id)
+        if not user:
+            raise ValueError("User not found")
+        if data.first_name is not None:
+            user.first_name = data.first_name
+        if data.last_name is not None:
+            user.last_name = data.last_name
+        # email, role, school_id are NOT updatable here — never touch them
+        await self.db.flush()
+        return user
