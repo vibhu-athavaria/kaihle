@@ -1,7 +1,10 @@
 {
   "_meta": {
-    "version": "1.0",
+    "version": "1.1",
     "authored_by": "Vidhya (curriculum content) + Kramer (structure validation)",
+    "reviewed_by": "Vidhya",
+    "review_date": "2026-03-25",
+    "review_status": "approved",
     "date": "2026-03",
     "scope": "Cambridge Lower Secondary (Grades 6-8) + Cambridge IGCSE (Grades 9-10)",
     "total_curricula": 2,
