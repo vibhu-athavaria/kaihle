@@ -27,6 +27,10 @@ export interface MasteryStyle {
   bgClass: string;
   /** Human-readable label */
   label: MasteryLabel;
+  /** SVG stroke colour for ScoreRing */
+  strokeColour: string;
+  /** SVG text fill colour for ScoreRing */
+  fillColour: string;
 }
 
 /**
@@ -48,6 +52,8 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
       textClass: "text-brand-muted",
       bgClass: "bg-gray-50",
       label: "Not assessed",
+      strokeColour: "#9ca3af",
+      fillColour: "#9ca3af",
     };
   }
   if (score > 0.7) {
@@ -56,6 +62,8 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
       textClass: "text-brand-green",
       bgClass: "bg-brand-green-light",
       label: "Strong",
+      strokeColour: "#16a34a",
+      fillColour: "#15803d",
     };
   }
   if (score >= 0.4) {
@@ -64,6 +72,8 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
       textClass: "text-brand-amber",
       bgClass: "bg-brand-amber-light",
       label: "Developing",
+      strokeColour: "#f59e0b",
+      fillColour: "#d97706",
     };
   }
   return {
@@ -71,6 +81,8 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
     textClass: "text-brand-red",
     bgClass: "bg-brand-red-light",
     label: "Needs Work",
+    strokeColour: "#ef4444",
+    fillColour: "#dc2626",
   };
 }
 
