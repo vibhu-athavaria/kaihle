@@ -10,6 +10,12 @@
 > `BIO`, `CHEM`, `PHY` are IGCSE only. `ENGL` (English Literature) added as non-core IGCSE.
 > CONSTITUTION.md §1 updated to match. All scripts must use these boundaries.
 
+> **📝 VIDHYA REVIEW (M1-2-T3) — 2026-03-25**
+> `cambridge_v1.json` was reviewed and approved by Vidhya on 2026-03-25 per M1-2-T3.
+> **Do NOT modify cambridge_v1.json without a new Vidhya review.**
+> Verified: Trigonometry only in IGCSE (Grade 9-10), Statistics named correctly as "Statistics and Probability",
+> ENGL is Literature (not Language), SCI topics appropriate for integrated science.
+
 ---
 
 ## Context
