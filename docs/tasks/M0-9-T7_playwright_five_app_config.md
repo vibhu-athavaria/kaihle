@@ -279,10 +279,9 @@ test('loaded_correct_app_kaihle_admin', async ({ page }) => {
 - [ ] `pnpm exec playwright test --project=teacher` runs teacher tests against localhost:3001
 - [ ] `pnpm exec playwright test --project=student` runs student tests against localhost:3002
 - [ ] `pnpm exec playwright test --project=parent` runs parent tests against localhost:3003
-- [ ] `pnpm exec playwright test --project=parent-mobile` runs parent tests at iPhone 13 viewport
 - [ ] `pnpm exec playwright test --project=school-admin` runs against localhost:3004
 - [ ] `pnpm exec playwright test --project=kaihle-admin` runs against localhost:3005
-- [ ] CI matrix runs 6 parallel E2E jobs (teacher, student, parent, parent-mobile, school-admin, kaihle-admin)
+- [ ] CI matrix runs 5 parallel E2E jobs (teacher, student, parent, school-admin, kaihle-admin)
 - [ ] A failure in school-admin tests does not cancel teacher tests (`fail-fast: false`)
 - [ ] Test artifacts are uploaded on failure per app
 - [ ] `playwright.config.ts` TypeScript compiles without errors
