@@ -107,7 +107,7 @@ export function ProfileQuestionnaire() {
       return (
         <div className="space-y-6">
           <h2 className="font-display font-bold text-xl text-brand-ink text-center">
-            What are you interested in? (Optional)
+            What are you interested in?
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {question.options.map((option) => {
