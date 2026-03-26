@@ -19,6 +19,7 @@ from app.api.v1.routes import (
     lesson_plans,
     onboarding,
     parent,
+    platform,
     schools,
     student_content,
     students,
@@ -96,6 +97,7 @@ app.include_router(curriculum.router, prefix="/api/v1")
 app.include_router(gap_map.router, prefix="/api/v1")
 app.include_router(lesson_plans.router, prefix="/api/v1")
 app.include_router(parent.router, prefix="/api/v1")
+app.include_router(platform.router, prefix="/api/v1")
 app.include_router(schools.router, prefix="/api/v1")
 app.include_router(study_plans.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")

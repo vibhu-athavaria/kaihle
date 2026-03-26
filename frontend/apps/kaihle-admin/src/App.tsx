@@ -8,6 +8,8 @@ import { AdminBilling } from "./pages/AdminBilling";
 import { AdminLogs } from "./pages/AdminLogs";
 import { AdminSchools } from "./pages/AdminSchools";
 import { AdminSchoolDetail } from "./pages/AdminSchoolDetail";
+import { AdminConfig } from "./pages/AdminConfig";
+import { AdminUsers } from "./pages/AdminUsers";
 
 export default function App() {
   return (
@@ -38,6 +40,8 @@ export default function App() {
                         path="schools/:schoolId"
                         element={<AdminSchoolDetail />}
                       />
+                      <Route path="config" element={<AdminConfig />} />
+                      <Route path="users" element={<AdminUsers />} />
                       <Route
                         index
                         element={<Navigate to="dashboard" replace />}
