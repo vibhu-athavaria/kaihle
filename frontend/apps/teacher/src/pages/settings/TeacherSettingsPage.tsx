@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth, apiClient } from "@kaihle/auth";
+import { useAuth, apiClient, useAuthStore } from "@kaihle/auth";
 import { Button, toast } from "@kaihle/ui";
 
 interface UserProfile {
@@ -27,8 +27,10 @@ function formatRelativeTime(dateString: string | undefined): string {
   return `${diffYears} years ago`;
 }
 
-async function fetchUserProfile(): Promise<UserProfile> {
-  const response = await apiClient.get<UserProfile>("/api/v1/users/me");
+async function fetchUserProfile(schoolId: string): Promise<UserProfile> {
+  const response = await apiClient.get<UserProfile>(
+    `/api/v1/schools/${schoolId}/users/me`,
+  );
   return response.data;
 }
 
@@ -49,7 +51,11 @@ export function TeacherSettingsPage() {
   const [isLoadingPassword, setIsLoadingPassword] = useState(false);
 
   useEffect(() => {
-    fetchUserProfile()
+    const schoolId = useAuthStore.getState().user?.school_id;
+    if (!schoolId) {
+      return;
+    }
+    fetchUserProfile(schoolId)
       .then((data) => {
         setProfile(data);
         setFirstName(data.first_name || "");
@@ -105,13 +111,21 @@ export function TeacherSettingsPage() {
       setNameError("Both first and last name are required");
       return;
     }
+    const schoolId = useAuthStore.getState().user?.school_id;
+    if (!schoolId) {
+      setNameError("No school_id found for current user");
+      return;
+    }
     setIsLoadingName(true);
     setNameError(null);
     try {
-      const response = await apiClient.patch<UserProfile>("/api/v1/users/me", {
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-      });
+      const response = await apiClient.patch<UserProfile>(
+        `/api/v1/schools/${schoolId}/users/me`,
+        {
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+        },
+      );
       setProfile(response.data);
       toast.success("Name updated");
       setEditingName(false);
