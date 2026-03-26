@@ -9,10 +9,23 @@ kaihle/
 ├── backend/           # FastAPI backend
 │   └── app/          # Application code
 ├── frontend/         # React monorepo
-│   ├── apps/        # Teacher, Student, Parent apps
+│   ├── apps/        # Teacher, Student, Parent, School Admin, Kaihle Admin apps
 │   └── packages/    # Shared UI components and utilities
 └── docs/           # Documentation
 ```
+
+## Applications and Ports
+
+| Application | Port | Description |
+|-------------|------|-------------|
+| Backend API | 8000 | FastAPI REST API |
+| PostgreSQL | 5433 | Database (pgvector enabled) |
+| Redis | 6379 | Cache and message broker |
+| Teacher App | 3001 | Teacher dashboard |
+| Student App | 3002 | Student learning interface |
+| Parent App | 3003 | Parent portal |
+| School Admin | 3004 | School administration |
+| Kaihle Admin | 3005 | Platform administration |
 
 ## Getting Started
 
@@ -21,10 +34,55 @@ kaihle/
 - Python 3.12+
 - Node.js 20+
 - pnpm
-- PostgreSQL 15+
-- Redis 7+
+- Docker and Docker Compose
 
-### Backend Setup
+### Docker Setup (Recommended)
+
+The development environment MUST be started via Docker Compose from the project root before running any backend or frontend code locally:
+
+```bash
+# Start all services
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop all services
+docker compose down
+
+# Stop and remove volumes (reset database)
+docker compose down -v
+```
+
+#### Service Details
+
+**Infrastructure Services:**
+- **PostgreSQL** (port 5433): Database with pgvector extension for vector search
+- **Redis** (port 6379): Cache and Celery message broker
+
+**Application Services:**
+- **Backend** (port 8000): FastAPI application with auto-reload
+- **Celery Worker**: Background task processor
+- **Frontend Apps**: React Vite apps for each user role
+
+#### Environment Configuration
+
+Copy the example environment file and configure:
+
+```bash
+cp .env.example .env
+```
+
+Required environment variables:
+- `DATABASE_URL`: PostgreSQL connection string
+- `REDIS_URL`: Redis connection string
+- `CELERY_BROKER_URL`: Celery message broker URL
+- `CELERY_RESULT_BACKEND`: Celery result backend URL
+- API keys for AI providers (OpenAI, Anthropic, Google)
+
+### Local Development Without Docker
+
+#### Backend Setup
 
 ```bash
 cd backend
@@ -33,7 +91,7 @@ uv pip install -e .
 uvicorn app.main:app --reload
 ```
 
-### Frontend Setup
+#### Frontend Setup
 
 ```bash
 cd frontend
@@ -41,6 +99,11 @@ pnpm install
 pnpm dev:teacher  # Start teacher app on port 3001
 pnpm dev:student  # Start student app on port 3002
 pnpm dev:parent   # Start parent app on port 3003
+pnpm dev:school-admin  # Start school admin app on port 3004
+pnpm dev:kaihle-admin # Start kaihle admin app on port 3005
+
+# Or run all frontends
+pnpm dev
 ```
 
 ## Tech Stack

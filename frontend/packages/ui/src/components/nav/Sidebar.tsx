@@ -61,6 +61,10 @@ const teacherSections: NavSection[] = [
     section: "TOOLS",
     items: [{ label: "Study Plans", href: "#", icon: BookOpen }],
   },
+  {
+    section: "ACCOUNT",
+    items: [{ label: "Settings", href: "/teacher/settings", icon: Settings }],
+  },
 ];
 
 const schoolAdminSections: NavSection[] = [
