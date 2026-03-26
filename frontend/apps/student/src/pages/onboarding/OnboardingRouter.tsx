@@ -25,7 +25,7 @@ export function OnboardingRouter() {
       </div>
     );
   }
-
+  console.debug("OnboardingRouter: status", status);
   // Gate 1: Learning profile must be complete before dashboard is accessible
   if (!status.learning_profile_complete) {
     return <Navigate to="/student/onboarding/profile" replace />;

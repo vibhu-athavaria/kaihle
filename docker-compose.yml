@@ -133,7 +133,7 @@ services:
     build:
       context: ./frontend
       dockerfile: apps/kaihle-admin/Dockerfile.dev
-    container_name: kaihle_kaihle_admin
+    container_name: kaihle_admin
     ports:
       - "3005:3005"
     volumes:

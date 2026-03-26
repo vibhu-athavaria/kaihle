@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { PrivateRoute, OnboardingRoute, RoleRoute } from "@kaihle/auth";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { PrivateRoute, RoleRoute } from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { ErrorBoundary } from "@kaihle/ui";
 import { LoginPage } from "./pages/LoginPage";
@@ -43,15 +43,13 @@ export default function App() {
           path="/student/*"
           element={
             <PrivateRoute>
-              <OnboardingRoute>
-                <ErrorBoundary role="student">
-                  <StudentDashboard />
-                </ErrorBoundary>
-              </OnboardingRoute>
+              <ErrorBoundary role="student">
+                <StudentDashboard />
+              </ErrorBoundary>
             </PrivateRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        {/* <Route path="*" element={<Navigate to="/login" replace />} /> */}
       </Routes>
     </BrowserRouter>
   );
