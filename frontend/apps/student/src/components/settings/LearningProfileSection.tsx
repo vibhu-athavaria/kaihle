@@ -20,7 +20,7 @@ export function LearningProfileSection() {
     queryKey: ["student", "settings", "learning-profile"],
     queryFn: async () => {
       const response = await apiClient.get<LearningProfile>(
-        "/api/v1/students/me/learning-profile",
+        "/api/v1/onboarding/learning-profile",
       );
       return response.data;
     },
