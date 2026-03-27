@@ -3,5 +3,11 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  server: { port: 3002, host: true },
+  server: {
+    port: 3002,
+    host: true,
+    headers: {
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+    },
+  },
 });

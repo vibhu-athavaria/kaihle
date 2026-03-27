@@ -118,10 +118,14 @@ async def get_student_info(
             detail="Student not found",
         )
 
-    # Get all enrolled classes with their subjects (not just the first one)
+    # Get all enrolled classes with their subjects using eager loading
+    # to avoid N+1 query pattern
     enrollment_query = (
-        select(ClassEnrollment, Class)
+        select(ClassEnrollment, Class, Subject, Grade, Curriculum)
         .join(Class, Class.id == ClassEnrollment.class_id)
+        .join(Subject, Subject.id == Class.subject_id)
+        .join(Grade, Grade.id == Class.grade_id)
+        .join(Curriculum, Curriculum.id == Class.curriculum_id)
         .where(
             ClassEnrollment.student_id == student_id,
             ClassEnrollment.is_active.is_(True),
@@ -137,29 +141,15 @@ async def get_student_info(
     enrolled_classes: list[EnrolledClassInfo] = []
 
     for enrollment_row in enrollment_rows:
-        enrollment, class_ = enrollment_row
+        enrollment, class_, subject, grade, curriculum = enrollment_row
 
         # Get first class_id for backwards compatibility
         if class_id is None:
             class_id = class_.id
 
-        # Get subject info
-        subject_query = select(Subject).where(Subject.id == class_.subject_id)
-        subject_result = await db.execute(subject_query)
-        subject = subject_result.scalar_one_or_none()
-
-        # Get grade info
-        grade_query = select(Grade).where(Grade.id == class_.grade_id)
-        grade_result = await db.execute(grade_query)
-        grade = grade_result.scalar_one_or_none()
-
         # Get curriculum name from class (for backwards compatibility)
         if curriculum_name == "":
-            curriculum_query = select(Curriculum).where(Curriculum.id == class_.curriculum_id)
-            curriculum_result = await db.execute(curriculum_query)
-            curriculum = curriculum_result.scalar_one_or_none()
-            if curriculum:
-                curriculum_name = curriculum.name
+            curriculum_name = curriculum.name if curriculum else ""
 
         # Set grade name from first class for backwards compatibility
         if grade_name == "" and grade:
