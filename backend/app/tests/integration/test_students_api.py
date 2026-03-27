@@ -62,7 +62,6 @@ async def enrolled_student(
     await db_session.commit()
 
     enrollment = ClassEnrollment(
-        id=uuid.uuid4(),
         class_id=class_.id,
         student_id=student.id,
         is_active=True,
@@ -378,3 +377,127 @@ class TestGetStudentInfo:
         )
 
         assert response.status_code == 404
+
+
+class TestGetMyStudentInfo:
+    """Tests for GET /api/v1/students/me/info.
+
+    This endpoint uses the /me shortcut to automatically use the authenticated user's ID.
+    Per CONSTITUTION.md Rule: "Never construct student ID in URLs - always use /me shortcut."
+
+    Only students can access this endpoint.
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_my_student_info_when_unauthenticated_then_401(
+        self,
+        client: AsyncClient,
+        enrolled_student: User,
+    ) -> None:
+        """Test that unauthenticated requests return 401."""
+        response = await client.get("/api/v1/students/me/info")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_my_student_info_when_student_enrolled_then_200(
+        self,
+        client: AsyncClient,
+        enrolled_student: User,
+        test_grade: Grade,
+        test_curriculum: Curriculum,
+    ) -> None:
+        """Test that enrolled student can view their own info via /me endpoint."""
+        auth_headers = make_auth_header(enrolled_student)
+        response = await client.get(
+            "/api/v1/students/me/info",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["firstName"] == "Enrolled"
+        assert data["gradeName"] == test_grade.name
+        assert data["curriculumName"] == test_curriculum.name
+        assert data["classId"] is not None
+        assert data["streakDays"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_my_student_info_when_student_unenrolled_then_200(
+        self,
+        client: AsyncClient,
+        unenrolled_student: User,
+    ) -> None:
+        """Test that unenrolled student can view their own info with empty strings."""
+        auth_headers = make_auth_header(unenrolled_student)
+        response = await client.get(
+            "/api/v1/students/me/info",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["firstName"] == "Unenrolled"
+        assert data["gradeName"] == ""
+        assert data["curriculumName"] == ""
+        assert data["classId"] is None
+        assert data["streakDays"] is None
+        assert data["isEnrolled"] is False
+        assert data["enrolledClasses"] == []
+
+    @pytest.mark.asyncio
+    async def test_get_my_student_info_when_teacher_then_403(
+        self,
+        client: AsyncClient,
+        test_teacher: User,
+    ) -> None:
+        """Test that teachers cannot access /me/info endpoint."""
+        auth_headers = make_auth_header(test_teacher)
+        response = await client.get(
+            "/api/v1/students/me/info",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 403
+        assert "Only students can access this endpoint" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_get_my_student_info_when_school_admin_then_403(
+        self,
+        client: AsyncClient,
+        school_admin: User,
+    ) -> None:
+        """Test that school admins cannot access /me/info endpoint."""
+        auth_headers = make_auth_header(school_admin)
+        response = await client.get(
+            "/api/v1/students/me/info",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 403
+        assert "Only students can access this endpoint" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_get_my_student_info_when_enrolled_has_isEnrolled_true(
+        self,
+        client: AsyncClient,
+        enrolled_student: User,
+        test_subject: Subject,
+        test_grade: Grade,
+    ) -> None:
+        """Test that enrolled student has isEnrolled true and populated enrolledClasses."""
+        auth_headers = make_auth_header(enrolled_student)
+        response = await client.get(
+            "/api/v1/students/me/info",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["isEnrolled"] is True
+        assert len(data["enrolledClasses"]) == 1
+        enrolled_class = data["enrolledClasses"][0]
+        assert enrolled_class["classId"] is not None
+        assert enrolled_class["className"] == "Test Class for Student"
+        assert enrolled_class["subjectId"] == str(test_subject.id)
+        assert enrolled_class["subjectName"] == test_subject.name
+        assert enrolled_class["gradeName"] == test_grade.name

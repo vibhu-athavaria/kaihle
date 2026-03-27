@@ -3,6 +3,7 @@
 Endpoints for student-specific data that doesn't fit in other categories.
 
 Routes:
+- GET /api/v1/students/me/info - Get current student's info (name, grade, curriculum, etc.)
 - GET /api/v1/students/{student_id}/info - Get student info (name, grade, curriculum, etc.)
 """
 
@@ -60,35 +61,15 @@ class StudentInfoResponse(BaseModel):
     )
 
 
-@router.get(
-    "/{student_id}/info",
-    response_model=StudentInfoResponse,
-)
-async def get_student_info(
-    student_id: UUID = Path(..., description="Student ID"),
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+async def _get_student_info_by_id(
+    student_id: UUID,
+    current_user: CurrentUser,
+    db: AsyncSession,
 ) -> StudentInfoResponse:
-    """Get basic info for a student.
+    """Shared logic to get student info by ID.
 
-    Students can only view their own info.
-    Teachers and admins can view any student's info within their school.
-
-    Returns:
-        StudentInfoResponse with first_name, grade_name, curriculum_name, class_id, streak_days
-
-    Raises:
-        403: If user doesn't have permission to view this student's info
-        404: If student doesn't exist
+    This is the internal helper used by both /me/info and /{student_id}/info endpoints.
     """
-    # Authorization: students can only view themselves
-    if current_user.role == UserRole.STUDENT:
-        if current_user.id != student_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Students can only view their own info",
-            )
-
     # For teachers/admins, verify the student belongs to their school
     if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN):
         # Query user and verify they are a student
@@ -197,4 +178,87 @@ async def get_student_info(
         streak_days=None,  # Not yet implemented
         is_enrolled=is_enrolled,
         enrolled_classes=enrolled_classes,
+    )
+
+
+@router.get(
+    "/me/info",
+    response_model=StudentInfoResponse,
+)
+async def get_my_student_info(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StudentInfoResponse:
+    """Get current student's own info.
+
+    This endpoint uses the /me shortcut to automatically use the authenticated user's ID.
+    Per CONSTITUTION.md Rule: "Never construct student ID in URLs - always use /me shortcut."
+
+    Only students can access this endpoint. Teachers and admins should use /{student_id}/info.
+
+    Returns:
+        StudentInfoResponse with first_name, grade_name, curriculum_name, class_id, streak_days
+
+    Raises:
+        403: If user is not a student
+    """
+    # Only students can access this endpoint
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint. Use /students/{student_id}/info for other roles.",
+        )
+
+    logger.info(
+        "my_student_info_requested",
+        student_id=str(current_user.id),
+    )
+
+    return await _get_student_info_by_id(
+        student_id=current_user.id,
+        current_user=current_user,
+        db=db,
+    )
+
+
+@router.get(
+    "/{student_id}/info",
+    response_model=StudentInfoResponse,
+)
+async def get_student_info(
+    student_id: UUID = Path(..., description="Student ID"),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StudentInfoResponse:
+    """Get basic info for a student.
+
+    Students can only view their own info.
+    Teachers and admins can view any student's info within their school.
+
+    Returns:
+        StudentInfoResponse with first_name, grade_name, curriculum_name, class_id, streak_days
+
+    Raises:
+        403: If user doesn't have permission to view this student's info
+        404: If student doesn't exist
+    """
+    # Authorization: students can only view themselves via this endpoint
+    if current_user.role == UserRole.STUDENT:
+        if current_user.id != student_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Students can only view their own info. Use /students/me/info to view your own info.",
+            )
+
+    logger.info(
+        "student_info_requested",
+        requester_id=str(current_user.id),
+        requester_role=str(current_user.role),
+        target_student_id=str(student_id),
+    )
+
+    return await _get_student_info_by_id(
+        student_id=student_id,
+        current_user=current_user,
+        db=db,
     )
