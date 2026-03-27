@@ -44,6 +44,10 @@ export function InlineChangePassword({
     e.preventDefault();
 
     // Validate all fields
+    if (!currentPassword) {
+      setCurrentPasswordError("Current password is required");
+      return;
+    }
     if (newPassword.length < 8) {
       setNewPasswordError("Password must be at least 8 characters");
       return;

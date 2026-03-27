@@ -19,7 +19,6 @@ export function InlineEditName({
 }: InlineEditNameProps) {
   const [firstName, setFirstName] = useState(initialFirstName);
   const [lastName, setLastName] = useState(initialLastName);
-  const [_touched, setTouched] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +38,6 @@ export function InlineEditName({
             type="text"
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
-            onBlur={() => setTouched(true)}
             placeholder="First name"
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
             disabled={isLoading}
@@ -51,7 +49,6 @@ export function InlineEditName({
             type="text"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
-            onBlur={() => setTouched(true)}
             placeholder="Last name"
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
             disabled={isLoading}

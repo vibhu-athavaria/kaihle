@@ -15,7 +15,7 @@ function getGreeting(): string {
 
 export function StudentDashboard() {
   const { logout } = useAuth();
-  const { data, isLoading, isError, errMessage } = useStudentDashboard();
+  const { data, isLoading, isError } = useStudentDashboard();
   const { status: onboardingStatus } = useOnboardingStatus();
 
   if (isError) {
@@ -23,7 +23,8 @@ export function StudentDashboard() {
       <StudentLayout activeNav="home" onLogout={logout}>
         <div className="text-center py-8">
           <p className="text-brand-red">
-            Failed to load dashboard data.: {errMessage}
+            Failed to load dashboard data. Please try again or contact support
+            if the problem persists.
           </p>
         </div>
       </StudentLayout>
