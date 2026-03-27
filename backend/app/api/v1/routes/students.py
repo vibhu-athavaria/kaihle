@@ -91,6 +91,7 @@ async def get_student_info(
 
     # For teachers/admins, verify the student belongs to their school
     if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN):
+        # Query user and verify they are a student
         student_query = select(User).where(User.id == student_id)
         student_result = await db.execute(student_query)
         student = student_result.scalar_one_or_none()
@@ -101,22 +102,31 @@ async def get_student_info(
                 detail="Student not found",
             )
 
+        # Verify the target user is a student
+        if student.role != UserRole.STUDENT:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Can only view student info",
+            )
+
         if student.school_id != current_user.school_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot view student from another school",
             )
+        user = student
+    else:
+        # Kaihle admin or other roles - query the user
+        user_query = select(User).where(User.id == student_id)
+        user_result = await db.execute(user_query)
+        queried_user = user_result.scalar_one_or_none()
 
-    # Get the student user
-    user_query = select(User).where(User.id == student_id)
-    user_result = await db.execute(user_query)
-    user = user_result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not found",
-        )
+        if not queried_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student not found",
+            )
+        user = queried_user
 
     # Get all enrolled classes with their subjects using eager loading
     # to avoid N+1 query pattern
@@ -141,7 +151,7 @@ async def get_student_info(
     enrolled_classes: list[EnrolledClassInfo] = []
 
     for enrollment_row in enrollment_rows:
-        enrollment, class_, subject, grade, curriculum = enrollment_row
+        _, class_, subject, grade, curriculum = enrollment_row
 
         # Get first class_id for backwards compatibility
         if class_id is None:
