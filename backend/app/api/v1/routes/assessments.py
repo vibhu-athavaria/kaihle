@@ -35,7 +35,9 @@ async def list_class_assessments(
     status_filter: str | None = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    current_user: CurrentUser = Depends(
+        require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN, UserRole.STUDENT)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> Page[AssessmentResponse]:
     # STUB — M0-10-T3 | Real implementation: M1-3-T2
