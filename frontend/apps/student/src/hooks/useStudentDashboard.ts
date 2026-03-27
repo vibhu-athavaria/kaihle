@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
-import { useAuth } from "@kaihle/auth";
 
 interface Subject {
   subjectCode: string;
@@ -37,7 +36,6 @@ interface StudentInfo {
   gradeName: string;
   curriculumName: string;
   classId?: string;
-  streakDays?: number;
   isEnrolled: boolean;
   enrolledClasses: EnrolledClass[];
 }
@@ -53,32 +51,33 @@ interface DashboardData {
   studentInfo: StudentInfo;
 }
 
-const QUERY_KEYS = {
-  dashboard: (studentId: string) =>
-    ["student", "dashboard", studentId] as const,
-  gapMap: (studentId: string) => ["student", "gap-map", studentId] as const,
-};
-
-async function fetchGapMap(
-  studentId: string,
-  subjectId: string,
-): Promise<GapMap> {
-  const response = await apiClient.get<GapMap>(
-    `/api/v1/students/${studentId}/gap-map`,
-    {
-      params: { subject_id: subjectId },
-    },
-  );
+/**
+ * Fetches gap map data for the current student using /me endpoint.
+ * Per STUDENT_SCREENS.md §4: Never construct student ID in URLs - always use /me shortcut.
+ */
+async function fetchGapMap(subjectId: string): Promise<GapMap> {
+  const response = await apiClient.get<GapMap>(`/api/v1/students/me/gap-map`, {
+    params: { subject_id: subjectId },
+  });
   return response.data;
 }
 
-async function fetchStudyPlans(studentId: string): Promise<StudyPlan[]> {
+/**
+ * Fetches study plans for the current student using /me endpoint.
+ * Per STUDENT_SCREENS.md §4: Never construct student ID in URLs - always use /me shortcut.
+ */
+async function fetchStudyPlans(): Promise<StudyPlan[]> {
   const response = await apiClient.get<StudyPlansResponse>(
-    `/api/v1/students/${studentId}/study-plans?status=active,in_progress&limit=10`,
+    `/api/v1/students/me/study-plans?status=active,in_progress&limit=10`,
   );
   return response.data.data;
 }
 
+/**
+ * Fetches assessments for a given class using /me shortcut for student context.
+ * Per STUDENT_SCREENS.md §4: Never construct student ID in URLs - always use /me shortcut.
+ * Note: classId is still needed for the class-specific assessments endpoint.
+ */
 async function fetchAssessments(classId: string): Promise<Assessment[]> {
   const response = await apiClient.get<Assessment[]>(
     `/api/v1/classes/${classId}/assessments?status=ACTIVE&limit=5`,
@@ -86,10 +85,12 @@ async function fetchAssessments(classId: string): Promise<Assessment[]> {
   return response.data;
 }
 
-async function fetchStudentInfo(studentId: string): Promise<StudentInfo> {
-  const response = await apiClient.get<StudentInfo>(
-    `/api/v1/students/${studentId}/info`,
-  );
+/**
+ * Fetches student info for the current student using /me endpoint.
+ * Per STUDENT_SCREENS.md §4: Never construct student ID in URLs - always use /me shortcut.
+ */
+async function fetchStudentInfo(): Promise<StudentInfo> {
+  const response = await apiClient.get<StudentInfo>(`/api/v1/students/me/info`);
   return response.data;
 }
 
@@ -102,15 +103,9 @@ interface UseStudentDashboardResult {
 }
 
 export function useStudentDashboard(): UseStudentDashboardResult {
-  const { user } = useAuth();
-
   const studentInfoQuery = useQuery({
-    queryKey: ["student", "info", user?.id] as const,
-    queryFn: () => {
-      if (!user?.id) throw new Error("User ID not available");
-      return fetchStudentInfo(user.id);
-    },
-    enabled: !!user?.id,
+    queryKey: ["student", "info"] as const,
+    queryFn: fetchStudentInfo,
   });
 
   // Get first enrolled class's subjectId for gap-map query
@@ -118,31 +113,26 @@ export function useStudentDashboard(): UseStudentDashboardResult {
     studentInfoQuery.data?.enrolledClasses?.[0]?.subjectId;
 
   const gapMapQuery = useQuery({
-    queryKey: QUERY_KEYS.gapMap(user?.id || ""),
+    queryKey: ["student", "gap-map", primarySubjectId] as const,
     queryFn: () => {
-      if (!user?.id) throw new Error("User ID not available");
       if (!primarySubjectId) throw new Error("Subject ID not available");
-      return fetchGapMap(user.id, primarySubjectId);
+      return fetchGapMap(primarySubjectId);
     },
-    // Only fetch gap-map if student is enrolled and has a subject
-    enabled: !!user?.id && !!primarySubjectId,
+    // Only fetch gap-map if student has a subject
+    enabled: !!primarySubjectId,
   });
 
   const studyPlansQuery = useQuery({
-    queryKey: ["student", "study-plans", user?.id] as const,
-    queryFn: () => {
-      if (!user?.id) throw new Error("User ID not available");
-      return fetchStudyPlans(user.id);
-    },
+    queryKey: ["student", "study-plans"] as const,
+    queryFn: fetchStudyPlans,
     // Only fetch study plans if student is enrolled
-    enabled: !!user?.id && studentInfoQuery.data?.isEnrolled === true,
+    enabled: studentInfoQuery.data?.isEnrolled === true,
   });
 
   const assessmentsQuery = useQuery({
     queryKey: [
       "student",
       "assessments",
-      user?.id,
       studentInfoQuery.data?.classId,
     ] as const,
     queryFn: () => {
@@ -150,7 +140,7 @@ export function useStudentDashboard(): UseStudentDashboardResult {
       if (!classId) throw new Error("Class ID not available");
       return fetchAssessments(classId);
     },
-    enabled: !!user?.id && !!studentInfoQuery.data?.classId,
+    enabled: !!studentInfoQuery.data?.classId,
   });
 
   const isLoading =

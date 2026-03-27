@@ -54,7 +54,14 @@ export function TopNav({
               <LogOut className="w-5 h-5 text-brand-ink" />
             </button>
           )}
-          <div className="w-8 h-8 rounded-full bg-brand-primary" />
+          {/* Settings accessible via avatar click - links to /student/settings */}
+          <a
+            href="/student/settings"
+            className="w-8 h-8 rounded-full bg-brand-primary flex items-center justify-center hover:opacity-80 transition-opacity focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+            aria-label="Settings"
+          >
+            <span className="text-white text-xs font-medium">S</span>
+          </a>
         </div>
       </header>
     );
