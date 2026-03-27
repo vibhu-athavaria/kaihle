@@ -24,12 +24,22 @@ interface Assessment {
   dueDate: string;
 }
 
+interface EnrolledClass {
+  classId: string;
+  className: string;
+  subjectId: string;
+  subjectName: string;
+  gradeName: string;
+}
+
 interface StudentInfo {
   firstName: string;
   gradeName: string;
   curriculumName: string;
   classId?: string;
   streakDays?: number;
+  isEnrolled: boolean;
+  enrolledClasses: EnrolledClass[];
 }
 
 interface StudyPlansResponse {
@@ -49,9 +59,15 @@ const QUERY_KEYS = {
   gapMap: (studentId: string) => ["student", "gap-map", studentId] as const,
 };
 
-async function fetchGapMap(studentId: string): Promise<GapMap> {
+async function fetchGapMap(
+  studentId: string,
+  subjectId: string,
+): Promise<GapMap> {
   const response = await apiClient.get<GapMap>(
     `/api/v1/students/${studentId}/gap-map`,
+    {
+      params: { subject_id: subjectId },
+    },
   );
   return response.data;
 }
@@ -81,6 +97,7 @@ interface UseStudentDashboardResult {
   data: DashboardData | undefined;
   isLoading: boolean;
   isError: boolean;
+  errMessage: string | undefined;
   refetch: () => Promise<void>;
 }
 
@@ -96,13 +113,19 @@ export function useStudentDashboard(): UseStudentDashboardResult {
     enabled: !!user?.id,
   });
 
+  // Get first enrolled class's subjectId for gap-map query
+  const primarySubjectId =
+    studentInfoQuery.data?.enrolledClasses?.[0]?.subjectId;
+
   const gapMapQuery = useQuery({
     queryKey: QUERY_KEYS.gapMap(user?.id || ""),
     queryFn: () => {
       if (!user?.id) throw new Error("User ID not available");
-      return fetchGapMap(user.id);
+      if (!primarySubjectId) throw new Error("Subject ID not available");
+      return fetchGapMap(user.id, primarySubjectId);
     },
-    enabled: !!user?.id,
+    // Only fetch gap-map if student is enrolled and has a subject
+    enabled: !!user?.id && !!primarySubjectId,
   });
 
   const studyPlansQuery = useQuery({
@@ -111,7 +134,8 @@ export function useStudentDashboard(): UseStudentDashboardResult {
       if (!user?.id) throw new Error("User ID not available");
       return fetchStudyPlans(user.id);
     },
-    enabled: !!user?.id,
+    // Only fetch study plans if student is enrolled
+    enabled: !!user?.id && studentInfoQuery.data?.isEnrolled === true,
   });
 
   const assessmentsQuery = useQuery({
@@ -141,20 +165,26 @@ export function useStudentDashboard(): UseStudentDashboardResult {
     assessmentsQuery.isError ||
     studentInfoQuery.isError;
 
-  const data =
-    gapMapQuery.data && studyPlansQuery.data && studentInfoQuery.data
-      ? {
-          gapMap: gapMapQuery.data,
-          studyPlans: studyPlansQuery.data,
-          assessments: assessmentsQuery.data || [],
-          studentInfo: studentInfoQuery.data,
-        }
-      : undefined;
+  const errMessage =
+    gapMapQuery.error?.message ||
+    studyPlansQuery.error?.message ||
+    assessmentsQuery.error?.message ||
+    studentInfoQuery.error?.message;
+
+  const data = studentInfoQuery.data
+    ? {
+        gapMap: gapMapQuery.data || { subjects: [] },
+        studyPlans: studyPlansQuery.data || [],
+        assessments: assessmentsQuery.data || [],
+        studentInfo: studentInfoQuery.data,
+      }
+    : undefined;
 
   return {
     data,
     isLoading,
     isError,
+    errMessage,
     refetch: async () => {
       await gapMapQuery.refetch();
       await studyPlansQuery.refetch();

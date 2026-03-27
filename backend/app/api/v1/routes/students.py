@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user
-from app.models.curriculum import Curriculum, Grade
+from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
 
@@ -25,10 +25,24 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/students", tags=["students"])
 
 
+class EnrolledClassInfo(BaseModel):
+    """Info about a single enrolled class with its subject."""
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    class_id: UUID = Field(..., alias="classId")
+    class_name: str = Field(..., alias="className")
+    subject_id: UUID = Field(..., alias="subjectId")
+    subject_name: str = Field(..., alias="subjectName")
+    grade_name: str = Field(..., alias="gradeName")
+
+
 class StudentInfoResponse(BaseModel):
     """Response schema for GET /students/{student_id}/info.
 
     Returns basic student info including name, grade, curriculum, class, and streak days.
+    Also includes enrollment status and list of enrolled classes.
+
     Note: streak_days is not yet implemented in the backend and will always be null.
     """
 
@@ -39,6 +53,11 @@ class StudentInfoResponse(BaseModel):
     curriculum_name: str = Field(..., alias="curriculumName")  # Empty string if school has no primary curriculum
     class_id: UUID | None = Field(None, alias="classId")
     streak_days: int | None = Field(None, alias="streakDays")  # Not yet implemented - always null
+    is_enrolled: bool = Field(..., alias="isEnrolled")  # True if student has at least one active enrollment
+    enrolled_classes: list[EnrolledClassInfo] = Field(
+        default_factory=list,
+        alias="enrolledClasses",
+    )
 
 
 @router.get(
@@ -99,7 +118,7 @@ async def get_student_info(
             detail="Student not found",
         )
 
-    # Get student's enrolled class (first active enrollment)
+    # Get all enrolled classes with their subjects (not just the first one)
     enrollment_query = (
         select(ClassEnrollment, Class)
         .join(Class, Class.id == ClassEnrollment.class_id)
@@ -108,32 +127,55 @@ async def get_student_info(
             ClassEnrollment.is_active.is_(True),
         )
         .order_by(ClassEnrollment.enrolled_at)
-        .limit(1)
     )
     enrollment_result = await db.execute(enrollment_query)
-    enrollment_row = enrollment_result.first()
+    enrollment_rows = enrollment_result.all()
 
     grade_name = ""
     curriculum_name = ""
     class_id = None
+    enrolled_classes: list[EnrolledClassInfo] = []
 
-    if enrollment_row:
+    for enrollment_row in enrollment_rows:
         enrollment, class_ = enrollment_row
-        class_id = class_.id
 
-        # Get grade name
+        # Get first class_id for backwards compatibility
+        if class_id is None:
+            class_id = class_.id
+
+        # Get subject info
+        subject_query = select(Subject).where(Subject.id == class_.subject_id)
+        subject_result = await db.execute(subject_query)
+        subject = subject_result.scalar_one_or_none()
+
+        # Get grade info
         grade_query = select(Grade).where(Grade.id == class_.grade_id)
         grade_result = await db.execute(grade_query)
         grade = grade_result.scalar_one_or_none()
-        if grade:
+
+        # Get curriculum name from class (for backwards compatibility)
+        if curriculum_name == "":
+            curriculum_query = select(Curriculum).where(Curriculum.id == class_.curriculum_id)
+            curriculum_result = await db.execute(curriculum_query)
+            curriculum = curriculum_result.scalar_one_or_none()
+            if curriculum:
+                curriculum_name = curriculum.name
+
+        # Set grade name from first class for backwards compatibility
+        if grade_name == "" and grade:
             grade_name = grade.name
 
-        # Get curriculum name from class
-        curriculum_query = select(Curriculum).where(Curriculum.id == class_.curriculum_id)
-        curriculum_result = await db.execute(curriculum_query)
-        curriculum = curriculum_result.scalar_one_or_none()
-        if curriculum:
-            curriculum_name = curriculum.name
+        enrolled_classes.append(
+            EnrolledClassInfo(
+                class_id=class_.id,
+                class_name=class_.name,
+                subject_id=class_.subject_id,
+                subject_name=subject.name if subject else "",
+                grade_name=grade.name if grade else "",
+            )
+        )
+
+    is_enrolled = len(enrolled_classes) > 0
 
     logger.debug(
         "student_info_retrieved",
@@ -143,6 +185,8 @@ async def get_student_info(
         grade_name=grade_name,
         curriculum_name=curriculum_name,
         class_id=str(class_id) if class_id else None,
+        is_enrolled=is_enrolled,
+        enrolled_class_count=len(enrolled_classes),
     )
 
     return StudentInfoResponse(
@@ -151,4 +195,6 @@ async def get_student_info(
         curriculum_name=curriculum_name,
         class_id=class_id,
         streak_days=None,  # Not yet implemented
+        is_enrolled=is_enrolled,
+        enrolled_classes=enrolled_classes,
     )
