@@ -2,7 +2,7 @@ import { StudentLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
 import { ClassCard, ClassCardSkeleton } from "../../components/ClassCard";
 import { NextStepCard, EmptyNextSteps } from "./NextStepCard";
-import { StreakBadge } from "./StreakBadge";
+import { SubjectScoreCard } from "./SubjectScoreCard";
 import { useStudentDashboard } from "../../hooks/useStudentDashboard";
 import { useOnboardingStatus } from "../../hooks/useOnboardingStatus";
 
@@ -22,7 +22,10 @@ export function StudentDashboard() {
     return (
       <StudentLayout activeNav="home" onLogout={logout}>
         <div className="text-center py-8">
-          <p className="text-brand-red">Failed to load dashboard data.</p>
+          <p className="text-brand-red">
+            Failed to load dashboard data. Please try again or contact support
+            if the problem persists.
+          </p>
         </div>
       </StudentLayout>
     );
@@ -32,9 +35,9 @@ export function StudentDashboard() {
   const firstName = data?.studentInfo.firstName || "";
   const gradeName = data?.studentInfo.gradeName || "";
   const curriculumName = data?.studentInfo.curriculumName || "";
-  const streakDays = data?.studentInfo.streakDays || 0;
   const studyPlans = data?.studyPlans || [];
   const assessments = data?.assessments || [];
+  const subjects = data?.gapMap?.subjects || [];
 
   const activeStudyPlans = studyPlans.filter((sp) => sp.status === "ACTIVE");
   const inProgressStudyPlans = studyPlans.filter(
@@ -56,19 +59,46 @@ export function StudentDashboard() {
       <div className="space-y-6">
         {/* Header with greeting */}
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-display font-bold text-2xl text-brand-ink">
-              {greeting}
-              {firstName ? `, ${firstName}` : ""} 👋
-            </h1>
-            <StreakBadge days={streakDays} />
-          </div>
+          <h1 className="font-display font-bold text-2xl text-brand-ink">
+            {greeting}
+            {firstName ? `, ${firstName}` : ""} 👋
+          </h1>
           {gradeName && curriculumName && (
             <p className="font-sans text-sm text-brand-muted mt-1">
               {gradeName} · {curriculumName}
             </p>
           )}
         </div>
+
+        {/* Subject Score Cards - 3 columns per spec */}
+        {subjects.length > 0 && (
+          <div>
+            <h2 className="font-sans text-sm font-bold text-brand-muted uppercase tracking-wide mb-3">
+              Your Performance
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {isLoading
+                ? Array.from({ length: 3 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="bg-white rounded-2xl border border-brand-border p-4 text-center animate-pulse"
+                    >
+                      <div className="h-8 w-16 bg-brand-border rounded mx-auto mb-2" />
+                      <div className="h-3 w-12 bg-brand-border rounded mx-auto" />
+                    </div>
+                  ))
+                : subjects
+                    .slice(0, 3)
+                    .map((subject) => (
+                      <SubjectScoreCard
+                        key={subject.subjectCode}
+                        subjectName={subject.subjectName}
+                        score={subject.score}
+                      />
+                    ))}
+            </div>
+          </div>
+        )}
 
         {/* Class Cards - Per-class diagnostic locked/unlocked state */}
         {enrolledClasses.length > 0 && (
@@ -126,7 +156,8 @@ export function StudentDashboard() {
 
         {nextSteps.length === 0 &&
           !isLoading &&
-          enrolledClasses.length === 0 && (
+          enrolledClasses.length === 0 &&
+          subjects.length === 0 && (
             <div>
               <h2 className="font-sans text-sm font-bold text-brand-muted uppercase tracking-wide mb-3">
                 Keep going
@@ -158,6 +189,7 @@ function buildNextSteps(
 ): NextStep[] {
   const nextSteps: NextStep[] = [];
 
+  // Priority 1: Active assessments due within 7 days
   if (assessments.length > 0) {
     nextSteps.push({
       type: "assessment",
@@ -175,6 +207,7 @@ function buildNextSteps(
     });
   }
 
+  // Priority 2: Study plans with status ACTIVE (not yet started)
   if (activeStudyPlans.length > 0) {
     nextSteps.push({
       type: "study-plan-ready",
@@ -187,6 +220,7 @@ function buildNextSteps(
     });
   }
 
+  // Priority 3: Study plans with status IN_PROGRESS (started, not finished)
   if (inProgressStudyPlans.length > 0) {
     nextSteps.push({
       type: "study-plan-progress",

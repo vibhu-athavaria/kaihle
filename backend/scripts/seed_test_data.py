@@ -185,17 +185,45 @@ async def seed_test_data() -> None:
         # -------------------------------------------------------------------
         # 4. Create student profile
         # -------------------------------------------------------------------
+        # Use ON CONFLICT DO UPDATE to set is_learning_profile_complete = true
+        # when re-running the seed script after creating a learning profile
         await db.execute(
             text("""
                 INSERT INTO student_profiles (id, user_id, grade_id, age, is_learning_profile_complete)
-                VALUES (gen_random_uuid(), :user_id, NULL, 14, false)
-                ON CONFLICT (user_id) DO NOTHING
+                VALUES (gen_random_uuid(), :user_id, NULL, 14, true)
+                ON CONFLICT (user_id) DO UPDATE SET is_learning_profile_complete = true
             """),
             {
                 "user_id": str(student_id),
             },
         )
         log.info("student_profile_created")
+
+        # -------------------------------------------------------------------
+        # 4b. Create student learning profile (required for dashboard API)
+        # -------------------------------------------------------------------
+        await db.execute(
+            text("""
+                INSERT INTO student_learning_profiles (
+                    id, student_id, school_id, modality_scores, work_style,
+                    interests, questionnaire_version, completed_at
+                )
+                VALUES (
+                    gen_random_uuid(), :student_id, :school_id,
+                    '{"visual": 0.7, "auditory": 0.5, "reading_writing": 0.6, "kinesthetic": 0.4}',
+                    '{"prefers_solo": true, "short_sessions": false, "task_based": true, "concept_first": false}',
+                    ARRAY['science', 'sports'],
+                    'v1',
+                    NOW()
+                )
+                ON CONFLICT (student_id) DO NOTHING
+            """),
+            {
+                "student_id": str(student_id),
+                "school_id": str(school_id),
+            },
+        )
+        log.info("student_learning_profile_created")
 
         await db.commit()
 

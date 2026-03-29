@@ -54,6 +54,81 @@ docker compose down
 docker compose down -v
 ```
 
+#### Backend Database Setup
+
+After starting Docker Compose, set up the database schema and seed initial data:
+
+**1. Run Alembic Migrations**
+
+Apply all migrations to bring the schema up to date:
+
+```bash
+# Inside Docker (recommended)
+docker compose exec backend alembic upgrade head
+
+# Outside Docker
+cd backend && alembic upgrade head
+```
+
+Rollback the last migration if needed:
+```bash
+docker compose exec backend alembic downgrade -1
+```
+
+**2. Seed the Database**
+
+Database seeding requires two scripts run in order:
+
+```bash
+# Step 1: Seed Cambridge curriculum hierarchy
+# (curricula, subjects, grades, topics, subtopics, prerequisites)
+docker compose exec backend python -m scripts.seed_curriculum_graph
+
+# Step 2: Seed test data (school, users, classes, enrollments)
+# Requires curriculum to be seeded first
+docker compose exec backend python -m scripts.seed_test_data
+
+# Outside Docker:
+cd backend && python -m scripts.seed_curriculum_graph
+cd backend && python -m scripts.seed_test_data
+```
+
+Both seed scripts are **idempotent** — safe to re-run using `ON CONFLICT DO NOTHING`.
+
+**Test accounts created:**
+| Email | Password | Role |
+|-------|----------|------|
+| teacher@kaihle.com | Test1234! | TEACHER |
+| student@kaihle.com | Test1234! | STUDENT |
+| admin@kaihle.com | Test1234! | SCHOOL_ADMIN |
+| parent@kaihle.com | Test1234! | PARENT |
+
+**Dry run curriculum seeding** (validates JSON without DB writes):
+```bash
+docker compose exec backend python -m scripts.seed_curriculum_graph --dry-run
+```
+
+**Troubleshooting**
+
+Reset the database:
+```bash
+# Stop services and remove volumes
+docker compose down -v
+
+# Restart (volumes will be recreated with init_db.sql)
+docker compose up -d
+
+# Re-run migrations and seeds
+docker compose exec backend alembic upgrade head
+docker compose exec backend python -m scripts.seed_curriculum_graph
+docker compose exec backend python -m scripts.seed_test_data
+```
+
+Verify database health:
+```bash
+docker compose exec postgres pg_isready -U kaihle -d kaihle
+```
+
 #### Service Details
 
 **Infrastructure Services:**
