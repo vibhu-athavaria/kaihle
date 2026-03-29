@@ -202,10 +202,8 @@ class TestGetStudentInfo:
         # Create a second subject
         second_subject = Subject(
             id=uuid.uuid4(),
-            curriculum_id=test_curriculum.id,
             name="Mathematics",
             code="MATH",
-            order_index=1,
         )
         db_session.add(second_subject)
         await db_session.commit()
@@ -262,13 +260,11 @@ class TestGetStudentInfo:
 
         # Enroll in both classes
         enrollment1 = ClassEnrollment(
-            id=uuid.uuid4(),
             class_id=first_class.id,
             student_id=student.id,
             is_active=True,
         )
         enrollment2 = ClassEnrollment(
-            id=uuid.uuid4(),
             class_id=second_class.id,
             student_id=student.id,
             is_active=True,
@@ -333,14 +329,18 @@ class TestGetStudentInfo:
         assert data["curriculumName"] == test_curriculum.name
 
     @pytest.mark.asyncio
-    async def test_get_student_info_when_teacher_views_student_from_other_school_then_403(
+    async def test_get_student_info_when_teacher_views_student_from_other_school_then_404(
         self,
         client: AsyncClient,
         test_teacher: User,
         other_school: School,
         db_session: AsyncSession,
     ) -> None:
-        """Test that teacher cannot view student from another school."""
+        """Test that teacher cannot view student from another school.
+
+        We return 404 (not 403) to avoid leaking information about whether
+        a student exists in another school. This is a security improvement.
+        """
         # Create a student in a different school
         other_student = User(
             id=uuid.uuid4(),
@@ -360,7 +360,7 @@ class TestGetStudentInfo:
             headers=auth_headers,
         )
 
-        assert response.status_code == 403
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_get_student_info_when_student_not_found_then_404(

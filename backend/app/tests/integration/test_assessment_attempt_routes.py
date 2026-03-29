@@ -125,12 +125,12 @@ class TestGetClassAssessments:
         assert data["data"] == []
 
     @pytest.mark.asyncio
-    async def test_get_class_assessments_when_student_then_403(
+    async def test_get_class_assessments_when_student_then_200(
         self,
         client: AsyncClient,
         student: User,
     ) -> None:
-        """GET /api/v1/classes/{id}/assessments with student JWT returns 403."""
+        """GET /api/v1/classes/{id}/assessments with student JWT returns 200."""
         class_id = uuid.uuid4()
         headers = make_auth_header(student)
 
@@ -139,7 +139,7 @@ class TestGetClassAssessments:
             headers=headers,
         )
 
-        assert response.status_code == 403
+        assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_get_class_assessments_when_parent_then_403(

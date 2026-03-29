@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, get_current_user
+from app.core.deps import CurrentUser, require_role
 from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
@@ -62,52 +62,24 @@ class StudentInfoResponse(BaseModel):
 
 
 async def _get_student_info_by_id(
-    student_id: UUID,
-    current_user: CurrentUser,
+    student: User,
     db: AsyncSession,
 ) -> StudentInfoResponse:
-    """Shared logic to get student info by ID.
+    """Fetch student info by ID.
 
-    This is the internal helper used by both /me/info and /{student_id}/info endpoints.
+    Authorization checks (role verification, school membership) must be done
+    at the API endpoint level before calling this helper.
+
+    Args:
+        student: The User model object
+        db: Database session.
+
+    Returns:
+        StudentInfoResponse with student info and enrolled classes.
+
+    Raises:
+        HTTPException 404: If student is not found.
     """
-    # For teachers/admins, verify the student belongs to their school
-    if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN):
-        # Query user and verify they are a student
-        student_query = select(User).where(User.id == student_id)
-        student_result = await db.execute(student_query)
-        student = student_result.scalar_one_or_none()
-
-        if not student:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Student not found",
-            )
-
-        # Verify the target user is a student
-        if student.role != UserRole.STUDENT:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Can only view student info",
-            )
-
-        if student.school_id != current_user.school_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot view student from another school",
-            )
-        user = student
-    else:
-        # Kaihle admin or other roles - query the user
-        user_query = select(User).where(User.id == student_id)
-        user_result = await db.execute(user_query)
-        queried_user = user_result.scalar_one_or_none()
-
-        if not queried_user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Student not found",
-            )
-        user = queried_user
 
     # Get all enrolled classes with their subjects using eager loading
     # to avoid N+1 query pattern
@@ -118,7 +90,7 @@ async def _get_student_info_by_id(
         .join(Grade, Grade.id == Class.grade_id)
         .join(Curriculum, Curriculum.id == Class.curriculum_id)
         .where(
-            ClassEnrollment.student_id == student_id,
+            ClassEnrollment.student_id == student.id,
             ClassEnrollment.is_active.is_(True),
         )
         .order_by(ClassEnrollment.enrolled_at)
@@ -160,9 +132,7 @@ async def _get_student_info_by_id(
 
     logger.debug(
         "student_info_retrieved",
-        requester_id=str(current_user.id),
-        requester_role=str(current_user.role),
-        student_id=str(student_id),
+        student_id=str(student.id),
         grade_name=grade_name,
         curriculum_name=curriculum_name,
         class_id=str(class_id) if class_id else None,
@@ -171,7 +141,7 @@ async def _get_student_info_by_id(
     )
 
     return StudentInfoResponse(
-        first_name=user.first_name or "",
+        first_name=student.first_name or "",
         grade_name=grade_name,
         curriculum_name=curriculum_name,
         class_id=class_id,
@@ -186,7 +156,7 @@ async def _get_student_info_by_id(
     response_model=StudentInfoResponse,
 )
 async def get_my_student_info(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.STUDENT)),
     db: AsyncSession = Depends(get_db),
 ) -> StudentInfoResponse:
     """Get current student's own info.
@@ -206,7 +176,7 @@ async def get_my_student_info(
     if current_user.role != UserRole.STUDENT:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only students can access this endpoint. Use /students/{student_id}/info for other roles.",
+            detail="Only students can access this endpoint",
         )
 
     logger.info(
@@ -215,8 +185,7 @@ async def get_my_student_info(
     )
 
     return await _get_student_info_by_id(
-        student_id=current_user.id,
-        current_user=current_user,
+        student=current_user,
         db=db,
     )
 
@@ -227,28 +196,37 @@ async def get_my_student_info(
 )
 async def get_student_info(
     student_id: UUID = Path(..., description="Student ID"),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
 ) -> StudentInfoResponse:
     """Get basic info for a student.
 
-    Students can only view their own info.
-    Teachers and admins can view any student's info within their school.
+    Authorization rules:
+    - STUDENTS: should use /me/info
+    - TEACHER/SCHOOL_ADMIN: Can view any student in the same school
+    - KAIHLE_ADMIN: Can view any student
 
     Returns:
         StudentInfoResponse with first_name, grade_name, curriculum_name, class_id, streak_days
 
     Raises:
         403: If user doesn't have permission to view this student's info
-        404: If student doesn't exist
+        404: If student doesn't exist or is not in the same school
     """
-    # Authorization: students can only view themselves via this endpoint
-    if current_user.role == UserRole.STUDENT:
-        if current_user.id != student_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Students can only view their own info. Use /students/me/info to view your own info.",
-            )
+    student_query = select(User).where(User.id == student_id, User.role == UserRole.STUDENT)
+    # For non-KAIHLE_ADMIN roles, verify the student is in the same school
+    if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN):
+        student_query = student_query.where(User.school_id == current_user.school_id)
+
+    student_result = await db.execute(student_query)
+    target_student = student_result.scalar_one_or_none()
+
+    if not target_student:
+        # Return 404 to avoid leaking information about students in other schools
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found",
+        )
 
     logger.info(
         "student_info_requested",
@@ -258,7 +236,6 @@ async def get_student_info(
     )
 
     return await _get_student_info_by_id(
-        student_id=student_id,
-        current_user=current_user,
+        student=target_student,
         db=db,
     )
