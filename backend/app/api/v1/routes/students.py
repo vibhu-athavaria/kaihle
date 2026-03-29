@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, require_role
+from app.core.deps import CurrentUser, get_current_user
 from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
@@ -156,7 +156,7 @@ async def _get_student_info_by_id(
     response_model=StudentInfoResponse,
 )
 async def get_my_student_info(
-    current_user: CurrentUser = Depends(require_role(UserRole.STUDENT)),
+    current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> StudentInfoResponse:
     """Get current student's own info.
@@ -196,13 +196,13 @@ async def get_my_student_info(
 )
 async def get_student_info(
     student_id: UUID = Path(..., description="Student ID"),
-    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
+    current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> StudentInfoResponse:
     """Get basic info for a student.
 
     Authorization rules:
-    - STUDENTS: should use /me/info
+    - STUDENT: Can view their own info (student_id == current_user.id)
     - TEACHER/SCHOOL_ADMIN: Can view any student in the same school
     - KAIHLE_ADMIN: Can view any student
 
@@ -213,10 +213,26 @@ async def get_student_info(
         403: If user doesn't have permission to view this student's info
         404: If student doesn't exist or is not in the same school
     """
-    student_query = select(User).where(User.id == student_id, User.role == UserRole.STUDENT)
-    # For non-KAIHLE_ADMIN roles, verify the student is in the same school
-    if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN):
-        student_query = student_query.where(User.school_id == current_user.school_id)
+    # Students can only view their own info
+    if current_user.role == UserRole.STUDENT:
+        if current_user.id != student_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view your own student info",
+            )
+        # For students viewing themselves, look up by student_id directly
+        student_query = select(User).where(User.id == student_id, User.role == UserRole.STUDENT)
+    else:
+        # TEACHER, SCHOOL_ADMIN, KAIHLE_ADMIN use require_role logic
+        if current_user.role not in (UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Required roles: KAIHLE_ADMIN, SCHOOL_ADMIN, TEACHER",
+            )
+        student_query = select(User).where(User.id == student_id, User.role == UserRole.STUDENT)
+        # For non-KAIHLE_ADMIN roles, verify the student is in the same school
+        if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN):
+            student_query = student_query.where(User.school_id == current_user.school_id)
 
     student_result = await db.execute(student_query)
     target_student = student_result.scalar_one_or_none()
