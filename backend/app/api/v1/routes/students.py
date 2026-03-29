@@ -213,26 +213,12 @@ async def get_student_info(
         403: If user doesn't have permission to view this student's info
         404: If student doesn't exist or is not in the same school
     """
-    # Students can only view their own info
-    if current_user.role == UserRole.STUDENT:
-        if current_user.id != student_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only view your own student info",
-            )
-        # For students viewing themselves, look up by student_id directly
-        student_query = select(User).where(User.id == student_id, User.role == UserRole.STUDENT)
-    else:
-        # TEACHER, SCHOOL_ADMIN, KAIHLE_ADMIN use require_role logic
-        if current_user.role not in (UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied. Required roles: KAIHLE_ADMIN, SCHOOL_ADMIN, TEACHER",
-            )
-        student_query = select(User).where(User.id == student_id, User.role == UserRole.STUDENT)
-        # For non-KAIHLE_ADMIN roles, verify the student is in the same school
-        if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN):
-            student_query = student_query.where(User.school_id == current_user.school_id)
+    # Build query to find the target student
+    student_query = select(User).where(User.id == student_id, User.role == UserRole.STUDENT)
+
+    # For teachers/school admins, verify the student is in the same school
+    if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN):
+        student_query = student_query.where(User.school_id == current_user.school_id)
 
     student_result = await db.execute(student_query)
     target_student = student_result.scalar_one_or_none()
@@ -242,6 +228,20 @@ async def get_student_info(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Student not found",
+        )
+
+    # After confirming student exists, check authorization
+    if current_user.role == UserRole.STUDENT:
+        # Students can only view their own info
+        if current_user.id != student_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view your own student info",
+            )
+    elif current_user.role not in (UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Required roles: KAIHLE_ADMIN, SCHOOL_ADMIN, TEACHER",
         )
 
     logger.info(
