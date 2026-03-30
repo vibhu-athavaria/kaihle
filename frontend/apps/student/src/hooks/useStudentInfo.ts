@@ -21,7 +21,9 @@ export function useStudentInfo() {
   return useQuery<StudentInfo>({
     queryKey: ["student", "info"],
     queryFn: async () => {
-      const response = await apiClient.get<StudentInfo>("/api/v1/students/me/info");
+      const response = await apiClient.get<StudentInfo>(
+        "/api/v1/students/me/info",
+      );
       return response.data;
     },
     staleTime: 10 * 60 * 1000, // 10 minutes - student info rarely changes

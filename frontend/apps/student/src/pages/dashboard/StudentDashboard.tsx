@@ -3,24 +3,38 @@ import { StudentLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
 import { ClassCard, ClassCardSkeleton } from "../../components/ClassCard";
 import { NextStepCard, EmptyNextSteps } from "./NextStepCard";
-import { SubjectScoresSection, SubjectEntry, ResolvedSubjectScore } from "./SubjectScoresSection";
+import {
+  SubjectScoresSection,
+  SubjectEntry,
+  ResolvedSubjectScore,
+} from "./SubjectScoresSection";
 import { useStudentInfo } from "../../hooks/useStudentInfo";
-import { useMyClasses, type StudentClassResponse } from "../../hooks/useMyClasses";
+import {
+  useMyClasses,
+  type StudentClassResponse,
+} from "../../hooks/useMyClasses";
 
 export function StudentDashboard() {
   const { logout } = useAuth();
-  const { data: studentInfo, isLoading: isInfoLoading, isError: isInfoError } = useStudentInfo();
+  const {
+    data: studentInfo,
+    isLoading: isInfoLoading,
+    isError: isInfoError,
+  } = useStudentInfo();
   const { data: classesData, isLoading: isClassesLoading } = useMyClasses();
 
   // Extract student info
   const firstName = studentInfo?.first_name || "";
   const lastName = studentInfo?.last_name || "";
-  const studentName = firstName && lastName ? `${firstName} ${lastName}` : firstName || "Student";
+  const studentName =
+    firstName && lastName ? `${firstName} ${lastName}` : firstName || "Student";
   const gradeName = studentInfo?.grade_name || "";
   const curriculumName = studentInfo?.curriculum_name || "";
 
   // State for resolved subject scores (used in buildNextSteps for weakest-area)
-  const [resolvedSubjectScores, setResolvedSubjectScores] = useState<ResolvedSubjectScore[]>([]);
+  const [resolvedSubjectScores, setResolvedSubjectScores] = useState<
+    ResolvedSubjectScore[]
+  >([]);
 
   // Handler for subject scores resolved from SubjectScoresSection
   const handleScoresResolved = (scores: ResolvedSubjectScore[]) => {
@@ -48,12 +62,16 @@ export function StudentDashboard() {
 
   // For now, default empty arrays - these would come from other API calls
   const studyPlans: Array<{ id: string; title: string; status: string }> = [];
-  const assessments: Array<{ id: string; subjectName: string; dueDate: string }> = [];
+  const assessments: Array<{
+    id: string;
+    subjectName: string;
+    dueDate: string;
+  }> = [];
 
-  const activeStudyPlans = studyPlans?.filter((sp) => sp.status === "ACTIVE") || [];
-  const inProgressStudyPlans = studyPlans?.filter(
-    (sp) => sp.status === "IN_PROGRESS",
-  ) || [];
+  const activeStudyPlans =
+    studyPlans?.filter((sp) => sp.status === "ACTIVE") || [];
+  const inProgressStudyPlans =
+    studyPlans?.filter((sp) => sp.status === "IN_PROGRESS") || [];
 
   // Build next steps including subject scores for weakest-area logic
   const nextSteps = buildNextSteps(
@@ -129,7 +147,9 @@ export function StudentDashboard() {
                         subjectName={cls.subjectName}
                         teacherName={cls.teacherName}
                         diagnosticStatus={cls.onboardingDiagnosticStatus}
-                        diagnosticAttemptId={cls.diagnosticAttemptId ?? undefined}
+                        diagnosticAttemptId={
+                          cls.diagnosticAttemptId ?? undefined
+                        }
                       />
                     ))}
               </div>
@@ -149,15 +169,17 @@ export function StudentDashboard() {
                 <SkeletonNextStep />
               </>
             ) : nextSteps.length > 0 ? (
-              nextSteps.slice(0, 3).map((step) => (
-                <NextStepCard
-                  key={step.id}
-                  type={step.type}
-                  title={step.title}
-                  subtitle={step.subtitle}
-                  actionLabel={step.actionLabel}
-                />
-              ))
+              nextSteps
+                .slice(0, 3)
+                .map((step) => (
+                  <NextStepCard
+                    key={step.id}
+                    type={step.type}
+                    title={step.title}
+                    subtitle={step.subtitle}
+                    actionLabel={step.actionLabel}
+                  />
+                ))
             ) : (
               <EmptyNextSteps />
             )}
@@ -231,17 +253,19 @@ function buildNextSteps(
   }
 
   // Priority 4: Weakest subject with no active study plan
-  const assessedScores = subjectScores.filter(s => s.avgMastery !== null);
+  const assessedScores = subjectScores.filter((s) => s.avgMastery !== null);
   if (assessedScores.length > 0 && activeStudyPlans.length === 0) {
     const weakest = assessedScores.reduce((a, b) =>
-      (a.avgMastery ?? 1) < (b.avgMastery ?? 1) ? a : b
+      (a.avgMastery ?? 1) < (b.avgMastery ?? 1) ? a : b,
     );
     if ((weakest.avgMastery ?? 1) < 0.7) {
       nextSteps.push({
         type: "weakest-area",
         id: `weakest-${weakest.subjectName}`,
         title: `Your weakest area: ${weakest.subjectName}`,
-        subtitle: `${Math.round((weakest.avgMastery ?? 0) * 100)}% — keep going`,
+        subtitle: `${Math.round(
+          (weakest.avgMastery ?? 0) * 100,
+        )}% — keep going`,
         actionLabel: "View progress →",
       });
     }
