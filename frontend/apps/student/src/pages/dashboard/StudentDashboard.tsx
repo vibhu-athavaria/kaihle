@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good morning hi there";
+  if (hour < 12) return "Good morning";
   if (hour < 18) return "Good afternoon";
   return "Good evening";
 }
@@ -95,12 +95,12 @@ export function StudentDashboard() {
   // Build header content
   const headerContent = (
     <div>
-      <div className="font-sans text-[13px] font-medium text-[#1a2016]">
+      <div className="font-sans text-sm font-medium text-brand-ink">
         {greeting}
         {firstName ? `, ${firstName}` : ""} 👋
       </div>
       {gradeName && curriculumName && (
-        <div className="font-sans text-[10px] text-[#9ca3af]">
+        <div className="font-sans text-xs text-brand-muted">
           {gradeName} · {curriculumName}
         </div>
       )}
@@ -132,7 +132,7 @@ export function StudentDashboard() {
         {/* Subject Score Cards - 3 columns per spec */}
         {subjects.length > 0 && (
           <div>
-            <h2 className="font-sans text-[9px] font-bold uppercase tracking-[0.8px] text-[#a0a8a0] mb-3">
+            <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
               Your subjects
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -162,7 +162,7 @@ export function StudentDashboard() {
         {/* Class Cards - Per-class diagnostic locked/unlocked state */}
         {enrolledClasses.length > 0 && (
           <div>
-            <h2 className="font-sans text-[9px] font-bold uppercase tracking-[0.8px] text-[#a0a8a0] mb-3">
+            <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
               My classes
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -186,7 +186,7 @@ export function StudentDashboard() {
         {/* What's waiting for you */}
         {nextSteps.length > 0 && (
           <div>
-            <h2 className="font-sans text-[9px] font-bold uppercase tracking-[0.8px] text-[#a0a8a0] mb-3">
+            <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
               What's waiting for you
             </h2>
             <div className="space-y-2">

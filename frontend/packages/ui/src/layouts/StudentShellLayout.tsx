@@ -78,13 +78,15 @@ export function StudentShellLayout({
                 key={item.key}
                 onClick={() => onNavClick?.(item.key)}
                 className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 ${
-                  isActive ? "text-[#1a5c38] font-semibold" : "text-[#6b7280]"
+                  isActive
+                    ? "bg-brand-green-light text-brand-primary font-semibold"
+                    : "text-brand-muted"
                 }`}
                 aria-current={isActive ? "page" : undefined}
               >
                 {isActive && (
                   <span
-                    className="w-[6px] h-[6px] rounded-full bg-[#1a5c38] flex-shrink-0"
+                    className="w-[6px] h-[6px] rounded-full bg-brand-primary flex-shrink-0"
                     aria-label="active"
                   />
                 )}
@@ -127,7 +129,7 @@ export function StudentShellLayout({
                     aria-hidden="true"
                   />
                   {cls.isLocked ? (
-                    <span className="text-[#c9932a]">🔒 {cls.name}</span>
+                    <span className="text-brand-gold">🔒 {cls.name}</span>
                   ) : (
                     <span className="truncate flex items-center gap-1">
                       <span aria-hidden="true">◫</span>
@@ -144,17 +146,17 @@ export function StudentShellLayout({
         <div className="mt-auto px-3 py-3 border-t border-role-student-border">
           <div className="flex items-center gap-2">
             <div
-              className="w-[28px] h-[28px] rounded-full bg-[#dcfce7] flex items-center justify-center text-[10px] font-bold text-[#166534] flex-shrink-0"
+              className="w-[28px] h-[28px] rounded-full bg-brand-green-light flex items-center justify-center text-[10px] font-bold text-brand-primary flex-shrink-0"
               aria-label={`Profile avatar for ${studentName}`}
             >
               {studentInitials || studentName?.charAt(0) || "?"}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-semibold text-[#1a2016] truncate">
+              <div className="text-[11px] font-semibold text-brand-ink truncate">
                 {studentName}
               </div>
               {gradeInfo && (
-                <div className="text-[9px] text-[#9ca3af] truncate">
+                <div className="text-[9px] text-brand-muted truncate">
                   {gradeInfo}
                 </div>
               )}

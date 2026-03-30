@@ -37,9 +37,9 @@ export function ClassCard({
 
   // Determine dot color class based on status
   const getDotColorClass = () => {
-    if (isLocked) return "bg-brand-amber-500"; // amber for locked
-    if (isCompleted) return "bg-brand-green"; // green for completed
-    return "bg-brand-blue"; // blue for default (in-progress)
+    if (isLocked) return "bg-brand-gold"; // amber for locked
+    if (isCompleted) return "bg-brand-primary"; // green for completed
+    return "bg-brand-primary"; // default
   };
 
   return (
@@ -52,11 +52,13 @@ export function ClassCard({
     >
       {/* Header with dot and class name */}
       <div className="flex items-center gap-1.5 mb-1">
+        {" "}
+        Hi there
         <span
           className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${getDotColorClass()}`}
           aria-label={`Status indicator: ${isLocked ? "locked" : "unlocked"}`}
         />
-        <span className="text-[11px] font-semibold text-[#1a2016] truncate">
+        <span className="text-[11px] font-semibold text-brand-ink truncate">
           {subjectName}
         </span>
       </div>
@@ -70,7 +72,7 @@ export function ClassCard({
       {/* CTA Footer */}
       <div
         className={`text-[10px] font-semibold ${
-          isLocked ? "text-brand-amber-600" : "text-brand-green"
+          isLocked ? "text-brand-gold" : "text-brand-primary"
         }`}
       >
         {isLocked ? (

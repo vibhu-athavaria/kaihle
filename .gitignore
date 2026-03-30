@@ -13,6 +13,9 @@ venv
 # Node
 node_modules/
 dist/
+src/**/*.js
+src/**/*.js.map
+
 .cache/
 
 # IDE
@@ -32,3 +35,7 @@ backend/data/curriculum/curriculum_review.csv
 .kilocode/mcp.json
 mcp.json
 .pnpm-store
+
+
+# Vite cache
+node_modules/.vite

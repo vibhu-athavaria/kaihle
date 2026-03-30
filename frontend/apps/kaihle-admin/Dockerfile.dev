@@ -9,4 +9,4 @@ ENV PNPM_HOME=/root/.pnpm-store
 
 EXPOSE 3005
 
-CMD ["sh", "-c", "pnpm install --config.confirmModulesPurge=false && pnpm dev:kaihle-admin"]
+CMD ["sh", "-c", "rm -rf /app/apps/kaihle-admin/node_modules/.vite && pnpm install --config.confirmModulesPurge=false && pnpm dev:kaihle-admin"]
