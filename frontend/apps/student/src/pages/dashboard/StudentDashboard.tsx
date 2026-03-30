@@ -14,6 +14,9 @@ function getGreeting(): string {
   return "Good evening";
 }
 
+/**
+ * Converts a name to initials (e.g., "John Doe" -> "JD", "Alice" -> "A")
+ */
 function getInitials(name: string): string {
   const parts = name?.split(" ") || [];
   if (parts.length >= 2) {
@@ -22,23 +25,32 @@ function getInitials(name: string): string {
   return name?.charAt(0) || "";
 }
 
+/**
+ * Creates an onNavClick handler that navigates to the appropriate student route
+ */
+function createNavHandler(navigate: ReturnType<typeof useNavigate>) {
+  return (nav: "home" | "progress" | "study" | "assessments") => {
+    if (nav === "home") navigate("/student/dashboard");
+    else if (nav === "progress") navigate("/student/my-progress");
+    else if (nav === "study") navigate("/student/study-plans");
+    else if (nav === "assessments") navigate("/student/assessments");
+  };
+}
+
 export function StudentDashboard() {
   const { logout } = useAuth();
   const { data, isLoading, isError } = useStudentDashboard();
   const { status: onboardingStatus } = useOnboardingStatus();
   const navigate = useNavigate();
 
+  const handleNavClick = createNavHandler(navigate);
+
   if (isError) {
     return (
       <StudentShellLayout
         activeNav="home"
         onLogout={logout}
-        onNavClick={(nav) => {
-          if (nav === "home") navigate("/student/dashboard");
-          else if (nav === "progress") navigate("/student/my-progress");
-          else if (nav === "study") navigate("/student/study-plans");
-          else if (nav === "assessments") navigate("/student/assessments");
-        }}
+        onNavClick={handleNavClick}
       >
         <div className="text-center py-8">
           <p className="text-brand-red">
@@ -52,7 +64,6 @@ export function StudentDashboard() {
 
   const greeting = getGreeting();
   const firstName = data?.studentInfo.firstName || "";
-  const fullName = data?.studentInfo.firstName || "";
   const gradeName = data?.studentInfo.gradeName || "";
   const curriculumName = data?.studentInfo.curriculumName || "";
   const studyPlans = data?.studyPlans || [];
@@ -84,12 +95,12 @@ export function StudentDashboard() {
   // Build header content
   const headerContent = (
     <div>
-      <div className="font-sans text-sm font-medium text-brand-ink">
+      <div className="font-sans text-[13px] font-medium text-[#1a2016]">
         {greeting}
         {firstName ? `, ${firstName}` : ""} 👋
       </div>
       {gradeName && curriculumName && (
-        <div className="font-sans text-[10px] text-brand-muted">
+        <div className="font-sans text-[10px] text-[#9ca3af]">
           {gradeName} · {curriculumName}
         </div>
       )}
@@ -100,19 +111,14 @@ export function StudentDashboard() {
     <StudentShellLayout
       activeNav="home"
       headerContent={headerContent}
-      studentName={fullName || "Student"}
-      studentInitials={getInitials(fullName)}
+      studentName={firstName || "Student"}
+      studentInitials={getInitials(firstName)}
       gradeInfo={
         gradeName ? `${gradeName} · ${curriculumName}` : curriculumName
       }
       classes={sidebarClasses}
       onLogout={logout}
-      onNavClick={(nav) => {
-        if (nav === "home") navigate("/student/dashboard");
-        else if (nav === "progress") navigate("/student/my-progress");
-        else if (nav === "study") navigate("/student/study-plans");
-        else if (nav === "assessments") navigate("/student/assessments");
-      }}
+      onNavClick={handleNavClick}
       onClassClick={(classId) => {
         const cls = enrolledClasses.find((c) => c.class_id === classId);
         if (cls && (cls.status === "PENDING" || cls.status === "IN_PROGRESS")) {
@@ -126,7 +132,7 @@ export function StudentDashboard() {
         {/* Subject Score Cards - 3 columns per spec */}
         {subjects.length > 0 && (
           <div>
-            <h2 className="font-sans text-[9px] font-bold uppercase tracking-widest text-brand-muted mb-3">
+            <h2 className="font-sans text-[9px] font-bold uppercase tracking-[0.8px] text-[#a0a8a0] mb-3">
               Your subjects
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -156,7 +162,7 @@ export function StudentDashboard() {
         {/* Class Cards - Per-class diagnostic locked/unlocked state */}
         {enrolledClasses.length > 0 && (
           <div>
-            <h2 className="font-sans text-[9px] font-bold uppercase tracking-widest text-brand-muted mb-3">
+            <h2 className="font-sans text-[9px] font-bold uppercase tracking-[0.8px] text-[#a0a8a0] mb-3">
               My classes
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -169,12 +175,8 @@ export function StudentDashboard() {
                       key={cls.class_id}
                       classId={cls.class_id}
                       subjectName={cls.class_name}
-                      gradeName={gradeName}
                       teacherName="Your Teacher"
                       diagnosticStatus={cls.status}
-                      hasNewMessages={false}
-                      hasNewProgressCheck={false}
-                      topicCount={0}
                     />
                   ))}
             </div>
@@ -184,7 +186,7 @@ export function StudentDashboard() {
         {/* What's waiting for you */}
         {nextSteps.length > 0 && (
           <div>
-            <h2 className="font-sans text-[9px] font-bold uppercase tracking-widest text-brand-muted mb-3">
+            <h2 className="font-sans text-[9px] font-bold uppercase tracking-[0.8px] text-[#a0a8a0] mb-3">
               What's waiting for you
             </h2>
             <div className="space-y-2">
@@ -212,7 +214,7 @@ export function StudentDashboard() {
           enrolledClasses.length === 0 &&
           subjects.length === 0 && (
             <div>
-              <h2 className="font-sans text-[9px] font-bold uppercase tracking-widest text-brand-muted mb-3">
+              <h2 className="font-sans text-[9px] font-bold uppercase tracking-[0.8px] text-[#a0a8a0] mb-3">
                 Keep going
               </h2>
               <EmptyNextSteps />

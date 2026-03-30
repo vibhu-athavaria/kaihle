@@ -6,14 +6,8 @@ export type DiagnosticStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED";
 export interface ClassCardProps {
   classId: string;
   subjectName: string;
-  gradeName: string;
   teacherName: string;
   diagnosticStatus: DiagnosticStatus;
-  hasNewMessages: boolean;
-  hasNewProgressCheck: boolean;
-  topicCount?: number;
-  /** Color dot for the class card - defaults based on status */
-  dotColor?: string;
   /** Student count for the class */
   studentCount?: number;
 }
@@ -21,13 +15,8 @@ export interface ClassCardProps {
 export function ClassCard({
   classId,
   subjectName,
-  gradeName: _gradeName,
   teacherName,
   diagnosticStatus,
-  hasNewMessages: _hasNewMessages,
-  hasNewProgressCheck: _hasNewProgressCheck,
-  topicCount: _topicCount,
-  dotColor,
   studentCount,
 }: ClassCardProps) {
   const navigate = useNavigate();
@@ -46,30 +35,28 @@ export function ClassCard({
     }
   };
 
-  // Determine dot color based on status or prop
-  const getDotColor = () => {
-    if (dotColor) return dotColor;
-    if (isLocked) return "#dc2626"; // red for locked
-    if (isCompleted) return "#1a5c38"; // green for completed
-    return "#2563eb"; // blue for default
+  // Determine dot color class based on status
+  const getDotColorClass = () => {
+    if (isLocked) return "bg-brand-amber-500"; // amber for locked
+    if (isCompleted) return "bg-brand-green"; // green for completed
+    return "bg-brand-blue"; // blue for default (in-progress)
   };
 
   return (
     <button
       type="button"
       onClick={handleClick}
-      className={`w-full text-left bg-white rounded-xl border border-brand-border p-3 transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 ${
+      className={`w-full text-left bg-white rounded-[10px] border border-brand-border p-3 transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[44px] ${
         isLocked ? "opacity-60" : ""
       }`}
     >
       {/* Header with dot and class name */}
       <div className="flex items-center gap-1.5 mb-1">
         <span
-          className="w-[7px] h-[7px] rounded-full flex-shrink-0"
-          style={{ backgroundColor: getDotColor() }}
+          className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${getDotColorClass()}`}
           aria-label={`Status indicator: ${isLocked ? "locked" : "unlocked"}`}
         />
-        <span className="text-[11px] font-semibold text-brand-ink truncate">
+        <span className="text-[11px] font-semibold text-[#1a2016] truncate">
           {subjectName}
         </span>
       </div>
@@ -83,7 +70,7 @@ export function ClassCard({
       {/* CTA Footer */}
       <div
         className={`text-[10px] font-semibold ${
-          isLocked ? "text-brand-gold" : "text-brand-primary"
+          isLocked ? "text-brand-amber-600" : "text-brand-green"
         }`}
       >
         {isLocked ? (

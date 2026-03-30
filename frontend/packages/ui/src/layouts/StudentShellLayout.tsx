@@ -64,7 +64,7 @@ export function StudentShellLayout({
 
         {/* Learn section */}
         <div className="px-3 pt-3 pb-1">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-brand-muted">
+          <span className="text-[9px] font-bold uppercase tracking-[0.8px] text-[#a0a8a0]">
             Learn
           </span>
         </div>
@@ -78,15 +78,13 @@ export function StudentShellLayout({
                 key={item.key}
                 onClick={() => onNavClick?.(item.key)}
                 className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 ${
-                  isActive
-                    ? "bg-brand-light text-brand-primary font-semibold"
-                    : "text-brand-muted hover:text-brand-ink hover:bg-brand-border-soft"
+                  isActive ? "text-[#1a5c38] font-semibold" : "text-[#6b7280]"
                 }`}
                 aria-current={isActive ? "page" : undefined}
               >
                 {isActive && (
                   <span
-                    className="w-1.5 h-1.5 rounded-full bg-brand-primary flex-shrink-0"
+                    className="w-[6px] h-[6px] rounded-full bg-[#1a5c38] flex-shrink-0"
                     aria-label="active"
                   />
                 )}
@@ -110,7 +108,7 @@ export function StudentShellLayout({
         {classes.length > 0 && (
           <>
             <div className="px-3 pt-4 pb-1">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-brand-muted">
+              <span className="text-[9px] font-bold uppercase tracking-[0.8px] text-[#a0a8a0]">
                 Classes
               </span>
             </div>
@@ -119,18 +117,22 @@ export function StudentShellLayout({
                 <button
                   key={cls.id}
                   onClick={() => onClassClick?.(cls.id)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-brand-muted hover:text-brand-ink hover:bg-brand-border-soft transition-colors min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-[#6b7280] hover:text-brand-ink hover:bg-brand-border-soft transition-colors min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
                 >
                   <span
-                    className="w-4 text-center text-[13px]"
+                    className="w-[7px] h-[7px] rounded-full flex-shrink-0"
+                    style={{
+                      backgroundColor: cls.isLocked ? "#c9932a" : "#1a5c38",
+                    }}
                     aria-hidden="true"
-                  >
-                    ◫
-                  </span>
+                  />
                   {cls.isLocked ? (
-                    <span className="text-brand-gold">🔒 {cls.name}</span>
+                    <span className="text-[#c9932a]">🔒 {cls.name}</span>
                   ) : (
-                    <span className="truncate">{cls.name}</span>
+                    <span className="truncate flex items-center gap-1">
+                      <span aria-hidden="true">◫</span>
+                      <span>{cls.name}</span>
+                    </span>
                   )}
                 </button>
               ))}
@@ -142,17 +144,17 @@ export function StudentShellLayout({
         <div className="mt-auto px-3 py-3 border-t border-role-student-border">
           <div className="flex items-center gap-2">
             <div
-              className="w-7 h-7 rounded-full bg-brand-light flex items-center justify-center text-[10px] font-bold text-brand-primary flex-shrink-0"
+              className="w-[28px] h-[28px] rounded-full bg-[#dcfce7] flex items-center justify-center text-[10px] font-bold text-[#166534] flex-shrink-0"
               aria-label={`Profile avatar for ${studentName}`}
             >
               {studentInitials || studentName?.charAt(0) || "?"}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-semibold text-brand-ink truncate">
+              <div className="text-[11px] font-semibold text-[#1a2016] truncate">
                 {studentName}
               </div>
               {gradeInfo && (
-                <div className="text-[9px] text-brand-muted truncate">
+                <div className="text-[9px] text-[#9ca3af] truncate">
                   {gradeInfo}
                 </div>
               )}
@@ -161,7 +163,7 @@ export function StudentShellLayout({
           {onLogout && (
             <button
               onClick={onLogout}
-              className="mt-2 w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-brand-muted hover:text-brand-red transition-colors min-h-[36px] rounded-md hover:bg-brand-red/5 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+              className="mt-2 w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-brand-muted hover:text-brand-red transition-colors min-h-[44px] rounded-md hover:bg-brand-red/5 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
             >
               <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Logout</span>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kaihle — Teacher Dashboard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;background:#f0f0f0;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.shell{display:flex;height:560px;border:0.5px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#f5f7f1;width:860px;box-shadow:0 4px 24px rgba(0,0,0,0.08)}
+.sidebar{width:200px;background:#fff;border-right:0.5px solid #e5e7eb;display:flex;flex-direction:column;flex-shrink:0}
+.sb-logo{padding:14px 16px;border-bottom:0.5px solid #e5e7eb;font-size:15px;font-weight:600;color:#1a2016;letter-spacing:-0.3px}
+.sb-logo span{font-style:italic;color:#c9932a}
+.sb-section{padding:14px 8px 4px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#a0a8a0;padding-left:14px}
+.sb-item{display:flex;align-items:center;gap:8px;padding:7px 12px;margin:1px 6px;border-radius:6px;font-size:12px;color:#6b7280;cursor:default}
+.sb-item.active{background:#fffbeb;color:#92400e;font-weight:600}
+.sb-item .dot{width:6px;height:6px;border-radius:50%;background:#c9932a;flex-shrink:0}
+.sb-item .icon{font-size:13px;width:16px;text-align:center}
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.topnav{height:50px;background:#fff;border-bottom:0.5px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;padding:0 18px;flex-shrink:0}
+.topnav-left{font-size:13px;color:#6b7280}
+.topnav-left strong{color:#1a2016;font-size:13px}
+.btn-gold{background:#c9932a;color:#fff;border:none;border-radius:20px;padding:5px 13px;font-size:11px;font-weight:600;cursor:default}
+.avatar{width:28px;height:28px;border-radius:50%;background:#f5ead0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#92400e}
+.topnav-right{display:flex;align-items:center;gap:10px}
+.content{padding:18px;flex:1}
+.section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#a0a8a0;margin-bottom:10px}
+.banner{background:#fffbeb;border:1px solid #e8c97a;border-radius:10px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+.banner-left{display:flex;align-items:center;gap:8px}
+.banner-icon{font-size:14px}
+.banner-text{font-size:11px;color:#92400e}
+.banner-text strong{font-weight:600}
+.banner-link{font-size:11px;font-weight:600;color:#c9932a;white-space:nowrap}
+.cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+.class-card{background:#fff;border:0.5px solid #e5e7eb;border-radius:10px;padding:12px}
+.card-top{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.subj-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.card-name{font-size:12px;font-weight:600;color:#1a2016}
+.grade-pill{font-size:9px;font-weight:600;background:#f3f4f6;color:#6b7280;padding:1px 6px;border-radius:8px;margin-left:auto}
+.card-meta{font-size:10px;color:#6b7280;margin-bottom:6px}
+.mastery-row{display:flex;align-items:center;gap:5px;margin-bottom:8px}
+.mastery-pct{font-size:13px;font-weight:700}
+.mastery-label{font-size:9px;font-weight:600;padding:1px 6px;border-radius:6px}
+.green-text{color:#16a34a}.green-bg{background:#dcfce7;color:#166534}
+.amber-text{color:#c9932a}.amber-bg{background:#fef3c7;color:#92400e}
+.red-text{color:#ef4444}.red-bg{background:#fee2e2;color:#991b1b}
+.card-divider{border:none;border-top:0.5px solid #f3f4f6;margin-bottom:8px}
+.card-links{display:flex;gap:10px}
+.card-link{font-size:10px;font-weight:600;color:#c9932a}
+.this-week{background:#fff;border:0.5px solid #d4e4d8;border-radius:10px;padding:12px}
+.tw-header{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.tw-icon{font-size:13px}
+.tw-title{font-size:12px;font-weight:600;color:#1a2016}
+.tw-sub{font-size:10px;color:#6b7280;margin-bottom:8px}
+.tw-link{font-size:10px;font-weight:600;color:#c9932a}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="sidebar">
+    <div class="sb-logo">K<span>aihle</span></div>
+    <div class="sb-section">My classes</div>
+    <div class="sb-item active"><span class="dot"></span><span>Dashboard</span></div>
+    <div class="sb-item"><span class="icon">◫</span><span>Gap map</span></div>
+    <div class="sb-item"><span class="icon">✓</span><span>Assessments</span></div>
+    <div class="sb-item"><span class="icon">☰</span><span>Lesson plans</span></div>
+    <div class="sb-section">Students</div>
+    <div class="sb-item"><span class="icon">♟</span><span>My students</span></div>
+  </div>
+  <div class="main">
+    <div class="topnav">
+      <div class="topnav-left">Good morning, <strong>Ms. Ravi</strong></div>
+      <div class="topnav-right">
+        <button class="btn-gold">+ Assessment</button>
+        <div class="avatar">SR</div>
+      </div>
+    </div>
+    <div class="content">
+      <div class="banner">
+        <div class="banner-left">
+          <span class="banner-icon">⚠</span>
+          <span class="banner-text"><strong>4 students need study plans</strong> assigned in Mathematics 9B</span>
+        </div>
+        <span class="banner-link">Go to Gap Map →</span>
+      </div>
+      <div class="section-label">My classes</div>
+      <div class="cards-grid">
+        <div class="class-card">
+          <div class="card-top">
+            <span class="subj-dot" style="background:#1a5c38"></span>
+            <span class="card-name">Maths 9B</span>
+            <span class="grade-pill">Gr 9</span>
+          </div>
+          <div class="card-meta">28 students · Cambridge IGCSE</div>
+          <div class="mastery-row">
+            <span class="mastery-pct amber-text">61%</span>
+            <span class="mastery-label amber-bg">Developing</span>
+          </div>
+          <hr class="card-divider">
+          <div class="card-links">
+            <span class="card-link">Gap map →</span>
+            <span class="card-link">Assessments →</span>
+          </div>
+        </div>
+        <div class="class-card">
+          <div class="card-top">
+            <span class="subj-dot" style="background:#1a5c38"></span>
+            <span class="card-name">Maths 8A</span>
+            <span class="grade-pill">Gr 8</span>
+          </div>
+          <div class="card-meta">24 students · Cambridge Lower</div>
+          <div class="mastery-row">
+            <span class="mastery-pct green-text">74%</span>
+            <span class="mastery-label green-bg">Strong</span>
+          </div>
+          <hr class="card-divider">
+          <div class="card-links">
+            <span class="card-link">Gap map →</span>
+            <span class="card-link">Assessments →</span>
+          </div>
+        </div>
+        <div class="class-card">
+          <div class="card-top">
+            <span class="subj-dot" style="background:#dc2626"></span>
+            <span class="card-name">English 7C</span>
+            <span class="grade-pill">Gr 7</span>
+          </div>
+          <div class="card-meta">22 students · Cambridge Lower</div>
+          <div class="mastery-row">
+            <span class="mastery-pct red-text">38%</span>
+            <span class="mastery-label red-bg">Needs work</span>
+          </div>
+          <hr class="card-divider">
+          <div class="card-links">
+            <span class="card-link">Gap map →</span>
+            <span class="card-link">Assessments →</span>
+          </div>
+        </div>
+      </div>
+      <div class="section-label">This week</div>
+      <div class="this-week">
+        <div class="tw-header">
+          <span class="tw-icon">📖</span>
+          <span class="tw-title">Lesson plan ready · Maths 9B</span>
+          <span class="tw-link" style="margin-left:auto">View plan →</span>
+        </div>
+        <div class="tw-sub">Covers: Algebra — linear equations, Statistics — data interpretation</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
