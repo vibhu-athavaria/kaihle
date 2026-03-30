@@ -4,16 +4,9 @@ WORKDIR /app
 
 RUN npm install -g pnpm
 
-COPY package.json pnpm-workspace.yaml* ./
-COPY apps/kaihle-admin/package.json apps/kaihle-admin/
-COPY packages/ui/package.json packages/ui/
-COPY packages/api-client/package.json packages/api-client/
-COPY packages/auth/package.json packages/auth/
-COPY packages/types/package.json packages/types/
-
-RUN pnpm install
-
-COPY . .
+# Store lives outside the bind-mounted volume — avoids VirtioFS hard-link failures
+ENV PNPM_HOME=/root/.pnpm-store
 
 EXPOSE 3005
-CMD ["pnpm", "dev:kaihle-admin"]
+
+CMD ["sh", "-c", "pnpm install --config.confirmModulesPurge=false && pnpm dev:kaihle-admin"]

@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
+  if (hour < 12) return "Good morning hi there";
   if (hour < 18) return "Good afternoon";
   return "Good evening";
 }

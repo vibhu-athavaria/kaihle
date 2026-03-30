@@ -86,9 +86,10 @@ services:
       - "3001:3001"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
     environment:
       VITE_API_URL: http://localhost:8000
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
 
   frontend-student:
     build:
@@ -99,9 +100,10 @@ services:
       - "3002:3002"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
     environment:
       VITE_API_URL: http://localhost:8000
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
 
   frontend-parent:
     build:
@@ -112,9 +114,10 @@ services:
       - "3003:3003"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
     environment:
       VITE_API_URL: http://localhost:8000
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
 
   frontend-school-admin:
     build:
@@ -125,9 +128,10 @@ services:
       - "3004:3004"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
     environment:
       VITE_API_URL: http://localhost:8000
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
 
   frontend-kaihle-admin:
     build:
@@ -138,9 +142,10 @@ services:
       - "3005:3005"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
     environment:
       VITE_API_URL: http://localhost:8000
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
 
 volumes:
   postgres_data:
