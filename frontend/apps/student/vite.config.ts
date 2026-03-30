@@ -4,10 +4,15 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 3002,
-    host: true,
-    headers: {
-      "Cache-Control": "no-cache, no-store, must-revalidate",
+    host: "0.0.0.0", // reachable from outside container
+    port: 3002, // must match docker-compose port mapping
+    hmr: {
+      host: "localhost", // ← browser connects back through Docker port mapping
+      port: 3002,
+    },
+    watch: {
+      usePolling: true, // fixes macOS Docker Desktop file event issue
+      interval: 1000, // poll every 1s — balance between responsiveness and CPU
     },
   },
 });

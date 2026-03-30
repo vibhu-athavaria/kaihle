@@ -4,16 +4,9 @@ WORKDIR /app
 
 RUN npm install -g pnpm
 
-COPY package.json pnpm-workspace.yaml* ./
-COPY apps/parent/package.json apps/parent/
-COPY packages/ui/package.json packages/ui/
-COPY packages/api-client/package.json packages/api-client/
-COPY packages/auth/package.json packages/auth/
-COPY packages/types/package.json packages/types/
-
-RUN pnpm install
-
-COPY . .
+# Store lives outside the bind-mounted volume — avoids VirtioFS hard-link failures
+ENV PNPM_HOME=/root/.pnpm-store
 
 EXPOSE 3003
-CMD ["pnpm", "dev:parent"]
+
+CMD ["sh", "-c", "rm -rf /app/apps/parent/node_modules/.vite && pnpm install --config.confirmModulesPurge=false && pnpm dev:parent"]

@@ -1,10 +1,17 @@
 # Kaihle Design System
-**Version:** 2.0 · March 2026
+**Version:** 2.1 · March 2026
 **Authority:** Single source of truth for all frontend visual decisions.
 **Load this file alongside CONSTITUTION.md for every frontend task.**
 
 > Every coding agent implementing a frontend task MUST read this entire file before writing
 > any component or Tailwind class. Do not invent colors, fonts, or layout patterns.
+
+**v2.1 changes from v2.0:**
+- §5.4 Student layout updated: sidebar added (replaces top nav tabs + bottom nav)
+- §5.5 Parent layout updated: sidebar added (replaces minimal top nav only)
+- §6 Layout Architecture Summary updated for both roles
+- §6 Sidebar Active State table now covers all five roles
+- Child selector for Parent moved from page content into sidebar
 
 ---
 
@@ -86,7 +93,7 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
 |---|---|---|
 | `font-sans` | Nunito | ALL roles — body, labels, buttons, nav |
 | `font-display` | Fraunces | School Admin, Teacher, Student (headings only) |
-| `font-['Lora']` | Lora | Parent ONLY — narrative text and headings |
+| `font-['Lora']` | Lora | Parent ONLY — narrative text, headings, sidebar logo |
 | `font-['Inter']` | Inter | Kaihle Admin ONLY — all text, no serifs |
 
 **Google Fonts import — add to EVERY app's `src/index.css` above Tailwind directives:**
@@ -199,13 +206,15 @@ Always `aria-hidden="true"` on decorative icons. Never icon-only interactive ele
 
 ```
 bg-white border-r border-role-admin-border
-Logo mark: bg-role-admin-mark (gray-700) rounded-lg
+Logo mark: bg-role-admin-mark (gray-700) rounded-lg w-26px h-26px
+           "K" text-white text-xs font-bold
+           Next to mark: "Kaihle" text-sm font-semibold + "Admin panel" text-xs muted
 Nav active: bg-gray-100 text-role-admin-ink + w-1.5 h-1.5 rounded-full bg-brand-primary dot
 Nav hover:  bg-gray-50 text-role-admin-ink
 Nav base:   text-role-admin-subtle
 ```
 
-Active indicator: small **green dot** before the label. No background stripe.
+Active indicator: small **green dot** (`w-1.5 h-1.5 rounded-full bg-brand-primary`) before the label. No background stripe.
 
 #### Buttons
 
@@ -221,59 +230,49 @@ Secondary: bg-gray-100 text-role-admin-ink hover:bg-gray-200 rounded-full
 
 **Feeling:** Strategic oversight. Trustworthy, brand-connected, professional.
 **Layout:** Left sidebar + top nav + content (`DashboardLayout variant="school-admin"`).
+**Primary font:** Fraunces for headings, Nunito for body.
 
 #### Palette
 
 | Token | Hex | Usage |
 |---|---|---|
-| `role-school-bg` | `#f5f7f1` | Page background — brand cream |
+| `role-school-bg` | `#f5f7f1` | Page background — green tint |
 | `role-school-sidebar` | `#ffffff` | Sidebar |
-| `role-school-border` | `#d4e4d8` | Borders — green-tinted |
+| `role-school-border` | `#d4e4d8` | All borders — green tinted |
 | `role-school-muted` | `#6b9e79` | Section labels — muted green |
-| `role-school-subtle` | `#4a5240` | Inactive nav items |
-| `brand-primary` | `#1a5c38` | Active nav stripe, primary actions |
-| `brand-light` | `#e8f2ea` | Active nav tint |
-| `brand-gold` | `#c9932a` | Secondary actions, warnings |
-
-#### Typography
-
-| Element | Class |
-|---|---|
-| Page titles | `font-display font-bold text-2xl text-brand-ink` |
-| Nav brand | `font-display font-bold text-sm text-brand-ink` |
-| Section labels | `font-sans text-xs font-bold uppercase tracking-widest text-role-school-muted` |
-| Body | `font-sans text-sm text-role-school-subtle` |
+| `brand-primary` | `#1a5c38` | Buttons, active nav, progress bars |
+| `brand-light` | `#e8f2ea` | Active nav background tint |
 
 #### Sidebar spec
 
 ```
 bg-white border-r border-role-school-border
-Logo mark: bg-brand-primary italic Fraunces "K"
+Logo: font-display italic text-brand-ink (same Fraunces as headings)
 Nav active: border-l-[3px] border-brand-primary bg-brand-light text-brand-primary
-            (left stripe + green tint — the "authority stripe" pattern)
-            rounded-r-lg rounded-l-none
-Nav hover:  bg-brand-light/50 text-brand-ink
-Nav base:   text-role-school-subtle
+            rounded-r-lg rounded-l-none font-semibold
+            (left stripe — the defining visual for School Admin)
+Nav hover:  bg-brand-light/50 text-brand-primary
+Nav base:   text-role-school-muted
 ```
 
-Active indicator: **left border stripe** — `border-l-[3px] border-brand-primary`.
+Active indicator: **left green stripe** `border-l-[3px] border-brand-primary`. No dot.
 
 #### Buttons
 
 ```
 Primary:   bg-brand-primary text-white hover:bg-brand-dark rounded-full
-Secondary: bg-white text-brand-primary border border-brand-mid hover:bg-brand-light rounded-full
+Secondary: border border-role-school-border text-brand-primary hover:bg-brand-light rounded-full
+Danger:    border border-red-300 text-red-600 hover:bg-red-50 rounded-full
 ```
 
 ---
 
-### 5.3 Teacher — Focused Workspace
+### 5.3 Teacher — Warm Professional
 
-**Feeling:** Clean workspace. Data speaks; chrome disappears.
+**Feeling:** A craftsperson's workspace. Gold-accented, warm, purposeful.
 **Layout:** Left sidebar + top nav + content (`DashboardLayout variant="teacher"`).
-
-> **Key design rule:** Gold is the action color. Green is the data/success color.
-> NEVER use green buttons in the Teacher role — green means mastery, gold means action.
+**Primary font:** Fraunces for headings, Nunito for body.
+**⚠️ Gold is the action color. Green = mastery data ONLY. Never green buttons.**
 
 #### Palette
 
@@ -281,73 +280,59 @@ Secondary: bg-white text-brand-primary border border-brand-mid hover:bg-brand-li
 |---|---|---|
 | `role-teacher-bg` | `#f5f7f1` | Page background |
 | `role-teacher-sidebar` | `#ffffff` | Sidebar |
-| `role-teacher-border` | `#e5e7eb` | Borders — neutral gray |
-| `role-teacher-muted` | `#9ca3af` | Section labels, metadata |
-| `role-teacher-body` | `#4a5240` | Inactive nav, secondary text |
-| `brand-gold` | `#c9932a` | PRIMARY ACTION — buttons, active nav |
-| `brand-gold-light` | `#fffbeb` | Active nav tint |
+| `role-teacher-border` | `#e5e7eb` | All borders (neutral gray) |
+| `role-teacher-muted` | `#a0a8a0` | Section labels |
+| `brand-gold` | `#c9932a` | ALL teacher action buttons, active nav |
+| `brand-gold-light` | `#fffbeb` | Active nav tint background |
 | `brand-gold-dark` | `#92400e` | Text on gold tint |
-| `brand-primary` | `#1a5c38` | SUCCESS DATA ONLY — never for buttons |
-| `brand-ink` | `#1a2016` | Primary text |
-
-#### Typography
-
-| Element | Class |
-|---|---|
-| Page titles | `font-display font-bold text-2xl text-brand-ink` |
-| Nav brand | `font-display font-bold text-sm text-brand-ink` |
-| Section labels | `font-sans text-xs font-bold uppercase tracking-widest text-role-teacher-muted` |
-| Body | `font-sans text-sm text-role-teacher-body` |
+| `brand-green` | `#16a34a` | Mastery Strong ONLY — never buttons |
 
 #### Sidebar spec
 
 ```
 bg-white border-r border-role-teacher-border
-Logo mark: bg-brand-primary italic Fraunces "K"
-Nav active: bg-brand-gold-light text-brand-gold-dark font-bold
-            (gold tint fill — NO border stripe, distinct from School Admin)
+Logo: font-display italic text-brand-ink — "Kaihle" wordmark
+Nav active: bg-[#fffbeb] text-brand-gold-dark font-bold
+            (gold tint fill — the defining visual for Teacher)
 Nav hover:  bg-gray-50 text-brand-ink
-Nav base:   text-role-teacher-body
+Nav base:   text-brand-muted
 ```
 
-Active indicator: **gold tint background only** — no stripe. This is the visual distinction
-from School Admin (stripe = authority, tint = workspace).
+Active indicator: **gold tint fill** `bg-[#fffbeb] text-brand-gold-dark`. No stripe. No dot.
+
+Pending action indicator on nav item: amber dot `w-2 h-2 rounded-full bg-brand-gold ml-auto`.
 
 #### Buttons
 
 ```
-Primary:   bg-brand-gold text-white hover:bg-amber-600 rounded-full
-           (teacher taking action — gold = "you do something")
-Secondary: bg-white text-brand-ink border border-role-teacher-border hover:bg-gray-50 rounded-full
-Positive:  bg-brand-primary text-white hover:bg-brand-dark rounded-full
-           (only when confirming success — "Publish", "Mark as used")
+Primary action: bg-brand-gold text-white hover:bg-brand-gold-dark rounded-full
+                (e.g. [+ Assessment] in topbar)
+Publish:        bg-brand-primary text-white rounded-full
+                (exception: publishing = confirming success — green is correct here)
+Secondary:      border border-role-teacher-border text-brand-ink rounded-full
+Danger:         border border-red-300 text-red-600 hover:bg-red-50 rounded-full
 ```
 
 ---
 
 ### 5.4 Student — Airy & Encouraging
 
-**Feeling:** Lightweight learning companion. Mobile-first, encouraging, app-like.
-**Layout:** TOP NAV ONLY — no sidebar. Bottom nav on mobile (`StudentLayout`).
+**Feeling:** App-like. Clean, light, mobile-first. Progress is celebrated.
+**Layout:** Left sidebar + top nav + content (`StudentLayout`).
+**⚠️ v2.1 change: Student now has a sidebar. Previous spec (top nav tabs + bottom nav) is superseded.**
+**Primary font:** Fraunces for headings, Nunito for body. Green action color.
 
 #### Palette
 
 | Token | Hex | Usage |
 |---|---|---|
 | `role-student-bg` | `#f9fafb` | Page background — cool near-white |
+| `role-student-sidebar` | `#ffffff` | Sidebar |
 | `role-student-border` | `#e5e7eb` | Card borders, dividers |
-| `brand-primary` | `#1a5c38` | Strong mastery, positive actions |
-| `brand-light` | `#e8f2ea` | Strong mastery card borders/tints |
-| `brand-mid` | `#b5d4bc` | Strong mastery card border (colored-border cards) |
-| `brand-gold` | `#c9932a` | Developing mastery, achievement moments |
-| `brand-gold-light` | `#f5ead0` | Developing card border tint |
-| `brand-gold-mid` | `#e8c97a` | Developing card border |
-| `brand-red` | `#ef4444` | Needs Work |
-| `brand-red-light` | `#fee2e2` | Needs Work tint |
-| `brand-ink` | `#1a2016` | Primary text |
-| `brand-muted` | `#9ca3af` | Secondary labels |
+| `brand-primary` | `#1a5c38` | Action buttons, active nav, links |
+| `brand-green-light` | `#f0fdf4` | Active nav tint background |
 
-> Why `#f9fafb` (slightly cool) rather than `#f5f7f1` (warm cream)?
+> Why cool near-white for students?
 > Students respond to cleaner, app-like surfaces. The cream belongs to the teacher
 > professional workspace. Students are in Duolingo territory — crisp white-adjacent.
 
@@ -360,6 +345,73 @@ Positive:  bg-brand-primary text-white hover:bg-brand-dark rounded-full
 | Score values | `font-sans font-extrabold text-2xl` + mastery color class |
 | Body | `font-sans text-sm text-brand-body` |
 | Card titles | `font-sans font-semibold text-base text-brand-ink` |
+| Sidebar nav items | `font-sans text-sm text-brand-muted` |
+
+#### Sidebar spec
+
+```
+bg-white border-r border-role-student-border w-[200px] flex-shrink-0
+Logo row:     h-[50px] px-4 border-b border-role-student-border
+              font-display italic text-brand-ink text-[15px] font-semibold
+              "Kaihle" wordmark
+
+Section labels: px-3.5 pt-4 pb-1 text-[9px] font-bold uppercase tracking-[0.8px]
+                text-role-teacher-muted (reuse muted gray — not green)
+
+Nav items:    px-3 py-[7px] mx-[6px] rounded-[6px] text-[12px] gap-2
+              Base:   text-brand-muted
+              Hover:  bg-gray-50 text-brand-ink
+              Active: bg-[#f0fdf4] text-brand-primary font-semibold
+                      + w-[6px] h-[6px] rounded-full bg-brand-primary dot (left of label)
+
+Class items in sidebar:
+  Unlocked: subject color dot + class name — text-brand-muted, nav item hover
+  Locked:   lock icon + class name — text-brand-gold (amber warning), no hover nav behavior
+            Locked items route to /student/classes/{classId}/diagnostic
+
+Profile card at sidebar bottom:
+  border-t border-role-student-border px-3.5 py-3 mt-auto
+  flex items-center gap-2
+  Avatar: w-[28px] h-[28px] rounded-full bg-brand-green-light
+          text-[10px] font-bold text-brand-primary (initials)
+  Name: text-[11px] font-semibold text-brand-ink
+  Grade + curriculum: text-[9px] text-brand-muted
+```
+
+Active indicator: **green tint fill** `bg-[#f0fdf4]` + small **green dot** `bg-brand-primary`.
+
+#### Navigation sections
+
+```
+Section: LEARN
+  Home          → /student/dashboard
+  My progress   → /student/my-progress
+  Study plans   → /student/study-plans
+  Assessments   → /student/assessments
+
+Section: CLASSES
+  [Subject dot] [Class name]   → /student/classes/:classId/topics    (unlocked)
+  [Lock icon]   [Class name]   → /student/classes/:classId/diagnostic (locked, amber text)
+  (one item per enrolled class — dynamic list from API)
+```
+
+Settings: accessed via avatar/profile icon in top nav — NOT a sidebar item.
+
+#### Top nav spec
+
+```
+h-[50px] bg-white border-b border-role-student-border
+px-[18px] flex items-center justify-between
+
+Left:  Greeting text (font-sans font-medium text-[13px] text-brand-ink)
+       e.g. "Good morning, Aditya 👋"
+       Sub: grade + curriculum (font-sans text-[10px] text-brand-muted)
+
+Right: Avatar (w-[28px] h-[28px] rounded-full bg-brand-green-light)
+       Click → settings page
+```
+
+**No horizontal nav tabs in top nav. No bottom nav. Sidebar is the sole navigation.**
 
 #### Subject Score Cards (colored-border pattern)
 
@@ -376,18 +428,6 @@ Positive:  bg-brand-primary text-white hover:bg-brand-dark rounded-full
 </div>
 ```
 
-#### Layout spec
-
-```
-Top nav:     h-14 bg-white border-b border-role-student-border
-             Left: font-display "Kaihle" + subject tabs (active = brand-primary underline)
-             Right: avatar
-Content:     bg-role-student-bg p-4 md:p-6 pb-20 (bottom nav clearance on mobile)
-Bottom nav:  md:hidden fixed bottom-0 w-full h-16 bg-white border-t border-role-student-border
-             4 items: Home, Progress, Study Plans, Assessments
-             Active: text-brand-primary (no background fill)
-```
-
 #### Buttons
 
 ```
@@ -402,8 +442,9 @@ Secondary: bg-white text-brand-ink border border-role-student-border rounded-ful
 ### 5.5 Parent — Warm & Readable
 
 **Feeling:** Warm editorial. A letter from school, not a dashboard.
-**Layout:** MINIMAL TOP NAV — no sidebar, no bottom nav (`ParentLayout`).
-**Primary display font:** Lora (narrative text + headings). Nunito for labels/buttons.
+**Layout:** Left sidebar + top nav + content (`ParentLayout`).
+**⚠️ v2.1 change: Parent now has a sidebar. Previous spec (minimal top nav only) is superseded.**
+**Primary display font:** Lora (narrative text, headings, sidebar logo). Nunito for labels/buttons.
 
 #### Palette
 
@@ -412,10 +453,11 @@ Secondary: bg-white text-brand-ink border border-role-student-border rounded-ful
 | `role-parent-bg` | `#fdf8f0` | Page background — warm cream |
 | `role-parent-card` | `#ffffff` | Card surfaces |
 | `role-parent-border` | `#e8dcc8` | Borders — warm sand |
+| `role-parent-sidebar` | `#ffffff` | Sidebar background |
 | `role-parent-ink` | `#2c1a0e` | Primary text — espresso |
 | `role-parent-muted` | `#a08060` | Secondary text — warm taupe |
-| `brand-primary` | `#1a5c38` | Strong mastery dots |
-| `brand-gold` | `#c9932a` | "Read more" CTAs, developing mastery |
+| `brand-primary` | `#1a5c38` | Strong mastery dots, active child indicator |
+| `brand-gold` | `#c9932a` | Active nav dot, "Read more" CTAs, developing mastery |
 | `brand-gold-dark` | `#92400e` | Hover on gold text links |
 | `brand-red` | `#ef4444` | Needs Work mastery |
 
@@ -427,8 +469,10 @@ Secondary: bg-white text-brand-ink border border-role-student-border rounded-ful
 
 | Element | Class |
 |---|---|
+| Sidebar logo | `font-['Lora'] italic text-[15px] font-semibold text-role-parent-ink` |
 | Greeting / headings | `font-['Lora'] font-semibold text-xl text-role-parent-ink` |
 | Narrative body | `font-['Lora'] text-sm leading-relaxed text-role-parent-ink` |
+| Topic names in sidebar | `font-['Lora'] text-[11px] text-role-parent-ink` |
 | Score values | `font-sans font-extrabold text-xl` + mastery color |
 | Labels, badges, meta | `font-sans text-xs font-bold text-role-parent-muted` |
 | Buttons | `font-sans font-bold` |
@@ -439,16 +483,79 @@ Secondary: bg-white text-brand-ink border border-role-student-border rounded-ful
 > letter — Lora makes it feel like a thoughtful note from the teacher, not a data readout.
 > NO other role uses Lora.
 
-#### Layout spec
+#### Sidebar spec
 
 ```
-Top nav:    h-14 bg-white border-b border-role-parent-border
-            Left: font-['Lora'] italic "Kaihle" — the only role with italic logo text
-            Right: avatar only (no nav links)
-Content:    bg-role-parent-bg p-4
-            max-w-lg mx-auto  ← narrow reading column on tablet+
-            This is a reading experience, not a grid
+bg-white border-r border-role-parent-border w-[200px] flex-shrink-0
+Logo row:   h-[50px] px-4 border-b border-role-parent-border
+            font-['Lora'] italic text-[15px] font-semibold text-role-parent-ink
+            "Kaihle" wordmark — the only role with Lora in the sidebar logo
+
+Section labels: px-3.5 pt-4 pb-1 text-[9px] font-bold uppercase tracking-[0.8px]
+                text-role-parent-muted
+
+Nav items:  px-3 py-[7px] mx-[6px] rounded-[6px] text-[12px] gap-2
+            Base:   text-role-parent-muted
+            Hover:  bg-[#fdf8f0] text-role-parent-ink
+            Active: bg-[#fdf8f0] text-role-parent-ink font-semibold
+                    + w-[6px] h-[6px] rounded-full bg-brand-gold dot (left of label)
+
+Child selector (in sidebar, below CHILDREN section label):
+  Inlined card: bg-[#fdf8f0] border border-role-parent-border rounded-[8px]
+                mx-[10px] mt-[10px] p-[9px]
+  Label: text-[9px] font-bold uppercase tracking-[0.5px] text-role-parent-muted mb-1
+  Each child row: flex items-center gap-2 py-[5px]
+                  border-b border-[#f5ead0] last:border-0
+    Avatar: w-[22px] h-[22px] rounded-full text-[9px] font-bold
+            (child-specific background — e.g. bg-brand-green-light / bg-amber-100)
+    Name: text-[11px] font-medium text-role-parent-ink
+    Grade: text-[9px] text-role-parent-muted
+    Active indicator: w-[5px] h-[5px] rounded-full bg-brand-primary ml-auto
+  Hidden entirely when parent has only one child (single-child parents see no child switcher)
+
+Profile card at sidebar bottom:
+  border-t border-role-parent-border px-3.5 py-3 mt-auto
+  flex items-center gap-2
+  Avatar: w-[28px] h-[28px] rounded-full bg-[#f5ead0]
+          text-[10px] font-bold text-[#92400e] (initials, warm amber)
+  Name: font-['Lora'] text-[11px] font-semibold text-role-parent-ink
+  Role: text-[9px] text-role-parent-muted "Parent"
 ```
+
+Active indicator: **warm cream tint** `bg-[#fdf8f0]` + small **gold dot** `bg-brand-gold`.
+This distinguishes Parent active state from Student (green dot) and Teacher (gold tint fill).
+
+#### Navigation sections
+
+```
+Section: OVERVIEW
+  Home             → /parent/dashboard
+  Progress map     → /parent/children/:studentId/progress (Progress Map tab)
+  Weekly reports   → /parent/children/:studentId/progress (Weekly Reports tab)
+
+Section: CHILDREN
+  [Child selector inline card — see sidebar spec above]
+  (switching child updates studentId used by all dashboard data)
+```
+
+Settings: accessed via avatar in top nav — NOT a sidebar item.
+
+#### Top nav spec
+
+```
+h-[50px] bg-white border-b border-role-parent-border
+px-[18px] flex items-center justify-between
+
+Left:  Greeting (font-['Lora'] font-medium text-[13px] text-role-parent-ink)
+       e.g. "Hello, Sarah 👋"
+       Sub: child name + grade (font-sans text-[10px] text-role-parent-muted)
+       e.g. "Emma's weekly progress · Grade 9"
+
+Right: Avatar (w-[28px] h-[28px] rounded-full bg-[#f5ead0] text-[#92400e])
+       Click → settings page
+```
+
+**No nav tabs in top nav. No bottom nav. Sidebar is the sole navigation.**
 
 #### Narrative Card (hero component of Parent app)
 
@@ -459,9 +566,16 @@ Content:    bg-role-parent-bg p-4
     <span className="font-sans text-xs font-bold uppercase tracking-wide text-role-parent-muted">
       Latest update · {formattedDate}
     </span>
+    <span className="font-sans text-xs text-role-parent-muted ml-auto">{subject}</span>
   </div>
   <p className="font-['Lora'] text-sm leading-relaxed text-role-parent-ink">{narrative}</p>
-  <button className="mt-3 font-sans text-xs font-bold text-brand-gold hover:text-brand-gold-dark transition-colors">
+  <div className="flex flex-wrap gap-2 mt-3 mb-3">
+    {highlights.map(h => (
+      <span className="bg-brand-green-light border border-brand-mid rounded-full
+                       text-xs px-3 py-1 font-sans font-semibold text-brand-green">{h}</span>
+    ))}
+  </div>
+  <button className="font-sans text-xs font-bold text-brand-gold hover:text-brand-gold-dark transition-colors">
     Read full report →
   </button>
 </div>
@@ -478,31 +592,36 @@ Text link: text-brand-gold font-bold hover:text-brand-gold-dark (most CTAs)
 
 ## 6. Layout Architecture Summary
 
-| Role | Layout Wrapper | Sidebar | Page Bg | Primary Font |
+All five roles now use a left sidebar. Student and Parent were updated in v2.1.
+
+| Role | Layout Wrapper | Sidebar borders | Page Bg | Primary Font |
 |---|---|---|---|---|
-| Kaihle Admin | `AdminLayout` | White + gray borders | `#f8f9fb` | Inter |
-| School Admin | `DashboardLayout variant="school-admin"` | White + green borders | `#f5f7f1` | Fraunces + Nunito |
-| Teacher | `DashboardLayout variant="teacher"` | White + gray borders | `#f5f7f1` | Fraunces + Nunito |
-| Student | `StudentLayout` | None (top nav + bottom nav) | `#f9fafb` | Fraunces + Nunito |
-| Parent | `ParentLayout` | None (top nav only) | `#fdf8f0` | Lora + Nunito |
+| Kaihle Admin | `AdminLayout` | Neutral gray `#eaecf0` | `#f8f9fb` | Inter |
+| School Admin | `DashboardLayout variant="school-admin"` | Green-tinted `#d4e4d8` | `#f5f7f1` | Fraunces + Nunito |
+| Teacher | `DashboardLayout variant="teacher"` | Neutral gray `#e5e7eb` | `#f5f7f1` | Fraunces + Nunito |
+| Student | `StudentLayout` | Neutral gray `#e5e7eb` | `#f9fafb` | Fraunces + Nunito |
+| Parent | `ParentLayout` | Warm sand `#e8dcc8` | `#fdf8f0` | Lora + Nunito |
 
 All layout wrappers: `frontend/packages/ui/src/layouts/`.
 
 ### Sidebar Active State by Role
 
-| Role | Pattern | Tailwind |
+| Role | Active pattern | Tailwind classes |
 |---|---|---|
-| Kaihle Admin | Green dot before label | `text-role-admin-ink bg-gray-100` + dot `bg-brand-primary` |
-| School Admin | Left green stripe + green tint | `border-l-[3px] border-brand-primary bg-brand-light text-brand-primary rounded-r-lg rounded-l-none` |
+| Kaihle Admin | Gray fill + green dot | `bg-gray-100 text-role-admin-ink` + dot `bg-brand-primary` |
+| School Admin | Left green stripe + green tint | `border-l-[3px] border-brand-primary bg-brand-light text-brand-primary` |
 | Teacher | Gold tint fill | `bg-[#fffbeb] text-brand-gold-dark font-bold` |
+| Student | Green tint fill + green dot | `bg-[#f0fdf4] text-brand-primary font-semibold` + dot `bg-brand-primary` |
+| Parent | Cream tint fill + gold dot | `bg-[#fdf8f0] text-role-parent-ink font-semibold` + dot `bg-brand-gold` |
 
-### Sidebar Dimensions (DashboardLayout + AdminLayout)
+### Sidebar Dimensions (all five roles)
 
 ```
-Width:         w-56 (224px)
-Logo row:      h-14 border-b
-Nav item:      px-3 py-2.5 mx-2 rounded-lg text-sm font-semibold gap-2
-Section label: px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest
+Width:         w-[200px] (all roles — consistent across the platform)
+Logo row:      h-[50px] border-b (matches topnav height exactly)
+Nav item:      px-3 py-[7px] mx-[6px] rounded-[6px] text-[12px] gap-2
+Section label: px-3.5 pt-4 pb-1 text-[9px] font-bold uppercase tracking-[0.8px]
+Profile card:  mt-auto border-t px-3.5 py-3
 ```
 
 ---
@@ -526,13 +645,14 @@ Section label: px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest
 |---|---|
 | base | 0px |
 | `sm:` | 640px |
-| `md:` | 768px — sidebar appears for dashboard roles |
+| `md:` | 768px — sidebar collapses to hamburger menu |
 | `lg:` | 1024px |
 | `xl:` | 1280px |
 
-Student + Parent: designed at 375px, comfortable at `md:`.
-Teacher + School Admin: designed at `lg:`, sidebar collapses at `md:`.
-Kaihle Admin: desktop acceptable, no mobile requirement.
+All five roles with sidebars: sidebar is visible at `lg:`, collapses at `md:` and below.
+Teacher + School Admin: designed at `lg:`.
+Student + Parent: designed at `md:`, sidebar collapses gracefully.
+Kaihle Admin: desktop only, no mobile requirement.
 Touch targets: `min-h-[44px] min-w-[44px]` on all interactive elements.
 
 ---
@@ -561,12 +681,13 @@ Touch targets: `min-h-[44px] min-w-[44px]` on all interactive elements.
    - `brand-ink` on white: 14.3:1 ✓
    - `white` on `brand-primary`: 7.2:1 ✓
    - `white` on `brand-gold`: 3.1:1 ✗ — use `brand-gold-dark` for text on gold backgrounds
+6. See `docs/design/DESIGN_SYSTEM_ACCESSIBILITY_ADDENDUM.md` for modal focus trap and loading state standards.
 
 ---
 
 ## 10. Hard Rules
 
-- ❌ No colored sidebar backgrounds — all sidebars are white
+- ❌ No colored sidebar backgrounds — all sidebars are white (`bg-white`)
 - ❌ No `indigo-*`, `emerald-*` for brand or mastery colors
 - ❌ No `emerald-500` for Strong mastery — use `brand-green` (#16a34a)
 - ❌ No green buttons in Teacher role — use gold buttons for Teacher actions
@@ -577,6 +698,8 @@ Touch targets: `min-h-[44px] min-w-[44px]` on all interactive elements.
 - ❌ No per-page layout shells — use shared wrappers from `packages/ui`
 - ❌ No `@apply` in component files — utility classes in JSX only
 - ❌ No additional UI kits (MUI, Chakra, shadcn) — see CONSTITUTION §4 Rule 11
+- ❌ No top nav tabs or bottom nav for Student — sidebar is the sole navigation (v2.1)
+- ❌ No minimal top nav only for Parent — sidebar is the sole navigation (v2.1)
 
 ---
 
@@ -589,8 +712,11 @@ Touch targets: `min-h-[44px] min-w-[44px]` on all interactive elements.
 | Layout wrappers | `frontend/packages/ui/src/layouts/` |
 | Shared components | `frontend/packages/ui/src/components/` |
 | Mastery helper | `frontend/packages/types/src/mastery.ts` |
+| Dashboard mockups (HTML reference) | `docs/design/mockups/` |
+| Screen specs per role | `docs/design/screens/` |
 
 ---
 
-*Kaihle Design System v2.0 · Pixel (UX/UI Lead) · March 2026*
-*Supersedes v1.0. Load alongside CONSTITUTION.md for every frontend task.*
+*Kaihle Design System v2.1 · Pixel (UX/UI Lead) · March 2026*
+*v2.1: Student and Parent layouts updated to sidebar. Supersedes v2.0 for §5.4, §5.5, and §6.*
+*Load alongside CONSTITUTION.md and DESIGN_SYSTEM_ACCESSIBILITY_ADDENDUM.md for every frontend task.*

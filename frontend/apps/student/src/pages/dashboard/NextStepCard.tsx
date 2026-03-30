@@ -27,19 +27,25 @@ export function NextStepCard({
   const emoji = emojiMap[type];
 
   return (
-    <div className="bg-white rounded-2xl border border-role-student-border p-4 flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        <span className="text-2xl" role="img" aria-label={type}>
+    <div className="bg-white border-[0.5px] border-[#e5e7eb] rounded-[10px] p-[10px_14px] flex items-center justify-between">
+      <div className="flex items-center gap-[10px]">
+        <span
+          className="text-[14px] w-[18px] text-center"
+          role="img"
+          aria-label={type}
+        >
           {emoji}
         </span>
         <div>
-          <div className="font-semibold text-brand-ink">{title}</div>
-          <div className="text-xs text-brand-muted">{subtitle}</div>
+          <div className="text-[11px] font-semibold text-brand-ink">
+            {title}
+          </div>
+          <div className="text-[9px] text-brand-muted">{subtitle}</div>
         </div>
       </div>
       <button
         onClick={onAction}
-        className="text-sm font-bold text-brand-primary whitespace-nowrap hover:underline"
+        className="text-[10px] font-bold text-brand-primary whitespace-nowrap hover:underline min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
       >
         {actionLabel}
       </button>
@@ -55,7 +61,7 @@ export function EmptyNextSteps({
   message = "You're all caught up! Check back after your next assessment.",
 }: EmptyNextStepsProps) {
   return (
-    <div className="bg-brand-light rounded-2xl p-4 text-center">
+    <div className="bg-brand-light rounded-xl p-4 text-center">
       <p className="text-sm text-brand-body">{message}</p>
     </div>
   );
