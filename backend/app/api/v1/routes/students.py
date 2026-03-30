@@ -255,3 +255,120 @@ async def get_student_info(
         student=target_student,
         db=db,
     )
+
+
+# =============================================================================
+# M0-7-T3-patch: Student Classes endpoint with teacher_name for dashboard
+# =============================================================================
+
+
+class StudentClassResponse(BaseModel):
+    """Response schema for GET /students/me/classes.
+
+    Returns enrolled classes with full details including teacher name for the
+    student dashboard. Includes diagnostic status for each class.
+    """
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: UUID = Field(..., alias="id")
+    name: str = Field(..., alias="name")
+    subject_id: UUID = Field(..., alias="subjectId")
+    subject_name: str = Field(..., alias="subjectName")
+    grade_name: str = Field(..., alias="gradeName")
+    teacher_name: str = Field(..., alias="teacherName")
+    curriculum_id: UUID = Field(..., alias="curriculumId")
+    academic_year: str = Field(..., alias="academicYear")
+    is_active: bool = Field(..., alias="isActive")
+    onboarding_diagnostic_status: str = Field(..., alias="onboardingDiagnosticStatus")
+    diagnostic_attempt_id: UUID | None = Field(None, alias="diagnosticAttemptId")
+
+
+async def _get_student_classes(
+    student: User,
+    db: AsyncSession,
+) -> list[StudentClassResponse]:
+    """Fetch all enrolled classes for a student with full details.
+
+    This includes teacher name from the teacher user record.
+    """
+    # Query enrollments with all related data including teacher
+    # Include ClassEnrollment to get is_active and onboarding_diagnostic_status
+    query = (
+        select(
+            ClassEnrollment,
+            Class,
+            Subject,
+            Grade,
+            User,  # Teacher
+        )
+        .join(Class, Class.id == ClassEnrollment.class_id)
+        .join(Subject, Subject.id == Class.subject_id)
+        .join(Grade, Grade.id == Class.grade_id)
+        .join(User, User.id == Class.teacher_id)
+        .where(
+            ClassEnrollment.student_id == student.id,
+            ClassEnrollment.is_active.is_(True),
+        )
+        .order_by(ClassEnrollment.enrolled_at)
+    )
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    classes: list[StudentClassResponse] = []
+    for enrollment, class_, subject, grade, teacher in rows:
+        # Get diagnostic status from enrollment's onboarding_diagnostic_status
+        diagnostic_status = enrollment.onboarding_diagnostic_status
+        diagnostic_attempt_id = None  # Field not available in current schema
+
+        classes.append(
+            StudentClassResponse(
+                id=class_.id,
+                name=class_.name,
+                subject_id=class_.subject_id,
+                subject_name=subject.name if subject else "",
+                grade_name=grade.name if grade else "",
+                teacher_name=teacher.first_name if teacher else "",
+                curriculum_id=class_.curriculum_id,
+                academic_year=class_.academic_year or "",
+                is_active=enrollment.is_active,
+                onboarding_diagnostic_status=diagnostic_status,
+                diagnostic_attempt_id=diagnostic_attempt_id,
+            )
+        )
+
+    return classes
+
+
+@router.get(
+    "/me/classes",
+    response_model=list[StudentClassResponse],
+)
+async def get_my_classes(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[StudentClassResponse]:
+    """Get current student's enrolled classes with full details.
+
+    Returns:
+        list[StudentClassResponse] with class details including teacher name
+
+    Raises:
+        403: If user is not a student
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint",
+        )
+
+    logger.info(
+        "my_classes_requested",
+        student_id=str(current_user.id),
+    )
+
+    return await _get_student_classes(
+        student=current_user,
+        db=db,
+    )
