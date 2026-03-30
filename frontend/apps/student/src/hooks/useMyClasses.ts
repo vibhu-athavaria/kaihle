@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import apiClient from "axios";
+import { apiClient } from "@kaihle/auth";
 
 /**
  * Response type for GET /api/v1/students/me/classes

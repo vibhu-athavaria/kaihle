@@ -23,29 +23,6 @@ interface SubjectScoresSectionProps {
 }
 
 /**
- * Individual card component that fetches its own data.
- * This avoids the hook-in-loop rule by having each card manage its own query.
- */
-interface SingleSubjectCardProps {
-  subject: SubjectEntry;
-}
-
-function SingleSubjectCard({ subject }: SingleSubjectCardProps) {
-  const { data, isLoading } = useSubjectGapMap(subject.subjectId);
-  const avgMastery = aggregateSubjectMastery(data);
-
-  if (isLoading) {
-    return (
-      <div className="bg-white rounded-2xl border border-role-student-border p-4 animate-pulse h-[96px]" />
-    );
-  }
-
-  return (
-    <SubjectScoreCard subjectName={subject.subjectName} score={avgMastery} />
-  );
-}
-
-/**
  * Wrapper component that fetches score and reports it via callback
  */
 interface SingleSubjectCardWithCallbackProps {

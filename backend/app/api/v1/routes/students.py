@@ -329,7 +329,7 @@ async def _get_student_classes(
                 subject_id=class_.subject_id,
                 subject_name=subject.name if subject else "",
                 grade_name=grade.name if grade else "",
-                teacher_name=teacher.first_name if teacher else "",
+                teacher_name=f"{teacher.first_name} {teacher.last_name}".strip() if teacher else "",
                 curriculum_id=class_.curriculum_id,
                 academic_year=class_.academic_year or "",
                 is_active=enrollment.is_active,
