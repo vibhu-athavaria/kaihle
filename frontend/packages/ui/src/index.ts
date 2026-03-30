@@ -17,6 +17,7 @@ export { LearningStyleTag } from "./components/LearningStyleTag";
 
 export { DashboardLayout } from "./layouts/DashboardLayout";
 export { StudentLayout } from "./layouts/StudentLayout";
+export { StudentShellLayout } from "./layouts/StudentShellLayout";
 export { ParentLayout } from "./layouts/ParentLayout";
 export { AdminLayout } from "./layouts/AdminLayout";
 export { AuthLayout } from "./layouts/AuthLayout";
