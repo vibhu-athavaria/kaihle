@@ -1,56 +1,40 @@
-import { StudentShellLayout } from "@kaihle/ui";
+import { useState, useMemo } from "react";
+import { StudentLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
 import { ClassCard, ClassCardSkeleton } from "../../components/ClassCard";
 import { NextStepCard, EmptyNextSteps } from "./NextStepCard";
-import { SubjectScoreCard } from "./SubjectScoreCard";
-import { useStudentDashboard } from "../../hooks/useStudentDashboard";
-import { useOnboardingStatus } from "../../hooks/useOnboardingStatus";
-import { useNavigate } from "react-router-dom";
-
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
-}
-
-/**
- * Converts a name to initials (e.g., "John Doe" -> "JD", "Alice" -> "A")
- */
-function getInitials(name: string): string {
-  const parts = name?.split(" ") || [];
-  if (parts.length >= 2) {
-    return (parts[0]?.charAt(0) || "") + (parts[1]?.charAt(0) || "");
-  }
-  return name?.charAt(0) || "";
-}
-
-/**
- * Creates an onNavClick handler that navigates to the appropriate student route
- */
-function createNavHandler(navigate: ReturnType<typeof useNavigate>) {
-  return (nav: "home" | "progress" | "study" | "assessments") => {
-    if (nav === "home") navigate("/student/dashboard");
-    else if (nav === "progress") navigate("/student/my-progress");
-    else if (nav === "study") navigate("/student/study-plans");
-    else if (nav === "assessments") navigate("/student/assessments");
-  };
-}
+import { SubjectScoresSection, SubjectEntry, ResolvedSubjectScore } from "./SubjectScoresSection";
+import { useStudentInfo } from "../../hooks/useStudentInfo";
+import { useMyClasses, type StudentClassResponse } from "../../hooks/useMyClasses";
 
 export function StudentDashboard() {
   const { logout } = useAuth();
-  const { data, isLoading, isError } = useStudentDashboard();
-  const { status: onboardingStatus } = useOnboardingStatus();
-  const navigate = useNavigate();
+  const { data: studentInfo, isLoading: isInfoLoading, isError: isInfoError } = useStudentInfo();
+  const { data: classesData, isLoading: isClassesLoading } = useMyClasses();
 
-  const handleNavClick = createNavHandler(navigate);
+  // Extract student info
+  const firstName = studentInfo?.first_name || "";
+  const lastName = studentInfo?.last_name || "";
+  const studentName = firstName && lastName ? `${firstName} ${lastName}` : firstName || "Student";
+  const gradeName = studentInfo?.grade_name || "";
+  const curriculumName = studentInfo?.curriculum_name || "";
 
-  if (isError) {
+  // State for resolved subject scores (used in buildNextSteps for weakest-area)
+  const [resolvedSubjectScores, setResolvedSubjectScores] = useState<ResolvedSubjectScore[]>([]);
+
+  // Handler for subject scores resolved from SubjectScoresSection
+  const handleScoresResolved = (scores: ResolvedSubjectScore[]) => {
+    setResolvedSubjectScores(scores);
+  };
+
+  if (isInfoError) {
     return (
-      <StudentShellLayout
+      <StudentLayout
         activeNav="home"
+        studentName={studentName}
+        gradeName={gradeName}
+        curriculumName={curriculumName}
         onLogout={logout}
-        onNavClick={handleNavClick}
       >
         <div className="text-center py-8">
           <p className="text-brand-red">
@@ -58,170 +42,129 @@ export function StudentDashboard() {
             if the problem persists.
           </p>
         </div>
-      </StudentShellLayout>
+      </StudentLayout>
     );
   }
 
-  const greeting = getGreeting();
-  const firstName = data?.studentInfo.firstName || "";
-  const gradeName = data?.studentInfo.gradeName || "";
-  const curriculumName = data?.studentInfo.curriculumName || "";
-  const studyPlans = data?.studyPlans || [];
-  const assessments = data?.assessments || [];
-  const subjects = data?.gapMap?.subjects || [];
+  // For now, default empty arrays - these would come from other API calls
+  const studyPlans: Array<{ id: string; title: string; status: string }> = [];
+  const assessments: Array<{ id: string; subjectName: string; dueDate: string }> = [];
 
-  const activeStudyPlans = studyPlans.filter((sp) => sp.status === "ACTIVE");
-  const inProgressStudyPlans = studyPlans.filter(
+  const activeStudyPlans = studyPlans?.filter((sp) => sp.status === "ACTIVE") || [];
+  const inProgressStudyPlans = studyPlans?.filter(
     (sp) => sp.status === "IN_PROGRESS",
-  );
+  ) || [];
 
-  // Get enrolled classes from onboarding status with diagnostic status
-  const enrolledClasses = onboardingStatus?.diagnostics_by_class || [];
-  const isClassesLoading = !onboardingStatus && !isLoading;
-
+  // Build next steps including subject scores for weakest-area logic
   const nextSteps = buildNextSteps(
     assessments,
     activeStudyPlans,
     inProgressStudyPlans,
+    resolvedSubjectScores,
   );
 
-  // Build class items for sidebar
-  const sidebarClasses = enrolledClasses.map((cls) => ({
-    id: cls.class_id,
-    name: cls.class_name,
-    isLocked: cls.status === "PENDING" || cls.status === "IN_PROGRESS",
-  }));
+  // Build unique subjects from enrolled classes for subject scores section
+  const uniqueSubjects = useMemo<SubjectEntry[]>(() => {
+    const seen = new Set<string>();
+    const result: SubjectEntry[] = [];
+    const safeClasses = Array.isArray(classesData) ? classesData : [];
+    for (const cls of safeClasses) {
+      if (cls.subjectId && !seen.has(cls.subjectId)) {
+        seen.add(cls.subjectId);
+        result.push({ subjectId: cls.subjectId, subjectName: cls.subjectName });
+      }
+    }
+    return result;
+  }, [classesData]);
 
-  // Build header content
-  const headerContent = (
-    <div>
-      <div className="font-sans text-sm font-medium text-brand-ink">
-        {greeting}
-        {firstName ? `, ${firstName}` : ""} 👋
-      </div>
-      {gradeName && curriculumName && (
-        <div className="font-sans text-xs text-brand-muted">
-          {gradeName} · {curriculumName}
-        </div>
-      )}
-    </div>
-  );
+  // Build class items for sidebar - safely handle potentially non-array data
+  const sidebarClasses = Array.isArray(classesData)
+    ? classesData.map((cls: StudentClassResponse) => ({
+        id: cls.id,
+        name: cls.name,
+        subjectName: cls.subjectName,
+        subjectId: cls.subjectId,
+        diagnosticStatus: cls.onboardingDiagnosticStatus,
+        diagnosticAttemptId: cls.diagnosticAttemptId,
+      }))
+    : [];
 
   return (
-    <StudentShellLayout
+    <StudentLayout
       activeNav="home"
-      headerContent={headerContent}
-      studentName={firstName || "Student"}
-      studentInitials={getInitials(firstName)}
-      gradeInfo={
-        gradeName ? `${gradeName} · ${curriculumName}` : curriculumName
-      }
+      studentName={studentName}
+      gradeName={gradeName}
+      curriculumName={curriculumName}
       classes={sidebarClasses}
       onLogout={logout}
-      onNavClick={handleNavClick}
-      onClassClick={(classId) => {
-        const cls = enrolledClasses.find((c) => c.class_id === classId);
-        if (cls && (cls.status === "PENDING" || cls.status === "IN_PROGRESS")) {
-          navigate(`/student/classes/${classId}/diagnostic`);
-        } else {
-          navigate(`/student/classes/${classId}/topics`);
-        }
-      }}
     >
       <div className="space-y-6">
-        {/* Subject Score Cards - 3 columns per spec */}
-        {subjects.length > 0 && (
-          <div>
-            <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
-              Your subjects
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {isLoading
-                ? Array.from({ length: 3 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="bg-white rounded-xl border border-brand-border p-3 text-center animate-pulse"
-                    >
-                      <div className="h-6 w-12 bg-brand-border rounded mx-auto mb-1" />
-                      <div className="h-2 w-10 bg-brand-border rounded mx-auto" />
-                    </div>
-                  ))
-                : subjects
-                    .slice(0, 3)
-                    .map((subject) => (
-                      <SubjectScoreCard
-                        key={subject.subjectCode}
-                        subjectName={subject.subjectName}
-                        score={subject.score}
-                      />
-                    ))}
-            </div>
-          </div>
+        {/* Subject Scores Section - Render first before My Classes */}
+        {!isInfoLoading && uniqueSubjects.length > 0 && (
+          <SubjectScoresSection
+            subjects={uniqueSubjects}
+            onScoresResolved={handleScoresResolved}
+          />
         )}
 
         {/* Class Cards - Per-class diagnostic locked/unlocked state */}
-        {enrolledClasses.length > 0 && (
-          <div>
-            <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
-              My classes
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {isClassesLoading
-                ? Array.from({ length: enrolledClasses.length || 2 }).map(
-                    (_, i) => <ClassCardSkeleton key={i} />,
-                  )
-                : enrolledClasses.map((cls) => (
-                    <ClassCard
-                      key={cls.class_id}
-                      classId={cls.class_id}
-                      subjectName={cls.class_name}
-                      teacherName="Your Teacher"
-                      diagnosticStatus={cls.status}
-                    />
-                  ))}
-            </div>
-          </div>
-        )}
-
-        {/* What's waiting for you */}
-        {nextSteps.length > 0 && (
-          <div>
-            <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
-              What's waiting for you
-            </h2>
-            <div className="space-y-2">
-              {isLoading
-                ? Array.from({ length: 2 }).map((_, i) => (
-                    <SkeletonNextStep key={i} />
-                  ))
-                : nextSteps
-                    .slice(0, 3)
-                    .map((step) => (
-                      <NextStepCard
-                        key={step.id}
-                        type={step.type}
-                        title={step.title}
-                        subtitle={step.subtitle}
-                        actionLabel={step.actionLabel}
+        {(() => {
+          const safeClasses = Array.isArray(classesData) ? classesData : [];
+          if (safeClasses.length === 0) return null;
+          return (
+            <div>
+              <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
+                My classes
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {isClassesLoading
+                  ? Array.from({ length: safeClasses.length || 2 }).map(
+                      (_, i) => <ClassCardSkeleton key={i} />,
+                    )
+                  : safeClasses.map((cls) => (
+                      <ClassCard
+                        key={cls.id}
+                        classId={cls.id}
+                        className={cls.name}
+                        subjectName={cls.subjectName}
+                        teacherName={cls.teacherName}
+                        diagnosticStatus={cls.onboardingDiagnosticStatus}
+                        diagnosticAttemptId={cls.diagnosticAttemptId ?? undefined}
                       />
                     ))}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
-        {nextSteps.length === 0 &&
-          !isLoading &&
-          enrolledClasses.length === 0 &&
-          subjects.length === 0 && (
-            <div>
-              <h2 className="font-sans text-[9px] font-bold uppercase tracking-[0.8px] text-[#a0a8a0] mb-3">
-                Keep going
-              </h2>
+        {/* What's waiting for you - Always render, show EmptyNextSteps if no steps */}
+        <div>
+          <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
+            What's waiting for you
+          </h2>
+          <div className="space-y-3">
+            {isInfoLoading || isClassesLoading ? (
+              <>
+                <SkeletonNextStep />
+                <SkeletonNextStep />
+              </>
+            ) : nextSteps.length > 0 ? (
+              nextSteps.slice(0, 3).map((step) => (
+                <NextStepCard
+                  key={step.id}
+                  type={step.type}
+                  title={step.title}
+                  subtitle={step.subtitle}
+                  actionLabel={step.actionLabel}
+                />
+              ))
+            ) : (
               <EmptyNextSteps />
-            </div>
-          )}
+            )}
+          </div>
+        </div>
       </div>
-    </StudentShellLayout>
+    </StudentLayout>
   );
 }
 
@@ -241,6 +184,7 @@ function buildNextSteps(
   assessments: Array<{ id: string; subjectName: string; dueDate: string }>,
   activeStudyPlans: Array<{ id: string; title: string; status: string }>,
   inProgressStudyPlans: Array<{ id: string; title: string; status: string }>,
+  subjectScores: ResolvedSubjectScore[],
 ): NextStep[] {
   const nextSteps: NextStep[] = [];
 
@@ -284,6 +228,23 @@ function buildNextSteps(
       subtitle: inProgressStudyPlans[0].title,
       actionLabel: "Continue →",
     });
+  }
+
+  // Priority 4: Weakest subject with no active study plan
+  const assessedScores = subjectScores.filter(s => s.avgMastery !== null);
+  if (assessedScores.length > 0 && activeStudyPlans.length === 0) {
+    const weakest = assessedScores.reduce((a, b) =>
+      (a.avgMastery ?? 1) < (b.avgMastery ?? 1) ? a : b
+    );
+    if ((weakest.avgMastery ?? 1) < 0.7) {
+      nextSteps.push({
+        type: "weakest-area",
+        id: `weakest-${weakest.subjectName}`,
+        title: `Your weakest area: ${weakest.subjectName}`,
+        subtitle: `${Math.round((weakest.avgMastery ?? 0) * 100)}% — keep going`,
+        actionLabel: "View progress →",
+      });
+    }
   }
 
   return nextSteps;
