@@ -4,6 +4,7 @@ import { useAuth } from "@kaihle/auth";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { InlineEditName } from "./InlineEditName";
 import { InlineChangePassword } from "./InlineChangePassword";
+import { useStudentInfo } from "../../hooks/useStudentInfo";
 
 interface User {
   id: string;
@@ -18,12 +19,19 @@ export function AccountSection() {
   const [editingName, setEditingName] = useState(false);
   const [editingPassword, setEditingPassword] = useState(false);
 
+  const { data: studentInfo } = useStudentInfo();
+  const schoolId = studentInfo?.schoolId;
+
   const { data: user } = useQuery<User>({
-    queryKey: ["student", "settings", "user"],
+    queryKey: ["student", "settings", "user", schoolId],
     queryFn: async () => {
-      const response = await apiClient.get<User>("/api/v1/users/me");
+      if (!schoolId) throw new Error("School ID not available");
+      const response = await apiClient.get<User>(
+        `/api/v1/schools/${schoolId}/users/me`,
+      );
       return response.data;
     },
+    enabled: !!schoolId,
   });
 
   const updateNameMutation = useMutation({

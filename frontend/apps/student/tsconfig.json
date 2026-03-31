@@ -13,5 +13,10 @@
     "noEmit": true
   },
   "include": ["src"],
-  "exclude": ["src/tests"]
+  "exclude": [
+    "src/tests",
+    "src/hooks/__tests__",
+    "src/pages/__tests__",
+    "src/components/__tests__"
+  ]
 }

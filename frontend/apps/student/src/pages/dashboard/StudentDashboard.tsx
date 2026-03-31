@@ -9,6 +9,7 @@ import {
   ResolvedSubjectScore,
 } from "./SubjectScoresSection";
 import { useStudentInfo } from "../../hooks/useStudentInfo";
+import { useStudentDashboard } from "../../hooks/useStudentDashboard";
 import {
   useMyClasses,
   type StudentClassResponse,
@@ -22,14 +23,16 @@ export function StudentDashboard() {
     isError: isInfoError,
   } = useStudentInfo();
   const { data: classesData, isLoading: isClassesLoading } = useMyClasses();
+  const { data: dashboardData, isLoading: isDashboardLoading } =
+    useStudentDashboard();
 
   // Extract student info
-  const firstName = studentInfo?.first_name || "";
-  const lastName = studentInfo?.last_name || "";
+  const firstName = studentInfo?.firstName || "";
+  const lastName = studentInfo?.lastName || "";
   const studentName =
     firstName && lastName ? `${firstName} ${lastName}` : firstName || "Student";
-  const gradeName = studentInfo?.grade_name || "";
-  const curriculumName = studentInfo?.curriculum_name || "";
+  const gradeName = studentInfo?.gradeName || "";
+  const curriculumName = studentInfo?.curriculumName || "";
 
   // State for resolved subject scores (used in buildNextSteps for weakest-area)
   const [resolvedSubjectScores, setResolvedSubjectScores] = useState<
@@ -61,12 +64,8 @@ export function StudentDashboard() {
   }
 
   // For now, default empty arrays - these would come from other API calls
-  const studyPlans: Array<{ id: string; title: string; status: string }> = [];
-  const assessments: Array<{
-    id: string;
-    subjectName: string;
-    dueDate: string;
-  }> = [];
+  const studyPlans = dashboardData?.studyPlans ?? [];
+  const assessments = dashboardData?.assessments ?? [];
 
   const activeStudyPlans =
     studyPlans?.filter((sp) => sp.status === "ACTIVE") || [];
@@ -131,7 +130,7 @@ export function StudentDashboard() {
           if (safeClasses.length === 0) return null;
           return (
             <div>
-              <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
+              <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-body mb-3">
                 My classes
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -159,11 +158,11 @@ export function StudentDashboard() {
 
         {/* What's waiting for you - Always render, show EmptyNextSteps if no steps */}
         <div>
-          <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
+          <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-body mb-3">
             What's waiting for you
           </h2>
           <div className="space-y-3">
-            {isInfoLoading || isClassesLoading ? (
+            {isInfoLoading || isClassesLoading || isDashboardLoading ? (
               <>
                 <SkeletonNextStep />
                 <SkeletonNextStep />

@@ -37,15 +37,17 @@ export function NextStepCard({
           {emoji}
         </span>
         <div>
-          <div className="text-[11px] font-semibold text-brand-ink">
+          <div className="font-sans font-semibold text-sm text-brand-ink">
             {title}
           </div>
-          <div className="text-[9px] text-brand-muted">{subtitle}</div>
+          <div className="font-sans text-xs text-brand-muted mt-0.5">
+            {subtitle}
+          </div>
         </div>
       </div>
       <button
         onClick={onAction}
-        className="text-[10px] font-bold text-brand-primary whitespace-nowrap hover:underline min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+        className="font-sans font-bold text-xs text-brand-primary whitespace-nowrap hover:underline min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 ml-4"
       >
         {actionLabel}
       </button>

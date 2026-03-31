@@ -3,14 +3,17 @@ import { apiClient } from "@kaihle/auth";
 
 /**
  * Response type for GET /api/v1/students/me/info
+ * Uses camelCase to match backend Pydantic field aliases (alias="firstName", etc.)
  */
 export interface StudentInfo {
   id: string;
-  first_name: string;
-  last_name: string;
-  grade_name: string; // e.g. "Grade 9"
-  curriculum_name: string; // e.g. "Cambridge IGCSE"
-  school_id: string;
+  firstName: string;
+  lastName?: string;
+  gradeName: string;
+  curriculumName: string;
+  schoolId: string;
+  classId?: string | null;
+  isEnrolled?: boolean;
 }
 
 /**

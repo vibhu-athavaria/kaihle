@@ -57,7 +57,7 @@ export function StudentShellLayout({
       <aside className="w-[200px] bg-white border-r border-role-student-border flex flex-col flex-shrink-0">
         {/* Logo */}
         <div className="px-4 py-3.5 border-b border-role-student-border">
-          <span className="font-bold text-brand-ink italic text-base tracking-tight">
+          <span className="font-display italic font-semibold text-[15px] text-brand-ink">
             Kaihle
           </span>
         </div>
@@ -77,7 +77,7 @@ export function StudentShellLayout({
               <button
                 key={item.key}
                 onClick={() => onNavClick?.(item.key)}
-                className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 ${
+                className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 ${
                   isActive
                     ? "bg-brand-green-light text-brand-primary font-semibold"
                     : "text-brand-muted"
@@ -119,7 +119,7 @@ export function StudentShellLayout({
                 <button
                   key={cls.id}
                   onClick={() => onClassClick?.(cls.id)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs text-[#6b7280] hover:text-brand-ink hover:bg-brand-border-soft transition-colors min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-brand-body hover:text-brand-ink hover:bg-gray-50 transition-colors min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
                 >
                   <span
                     className="w-[7px] h-[7px] rounded-full flex-shrink-0"
@@ -165,7 +165,7 @@ export function StudentShellLayout({
           {onLogout && (
             <button
               onClick={onLogout}
-              className="mt-2 w-full flex items-center gap-1.5 px-2 py-1.5 text-xs text-brand-muted hover:text-brand-red transition-colors min-h-[44px] rounded-md hover:bg-brand-red/5 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+              className="mt-2 w-full flex items-center gap-1.5 px-2 py-1.5 text-sm text-brand-muted hover:text-brand-red transition-colors min-h-[44px] rounded-md hover:bg-brand-red/5 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
             >
               <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Logout</span>

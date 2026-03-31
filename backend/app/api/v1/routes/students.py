@@ -50,6 +50,7 @@ class StudentInfoResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     first_name: str = Field(..., alias="firstName")
+    last_name: str = Field(..., alias="lastName")
     grade_name: str = Field(..., alias="gradeName")  # Empty string if not enrolled in any class
     curriculum_name: str = Field(..., alias="curriculumName")  # Empty string if school has no primary curriculum
     class_id: UUID | None = Field(None, alias="classId")
@@ -142,6 +143,7 @@ async def _get_student_info_by_id(
 
     return StudentInfoResponse(
         first_name=student.first_name or "",
+        last_name=student.last_name or "",
         grade_name=grade_name,
         curriculum_name=curriculum_name,
         class_id=class_id,

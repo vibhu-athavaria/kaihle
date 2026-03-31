@@ -25,13 +25,14 @@ export interface SubjectScore {
 export const useSubjectGapMap = (subjectId: string | undefined) =>
   useQuery({
     queryKey: ["student", "gap-map", subjectId] as const,
-    queryFn: () => {
+    queryFn: async () => {
       if (!subjectId) {
         throw new Error("subjectId is required");
       }
-      return apiClient.get(`/api/v1/students/me/gap-map`, {
+      const response = await apiClient.get(`/api/v1/students/me/gap-map`, {
         params: { subject_id: subjectId },
       });
+      return response.data;
     },
     enabled: !!subjectId,
     staleTime: 5 * 60 * 1000, // 5 minutes

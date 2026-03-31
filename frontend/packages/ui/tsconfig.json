@@ -17,7 +17,7 @@
     "noFallthroughCasesInSwitch": true,
     "declaration": true,
     "declarationMap": true,
-    "types": ["jest", "@testing-library/jest-dom"]
+    "types": ["jest", "@testing-library/jest-dom", "vite/client"]
   },
   "include": ["src"],
   "exclude": ["node_modules", "src/__tests__", "src/components/__tests__"]

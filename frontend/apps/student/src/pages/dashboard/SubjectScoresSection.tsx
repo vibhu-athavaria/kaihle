@@ -28,13 +28,11 @@ interface SubjectScoresSectionProps {
 interface SingleSubjectCardWithCallbackProps {
   subject: SubjectEntry;
   onResolved: (score: number | null) => void;
-  allResolved: boolean;
 }
 
 function SingleSubjectCardWithCallback({
   subject,
   onResolved,
-  allResolved,
 }: SingleSubjectCardWithCallbackProps) {
   const { data, isLoading } = useSubjectGapMap(subject.subjectId);
   const avgMastery = aggregateSubjectMastery(data);
@@ -113,7 +111,7 @@ export function SubjectScoresSection({
 
   return (
     <div className="mb-6">
-      <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
+      <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-body mb-3">
         Your subjects
       </h2>
       <div className="grid grid-cols-3 gap-3">
@@ -122,9 +120,6 @@ export function SubjectScoresSection({
             key={subject.subjectId}
             subject={subject}
             onResolved={(score) => handleResolved(subject.subjectName, score)}
-            allResolved={resolvedScores.some(
-              (s) => s.subjectName === subject.subjectName,
-            )}
           />
         ))}
       </div>
