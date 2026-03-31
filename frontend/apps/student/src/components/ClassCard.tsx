@@ -62,7 +62,7 @@ export function ClassCard({
     <button
       type="button"
       onClick={handleClick}
-      className={`w-full text-left bg-white rounded-[10px] border border-brand-border p-3 transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[44px] ${
+      className={`w-full text-left bg-white rounded-card border border-role-student-border p-3 shadow-card transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[44px] ${
         isLocked ? "opacity-60" : ""
       }`}
     >
@@ -72,20 +72,20 @@ export function ClassCard({
           className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${getDotColorClass()}`}
           aria-label={`Status indicator: ${isLocked ? "locked" : "unlocked"}`}
         />
-        <span className="font-sans font-semibold text-base text-brand-ink truncate">
+        <span className="font-sans font-semibold text-card-title text-brand-ink truncate">
           {displayName}
         </span>
       </div>
 
       {/* Meta info */}
-      <div className="font-sans text-xs text-brand-body mb-3">
+      <div className="ffont-sans text-card-meta text-brand-body mb-">
         {teacherName}
         {studentCount !== undefined && ` · ${studentCount} students`}
       </div>
 
       {/* CTA Footer */}
       <div
-        className={`font-sans font-semibold text-xs ${
+        className={`font-sans font-semibold text-card-action ${
           isLocked ? "text-brand-gold" : "text-brand-primary"
         }`}
       >

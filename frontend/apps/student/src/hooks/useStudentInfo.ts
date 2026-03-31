@@ -9,6 +9,7 @@ export interface StudentInfo {
   id: string;
   firstName: string;
   lastName?: string;
+  email: string;
   gradeName: string;
   curriculumName: string;
   schoolId: string;

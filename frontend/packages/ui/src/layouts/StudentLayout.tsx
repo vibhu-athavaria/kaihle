@@ -95,7 +95,7 @@ export function StudentLayout({
       >
         {/* Logo row — h-[50px] must match topnav height */}
         <div className="h-[50px] flex items-center px-4 border-b border-role-student-border flex-shrink-0">
-          <span className="font-display italic font-semibold text-[15px] text-brand-ink">
+          <span className="font-display italic font-semibold text-sidebar-logo text-brand-ink">
             Kaihle
           </span>
         </div>
@@ -106,7 +106,7 @@ export function StudentLayout({
           aria-label="Main navigation"
         >
           {/* LEARN section */}
-          <div className="px-3.5 pt-4 pb-1 font-sans font-bold text-[9px] uppercase tracking-[0.8px] text-brand-muted">
+          <div className="px-3.5 pt-4 pb-1 font-sans font-bold text-sidebar-label uppercase tracking-[0.8px] text-brand-muted">
             Learn
           </div>
 
@@ -135,10 +135,10 @@ export function StudentLayout({
                 to={NAV_ROUTES[key]}
                 aria-current={isActive ? "page" : undefined}
                 className={[
-                  "flex items-center gap-2 mx-[6px] px-3 py-[7px] rounded-[6px]",
-                  "font-sans text-[12px] transition-colors",
+                  "flex items-center gap-2 mx-1.5 px-3 py-7px rounded-nav",
+                  "font-sans text-sidebar-nav transition-colors",
                   isActive
-                    ? "bg-[#f0fdf4] text-brand-primary font-semibold"
+                    ? "bg-role-student-nav-active text-brand-primary font-semibold"
                     : "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
                 ].join(" ")}
               >
@@ -161,7 +161,7 @@ export function StudentLayout({
           {/* CLASSES section — dynamic */}
           {classes.length > 0 && (
             <>
-              <div className="px-3.5 pt-4 pb-1 font-sans font-bold text-[9px] uppercase tracking-[0.8px] text-brand-muted">
+              <div className="px-3.5 pt-4 pb-1 font-sans font-bold text-sidebar-label uppercase tracking-[0.8px] text-brand-muted">
                 Classes
               </div>
               {classes.map((cls) => {
@@ -176,10 +176,10 @@ export function StudentLayout({
                     key={cls.id}
                     to={route}
                     className={[
-                      "flex items-center gap-2 mx-[6px] px-3 py-[7px] rounded-[6px]",
-                      "font-sans text-[12px] transition-colors",
+                      "flex items-center gap-2 mx-1.5 px-3 py-7px rounded-nav",
+                      "font-sans text-sidebar-nav transition-colors",
                       isLocked
-                        ? "text-brand-gold hover:bg-[#fffbeb]"
+                        ? "text-brand-gold hover:bg-role-student-nav-locked-hover"
                         : "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
                     ].join(" ")}
                   >
@@ -215,16 +215,16 @@ export function StudentLayout({
           >
             <div
               className="w-[28px] h-[28px] rounded-full bg-brand-green-light flex items-center
-                         justify-center font-sans font-bold text-[10px] text-brand-primary flex-shrink-0"
+                         justify-center font-sans font-bold text-topnav-sub text-brand-primary flex-shrink-0"
               aria-hidden="true"
             >
               {initials}
             </div>
             <div className="overflow-hidden min-w-0">
-              <div className="font-sans font-semibold text-[11px] text-brand-ink truncate leading-tight">
+              <div className="font-sans font-semibold text-sidebar-profile text-brand-ink truncate leading-tight">
                 {studentName}
               </div>
-              <div className="font-sans text-[9px] text-brand-muted truncate leading-tight">
+              <div className="font-sans text-sidebar-label text-brand-muted truncate leading-tight">
                 {gradeName} · {curriculumName}
               </div>
             </div>
@@ -235,7 +235,7 @@ export function StudentLayout({
             type="button"
             onClick={onLogout}
             className="w-full flex items-center gap-2 px-3.5 py-2.5
-                       font-sans text-[11px] text-brand-muted hover:text-brand-ink hover:bg-gray-50 transition-colors"
+                       font-sans text-sidebar-profile text-brand-muted hover:text-brand-ink hover:bg-gray-50 transition-colors"
             aria-label="Log out"
           >
             <LogOut
@@ -252,15 +252,15 @@ export function StudentLayout({
         {/* Top nav — greeting lives HERE per DESIGN_SYSTEM.md §5.4 Top nav spec */}
         <header
           className="h-[50px] bg-white border-b border-role-student-border
-                     flex items-center justify-between px-[18px] flex-shrink-0"
+                     flex items-center justify-between px-18px flex-shrink-0"
         >
           {/* Left: greeting + grade/curriculum */}
           <div>
-            <div className="font-sans font-medium text-[13px] text-brand-ink leading-tight">
+            <div className="font-sans font-medium text-topnav-sub text-brand-ink leading-tight">
               {getGreeting()}, {firstName} 👋
             </div>
             {gradeName && curriculumName && (
-              <div className="font-sans text-[10px] text-brand-muted leading-tight">
+              <div className="font-sans text-topnav-sub text-brand-muted leading-tight">
                 {gradeName} · {curriculumName}
               </div>
             )}
@@ -271,7 +271,7 @@ export function StudentLayout({
             type="button"
             onClick={() => navigate("/student/settings")}
             className="w-[28px] h-[28px] rounded-full bg-brand-green-light flex items-center
-                       justify-center font-sans font-bold text-[10px] text-brand-primary
+                       justify-center font-sans font-bold text-topnav-sub text-brand-primary
                        hover:opacity-80 transition-opacity flex-shrink-0"
             aria-label={`${studentName} — open settings`}
           >

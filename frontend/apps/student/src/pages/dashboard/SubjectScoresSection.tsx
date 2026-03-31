@@ -111,7 +111,7 @@ export function SubjectScoresSection({
 
   return (
     <div className="mb-6">
-      <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-body mb-3">
+      <h2 className="font-sans text-section-label font-bold uppercase tracking-[0.8px] text-brand-body mb-2.5">
         Your subjects
       </h2>
       <div className="grid grid-cols-3 gap-3">

@@ -9,7 +9,8 @@ interface NavItemProps {
 }
 
 const activeClasses: Record<NavItemProps["variant"], string> = {
-  teacher: "bg-[#fffbeb] text-brand-gold-dark font-bold rounded-lg",
+  teacher:
+    "bg-role-teacher-nav-active text-brand-gold-dark font-bold rounded-lg",
   "school-admin":
     "border-l-[3px] border-brand-primary bg-brand-light text-brand-primary rounded-r-lg rounded-l-none ml-0 mr-2",
   admin: "bg-gray-100 text-role-admin-ink rounded-lg",

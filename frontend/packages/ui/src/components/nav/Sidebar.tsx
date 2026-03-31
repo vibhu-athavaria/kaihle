@@ -161,7 +161,7 @@ export function Sidebar({ variant, classId, onLogout }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto py-4" aria-label="Main navigation">
         {sections.map((section) => (
           <div key={section.section}>
-            <div className="px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest text-brand-muted">
+            <div className="px-3 pt-4 pb-1 text-topnav-sub font-bold uppercase tracking-widest text-brand-muted">
               {section.section}
             </div>
             {section.items.map((item) => {
