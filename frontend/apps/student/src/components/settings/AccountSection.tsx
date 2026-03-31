@@ -1,36 +1,29 @@
 import { useState } from "react";
 import { apiClient } from "@kaihle/auth";
 import { useAuth } from "@kaihle/auth";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { InlineEditName } from "./InlineEditName";
 import { InlineChangePassword } from "./InlineChangePassword";
-
-interface User {
-  id: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-}
+import { useStudentInfo } from "../../hooks/useStudentInfo";
 
 export function AccountSection() {
   useAuth();
   const queryClient = useQueryClient();
+  const { data: studentInfo } = useStudentInfo();
+  const schoolId = studentInfo?.schoolId;
+
   const [editingName, setEditingName] = useState(false);
   const [editingPassword, setEditingPassword] = useState(false);
 
-  const { data: user } = useQuery<User>({
-    queryKey: ["student", "settings", "user"],
-    queryFn: async () => {
-      const response = await apiClient.get<User>("/api/v1/users/me");
-      return response.data;
-    },
-  });
-
   const updateNameMutation = useMutation({
     mutationFn: async (data: { first_name: string; last_name: string }) => {
-      await apiClient.patch("/api/v1/users/me", data);
+      if (!schoolId) throw new Error("School ID not available");
+      await apiClient.patch(`/api/v1/schools/${schoolId}/users/me`, data);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["student", "info"],
+      });
       queryClient.invalidateQueries({
         queryKey: ["student", "settings", "user"],
       });
@@ -65,7 +58,11 @@ export function AccountSection() {
     setEditingPassword(true);
   };
 
-  const displayName = user ? `${user.first_name} ${user.last_name}` : "—";
+  const displayName = studentInfo
+    ? `${studentInfo.firstName}${
+        studentInfo.lastName ? ` ${studentInfo.lastName}` : ""
+      }`
+    : "—";
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
@@ -94,8 +91,8 @@ export function AccountSection() {
 
       {editingName && (
         <InlineEditName
-          initialFirstName={user?.first_name || ""}
-          initialLastName={user?.last_name || ""}
+          initialFirstName={studentInfo?.firstName || ""}
+          initialLastName={studentInfo?.lastName || ""}
           onSave={handleNameSave}
           onCancel={handleNameCancel}
           isLoading={updateNameMutation.isPending}
@@ -112,7 +109,7 @@ export function AccountSection() {
             Email
           </div>
           <div className="font-nunito text-sm text-gray-400">
-            {user?.email || "—"}
+            {studentInfo?.email || "—"}
           </div>
         </div>
         <span className="bg-gray-100 text-gray-400 text-xs rounded-full px-2 py-0.5">

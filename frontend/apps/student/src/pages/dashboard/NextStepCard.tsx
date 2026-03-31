@@ -27,25 +27,27 @@ export function NextStepCard({
   const emoji = emojiMap[type];
 
   return (
-    <div className="bg-white border-[0.5px] border-[#e5e7eb] rounded-[10px] p-[10px_14px] flex items-center justify-between">
-      <div className="flex items-center gap-[10px]">
+    <div className="bg-white border border-role-student-border rounded-card px-3.5 py-2.5 flex items-center justify-between">
+      <div className="flex items-center gap-2.5">
         <span
-          className="text-[14px] w-[18px] text-center"
+          className="text-step-title w-4 text-center flex-shrink-0"
           role="img"
           aria-label={type}
         >
           {emoji}
         </span>
         <div>
-          <div className="text-[11px] font-semibold text-brand-ink">
+          <div className="font-sans font-semibold text-step-title text-brand-ink">
             {title}
           </div>
-          <div className="text-[9px] text-brand-muted">{subtitle}</div>
+          <div className="font-sans text-step-sub text-brand-muted mt-0.5">
+            {subtitle}
+          </div>
         </div>
       </div>
       <button
         onClick={onAction}
-        className="text-[10px] font-bold text-brand-primary whitespace-nowrap hover:underline min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+        className="font-sans font-bold text-step-action text-brand-primary whitespace-nowrap hover:underline min-h-[44px] flex items-center ml-3 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
       >
         {actionLabel}
       </button>

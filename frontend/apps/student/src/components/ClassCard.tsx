@@ -4,19 +4,29 @@ import { Lock } from "lucide-react";
 export type DiagnosticStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED";
 
 export interface ClassCardProps {
+  /** Unique identifier for the class */
   classId: string;
+  /** Optional display name for the class (shown as card heading) */
+  className?: string;
+  /** Name of the subject for this class */
   subjectName: string;
+  /** Name of the teacher for this class */
   teacherName: string;
+  /** Current diagnostic status */
   diagnosticStatus: DiagnosticStatus;
+  /** Optional diagnostic attempt ID for routing to in-progress assessment */
+  diagnosticAttemptId?: string;
   /** Student count for the class */
   studentCount?: number;
 }
 
 export function ClassCard({
   classId,
+  className,
   subjectName,
   teacherName,
   diagnosticStatus,
+  diagnosticAttemptId,
   studentCount,
 }: ClassCardProps) {
   const navigate = useNavigate();
@@ -27,8 +37,11 @@ export function ClassCard({
 
   const handleClick = () => {
     if (isLocked) {
-      // Navigate to diagnostic to unlock class
-      navigate(`/student/classes/${classId}/diagnostic`);
+      // Navigate to diagnostic to unlock class, using attempt ID if available
+      const diagnosticRoute = diagnosticAttemptId
+        ? `/student/assessments/${diagnosticAttemptId}/take`
+        : `/student/classes/${classId}/diagnostic`;
+      navigate(diagnosticRoute);
     } else {
       // Navigate to topics (class content)
       navigate(`/student/classes/${classId}/topics`);
@@ -42,36 +55,37 @@ export function ClassCard({
     return "bg-brand-primary"; // default
   };
 
+  // Determine which name to display as card heading
+  const displayName = className || subjectName;
+
   return (
     <button
       type="button"
       onClick={handleClick}
-      className={`w-full text-left bg-white rounded-[10px] border border-brand-border p-3 transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[44px] ${
+      className={`w-full text-left bg-white rounded-card border border-role-student-border p-3 shadow-card transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[44px] ${
         isLocked ? "opacity-60" : ""
       }`}
     >
-      {/* Header with dot and class name */}
+      {/* Header with dot and class/subject name */}
       <div className="flex items-center gap-1.5 mb-1">
-        {" "}
-        Hi there
         <span
           className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${getDotColorClass()}`}
           aria-label={`Status indicator: ${isLocked ? "locked" : "unlocked"}`}
         />
-        <span className="text-[11px] font-semibold text-brand-ink truncate">
-          {subjectName}
+        <span className="font-sans font-semibold text-card-title text-brand-ink truncate">
+          {displayName}
         </span>
       </div>
 
       {/* Meta info */}
-      <div className="text-[9px] text-brand-muted mb-2">
+      <div className="ffont-sans text-card-meta text-brand-body mb-">
         {teacherName}
         {studentCount !== undefined && ` · ${studentCount} students`}
       </div>
 
       {/* CTA Footer */}
       <div
-        className={`text-[10px] font-semibold ${
+        className={`font-sans font-semibold text-card-action ${
           isLocked ? "text-brand-gold" : "text-brand-primary"
         }`}
       >

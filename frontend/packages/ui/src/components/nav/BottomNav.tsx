@@ -59,7 +59,7 @@ export function BottomNav({ activeItem, className = "" }: BottomNavProps) {
               aria-hidden="true"
             />
             <span
-              className={`text-[10px] font-semibold ${
+              className={`text-topnav-sub font-semibold ${
                 isActive ? "text-brand-primary" : "text-brand-muted"
               }`}
             >

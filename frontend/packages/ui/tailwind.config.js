@@ -22,7 +22,35 @@ export default {
   ],
   theme: {
     extend: {
-
+      // ── COMPACT UI TOKENS ───────────────────────────────────
+      // All values match docs/design/mockups/student_dashboard.html exactly.
+      // Use these token names in components — never use text-[Npx] in JSX.
+      fontSize: {
+        // Sidebar chrome
+        'sidebar-logo':    ['15px', { lineHeight: '1' }],
+        'sidebar-label':   ['9px',  { lineHeight: '1' }],
+        'sidebar-nav':     ['12px', { lineHeight: '1.25' }],
+        'sidebar-profile': ['11px', { lineHeight: '1.2' }],
+        'sidebar-grade':   ['9px',  { lineHeight: '1' }],
+        'sidebar-avatar':  ['10px', { lineHeight: '1' }],
+        // Top nav
+        'topnav-greeting': ['13px', { lineHeight: '1.25' }],
+        'topnav-sub':      ['10px', { lineHeight: '1' }],
+        // Page section labels
+        'section-label':   ['9px',  { lineHeight: '1' }],
+        // Score cards
+        'score-value':     ['20px', { lineHeight: '1' }],
+        'score-subject':   ['9px',  { lineHeight: '1' }],
+        'score-band':      ['9px',  { lineHeight: '1' }],
+        // Class cards
+        'card-title':      ['11px', { lineHeight: '1.3' }],
+        'card-meta':       ['9px',  { lineHeight: '1.4' }],
+        'card-action':     ['10px', { lineHeight: '1' }],
+        // Next step cards
+        'step-title':      ['11px', { lineHeight: '1.3' }],
+        'step-sub':        ['9px',  { lineHeight: '1.4' }],
+        'step-action':     ['10px', { lineHeight: '1' }],
+      },
       // ── FONT FAMILIES ──────────────────────────────────────
       fontFamily: {
         // Nunito: base body font — ALL roles
@@ -108,17 +136,17 @@ export default {
           border:   '#e5e7eb',   // borders — neutral gray (same as brand-border)
           muted:    '#9ca3af',   // section labels (same as brand-muted)
           body:     '#4a5240',   // secondary text, inactive nav
-          // Active nav: bg-[#fffbeb] text-brand-gold-dark (gold tint)
+          'nav-active': '#fffbeb',
         },
 
         // ── STUDENT TOKENS ───────────────────────────────────
         // Airy & Encouraging — mobile-first, colored-border cards
         // CONSTITUTION: ages 11-18, phone-primary, daily use
         'role-student': {
-          bg:       '#f9fafb',   // page background — cool near-white (NOT cream)
-          border:   '#e5e7eb',   // card borders, dividers
-          // Subject cards use colored borders derived from getMasteryStyle()
-          // See DESIGN_SYSTEM.md §5.4 for the colored-border card pattern
+          bg:           '#f9fafb',   // page background
+          border:       '#e5e7eb',   // card borders, dividers
+          'nav-active': '#f0fdf4',   // active sidebar nav tint (NOT the mastery Strong tint)
+          'nav-locked-hover': '#fffbeb',  // hover tint for locked class items (amber/gold tint)
         },
 
         // ── PARENT TOKENS ────────────────────────────────────
@@ -136,8 +164,10 @@ export default {
 
       // ── BORDER RADIUS ──────────────────────────────────────
       borderRadius: {
-        '2xl': '1rem',    // cards, modals
-        '3xl': '1.5rem',  // large panels
+        '2xl':  '1rem',    // modals, large cards
+        '3xl':  '1.5rem',  // large panels
+        'nav':  '6px',     // sidebar nav item radius
+        'card': '10px',    // dashboard compact cards (score, class, next step)
       },
 
       // ── BOX SHADOWS ────────────────────────────────────────
@@ -146,7 +176,6 @@ export default {
         'card-hover': '0 8px 30px rgba(26,92,56,0.08)',
         btn:        '0 4px 14px rgba(26,92,56,0.20)',
       },
-
     },
   },
   plugins: [],

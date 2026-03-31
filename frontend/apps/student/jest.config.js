@@ -8,5 +8,17 @@ export default {
   ],
   moduleNameMapper: {
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
+    '^@kaihle/auth$': '<rootDir>/src/hooks/__tests__/__mocks__/apiClient.ts',
+  },
+  transform: {
+    '^.+\\.tsx?$': ['ts-jest', {
+      tsconfig: {
+        jsx: 'react-jsx',
+        esModuleInterop: true,
+        module: 'ESNext',
+        moduleResolution: 'bundler',
+        types: ['jest', 'jest-environment-jsdom'],
+      },
+    }],
   },
 };
