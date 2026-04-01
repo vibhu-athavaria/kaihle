@@ -1,4 +1,4 @@
-import React from "react";
+import { useState, FormEvent } from "react";
 
 interface InlineEditNameProps {
   currentFirstName: string;
@@ -13,11 +13,11 @@ export function InlineEditName({
   onSave,
   onCancel,
 }: InlineEditNameProps) {
-  const [firstName, setFirstName] = React.useState(currentFirstName);
-  const [lastName, setLastName] = React.useState(currentLastName);
-  const [saving, setSaving] = React.useState(false);
+  const [firstName, setFirstName] = useState(currentFirstName);
+  const [lastName, setLastName] = useState(currentLastName);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!isValid) return;
     setSaving(true);
