@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, require_role, require_school_match
+from app.core.deps import CurrentUser, _check_school_access, require_role
 from app.models.user import UserRole
 from app.schemas.analytics import PlatformStats, SchoolAnalytics
 
@@ -30,9 +30,11 @@ router = APIRouter(tags=["analytics"])
 async def get_school_analytics(
     school_id: UUID,
     current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
-    _: CurrentUser = Depends(require_school_match(lambda: school_id)),  # noqa: F821
     db: AsyncSession = Depends(get_db),
 ) -> SchoolAnalytics:
+    # Check school access - KAIHLE_ADMIN bypasses, others must match
+    _check_school_access(school_id, current_user)
+
     # STUB — M0-10-T6 | Real implementation: M6-1-T1
     # M6 adds: school_id-scoped aggregation queries across all feature tables.
     return SchoolAnalytics(

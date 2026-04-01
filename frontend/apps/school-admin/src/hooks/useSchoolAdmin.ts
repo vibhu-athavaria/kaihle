@@ -91,7 +91,29 @@ export function useSchoolUsers(
       const response = await apiClient.get(
         `/api/v1/schools/${schoolId}/users?role=${role}`,
       );
-      return response.data as User[];
+      // Handle both paginated response (object with users array) and direct array
+      const rawUsers = response.data?.users ?? response.data;
+
+      // Map backend fields to frontend interface
+      const users: User[] = (rawUsers || []).map(
+        (user: {
+          id: string;
+          email: string;
+          first_name: string;
+          last_name: string;
+          role: string;
+          is_active: boolean;
+        }) => ({
+          id: user.id,
+          email: user.email,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          role: user.role,
+          status: user.is_active ? ("ACTIVE" as const) : ("INACTIVE" as const),
+        }),
+      );
+
+      return users;
     },
     enabled: !!useAuthStore.getState().user?.school_id,
   });

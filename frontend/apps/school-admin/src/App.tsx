@@ -7,6 +7,9 @@ import { PasswordSetupPage } from "./pages/PasswordSetupPage";
 import { SchoolOverview } from "./pages/SchoolOverview";
 import { UserManagement } from "./pages/UserManagement";
 import { ClassManagement } from "./pages/ClassManagement";
+import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { BillingPage } from "./pages/BillingPage";
+import { SchoolAdminSettingsPage } from "./pages/settings/SchoolAdminSettingsPage";
 
 export default function App() {
   return (
@@ -38,6 +41,12 @@ export default function App() {
                       <Route path="dashboard" element={<SchoolOverview />} />
                       <Route path="users" element={<UserManagement />} />
                       <Route path="classes" element={<ClassManagement />} />
+                      <Route
+                        path="settings"
+                        element={<SchoolAdminSettingsPage />}
+                      />
+                      <Route path="analytics" element={<AnalyticsPage />} />
+                      <Route path="billing" element={<BillingPage />} />
                       <Route
                         index
                         element={<Navigate to="dashboard" replace />}

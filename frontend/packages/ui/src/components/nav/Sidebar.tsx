@@ -5,6 +5,7 @@ import {
   ClipboardList,
   BookOpen,
   Users,
+  BadgeDollarSign,
   BarChart3,
   Building2,
   Settings,
@@ -71,17 +72,25 @@ const schoolAdminSections: NavSection[] = [
   {
     section: "SCHOOL",
     items: [
-      { label: "Overview", href: "/school/overview", icon: LayoutDashboard },
-      { label: "Teachers", href: "/school/users?role=teacher", icon: Users },
-      { label: "Students", href: "/school/users?role=student", icon: Users },
-      { label: "Classes", href: "/school/classes", icon: Building2 },
+      {
+        label: "Dashboard",
+        href: "/school-admin/dashboard",
+        icon: LayoutDashboard,
+      },
+      { label: "Users", href: "/school-admin/users", icon: Users },
+      { label: "Classes", href: "/school-admin/classes", icon: Building2 },
     ],
   },
   {
     section: "ADMIN",
     items: [
-      { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
-      { label: "Billing", href: "/school/billing", icon: Settings },
+      { label: "Analytics", href: "/school-admin/analytics", icon: BarChart3 },
+      {
+        label: "Billing",
+        href: "/school-admin/billing",
+        icon: BadgeDollarSign,
+      },
+      { label: "Settings", href: "/school-admin/settings", icon: Settings },
     ],
   },
 ];
