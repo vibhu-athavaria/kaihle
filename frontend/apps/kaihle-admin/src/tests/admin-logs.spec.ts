@@ -29,30 +29,30 @@ test.describe("KaihleAdmin Logs Page", () => {
   });
 
   test("logs_timestamp_uses_tabular_nums", async ({ page }) => {
-    const firstLogLine = page.locator('[data-testid="log-line"]').first();
-    const timestamp = firstLogLine.locator('[data-testid="log-timestamp"]');
+    const firstLogLine = page.locator('[data-testid^="log-line-"]').first();
+    const timestamp = firstLogLine.locator('[data-testid^="log-timestamp-"]');
     await expect(timestamp).toHaveClass(/tabular-nums/);
   });
 
   test("logs_level_filter_shows_only_that_level", async ({ page }) => {
     // Select ERROR level filter
-    const levelSelect = page.locator('[data-testid="level-filter"]');
+    const levelSelect = page.locator('[data-testid="logs-level-select"]');
     await levelSelect.selectOption("ERROR");
 
     // Wait for filter to apply
     await page.waitForTimeout(500);
 
     // All visible log lines should have ERROR level
-    const logLines = page.locator('[data-testid="log-line"]');
+    const logLines = page.locator('[data-testid^="log-line-"]');
     const count = await logLines.count();
     for (let i = 0; i < count; i++) {
-      const level = logLines.nth(i).locator('[data-testid="log-level"]');
+      const level = logLines.nth(i).locator('[data-testid^="log-level-"]');
       await expect(level).toHaveText("ERROR");
     }
   });
 
   test("logs_search_debounced_300ms", async ({ page }) => {
-    const searchInput = page.locator('[data-testid="search-input"]');
+    const searchInput = page.locator('[data-testid="logs-search-input"]');
 
     // Type first character
     await searchInput.fill("a");
@@ -71,19 +71,19 @@ test.describe("KaihleAdmin Logs Page", () => {
 
   test("logs_line_click_expands_extra_fields", async ({ page }) => {
     // Find a log line that has extra fields
-    const logLines = page.locator('[data-testid="log-line"]');
+    const logLines = page.locator('[data-testid^="log-line-"]');
     const count = await logLines.count();
     expect(count).toBeGreaterThan(0);
 
     // Click first log line
     const firstLine = logLines.first();
     const hasExtra = await firstLine
-      .locator('[data-testid="log-extra"]')
+      .locator('[data-testid^="log-extra-"]')
       .count();
     if (hasExtra > 0) {
       await firstLine.click();
       // Extra fields should be visible after click
-      const extraSection = firstLine.locator('[data-testid="log-extra"]');
+      const extraSection = firstLine.locator('[data-testid^="log-extra-"]');
       await expect(extraSection).toBeVisible();
     }
   });
@@ -97,11 +97,13 @@ test.describe("KaihleAdmin Logs Page", () => {
     );
 
     // Toggle auto-scroll on
-    const autoScrollToggle = page.locator('[data-testid="auto-scroll-toggle"]');
+    const autoScrollToggle = page.locator(
+      '[data-testid="logs-auto-scroll-toggle"]',
+    );
     await autoScrollToggle.click();
 
-    // Verify toggle is on
-    await expect(autoScrollToggle).toBeChecked();
+    // Verify toggle is on (Switch uses aria-checked, not checked)
+    await expect(autoScrollToggle).toHaveAttribute("aria-checked", "true");
 
     // Wait for auto-refresh (10s interval in mock)
     // But we can trigger manually or wait

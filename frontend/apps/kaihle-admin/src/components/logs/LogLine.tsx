@@ -18,6 +18,19 @@ function formatTimestamp(timestamp: string): string {
   return date.toISOString().replace("T", " ").replace("Z", "");
 }
 
+/**
+ * Sanitize a string to prevent XSS attacks.
+ * Escapes HTML special characters to render user-provided content safely.
+ */
+function sanitizeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 export function LogLine({ log }: LogLineProps) {
   const [expanded, setExpanded] = useState(false);
   const hasExtra = log.extra && Object.keys(log.extra).length > 0;
@@ -73,7 +86,7 @@ export function LogLine({ log }: LogLineProps) {
           }`}
           data-testid={`log-message-${log.id}`}
         >
-          {log.message}
+          {sanitizeHtml(log.message)}
         </span>
       </div>
 

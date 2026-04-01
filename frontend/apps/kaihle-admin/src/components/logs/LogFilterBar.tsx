@@ -15,12 +15,12 @@ function Switch({ checked, onChange, "data-testid": dataTestId }: SwitchProps) {
       data-testid={dataTestId}
       onClick={() => onChange(!checked)}
       className={`
-        relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full
-        border-2 border-transparent transition-colors duration-200 ease-in-out
-        focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2
-        focus-visible:outline-none min-h-[44px] min-w-[44px]
-        ${checked ? "bg-brand-primary" : "bg-gray-200"}
-      `}
+          relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full
+          border-2 border-transparent transition-colors duration-200 ease-in-out
+          focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2
+          focus-visible:outline-none min-h-[44px]
+          ${checked ? "bg-brand-primary" : "bg-gray-200"}
+        `}
     >
       <span
         className={`
