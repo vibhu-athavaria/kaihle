@@ -38,5 +38,13 @@ class Settings(BaseSettings):
     llm_embeddings_model: str = "text-embedding-004"
     llm_embeddings_api_base: str | None = None
 
+    # Platform stats — overridable via environment variables
+    platform_llm_provider: str = "openai"
+    platform_runpod_status: str = "blocked"
+    platform_trial_days: int = 14
+    platform_trial_students_limit: int = 30
+    platform_rate_limit_requests_per_minute: int = 100
+    platform_rate_limit_concurrent_users: int = 50
+
 
 settings = Settings()
