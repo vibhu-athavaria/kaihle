@@ -1,5 +1,3 @@
-import { ReactNode } from "react";
-
 export type BadgeVariant = "green" | "amber" | "red";
 
 interface ConfigRowProps {

@@ -1,5 +1,3 @@
-import { Button } from "@kaihle/ui";
-
 interface DeactivateUserModalProps {
   isOpen: boolean;
   onClose: () => void;
