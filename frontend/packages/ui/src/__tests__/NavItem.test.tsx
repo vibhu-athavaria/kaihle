@@ -42,7 +42,7 @@ describe("NavItem", () => {
     render(
       <NavItem
         label="Overview"
-        href="/kaihle-admin/overview"
+        href="/kaihle-admin/dashboard"
         icon={Home}
         isActive={true}
         variant="admin"

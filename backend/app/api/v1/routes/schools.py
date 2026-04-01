@@ -20,7 +20,7 @@ from app.services.school_service import SchoolService
 router = APIRouter(prefix="/schools", tags=["schools"])
 
 
-def _school_to_response(school: Any) -> SchoolResponse:
+def _school_to_response(school: Any, admin_user: Any = None) -> SchoolResponse:
     """Convert School model to SchoolResponse schema.
 
     Handles the mapping from status field to is_active boolean.
@@ -32,6 +32,9 @@ def _school_to_response(school: Any) -> SchoolResponse:
         country=school.country,
         timezone=school.timezone,
         is_active=school.status == "active",
+        joined=school.created_at.isoformat(),
+        admin_user_id=admin_user.id if admin_user else None,
+        admin_email=admin_user.email if admin_user else None,
     )
 
 
@@ -83,14 +86,15 @@ async def get_school(
     _check_school_access(school_id, current_user)
     service = SchoolService(db)
     try:
-        school = await service.get_school(school_id)
+        school, admin_user = await service.get_school_with_admin(school_id)
         logger.info(
             "get_school_response",
             school_id=str(school.id),
+            admin_user_id=str(admin_user.id) if admin_user else None,
             has_city=hasattr(school, "city"),
             city=getattr(school, "city", None),
         )
-        return _school_to_response(school)
+        return _school_to_response(school, admin_user)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="School not found")
 

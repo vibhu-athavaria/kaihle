@@ -2,7 +2,7 @@
 
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class SchoolCreate(BaseModel):
@@ -12,6 +12,12 @@ class SchoolCreate(BaseModel):
     slug: str  # URL-safe identifier e.g. "bali-green-school"
     country: str | None = None
     timezone: str | None = "UTC"
+    # Admin user fields - creates a SCHOOL_ADMIN user with the school
+    admin_email: EmailStr
+    admin_first_name: str
+    admin_last_name: str
+    admin_password: str | None = Field(default=None, min_length=8)
+    # NULL = magic-link only; if provided, must be >= 8 chars
 
 
 class SchoolUpdate(BaseModel):
@@ -32,6 +38,10 @@ class SchoolResponse(BaseModel):
     country: str | None
     timezone: str
     is_active: bool
+    joined: str
+    # Admin user info - available when fetching single school
+    admin_user_id: uuid.UUID | None = None
+    admin_email: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

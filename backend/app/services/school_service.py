@@ -2,11 +2,16 @@
 
 import uuid
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import hash_password
 from app.models.school import School
+from app.models.user import User, UserRole
 from app.schemas.school import SchoolCreate, SchoolUpdate
+
+logger = structlog.get_logger()
 
 
 class SchoolService:
@@ -44,6 +49,32 @@ class SchoolService:
         )
         self.db.add(school)
         await self.db.flush()
+
+        # Check for duplicate admin email
+        existing_user = await self.db.scalar(select(User).where(User.email == data.admin_email))
+        if existing_user:
+            raise ValueError(f"A user with email '{data.admin_email}' already exists")
+
+        # Create the school admin user
+        admin_user = User(
+            school_id=school.id,
+            email=data.admin_email,
+            first_name=data.admin_first_name,
+            last_name=data.admin_last_name,
+            role=UserRole.SCHOOL_ADMIN,
+            is_active=True,
+            hashed_password=hash_password(data.admin_password) if data.admin_password else None,
+        )
+        self.db.add(admin_user)
+        await self.db.flush()
+
+        logger.info(
+            "create_school",
+            school_id=str(school.id),
+            admin_email=data.admin_email,
+            password_set=data.admin_password is not None,
+        )
+
         return school
 
     async def list_schools(self, page: int = 1, page_size: int = 20) -> tuple[list[School], int]:
@@ -85,6 +116,27 @@ class SchoolService:
         if not school:
             raise ValueError("School not found")
         return school
+
+    async def get_school_with_admin(self, school_id: uuid.UUID) -> tuple[School, User | None]:
+        """Get a school and its first School Admin user by ID.
+
+        Args:
+            school_id: The school UUID
+
+        Returns:
+            Tuple of (School, User | None) where User is the SCHOOL_ADMIN or None
+
+        Raises:
+            ValueError: If the school is not found
+        """
+        school = await self.get_school(school_id)
+        admin_user = await self.db.scalar(
+            select(User)
+            .where(User.school_id == school_id, User.role == UserRole.SCHOOL_ADMIN)
+            .order_by(User.created_at.asc())
+            .limit(1)
+        )
+        return school, admin_user
 
     async def update_school(self, school_id: uuid.UUID, data: SchoolUpdate) -> School:
         """Update a school.

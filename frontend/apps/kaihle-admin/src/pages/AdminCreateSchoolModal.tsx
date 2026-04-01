@@ -42,6 +42,18 @@ function validateEmail(email: string): string | null {
   return null;
 }
 
+function validatePassword(
+  password: string,
+  confirm: string,
+): { password?: string; confirm?: string } {
+  if (!password) return {}; // empty = magic-link only, permitted
+  const errors: { password?: string; confirm?: string } = {};
+  if (password.length < 8)
+    errors.password = "Password must be at least 8 characters";
+  if (password !== confirm) errors.confirm = "Passwords do not match";
+  return errors;
+}
+
 export function AdminCreateSchoolModal({ onClose }: { onClose: () => void }) {
   const createSchool = useCreateSchool();
   const [formData, setFormData] = useState({
@@ -54,6 +66,8 @@ export function AdminCreateSchoolModal({ onClose }: { onClose: () => void }) {
     admin_email: "",
     admin_first_name: "",
     admin_last_name: "",
+    admin_password: "",
+    admin_password_confirm: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -89,6 +103,12 @@ export function AdminCreateSchoolModal({ onClose }: { onClose: () => void }) {
       newErrors.admin_first_name = "First name is required";
     if (!formData.admin_last_name.trim())
       newErrors.admin_last_name = "Last name is required";
+    const pwErrors = validatePassword(
+      formData.admin_password,
+      formData.admin_password_confirm,
+    );
+    if (pwErrors.password) newErrors.admin_password = pwErrors.password;
+    if (pwErrors.confirm) newErrors.admin_password_confirm = pwErrors.confirm;
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -98,7 +118,10 @@ export function AdminCreateSchoolModal({ onClose }: { onClose: () => void }) {
     if (!validate()) return;
 
     try {
-      await createSchool.mutateAsync(formData);
+      await createSchool.mutateAsync({
+        ...formData,
+        admin_password: formData.admin_password || undefined,
+      });
       onClose();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
@@ -228,6 +251,32 @@ export function AdminCreateSchoolModal({ onClose }: { onClose: () => void }) {
                   }
                   error={errors.admin_last_name}
                   placeholder="Doe"
+                />
+              </div>
+              <div className="mt-4">
+                <Input
+                  label="Admin password"
+                  type="password"
+                  value={formData.admin_password}
+                  onChange={(e) =>
+                    setFormData({ ...formData, admin_password: e.target.value })
+                  }
+                  error={errors.admin_password}
+                  hint="Leave blank to use magic link only"
+                />
+              </div>
+              <div className="mt-4">
+                <Input
+                  label="Confirm password"
+                  type="password"
+                  value={formData.admin_password_confirm}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      admin_password_confirm: e.target.value,
+                    })
+                  }
+                  error={errors.admin_password_confirm}
                 />
               </div>
             </div>

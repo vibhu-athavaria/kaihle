@@ -34,8 +34,8 @@ test.describe("Kaihle Admin UI", () => {
         );
       }, KAIHLE_ADMIN_USER);
 
-      await page.goto("/kaihle-admin/overview");
-      await expect(page).toHaveURL("/kaihle-admin/overview");
+      await page.goto("/kaihle-admin/dashboard");
+      await expect(page).toHaveURL("/kaihle-admin/dashboard");
       await expect(page.locator("text=Platform overview")).toBeVisible();
     });
 
@@ -54,7 +54,7 @@ test.describe("Kaihle Admin UI", () => {
         );
       }, TEACHER_USER);
 
-      await page.goto("/kaihle-admin/overview");
+      await page.goto("/kaihle-admin/dashboard");
       await expect(page).toHaveURL("/unauthorised");
     });
 
@@ -71,7 +71,7 @@ test.describe("Kaihle Admin UI", () => {
         );
       }, SCHOOL_ADMIN_USER);
 
-      await page.goto("/kaihle-admin/overview");
+      await page.goto("/kaihle-admin/dashboard");
       await expect(page).toHaveURL("/unauthorised");
     });
   });
@@ -92,7 +92,7 @@ test.describe("Kaihle Admin UI", () => {
     });
 
     test("shows KPI cards with correct data", async ({ page }) => {
-      await page.goto("/kaihle-admin/overview");
+      await page.goto("/kaihle-admin/dashboardd");
 
       await expect(page.locator("text=Schools")).toBeVisible();
       await expect(page.locator("text=Students")).toBeVisible();
@@ -100,19 +100,19 @@ test.describe("Kaihle Admin UI", () => {
     });
 
     test("shows school status table", async ({ page }) => {
-      await page.goto("/kaihle-admin/overview");
+      await page.goto("/kaihle-admin/dashboard");
 
       await expect(page.locator("text=School status")).toBeVisible();
     });
 
     test("shows recent activity section", async ({ page }) => {
-      await page.goto("/kaihle-admin/overview");
+      await page.goto("/kaihle-admin/dashboard");
 
       await expect(page.locator("text=Recent activity")).toBeVisible();
     });
 
     test("has Add school button in top nav", async ({ page }) => {
-      await page.goto("/kaihle-admin/overview");
+      await page.goto("/kaihle-admin/dashboard");
 
       await expect(page.locator("button:has-text('Add school')")).toBeVisible();
     });
@@ -342,7 +342,7 @@ test.describe("Kaihle Admin UI", () => {
         );
       }, KAIHLE_ADMIN_USER);
 
-      await page.goto("/kaihle-admin/overview");
+      await page.goto("/kaihle-admin/dashboard");
 
       const layout = page.locator(".bg-\\[\\#f8f9fb\\]");
       await expect(layout.first()).toBeVisible();

@@ -13,6 +13,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token
@@ -83,6 +84,9 @@ class TestCreateSchool:
             "slug": f"new-school-{uuid.uuid4().hex[:8]}",
             "country": "Indonesia",
             "timezone": "Asia/Jakarta",
+            "admin_email": f"admin-{uuid.uuid4().hex[:8]}@test.com",
+            "admin_first_name": "Admin",
+            "admin_last_name": "User",
         }
 
         response = await client.post("/api/v1/schools", json=payload, headers=headers)
@@ -94,6 +98,107 @@ class TestCreateSchool:
         assert data["slug"] == payload["slug"]
         assert data["country"] == "Indonesia"
         assert data["is_active"] is True
+
+    @pytest.mark.asyncio
+    async def test_create_school_with_password_when_valid_then_admin_user_has_hashed_password(
+        self, client: AsyncClient, kaihle_admin: User, db_session: AsyncSession
+    ) -> None:
+        """Test that creating a school with password creates admin user with hashed password."""
+        headers = make_auth_header(kaihle_admin)
+        plain_password = "securepass123"
+        payload = {
+            "name": "School With Password",
+            "slug": f"school-with-pw-{uuid.uuid4().hex[:8]}",
+            "country": "Indonesia",
+            "timezone": "Asia/Jakarta",
+            "admin_email": f"admin-{uuid.uuid4().hex[:8]}@test.com",
+            "admin_first_name": "Admin",
+            "admin_last_name": "User",
+            "admin_password": plain_password,
+        }
+
+        response = await client.post("/api/v1/schools", json=payload, headers=headers)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert "id" in data
+
+        # Verify user was created with hashed password
+        from sqlalchemy import select
+
+        from app.core.security import verify_password
+
+        result = await db_session.execute(
+            select(User).where(User.school_id == data["id"], User.role == UserRole.SCHOOL_ADMIN)
+        )
+        admin_user = result.scalar_one_or_none()
+        assert admin_user is not None
+        assert admin_user.hashed_password is not None
+        assert verify_password(plain_password, admin_user.hashed_password)
+        assert admin_user.hashed_password != plain_password  # Not plaintext
+
+    @pytest.mark.asyncio
+    async def test_create_school_without_password_when_valid_then_admin_user_has_null_password(
+        self, client: AsyncClient, kaihle_admin: User, db_session: AsyncSession
+    ) -> None:
+        """Test that creating a school without password creates admin user with null password."""
+        headers = make_auth_header(kaihle_admin)
+        payload = {
+            "name": "School No Password",
+            "slug": f"school-no-pw-{uuid.uuid4().hex[:8]}",
+            "country": "Indonesia",
+            "timezone": "Asia/Jakarta",
+            "admin_email": f"admin-{uuid.uuid4().hex[:8]}@test.com",
+            "admin_first_name": "Admin",
+            "admin_last_name": "User",
+            # No admin_password
+        }
+
+        response = await client.post("/api/v1/schools", json=payload, headers=headers)
+
+        assert response.status_code == 201
+        data = response.json()
+
+        # Verify user was created with null password (magic-link only)
+        result = await db_session.execute(
+            select(User).where(User.school_id == data["id"], User.role == UserRole.SCHOOL_ADMIN)
+        )
+        admin_user = result.scalar_one_or_none()
+        assert admin_user is not None
+        assert admin_user.hashed_password is None
+
+    @pytest.mark.asyncio
+    async def test_create_school_when_duplicate_admin_email_then_returns_409(
+        self, client: AsyncClient, kaihle_admin: User, db_session: AsyncSession, test_school: School
+    ) -> None:
+        """Test that duplicate admin email returns 409."""
+        # Create a user with the same email first
+        duplicate_email = f"existing-{uuid.uuid4().hex[:8]}@test.com"
+        existing_user = User(
+            id=uuid.uuid4(),
+            school_id=test_school.id,
+            email=duplicate_email,
+            first_name="Existing",
+            last_name="User",
+            role=UserRole.TEACHER,
+            is_active=True,
+        )
+        db_session.add(existing_user)
+        await db_session.commit()
+
+        headers = make_auth_header(kaihle_admin)
+        payload = {
+            "name": "School Duplicate Email",
+            "slug": f"school-dup-{uuid.uuid4().hex[:8]}",
+            "admin_email": duplicate_email,
+            "admin_first_name": "Admin",
+            "admin_last_name": "User",
+        }
+
+        response = await client.post("/api/v1/schools", json=payload, headers=headers)
+
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_create_school_when_teacher_then_403(self, client: AsyncClient, test_teacher: User) -> None:
@@ -117,6 +222,9 @@ class TestCreateSchool:
         payload = {
             "name": "Another School",
             "slug": test_school.slug,
+            "admin_email": f"admin-{uuid.uuid4().hex[:8]}@test.com",
+            "admin_first_name": "Admin",
+            "admin_last_name": "User",
         }
 
         response = await client.post("/api/v1/schools", json=payload, headers=headers)
@@ -252,6 +360,53 @@ class TestGetSchool:
         response = await client.get(f"/api/v1/schools/{non_existent_id}", headers=headers)
 
         assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_get_school_when_admin_exists_then_returns_admin_user_id_and_email(
+        self, client: AsyncClient, kaihle_admin: User, db_session: AsyncSession
+    ) -> None:
+        """Test that getting a school with admin returns admin_user_id and admin_email."""
+        # Create a school with admin
+
+        school_payload = {
+            "name": "School With Admin",
+            "slug": f"school-admin-{uuid.uuid4().hex[:8]}",
+            "country": "Indonesia",
+            "timezone": "Asia/Jakarta",
+            "admin_email": f"admin-{uuid.uuid4().hex[:8]}@test.com",
+            "admin_first_name": "Admin",
+            "admin_last_name": "User",
+            "admin_password": "securepass123",
+        }
+
+        create_response = await client.post(
+            "/api/v1/schools", json=school_payload, headers=make_auth_header(kaihle_admin)
+        )
+        assert create_response.status_code == 201
+        school_id = create_response.json()["id"]
+
+        # Get the school
+        headers = make_auth_header(kaihle_admin)
+        response = await client.get(f"/api/v1/schools/{school_id}", headers=headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["admin_user_id"] is not None
+        assert data["admin_email"] == school_payload["admin_email"]
+
+    @pytest.mark.asyncio
+    async def test_get_school_when_no_admin_then_admin_fields_are_null(
+        self, client: AsyncClient, kaihle_admin: User, test_school: School
+    ) -> None:
+        """Test that getting a school with no admin returns null admin fields."""
+        headers = make_auth_header(kaihle_admin)
+
+        response = await client.get(f"/api/v1/schools/{test_school.id}", headers=headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["admin_user_id"] is None
+        assert data["admin_email"] is None
 
 
 class TestUpdateSchool:

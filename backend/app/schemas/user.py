@@ -23,6 +23,9 @@ class UserUpdate(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     is_active: bool | None = None
+    # Password - if provided, hashed and stored as hashed_password.
+    # NULL = leave current password unchanged.
+    password: str | None = Field(default=None, min_length=8)
 
 
 class UserResponse(BaseModel):

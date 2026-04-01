@@ -5,6 +5,7 @@ import { Card, Badge, Button, Skeleton } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
 import { useAdminSchool, useSchoolAnalytics } from "../hooks/useKaihleAdmin";
 import { AdminExtendTrialModal } from "./AdminExtendTrialModal";
+import { AdminEditSchoolModal } from "./AdminEditSchoolModal";
 import {
   ArrowLeft,
   Users,
@@ -24,7 +25,7 @@ function getDaysRemaining(trialEndDate: string | null): number | null {
   return diff > 0 ? diff : 0;
 }
 
-function InfoSection({ school }: { school: any }) {
+function InfoSection({ school, onEdit }: { school: any; onEdit: () => void }) {
   const statusVariant =
     school.subscription_status === "ACTIVE"
       ? "success"
@@ -41,7 +42,17 @@ function InfoSection({ school }: { school: any }) {
     <Card className="bg-white border border-role-admin-border">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-sm font-bold text-role-admin-ink">School info</h3>
-        <Badge variant={statusVariant}>{school.subscription_status}</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={statusVariant}>{school.subscription_status}</Badge>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onEdit}
+            className="min-h-[44px]"
+          >
+            Edit
+          </Button>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-6">
         <div>
@@ -204,6 +215,7 @@ export function AdminSchoolDetail() {
   const { logout } = useAuth();
   const { schoolId } = useParams<{ schoolId: string }>();
   const [showExtendModal, setShowExtendModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const { data: school, isLoading: schoolLoading } = useAdminSchool(schoolId!);
   const { data: analytics, isLoading: analyticsLoading } = useSchoolAnalytics(
@@ -239,7 +251,7 @@ export function AdminSchoolDetail() {
           Back to schools
         </Link>
 
-        <InfoSection school={school} />
+        <InfoSection school={school} onEdit={() => setShowEditModal(true)} />
 
         {school.subscription_status === "TRIAL" && (
           <TrialSection
@@ -257,6 +269,13 @@ export function AdminSchoolDetail() {
           schoolName={school.name}
           currentTrialEnd={school.trial_end_date}
           onClose={() => setShowExtendModal(false)}
+        />
+      )}
+
+      {showEditModal && (
+        <AdminEditSchoolModal
+          school={school}
+          onClose={() => setShowEditModal(false)}
         />
       )}
     </AdminLayout>

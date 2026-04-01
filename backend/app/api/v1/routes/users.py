@@ -104,6 +104,10 @@ async def update_user(
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     """Update user information."""
+    # KAIHLE_ADMIN may set passwords for any user in any school.
+    # SCHOOL_ADMIN may set passwords for users in their own school only
+    # (enforced by _check_school_access above — no additional guard needed).
+    # TEACHER and PARENT cannot reach this route (blocked by require_role).
     _check_school_access(school_id, current_user)
     service = UserService(db)
     try:

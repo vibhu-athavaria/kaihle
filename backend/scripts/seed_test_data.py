@@ -128,10 +128,19 @@ async def seed_test_data() -> None:
                 "last_name": "User",
                 "role": "PARENT",
             },
+            {
+                "email": "kaihle-admin@kaihle.com",
+                "first_name": "Kaihle",
+                "last_name": "Admin",
+                "role": "KAIHLE_ADMIN",
+            },
         ]
 
         user_ids = {}
         for user_data in users_data:
+            # KAIHLE_ADMIN users must have school_id = NULL (database constraint)
+            school_id_value = None if user_data["role"] == "KAIHLE_ADMIN" else str(school_id)
+
             result = await db.execute(
                 text("""
                     INSERT INTO users (id, school_id, email, hashed_password, first_name, last_name, role, is_active)
@@ -140,7 +149,7 @@ async def seed_test_data() -> None:
                     RETURNING id
                 """),
                 {
-                    "school_id": str(school_id),
+                    "school_id": school_id_value,
                     "email": user_data["email"],
                     "hashed_password": test_password,
                     "first_name": user_data["first_name"],
