@@ -78,7 +78,7 @@ function SchoolsTable({
               Status
             </th>
             <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-widest text-role-admin-muted">
-              Created
+              Joined
             </th>
           </tr>
         </thead>
@@ -113,7 +113,7 @@ function SchoolsTable({
                 </Badge>
               </td>
               <td className="py-3 px-4 text-sm text-role-admin-subtle">
-                {new Date(school.created_at).toLocaleDateString()}
+                {new Date(school.joined).toLocaleDateString()}
               </td>
             </tr>
           ))}

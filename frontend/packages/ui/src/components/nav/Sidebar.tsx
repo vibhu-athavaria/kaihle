@@ -101,7 +101,7 @@ const adminSections: NavSection[] = [
     items: [
       {
         label: "Overview",
-        href: "/kaihle-admin/overview",
+        href: "/kaihle-admin/dashboard",
         icon: LayoutDashboard,
       },
       { label: "Schools", href: "/kaihle-admin/schools", icon: Building2 },

@@ -139,8 +139,18 @@ class UserService:
         """Update user information."""
         user = await self.get_user(user_id, school_id)
         previous_state = {"first_name": user.first_name, "last_name": user.last_name, "is_active": user.is_active}
-        for field, value in data.model_dump(exclude_unset=True).items():
+
+        # Extract password separately - don't let it pass through the generic loop
+        update_data = data.model_dump(exclude_unset=True)
+        new_password = update_data.pop("password", None)
+
+        for field, value in update_data.items():
             setattr(user, field, value)
+
+        # Handle password update - hash and store separately
+        if new_password is not None:
+            user.hashed_password = hash_password(new_password)
+
         await self.db.flush()
 
         logger.info(
@@ -149,6 +159,7 @@ class UserService:
             school_id=str(school_id),
             previous_state=previous_state,
             new_state={"first_name": user.first_name, "last_name": user.last_name, "is_active": user.is_active},
+            password_changed=new_password is not None,
         )
 
         return user

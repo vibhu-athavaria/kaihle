@@ -40,6 +40,10 @@ class TestCreateSchool:
             slug="test-school",
             country="Indonesia",
             timezone="Asia/Jakarta",
+            admin_email="admin@test.com",
+            admin_first_name="Admin",
+            admin_last_name="User",
+            admin_password="password123",
         )
         mock_db.scalar = AsyncMock(return_value=None)  # No existing school
 
@@ -52,8 +56,11 @@ class TestCreateSchool:
         assert school.country == "Indonesia"
         assert school.timezone == "Asia/Jakarta"
         assert school.status == "active"
-        mock_db.add.assert_called_once_with(school)
-        mock_db.flush.assert_called_once()
+        # create_school adds both School and User (admin)
+        add_calls = [call.args[0] for call in mock_db.add.call_args_list]
+        assert school in add_calls
+        assert mock_db.add.call_count == 2
+        assert mock_db.flush.call_count >= 2
 
     @pytest.mark.asyncio
     async def test_create_school_when_default_timezone_then_uses_utc(
@@ -64,6 +71,10 @@ class TestCreateSchool:
         data = SchoolCreate(
             name="Test School",
             slug="test-school",
+            admin_email="admin@test.com",
+            admin_first_name="Admin",
+            admin_last_name="User",
+            admin_password="password123",
         )
         mock_db.scalar = AsyncMock(return_value=None)
 
@@ -82,6 +93,10 @@ class TestCreateSchool:
         data = SchoolCreate(
             name="Test School",
             slug="test-school",
+            admin_email="admin@test.com",
+            admin_first_name="Admin",
+            admin_last_name="User",
+            admin_password="password123",
         )
         existing_school = School(name="Existing", slug="test-school")
         mock_db.scalar = AsyncMock(return_value=existing_school)

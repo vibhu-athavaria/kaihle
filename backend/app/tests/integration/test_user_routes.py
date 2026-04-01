@@ -333,6 +333,82 @@ class TestUpdateUser:
         assert response.status_code == 200
         assert response.json()["first_name"] == "UpdatedName"
 
+    @pytest.mark.asyncio
+    async def test_update_user_password_when_kaihle_admin_then_password_is_updated(
+        self, client: AsyncClient, kaihle_admin: User, school: School, teacher: User, db_session: AsyncSession
+    ) -> None:
+        """Test that KaihleAdmin can update user password."""
+        from sqlalchemy import select
+
+        from app.core.security import verify_password
+
+        # Act
+        headers = auth_header(kaihle_admin)
+        new_password = "newpass123"
+        payload = {"password": new_password}
+
+        response = await client.patch(
+            f"/api/v1/schools/{school.id}/users/{teacher.id}",
+            json=payload,
+            headers=headers,
+        )
+
+        # Assert
+        assert response.status_code == 200
+
+        # Verify password was updated in DB
+        result = await db_session.execute(select(User).where(User.id == teacher.id))
+        updated_user = result.scalar_one()
+        assert updated_user.hashed_password is not None
+        assert verify_password(new_password, updated_user.hashed_password)
+
+    @pytest.mark.asyncio
+    async def test_update_user_password_when_school_admin_for_own_school_then_password_is_updated(
+        self, client: AsyncClient, school_admin: User, school: School, teacher: User, db_session: AsyncSession
+    ) -> None:
+        """Test that SchoolAdmin can update password for users in their own school."""
+        from sqlalchemy import select
+
+        from app.core.security import verify_password
+
+        # Act
+        headers = auth_header(school_admin)
+        new_password = "newpass123"
+        payload = {"password": new_password}
+
+        response = await client.patch(
+            f"/api/v1/schools/{school.id}/users/{teacher.id}",
+            json=payload,
+            headers=headers,
+        )
+
+        # Assert
+        assert response.status_code == 200
+
+        # Verify password was updated
+        result = await db_session.execute(select(User).where(User.id == teacher.id))
+        updated_user = result.scalar_one()
+        assert updated_user.hashed_password is not None
+        assert verify_password(new_password, updated_user.hashed_password)
+
+    @pytest.mark.asyncio
+    async def test_update_user_password_when_password_too_short_then_returns_422(
+        self, client: AsyncClient, school_admin: User, school: School, teacher: User
+    ) -> None:
+        """Test that password too short returns 422."""
+        # Act
+        headers = auth_header(school_admin)
+        payload = {"password": "short"}
+
+        response = await client.patch(
+            f"/api/v1/schools/{school.id}/users/{teacher.id}",
+            json=payload,
+            headers=headers,
+        )
+
+        # Assert
+        assert response.status_code == 422
+
 
 class TestDeactivateUser:
     """Tests for DELETE /api/v1/schools/{school_id}/users/{user_id}"""
