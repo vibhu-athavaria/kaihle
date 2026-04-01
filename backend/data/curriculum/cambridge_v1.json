@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "version": "1.1",
+    "version": "1.2",
     "authored_by": "Vidhya (curriculum content) + Kramer (structure validation)",
     "reviewed_by": "Vidhya",
     "review_date": "2026-03-25",
@@ -11,9 +11,9 @@
     "total_subjects": 7,
     "subject_split_note": "SCI (Integrated Science) is Lower Secondary only. BIO, CHEM, PHY are IGCSE only. ENGL (Literature) is IGCSE only. MATH and ENG span both curricula.",
     "grade_boundary_note": "cambridge_lower = Grades 6-8 (Cambridge Stages 7-9). igcse = Grades 9-10 (IGCSE Years 10-11). This overrides the original task file which incorrectly had cambridge_lower = 6-9.",
-    "format_note": "Each curriculum_tree entry uses grade_level (singular integer) not grade_levels (array). The seed script must iterate entries individually."
+    "format_note": "Each curriculum_tree entry uses grade_level (singular integer) not grade_levels (array). The seed script must iterate entries individually.",
+    "prerequisite_patch": "2026-03-25: Prerequisites normalised to canonical_codes; 137 cross-grade links added; MATH-ALG-G8-02 wrong prereq removed. Patch authored by Vidhya (curriculum) + Kramer (validation)."
   },
-
   "curricula": [
     {
       "code": "cambridge_lower",
@@ -30,7 +30,6 @@
       "is_active": true
     }
   ],
-
   "subjects": [
     {
       "code": "MATH",
@@ -82,7 +81,6 @@
       "description": "Cambridge IGCSE English Literature covering poetry, prose and drama."
     }
   ],
-
   "grades": [
     {
       "level": 6,
@@ -120,7 +118,6 @@
       "description": "Cambridge A Level Year 2 (Year 13) — seeded in later milestone"
     }
   ],
-
   "curriculum_subjects": [
     {
       "curriculum_code": "cambridge_lower",
@@ -177,7 +174,6 @@
       "sort_order": 6
     }
   ],
-
   "curriculum_tree": [
     {
       "curriculum_code": "cambridge_lower",
@@ -214,7 +210,7 @@
               "difficulty_level": 1,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": ["Integers and Place Value"]
+              "prerequisites": ["MATH-NUM-G6-01"]
             },
             {
               "name": "Decimals and Percentages",
@@ -224,7 +220,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 3,
-              "prerequisites": ["Fractions"]
+              "prerequisites": ["MATH-NUM-G6-02"]
             },
             {
               "name": "Ratio and Proportion",
@@ -234,7 +230,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 4,
-              "prerequisites": ["Fractions"]
+              "prerequisites": ["MATH-NUM-G6-02"]
             }
           ]
         },
@@ -267,7 +263,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 2,
-              "prerequisites": ["Sequences"]
+              "prerequisites": ["MATH-ALG-G9-04"]
             },
             {
               "name": "Simple Linear Equations",
@@ -277,7 +273,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 3,
-              "prerequisites": ["Algebraic Expressions"]
+              "prerequisites": ["MATH-ALG-G6-02"]
             }
           ]
         },
@@ -310,7 +306,7 @@
               "difficulty_level": 1,
               "estimated_minutes": 45,
               "sequence_order": 2,
-              "prerequisites": ["Angles and Lines"]
+              "prerequisites": ["MATH-GEO-G6-01"]
             },
             {
               "name": "Area and Perimeter",
@@ -320,7 +316,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 3,
-              "prerequisites": ["2D Shape Properties"]
+              "prerequisites": ["MATH-GEO-G6-02"]
             },
             {
               "name": "Units and Measurement",
@@ -363,7 +359,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 2,
-              "prerequisites": ["Data Representation"]
+              "prerequisites": ["MATH-STAT-G6-01"]
             },
             {
               "name": "Probability Scale",
@@ -379,7 +375,6 @@
         }
       ]
     },
-
     {
       "curriculum_code": "cambridge_lower",
       "subject_code": "MATH",
@@ -405,7 +400,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-NUM-G6-03"]
             },
             {
               "name": "Powers and Roots",
@@ -415,7 +410,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["MATH-NUM-G6-01"]
             },
             {
               "name": "Standard Form",
@@ -425,7 +420,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 3,
-              "prerequisites": ["Powers and Roots"]
+              "prerequisites": ["MATH-NUM-G7-02", "MATH-NUM-G6-01"]
             },
             {
               "name": "Ratio and Direct Proportion",
@@ -435,7 +430,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 4,
-              "prerequisites": ["Fractions, Decimals and Percentages"]
+              "prerequisites": ["MATH-NUM-G7-01", "MATH-NUM-G6-04"]
             }
           ]
         },
@@ -458,7 +453,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-ALG-G6-03"]
             },
             {
               "name": "Linear Equations",
@@ -468,7 +463,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": ["Algebraic Manipulation"]
+              "prerequisites": ["MATH-ALG-G7-01", "MATH-ALG-G6-03"]
             },
             {
               "name": "Inequalities",
@@ -478,7 +473,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 3,
-              "prerequisites": ["Linear Equations"]
+              "prerequisites": ["MATH-ALG-G7-02"]
             },
             {
               "name": "Linear Graphs",
@@ -488,7 +483,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 4,
-              "prerequisites": ["Linear Equations"]
+              "prerequisites": ["MATH-ALG-G7-02", "MATH-ALG-G6-02"]
             }
           ]
         },
@@ -511,7 +506,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-GEO-G6-02"]
             },
             {
               "name": "Circles — Area and Circumference",
@@ -521,7 +516,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["MATH-GEO-G6-03"]
             },
             {
               "name": "Volume and Surface Area",
@@ -531,7 +526,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": ["Circles — Area and Circumference"]
+              "prerequisites": ["MATH-GEO-G7-02", "MATH-GEO-G6-03"]
             },
             {
               "name": "Transformations",
@@ -541,7 +536,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 60,
               "sequence_order": 4,
-              "prerequisites": []
+              "prerequisites": ["MATH-GEO-G6-02"]
             }
           ]
         },
@@ -564,7 +559,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-STAT-G6-01"]
             },
             {
               "name": "Averages from Grouped Data",
@@ -574,7 +569,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": ["Statistical Diagrams"]
+              "prerequisites": ["MATH-STAT-G7-01", "MATH-STAT-G6-02"]
             },
             {
               "name": "Combined Event Probability",
@@ -584,13 +579,12 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["MATH-STAT-G6-03"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "cambridge_lower",
       "subject_code": "MATH",
@@ -616,7 +610,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-NUM-G7-02"]
             },
             {
               "name": "Proportional Reasoning",
@@ -626,7 +620,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["MATH-NUM-G7-04"]
             },
             {
               "name": "Compound Measures",
@@ -636,7 +630,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["MATH-NUM-G7-04"]
             }
           ]
         },
@@ -659,7 +653,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-ALG-G7-01"]
             },
             {
               "name": "Simultaneous Equations",
@@ -669,7 +663,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": ["Quadratic Expressions"]
+              "prerequisites": ["MATH-ALG-G7-02"]
             },
             {
               "name": "Functions",
@@ -679,7 +673,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 55,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["MATH-ALG-G7-02"]
             },
             {
               "name": "Nth Term of Sequences",
@@ -689,7 +683,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 4,
-              "prerequisites": []
+              "prerequisites": ["MATH-ALG-G6-01"]
             }
           ]
         },
@@ -712,7 +706,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-GEO-G7-01"]
             },
             {
               "name": "Circle Properties",
@@ -722,7 +716,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["MATH-GEO-G7-02"]
             },
             {
               "name": "Similarity and Enlargement",
@@ -732,7 +726,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["MATH-GEO-G7-04"]
             }
           ]
         },
@@ -754,7 +748,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-STAT-G7-02"]
             },
             {
               "name": "Histograms",
@@ -764,7 +758,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": ["Cumulative Frequency"]
+              "prerequisites": ["MATH-STAT-G8-01", "MATH-STAT-G7-01"]
             },
             {
               "name": "Tree Diagrams and Combined Probability",
@@ -774,13 +768,12 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["MATH-STAT-G7-03"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "cambridge_lower",
       "subject_code": "SCI",
@@ -815,7 +808,7 @@
               "difficulty_level": 1,
               "estimated_minutes": 50,
               "sequence_order": 2,
-              "prerequisites": ["Planning Investigations"]
+              "prerequisites": ["SCI-ENQ-G6-01"]
             }
           ]
         },
@@ -848,7 +841,7 @@
               "difficulty_level": 1,
               "estimated_minutes": 50,
               "sequence_order": 2,
-              "prerequisites": ["Cells and Cell Functions"]
+              "prerequisites": ["SCI-BIO-G6-01"]
             },
             {
               "name": "Ecosystems and Food Chains",
@@ -858,7 +851,7 @@
               "difficulty_level": 1,
               "estimated_minutes": 50,
               "sequence_order": 3,
-              "prerequisites": ["Photosynthesis"]
+              "prerequisites": ["SCI-BIO-G6-02"]
             }
           ]
         },
@@ -891,7 +884,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": ["States of Matter"]
+              "prerequisites": ["SCI-CHEM-G6-01"]
             },
             {
               "name": "Properties of Materials",
@@ -901,7 +894,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 3,
-              "prerequisites": ["States of Matter"]
+              "prerequisites": ["SCI-CHEM-G6-01"]
             }
           ]
         },
@@ -944,13 +937,12 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 3,
-              "prerequisites": ["Energy Forms and Transfer"]
+              "prerequisites": ["SCI-PHY-G6-02"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "cambridge_lower",
       "subject_code": "SCI",
@@ -975,7 +967,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-ENQ-G6-02"]
             },
             {
               "name": "Analysing Evidence and Drawing Conclusions",
@@ -985,7 +977,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 2,
-              "prerequisites": ["Variables and Fair Testing"]
+              "prerequisites": ["SCI-ENQ-G7-01", "SCI-ENQ-G6-02"]
             }
           ]
         },
@@ -1008,7 +1000,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G6-01"]
             },
             {
               "name": "Reproduction",
@@ -1018,7 +1010,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G6-01"]
             },
             {
               "name": "Nutrition and Health",
@@ -1028,7 +1020,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 3,
-              "prerequisites": ["Human Organ Systems"]
+              "prerequisites": ["SCI-BIO-G7-01", "SCI-BIO-G6-02"]
             }
           ]
         },
@@ -1051,7 +1043,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-CHEM-G6-01"]
             },
             {
               "name": "Chemical and Physical Changes",
@@ -1061,7 +1053,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": ["Atoms, Elements and the Periodic Table"]
+              "prerequisites": ["SCI-CHEM-G7-01", "SCI-CHEM-G6-02"]
             },
             {
               "name": "Acids, Alkalis and Neutralisation",
@@ -1071,7 +1063,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 3,
-              "prerequisites": ["Chemical and Physical Changes"]
+              "prerequisites": ["SCI-CHEM-G7-02"]
             }
           ]
         },
@@ -1094,7 +1086,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-ENQ-G6-02"]
             },
             {
               "name": "Sound and Waves",
@@ -1104,7 +1096,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["SCI-PHY-G6-02"]
             },
             {
               "name": "Earth and Space",
@@ -1114,13 +1106,12 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["SCI-PHY-G6-01"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "cambridge_lower",
       "subject_code": "SCI",
@@ -1144,7 +1135,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-ENQ-G7-02"]
             }
           ]
         },
@@ -1167,7 +1158,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G7-02"]
             },
             {
               "name": "Disease and Immunity",
@@ -1177,7 +1168,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G7-01"]
             },
             {
               "name": "Respiration and Gas Exchange",
@@ -1187,7 +1178,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G7-01"]
             }
           ]
         },
@@ -1210,7 +1201,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-CHEM-G7-01"]
             },
             {
               "name": "Rates of Reaction",
@@ -1220,7 +1211,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": ["The Periodic Table and Reactivity"]
+              "prerequisites": ["SCI-CHEM-G8-01", "SCI-CHEM-G7-02"]
             },
             {
               "name": "Reversible Reactions",
@@ -1230,7 +1221,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 3,
-              "prerequisites": ["Rates of Reaction"]
+              "prerequisites": ["CHEM-PHYS-G9-02", "SCI-CHEM-G7-02"]
             }
           ]
         },
@@ -1253,7 +1244,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-PHY-G6-03"]
             },
             {
               "name": "Wave Properties",
@@ -1263,7 +1254,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["SCI-PHY-G7-02"]
             },
             {
               "name": "Forces and Motion",
@@ -1273,13 +1264,12 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["SCI-PHY-G6-01"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "cambridge_lower",
       "subject_code": "ENG",
@@ -1314,7 +1304,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 50,
               "sequence_order": 2,
-              "prerequisites": ["Reading for Explicit Meaning"]
+              "prerequisites": ["ENG-READ-G6-01"]
             },
             {
               "name": "Language and Structure Analysis",
@@ -1324,7 +1314,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 3,
-              "prerequisites": ["Inference and Deduction"]
+              "prerequisites": ["ENG-READ-G6-02"]
             }
           ]
         },
@@ -1356,7 +1346,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Writing for Purpose and Audience"]
+              "prerequisites": ["ENG-WRITE-G6-01"]
             },
             {
               "name": "Non-Fiction Writing",
@@ -1366,7 +1356,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": ["Writing for Purpose and Audience"]
+              "prerequisites": ["ENG-WRITE-G6-01"]
             }
           ]
         },
@@ -1404,7 +1394,6 @@
         }
       ]
     },
-
     {
       "curriculum_code": "cambridge_lower",
       "subject_code": "ENG",
@@ -1429,7 +1418,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-READ-G6-02"]
             },
             {
               "name": "Language Analysis",
@@ -1439,7 +1428,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": ["Inference and Interpretation"]
+              "prerequisites": ["ENG-READ-G7-01", "ENG-READ-G6-03"]
             },
             {
               "name": "Comparative Reading",
@@ -1449,7 +1438,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": ["Language Analysis"]
+              "prerequisites": ["ENG-READ-G7-02", "ENG-READ-G6-03"]
             }
           ]
         },
@@ -1471,7 +1460,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-WRITE-G6-01"]
             },
             {
               "name": "Descriptive Writing",
@@ -1481,7 +1470,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["ENG-WRITE-G6-02"]
             },
             {
               "name": "Analytical Writing",
@@ -1491,7 +1480,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": ["Persuasive Writing"]
+              "prerequisites": ["ENG-WRITE-G7-01"]
             }
           ]
         },
@@ -1513,7 +1502,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 45,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-SPEAK-G6-01"]
             },
             {
               "name": "Critical Listening",
@@ -1523,13 +1512,12 @@
               "difficulty_level": 2,
               "estimated_minutes": 45,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["ENG-SPEAK-G6-02"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "cambridge_lower",
       "subject_code": "ENG",
@@ -1554,7 +1542,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-READ-G7-02"]
             },
             {
               "name": "Cross-Text Synthesis",
@@ -1564,7 +1552,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Critical Textual Analysis"]
+              "prerequisites": ["ENG-READ-G8-01", "ENG-READ-G7-03"]
             }
           ]
         },
@@ -1586,7 +1574,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 75,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-WRITE-G7-01"]
             },
             {
               "name": "Evaluative Writing",
@@ -1596,7 +1584,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 70,
               "sequence_order": 2,
-              "prerequisites": ["Extended Writing"]
+              "prerequisites": ["ENG-WRITE-G8-01", "ENG-WRITE-G7-03"]
             }
           ]
         },
@@ -1617,13 +1605,12 @@
               "difficulty_level": 3,
               "estimated_minutes": 50,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-SPEAK-G7-01"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "MATH",
@@ -1649,7 +1636,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-NUM-G8-01"]
             },
             {
               "name": "Standard Form Calculations",
@@ -1659,7 +1646,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": ["Surds and Index Laws"]
+              "prerequisites": ["MATH-NUM-G9-01", "MATH-NUM-G7-03"]
             },
             {
               "name": "Direct and Inverse Proportion",
@@ -1669,7 +1656,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["MATH-NUM-G8-02"]
             }
           ]
         },
@@ -1692,7 +1679,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-ALG-G8-01"]
             },
             {
               "name": "Solving Quadratic Equations",
@@ -1702,7 +1689,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 2,
-              "prerequisites": ["Quadratic Expressions and Factorisation"]
+              "prerequisites": ["MATH-ALG-G9-01"]
             },
             {
               "name": "Simultaneous Equations",
@@ -1712,7 +1699,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 3,
-              "prerequisites": ["Solving Quadratic Equations"]
+              "prerequisites": ["MATH-ALG-G9-02", "MATH-ALG-G8-02"]
             },
             {
               "name": "Sequences",
@@ -1722,7 +1709,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 55,
               "sequence_order": 4,
-              "prerequisites": []
+              "prerequisites": ["MATH-ALG-G8-04"]
             },
             {
               "name": "Inequalities",
@@ -1732,7 +1719,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 5,
-              "prerequisites": ["Solving Quadratic Equations"]
+              "prerequisites": ["MATH-ALG-G9-02", "MATH-ALG-G7-03"]
             }
           ]
         },
@@ -1754,7 +1741,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-ALG-G7-04"]
             },
             {
               "name": "Distance and Midpoint",
@@ -1764,7 +1751,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": ["Gradient and Equations of Lines"]
+              "prerequisites": ["MATH-COORD-G9-01"]
             }
           ]
         },
@@ -1786,7 +1773,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-GEO-G8-02"]
             },
             {
               "name": "Similarity and Congruence",
@@ -1796,7 +1783,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["MATH-GEO-G8-03"]
             }
           ]
         },
@@ -1818,7 +1805,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-GEO-G8-01"]
             },
             {
               "name": "Sine Rule and Cosine Rule",
@@ -1828,7 +1815,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 2,
-              "prerequisites": ["Trigonometric Ratios in 2D and 3D"]
+              "prerequisites": ["MATH-TRIG-G9-01"]
             }
           ]
         },
@@ -1851,7 +1838,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-STAT-G8-01"]
             },
             {
               "name": "Histograms with Unequal Class Widths",
@@ -1861,7 +1848,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["MATH-STAT-G8-02"]
             },
             {
               "name": "Probability with Venn Diagrams and Tree Diagrams",
@@ -1871,13 +1858,12 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["MATH-STAT-G8-03"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "MATH",
@@ -1902,7 +1888,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-NUM-G9-03"]
             },
             {
               "name": "Bounds and Error Intervals",
@@ -1912,7 +1898,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["MATH-NUM-G9-01"]
             }
           ]
         },
@@ -1934,7 +1920,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-ALG-G8-03"]
             },
             {
               "name": "Transformation of Graphs",
@@ -1944,7 +1930,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Functions and Inverse Functions"]
+              "prerequisites": ["MATH-ALG-G10-01"]
             },
             {
               "name": "Algebraic Proof",
@@ -1954,7 +1940,7 @@
               "difficulty_level": 5,
               "estimated_minutes": 70,
               "sequence_order": 3,
-              "prerequisites": ["Functions and Inverse Functions"]
+              "prerequisites": ["MATH-ALG-G10-01", "MATH-ALG-G9-03"]
             }
           ]
         },
@@ -1976,7 +1962,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-GEO-G8-02"]
             },
             {
               "name": "Surface Area and Volume of 3D Shapes",
@@ -1986,7 +1972,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 2,
-              "prerequisites": ["Arc Length and Sector Area"]
+              "prerequisites": ["MATH-MENSUR-G10-01", "MATH-GEO-G7-03"]
             }
           ]
         },
@@ -2008,7 +1994,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-COORD-G9-02"]
             },
             {
               "name": "Geometric Applications of Vectors",
@@ -2018,7 +2004,7 @@
               "difficulty_level": 5,
               "estimated_minutes": 75,
               "sequence_order": 2,
-              "prerequisites": ["Vector Notation and Operations"]
+              "prerequisites": ["MATH-VEC-G10-01"]
             }
           ]
         },
@@ -2040,7 +2026,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["MATH-STAT-G9-01"]
             },
             {
               "name": "Conditional Probability",
@@ -2050,13 +2036,12 @@
               "difficulty_level": 5,
               "estimated_minutes": 75,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["MATH-STAT-G9-03"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "BIO",
@@ -2082,7 +2067,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G6-01"]
             },
             {
               "name": "Cell Membrane Transport",
@@ -2092,7 +2077,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Cell Structure and Organelles"]
+              "prerequisites": ["BIO-CELL-G9-01"]
             },
             {
               "name": "Cell Division — Mitosis and Meiosis",
@@ -2102,7 +2087,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 3,
-              "prerequisites": ["Cell Structure and Organelles"]
+              "prerequisites": ["BIO-CELL-G9-01", "SCI-BIO-G7-02"]
             }
           ]
         },
@@ -2124,7 +2109,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-CHEM-G6-02"]
             },
             {
               "name": "Enzyme Action and Factors",
@@ -2134,7 +2119,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Biological Molecules"]
+              "prerequisites": ["BIO-MOL-G9-01"]
             }
           ]
         },
@@ -2156,7 +2141,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G6-02"]
             },
             {
               "name": "Transport in Plants and Transpiration",
@@ -2166,7 +2151,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Photosynthesis and Limiting Factors"]
+              "prerequisites": ["BIO-PLANT-G9-01", "SCI-BIO-G6-02"]
             }
           ]
         },
@@ -2188,7 +2173,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G7-01"]
             },
             {
               "name": "Gas Exchange in the Lungs",
@@ -2198,7 +2183,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": ["Digestion and Absorption"]
+              "prerequisites": ["BIO-PHYSIO-G9-01", "SCI-BIO-G8-03"]
             }
           ]
         },
@@ -2219,7 +2204,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G7-02"]
             },
             {
               "name": "Reproduction in Flowering Plants",
@@ -2229,13 +2214,12 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G6-03"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "BIO",
@@ -2262,7 +2246,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["BIO-PHYSIO-G9-02"]
             },
             {
               "name": "Coordination and Response",
@@ -2272,7 +2256,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["BIO-PHYSIO-G9-01"]
             },
             {
               "name": "Excretion and Osmoregulation",
@@ -2282,7 +2266,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["BIO-PHYSIO-G9-02"]
             },
             {
               "name": "Disease and Immunity",
@@ -2292,7 +2276,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 4,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G8-02"]
             }
           ]
         },
@@ -2314,7 +2298,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G8-01"]
             },
             {
               "name": "Variation and Mutation",
@@ -2324,7 +2308,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": ["Inheritance and Genetic Diagrams"]
+              "prerequisites": ["BIO-REPRO-G10-01"]
             }
           ]
         },
@@ -2347,7 +2331,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G8-01"]
             },
             {
               "name": "Ecosystems and Human Impact",
@@ -2357,7 +2341,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G6-03"]
             },
             {
               "name": "Biotechnology and Genetic Engineering",
@@ -2367,13 +2351,12 @@
               "difficulty_level": 4,
               "estimated_minutes": 65,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["SCI-BIO-G8-01"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "CHEM",
@@ -2398,7 +2381,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-CHEM-G7-01"]
             },
             {
               "name": "Isotopes and Relative Atomic Mass",
@@ -2408,7 +2391,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": ["Atomic Structure and the Periodic Table"]
+              "prerequisites": ["CHEM-ATOM-G9-01"]
             }
           ]
         },
@@ -2430,7 +2413,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": ["Atomic Structure and the Periodic Table"]
+              "prerequisites": ["CHEM-ATOM-G9-01", "SCI-CHEM-G7-01"]
             },
             {
               "name": "Covalent Bonding and Structure",
@@ -2440,7 +2423,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Atomic Structure and the Periodic Table"]
+              "prerequisites": ["CHEM-ATOM-G9-01", "SCI-CHEM-G7-01"]
             },
             {
               "name": "Metallic Bonding and Properties",
@@ -2450,7 +2433,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 3,
-              "prerequisites": ["Ionic Bonding and Structure"]
+              "prerequisites": ["CHEM-BOND-G9-01", "SCI-CHEM-G8-01"]
             }
           ]
         },
@@ -2472,7 +2455,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": ["Isotopes and Relative Atomic Mass"]
+              "prerequisites": ["CHEM-ATOM-G9-02", "SCI-CHEM-G7-01"]
             },
             {
               "name": "Reacting Quantities and Yield",
@@ -2482,7 +2465,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 2,
-              "prerequisites": ["Moles and Chemical Formulae"]
+              "prerequisites": ["CHEM-STOICH-G9-01"]
             }
           ]
         },
@@ -2504,7 +2487,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-CHEM-G7-02"]
             },
             {
               "name": "Rates of Reaction",
@@ -2514,13 +2497,12 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["SCI-CHEM-G8-02"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "CHEM",
@@ -2555,7 +2537,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["CHEM-BOND-G9-01"]
             }
           ]
         },
@@ -2578,7 +2560,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-CHEM-G7-03"]
             },
             {
               "name": "Metals and the Reactivity Series",
@@ -2588,7 +2570,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["SCI-CHEM-G8-01"]
             },
             {
               "name": "Atmospheric Chemistry and Environment",
@@ -2598,7 +2580,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": []
+              "prerequisites": ["SCI-CHEM-G7-02"]
             }
           ]
         },
@@ -2621,7 +2603,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["CHEM-BOND-G9-02"]
             },
             {
               "name": "Alcohols and Carboxylic Acids",
@@ -2631,7 +2613,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Hydrocarbons — Alkanes and Alkenes"]
+              "prerequisites": ["CHEM-ORG-G10-01"]
             },
             {
               "name": "Polymers and Environmental Impact",
@@ -2641,13 +2623,12 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": ["Hydrocarbons — Alkanes and Alkenes"]
+              "prerequisites": ["CHEM-ORG-G10-01"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "PHY",
@@ -2673,7 +2654,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-PHY-G8-03"]
             },
             {
               "name": "Newton's Laws of Motion",
@@ -2683,7 +2664,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Kinematics and Motion Graphs"]
+              "prerequisites": ["PHY-MOTION-G9-01", "SCI-PHY-G6-01"]
             },
             {
               "name": "Work, Energy and Power",
@@ -2693,7 +2674,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 3,
-              "prerequisites": ["Newton's Laws of Motion"]
+              "prerequisites": ["PHY-MOTION-G9-02", "SCI-PHY-G6-02"]
             },
             {
               "name": "Momentum and Impulse",
@@ -2703,7 +2684,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 65,
               "sequence_order": 4,
-              "prerequisites": ["Newton's Laws of Motion"]
+              "prerequisites": ["PHY-MOTION-G9-02"]
             }
           ]
         },
@@ -2725,7 +2706,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-CHEM-G6-01"]
             },
             {
               "name": "Thermal Energy Transfer",
@@ -2735,7 +2716,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": []
+              "prerequisites": ["SCI-PHY-G6-02"]
             }
           ]
         },
@@ -2758,7 +2739,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-PHY-G7-02"]
             },
             {
               "name": "Light — Reflection, Refraction and TIR",
@@ -2768,7 +2749,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Wave Properties and Calculations"]
+              "prerequisites": ["PHY-WAVES-G9-01", "SCI-PHY-G7-01"]
             },
             {
               "name": "The Electromagnetic Spectrum",
@@ -2778,13 +2759,12 @@
               "difficulty_level": 2,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": ["Wave Properties and Calculations"]
+              "prerequisites": ["PHY-WAVES-G9-01"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "PHY",
@@ -2808,7 +2788,7 @@
               "difficulty_level": 2,
               "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["PHY-WAVES-G9-01"]
             }
           ]
         },
@@ -2832,7 +2812,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["SCI-PHY-G6-03"]
             },
             {
               "name": "Electrical Power and Energy",
@@ -2842,7 +2822,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": ["Circuit Analysis and Ohm's Law"]
+              "prerequisites": ["PHY-ELEC-G10-01"]
             },
             {
               "name": "Electromagnetism and the Motor Effect",
@@ -2852,7 +2832,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 3,
-              "prerequisites": ["Circuit Analysis and Ohm's Law"]
+              "prerequisites": ["PHY-ELEC-G10-01", "SCI-PHY-G8-01"]
             },
             {
               "name": "Transformers and the National Grid",
@@ -2862,7 +2842,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 65,
               "sequence_order": 4,
-              "prerequisites": ["Electromagnetism and the Motor Effect"]
+              "prerequisites": ["PHY-ELEC-G10-03"]
             }
           ]
         },
@@ -2885,7 +2865,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["CHEM-ATOM-G9-02"]
             },
             {
               "name": "Radioactive Decay and Half-Life",
@@ -2895,7 +2875,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Radioactivity and Ionising Radiation"]
+              "prerequisites": ["PHY-NUCLEAR-G10-01"]
             },
             {
               "name": "Nuclear Fission, Fusion and Energy",
@@ -2905,13 +2885,12 @@
               "difficulty_level": 4,
               "estimated_minutes": 65,
               "sequence_order": 3,
-              "prerequisites": ["Radioactive Decay and Half-Life"]
+              "prerequisites": ["PHY-NUCLEAR-G10-02"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "ENG",
@@ -2936,7 +2915,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-READ-G8-01"]
             },
             {
               "name": "Language Analysis for Effect",
@@ -2946,7 +2925,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Comprehension and Inference"]
+              "prerequisites": ["ENG-READ-G9-01", "ENG-READ-G8-01"]
             },
             {
               "name": "Summary Writing",
@@ -2956,7 +2935,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": ["Comprehension and Inference"]
+              "prerequisites": ["ENG-READ-G9-01", "ENG-READ-G8-02"]
             }
           ]
         },
@@ -2978,7 +2957,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 70,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-WRITE-G8-01"]
             },
             {
               "name": "Narrative and Descriptive Writing",
@@ -2988,13 +2967,12 @@
               "difficulty_level": 4,
               "estimated_minutes": 75,
               "sequence_order": 2,
-              "prerequisites": ["Directed Writing"]
+              "prerequisites": ["ENG-WRITE-G9-01", "ENG-WRITE-G7-02"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "ENG",
@@ -3019,7 +2997,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-READ-G9-02"]
             }
           ]
         },
@@ -3041,7 +3019,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 75,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-WRITE-G9-01"]
             },
             {
               "name": "Extended Composition",
@@ -3051,13 +3029,12 @@
               "difficulty_level": 5,
               "estimated_minutes": 80,
               "sequence_order": 2,
-              "prerequisites": ["Argumentative and Persuasive Writing"]
+              "prerequisites": ["ENG-WRITE-G10-01", "ENG-WRITE-G9-02"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "ENGL",
@@ -3082,7 +3059,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-READ-G8-01"]
             },
             {
               "name": "Unseen Poetry",
@@ -3092,7 +3069,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": ["Set Poetry Analysis"]
+              "prerequisites": ["ENGL-POETRY-G9-01"]
             }
           ]
         },
@@ -3113,7 +3090,7 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-READ-G8-01"]
             }
           ]
         },
@@ -3134,13 +3111,12 @@
               "difficulty_level": 3,
               "estimated_minutes": 65,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENG-READ-G8-01"]
             }
           ]
         }
       ]
     },
-
     {
       "curriculum_code": "igcse",
       "subject_code": "ENGL",
@@ -3164,7 +3140,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 75,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENGL-POETRY-G9-01"]
             }
           ]
         },
@@ -3186,7 +3162,7 @@
               "difficulty_level": 5,
               "estimated_minutes": 80,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENGL-PROSE-G9-01"]
             },
             {
               "name": "Unseen Prose Analysis",
@@ -3196,7 +3172,7 @@
               "difficulty_level": 4,
               "estimated_minutes": 70,
               "sequence_order": 2,
-              "prerequisites": ["Extended Prose Essay"]
+              "prerequisites": ["ENGL-PROSE-G10-01", "ENGL-PROSE-G9-01"]
             }
           ]
         },
@@ -3217,7 +3193,7 @@
               "difficulty_level": 5,
               "estimated_minutes": 75,
               "sequence_order": 1,
-              "prerequisites": []
+              "prerequisites": ["ENGL-DRAMA-G9-01"]
             }
           ]
         }
