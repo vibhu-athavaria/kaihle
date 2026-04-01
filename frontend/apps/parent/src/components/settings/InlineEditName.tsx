@@ -19,7 +19,7 @@ export function InlineEditName({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName.trim()) return;
+    if (!isValid) return;
     setSaving(true);
     try {
       await onSave(firstName.trim(), lastName.trim());
@@ -28,7 +28,7 @@ export function InlineEditName({
     }
   };
 
-  const isValid = firstName.trim().length > 0;
+  const isValid = firstName.trim().length > 0 && lastName.trim().length > 0;
 
   return (
     <form
