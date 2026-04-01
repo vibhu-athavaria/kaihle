@@ -26,9 +26,11 @@ interface School {
 
 function MyAccountSection({
   user,
+  authUser,
   onNameUpdated,
 }: {
   user: User | undefined;
+  authUser: { school_id: string | null } | null;
   onNameUpdated: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -41,11 +43,15 @@ function MyAccountSection({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
 
   const updateNameMutation = useMutation({
     mutationFn: async (data: { first_name: string; last_name: string }) => {
-      await apiClient.patch("/api/v1/users/me", data);
+      const schoolId = authUser?.school_id;
+      if (!schoolId) {
+        throw new Error("No school_id found");
+      }
+      await apiClient.patch(`/api/v1/schools/${schoolId}/users/me`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -456,7 +462,6 @@ function SchoolProfileSection({ school }: { school: School | undefined }) {
 }
 
 function AccountActionsSection({ onLogout }: { onLogout: () => void }) {
-  const { logout } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSignOut = async () => {
@@ -464,7 +469,7 @@ function AccountActionsSection({ onLogout }: { onLogout: () => void }) {
     try {
       await apiClient.post("/api/v1/auth/logout");
     } finally {
-      logout();
+      onLogout();
     }
   };
 
@@ -501,31 +506,51 @@ function AccountActionsSection({ onLogout }: { onLogout: () => void }) {
 export function SchoolAdminSettingsPage() {
   const { user, logout } = useAuth();
 
-  const { data: userData } = useQuery<User>({
+  const {
+    data: userData,
+    isLoading: isLoadingUser,
+    error: userError,
+  } = useQuery<User>({
     queryKey: ["school-admin", "settings", "user"],
     queryFn: async () => {
-      const response = await apiClient.get<User>("/api/v1/users/me");
+      const schoolId = user?.school_id;
+      if (!schoolId) {
+        throw new Error("No school_id found for current user");
+      }
+      const response = await apiClient.get<User>(
+        `/api/v1/schools/${schoolId}/users/me`,
+      );
       return response.data;
     },
+    enabled: !!user?.school_id,
   });
 
-  const { data: schoolData } = useQuery<School>({
+  const {
+    data: schoolData,
+    isLoading: isLoadingSchool,
+    error: schoolError,
+  } = useQuery<School>({
     queryKey: ["school-admin", "settings", "school"],
     queryFn: async () => {
-      const schoolId = userData?.school_id;
-      if (!schoolId) throw new Error("No school_id");
+      const schoolId = user?.school_id;
+      if (!schoolId) {
+        throw new Error("No school_id found for current user");
+      }
       const response = await apiClient.get<School>(
         `/api/v1/schools/${schoolId}`,
       );
       return response.data;
     },
-    enabled: !!userData?.school_id,
+    enabled: !!user?.school_id,
   });
 
   const displayName = userData
     ? `${userData.first_name} ${userData.last_name}`
     : "School Admin";
   const schoolName = schoolData?.name || "School";
+
+  const isLoading = isLoadingUser || isLoadingSchool;
+  const error = userError || schoolError;
 
   return (
     <DashboardLayout
@@ -541,11 +566,31 @@ export function SchoolAdminSettingsPage() {
           </p>
         </div>
 
-        <div className="space-y-4">
-          <MyAccountSection user={userData} onNameUpdated={() => {}} />
-          <SchoolProfileSection school={schoolData} />
-          <AccountActionsSection onLogout={logout} />
-        </div>
+        {isLoading && (
+          <div className="flex items-center justify-center py-12">
+            <span className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary" />
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-4">
+            <p className="text-sm text-red-600 font-sans">
+              Failed to load settings. Please try again later.
+            </p>
+          </div>
+        )}
+
+        {!isLoading && !error && (
+          <div className="space-y-4">
+            <MyAccountSection
+              user={userData}
+              authUser={user}
+              onNameUpdated={() => {}}
+            />
+            <SchoolProfileSection school={schoolData} />
+            <AccountActionsSection onLogout={logout} />
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

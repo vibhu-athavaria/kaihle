@@ -75,10 +75,21 @@ async def get_school(
     db: AsyncSession = Depends(get_db),
 ) -> SchoolResponse:
     """Get a single school. KaihleAdmin sees any school. SchoolAdmin sees own only."""
+    import structlog
+
+    logger = structlog.get_logger()
+    logger.info("get_school_request", school_id=str(school_id), user_id=str(current_user.id))
+
     _check_school_access(school_id, current_user)
     service = SchoolService(db)
     try:
         school = await service.get_school(school_id)
+        logger.info(
+            "get_school_response",
+            school_id=str(school.id),
+            has_city=hasattr(school, "city"),
+            city=getattr(school, "city", None),
+        )
         return _school_to_response(school)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="School not found")

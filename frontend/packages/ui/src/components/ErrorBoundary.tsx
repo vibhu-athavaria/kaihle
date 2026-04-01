@@ -141,7 +141,6 @@ export class ErrorBoundary extends React.Component<
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     // Log to console for development visibility.
     // In production, replace or augment this with your error reporting service.
-    console.error("[ErrorBoundary] Caught error:", error, errorInfo);
     this.props.onError?.(error, errorInfo);
   }
 
