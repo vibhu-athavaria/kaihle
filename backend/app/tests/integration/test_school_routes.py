@@ -84,6 +84,9 @@ class TestCreateSchool:
             "slug": f"new-school-{uuid.uuid4().hex[:8]}",
             "country": "Indonesia",
             "timezone": "Asia/Jakarta",
+            "admin_email": f"admin-{uuid.uuid4().hex[:8]}@test.com",
+            "admin_first_name": "Admin",
+            "admin_last_name": "User",
         }
 
         response = await client.post("/api/v1/schools", json=payload, headers=headers)
@@ -219,6 +222,9 @@ class TestCreateSchool:
         payload = {
             "name": "Another School",
             "slug": test_school.slug,
+            "admin_email": f"admin-{uuid.uuid4().hex[:8]}@test.com",
+            "admin_first_name": "Admin",
+            "admin_last_name": "User",
         }
 
         response = await client.post("/api/v1/schools", json=payload, headers=headers)
