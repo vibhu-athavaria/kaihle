@@ -28,6 +28,14 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         yield client
 
 
+def _make_admin_user() -> MagicMock:
+    """Create a mock KAIHLE_ADMIN user."""
+    mock_user = MagicMock()
+    mock_user.id = "test-user-id"
+    mock_user.role = UserRole.KAIHLE_ADMIN
+    return mock_user
+
+
 class TestPlatformStatsAuth:
     """Tests for /platform/stats authentication and authorization."""
 
@@ -40,17 +48,11 @@ class TestPlatformStatsAuth:
     @pytest.mark.asyncio
     async def test_stats_when_non_admin_role_then_403(self, client: AsyncClient) -> None:
         """Stats endpoint requires KAIHLE_ADMIN role — returns 403 for other roles."""
-        with patch("app.api.v1.routes.platform.require_role") as mock_require_role:
-            from fastapi import HTTPException, status
+        mock_user = MagicMock()
+        mock_user.id = "test-user-id"
+        mock_user.role = UserRole.TEACHER
 
-            async def fake_role_checker(*args, **kwargs):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied. Required roles: kaihle_admin",
-                )
-
-            mock_require_role.return_value = fake_role_checker
-
+        with patch("app.core.deps.get_current_user", return_value=mock_user):
             response = await client.get(
                 "/api/v1/platform/stats",
                 headers={"Authorization": "Bearer fake-token"},
@@ -70,17 +72,11 @@ class TestPlatformUsersAuth:
     @pytest.mark.asyncio
     async def test_users_when_non_admin_role_then_403(self, client: AsyncClient) -> None:
         """Users endpoint requires KAIHLE_ADMIN role — returns 403 for other roles."""
-        with patch("app.api.v1.routes.platform.require_role") as mock_require_role:
-            from fastapi import HTTPException, status
+        mock_user = MagicMock()
+        mock_user.id = "test-user-id"
+        mock_user.role = UserRole.SCHOOL_ADMIN
 
-            async def fake_role_checker(*args, **kwargs):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied. Required roles: kaihle_admin",
-                )
-
-            mock_require_role.return_value = fake_role_checker
-
+        with patch("app.core.deps.get_current_user", return_value=mock_user):
             response = await client.get(
                 "/api/v1/platform/users",
                 headers={"Authorization": "Bearer fake-token"},
@@ -96,14 +92,9 @@ class TestPlatformStatsConfig:
         """Stats endpoint returns values from config.py when accessed by KAIHLE_ADMIN."""
         from app.core.config import settings
 
-        mock_user = MagicMock()
-        mock_user.id = "test-user-id"
-        mock_user.role = UserRole.KAIHLE_ADMIN
+        mock_user = _make_admin_user()
 
-        with patch(
-            "app.api.v1.routes.platform.require_role",
-            return_value=lambda: mock_user,
-        ):
+        with patch("app.core.deps.get_current_user", return_value=mock_user):
             response = await client.get(
                 "/api/v1/platform/stats",
                 headers={"Authorization": "Bearer fake-token"},
@@ -120,14 +111,9 @@ class TestPlatformStatsConfig:
     @pytest.mark.asyncio
     async def test_stats_when_called_then_no_hardcoded_defaults_in_response(self, client: AsyncClient) -> None:
         """Stats endpoint does not return hardcoded defaults — values come from config."""
-        mock_user = MagicMock()
-        mock_user.id = "test-user-id"
-        mock_user.role = UserRole.KAIHLE_ADMIN
+        mock_user = _make_admin_user()
 
-        with patch(
-            "app.api.v1.routes.platform.require_role",
-            return_value=lambda: mock_user,
-        ):
+        with patch("app.core.deps.get_current_user", return_value=mock_user):
             response = await client.get(
                 "/api/v1/platform/stats",
                 headers={"Authorization": "Bearer fake-token"},
@@ -149,14 +135,9 @@ class TestPlatformUsersResponse:
     @pytest.mark.asyncio
     async def test_users_when_kaihle_admin_then_returns_paginated_response(self, client: AsyncClient) -> None:
         """Users endpoint returns paginated response structure when accessed by KAIHLE_ADMIN."""
-        mock_user = MagicMock()
-        mock_user.id = "test-user-id"
-        mock_user.role = UserRole.KAIHLE_ADMIN
+        mock_user = _make_admin_user()
 
-        with patch(
-            "app.api.v1.routes.platform.require_role",
-            return_value=lambda: mock_user,
-        ):
+        with patch("app.core.deps.get_current_user", return_value=mock_user):
             response = await client.get(
                 "/api/v1/platform/users",
                 headers={"Authorization": "Bearer fake-token"},
@@ -178,15 +159,10 @@ class TestPlatformLogging:
     @pytest.mark.asyncio
     async def test_stats_when_requested_then_logs_request(self, client: AsyncClient) -> None:
         """Stats endpoint logs request with structlog when accessed."""
-        mock_user = MagicMock()
-        mock_user.id = "test-user-id"
-        mock_user.role = UserRole.KAIHLE_ADMIN
+        mock_user = _make_admin_user()
 
         with (
-            patch(
-                "app.api.v1.routes.platform.require_role",
-                return_value=lambda: mock_user,
-            ),
+            patch("app.core.deps.get_current_user", return_value=mock_user),
             patch("app.api.v1.routes.platform.logger") as mock_logger,
         ):
             await client.get(
@@ -201,15 +177,10 @@ class TestPlatformLogging:
     @pytest.mark.asyncio
     async def test_users_when_requested_then_logs_request(self, client: AsyncClient) -> None:
         """Users endpoint logs request with structlog when accessed."""
-        mock_user = MagicMock()
-        mock_user.id = "test-user-id"
-        mock_user.role = UserRole.KAIHLE_ADMIN
+        mock_user = _make_admin_user()
 
         with (
-            patch(
-                "app.api.v1.routes.platform.require_role",
-                return_value=lambda: mock_user,
-            ),
+            patch("app.core.deps.get_current_user", return_value=mock_user),
             patch("app.api.v1.routes.platform.logger") as mock_logger,
         ):
             await client.get(
