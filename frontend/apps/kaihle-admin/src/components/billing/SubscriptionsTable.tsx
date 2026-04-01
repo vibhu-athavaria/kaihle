@@ -1,11 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState, useMemo } from "react";
 import { Skeleton } from "@kaihle/ui";
-import {
-  Subscription,
-  PlanTier,
-  PaymentStatus,
-} from "../../hooks/useAdminBilling";
+import { Subscription, PlanTier } from "../../hooks/useAdminBilling";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 interface SubscriptionsTableProps {

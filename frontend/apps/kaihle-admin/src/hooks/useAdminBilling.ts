@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
 
 export type PlanTier = "TRIAL" | "STARTER" | "GROWTH" | "SCALE";
 export type PaymentStatus = "ACTIVE" | "PAST_DUE" | "SUSPENDED";
