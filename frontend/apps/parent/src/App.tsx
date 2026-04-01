@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { PrivateRoute } from "@kaihle/auth";
-import { ErrorBoundary } from "@kaihle/ui";
+import { PrivateRoute, RoleRoute } from "@kaihle/auth";
+import { ParentLayout } from "@kaihle/ui";
 import { LoginPage } from "./pages/LoginPage";
+import { ParentSettings } from "./pages/settings/ParentSettings";
 
 export default function App() {
   return (
@@ -9,15 +10,28 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
+          path="/parent/settings"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={["PARENT"]}>
+                <ParentLayout>
+                  <ParentSettings />
+                </ParentLayout>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
+        <Route
           path="/parent/*"
           element={
             <PrivateRoute>
-              <ErrorBoundary role="parent">
-                {/* Parent routes — implemented in later milestones */}
-                <div className="p-8 text-gray-500">
-                  Parent dashboard — coming in M5
-                </div>
-              </ErrorBoundary>
+              <RoleRoute allowedRoles={["PARENT"]}>
+                <ParentLayout>
+                  <div className="p-8 text-gray-500">
+                    Parent dashboard — coming in M5
+                  </div>
+                </ParentLayout>
+              </RoleRoute>
             </PrivateRoute>
           }
         />

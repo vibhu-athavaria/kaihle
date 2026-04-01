@@ -32,7 +32,16 @@ export function TopNav({
               <LogOut className="w-5 h-5 text-role-parent-ink" />
             </button>
           )}
-          <div className="w-8 h-8 rounded-full bg-brand-primary" />
+          {/* Settings accessible via avatar click - links to /parent/settings */}
+          <a
+            href="/parent/settings"
+            className="w-8 h-8 rounded-full bg-amber-50 text-amber-700 text-sm font-semibold
+                       flex items-center justify-center hover:opacity-80 transition-opacity
+                       focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+            aria-label="Account settings"
+          >
+            <span>P</span>
+          </a>
         </div>
       </header>
     );
