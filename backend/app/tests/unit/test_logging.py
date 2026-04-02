@@ -1,11 +1,13 @@
 """Unit tests for structured logging and request logging middleware."""
 
 import json
+import logging
 import uuid
 from collections.abc import Callable, Coroutine
 from typing import Any
 
 import pytest
+import structlog
 from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -40,8 +42,24 @@ def _build_test_app(
 
 @pytest.fixture(autouse=True)
 def _setup_logging() -> None:
-    """Ensure structlog is configured before each test."""
-    configure_logging(log_level="DEBUG")
+    """Ensure structlog is configured before each test.
+
+    Disable logger caching so that each test gets a fresh configuration
+    without interference from previously cached loggers.
+    """
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.dict_tracebacks,
+            structlog.processors.JSONRenderer(),
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(),
+        cache_logger_on_first_use=False,
+    )
 
 
 # ---------------------------------------------------------------------------
