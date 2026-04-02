@@ -14,7 +14,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from app.core.logging import configure_logging
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.security import create_access_token
 
