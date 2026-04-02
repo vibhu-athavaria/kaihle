@@ -1,10 +1,41 @@
 import { test, expect } from "@playwright/test";
+import { UserRole } from "@kaihle/types";
+
+const mockStudentUser = {
+  id: "student-1",
+  email: "student@school.edu",
+  first_name: "Test",
+  last_name: "Student",
+  role: UserRole.STUDENT,
+  school_id: "school-1",
+  updated_at: new Date().toISOString(),
+};
 
 /**
  * E2E tests for Student Settings page
  * Route: /student/settings - PrivateRoute + RoleRoute(['STUDENT'])
  */
 test.describe("Student Settings Page", () => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to a same-origin page first so localStorage is accessible
+    await page.goto("/");
+    // Set auth state for student
+    await page.evaluate((user) => {
+      localStorage.setItem(
+        "kaihle-auth",
+        JSON.stringify({
+          state: {
+            accessToken: "mock-token",
+            refreshToken: "mock-refresh",
+            user: user,
+            isAuthenticated: true,
+          },
+          version: 0,
+        }),
+      );
+    }, mockStudentUser);
+  });
+
   test("renders_three_sections_when_authenticated", async ({ page }) => {
     // Navigate to settings page
     await page.goto("/student/settings");

@@ -15,6 +15,7 @@ Stub implementations. Real implementations: M6-1-T1 (analytics), M6 (impersonate
 from datetime import UTC, datetime
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +25,7 @@ from app.models.user import UserRole
 from app.schemas.analytics import PlatformStats, SchoolAnalytics
 
 router = APIRouter(tags=["analytics"])
+logger = structlog.get_logger()
 
 
 @router.get("/schools/{school_id}/analytics", response_model=SchoolAnalytics)
@@ -59,6 +61,7 @@ async def get_platform_stats(
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformStats:
+    logger.info("platform.stats.requested", user_id=str(current_user.id))
     # STUB — M0-10-T6 | Real implementation: M6-1-T1
     # KaihleAdmin only — cross-school aggregation.
     return PlatformStats(

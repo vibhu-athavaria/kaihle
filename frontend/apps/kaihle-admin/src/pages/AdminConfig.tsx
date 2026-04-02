@@ -34,7 +34,7 @@ export function AdminConfig() {
         <ConfigSection title="LLM Provider">
           <ConfigRow
             label="Active Provider"
-            value={isLoading ? undefined : config?.llm_provider ?? "—"}
+            value={isLoading ? undefined : (config?.llm_provider ?? "—")}
             valueClassName="font-mono text-sm"
           />
           <ConfigRow
@@ -58,7 +58,9 @@ export function AdminConfig() {
           />
           <ConfigRow
             label="Max Trial Students"
-            value={isLoading ? undefined : config?.trial_students_limit ?? "—"}
+            value={
+              isLoading ? undefined : (config?.trial_students_limit ?? "—")
+            }
           />
         </ConfigSection>
 
@@ -68,13 +70,15 @@ export function AdminConfig() {
             value={
               isLoading
                 ? undefined
-                : config?.rate_limit_requests_per_minute ?? "—"
+                : (config?.rate_limit_requests_per_minute ?? "—")
             }
           />
           <ConfigRow
             label="Concurrent Users"
             value={
-              isLoading ? undefined : config?.rate_limit_concurrent_users ?? "—"
+              isLoading
+                ? undefined
+                : (config?.rate_limit_concurrent_users ?? "—")
             }
             isLast
           />
