@@ -19,6 +19,8 @@ const mockTeacherUser = {
 
 test.describe("Teacher Settings Page", () => {
   test.beforeEach(async ({ page }) => {
+    // Navigate to a same-origin page first so localStorage is accessible
+    await page.goto("/");
     // Set auth state for teacher
     await page.evaluate((user) => {
       localStorage.setItem(
