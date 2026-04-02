@@ -43,9 +43,10 @@ def _build_test_app(
 def _setup_logging() -> None:
     """Ensure structlog is configured before each test.
 
-    Disable logger caching so that each test gets a fresh configuration
-    without interference from previously cached loggers.
+    Use reset_defaults() to clear both the configuration AND the logger cache,
+    then reconfigure with our test settings.
     """
+    structlog.reset_defaults()
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
