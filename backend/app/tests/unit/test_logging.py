@@ -1,18 +1,23 @@
 """Unit tests for structured logging and request logging middleware."""
 
+import os
+
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-logging-tests")
+
 import json
+import logging
 import uuid
 from collections.abc import Callable, Coroutine
 from typing import Any
 
 import pytest
+import structlog
 from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from app.core.logging import configure_logging
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.security import create_access_token
 
@@ -40,8 +45,26 @@ def _build_test_app(
 
 @pytest.fixture(autouse=True)
 def _setup_logging() -> None:
-    """Ensure structlog is configured before each test."""
-    configure_logging(log_level="DEBUG")
+    """Ensure structlog is configured before each test.
+
+    Use reset_defaults() to clear both the configuration AND the logger cache,
+    then reconfigure with our test settings.
+    """
+    structlog.reset_defaults()
+    structlog.contextvars.clear_contextvars()
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.dict_tracebacks,
+            structlog.processors.JSONRenderer(),
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(),
+        cache_logger_on_first_use=False,
+    )
 
 
 # ---------------------------------------------------------------------------
