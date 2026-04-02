@@ -37,9 +37,7 @@ from scripts.seed_curriculum_graph import CurriculumSeeder, Stats
 
 MINIMAL_VALID_JSON: dict[str, Any] = {
     "_meta": {"version": "test", "format_note": "grade_level is singular int"},
-    "curricula": [
-        {"code": "test_curr", "name": "Test Curriculum", "description": "Test", "is_active": True}
-    ],
+    "curricula": [{"code": "test_curr", "name": "Test Curriculum", "description": "Test", "is_active": True}],
     "subjects": [
         {"code": "MATH", "name": "Mathematics", "icon": "calculator", "color": "#0D9488"},
         {"code": "SCI", "name": "Science", "icon": "flask", "color": "#16a34a"},
@@ -123,18 +121,10 @@ MINIMAL_VALID_JSON: dict[str, Any] = {
 # JSON with an unknown prerequisite to test warning handling
 JSON_WITH_UNKNOWN_PREREQ: dict[str, Any] = {
     "_meta": {"version": "test"},
-    "curricula": [
-        {"code": "test_curr", "name": "Test Curriculum", "is_active": True}
-    ],
-    "subjects": [
-        {"code": "MATH", "name": "Mathematics"}
-    ],
-    "grades": [
-        {"level": 6, "name": "Grade 6"}
-    ],
-    "curriculum_subjects": [
-        {"curriculum_code": "test_curr", "subject_code": "MATH", "is_core": True, "sort_order": 1}
-    ],
+    "curricula": [{"code": "test_curr", "name": "Test Curriculum", "is_active": True}],
+    "subjects": [{"code": "MATH", "name": "Mathematics"}],
+    "grades": [{"level": 6, "name": "Grade 6"}],
+    "curriculum_subjects": [{"curriculum_code": "test_curr", "subject_code": "MATH", "is_core": True, "sort_order": 1}],
     "curriculum_tree": [
         {
             "curriculum_code": "test_curr",
@@ -170,6 +160,7 @@ JSON_WITH_UNKNOWN_PREREQ: dict[str, Any] = {
 # Helper: run the seeder with given JSON data
 # ---------------------------------------------------------------------------
 
+
 async def run_seeder(db: AsyncSession, data: dict[str, Any]) -> Stats:
     """Run the CurriculumSeeder with the given data dict. Returns Stats object."""
     stats = Stats()
@@ -182,6 +173,7 @@ async def run_seeder(db: AsyncSession, data: dict[str, Any]) -> Stats:
 # ---------------------------------------------------------------------------
 # Acceptance Criterion 1: Valid JSON -> all tables populated
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_seed_when_valid_json_then_all_tables_populated(db_session: AsyncSession) -> None:
@@ -245,6 +237,7 @@ async def test_seed_when_valid_json_then_all_tables_populated(db_session: AsyncS
 # Acceptance Criterion 2: Idempotency - run twice, no duplicates
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_seed_when_run_twice_then_no_duplicates(db_session: AsyncSession) -> None:
     """Run seed twice -> row counts identical after second run."""
@@ -291,6 +284,7 @@ async def test_seed_when_run_twice_then_no_duplicates(db_session: AsyncSession) 
 # Acceptance Criterion 3: Curriculum-subject binding rules
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_curriculum_subjects_binding_respected(db_session: AsyncSession) -> None:
     """After seeding cambridge_v1.json: SCI does NOT appear under igcse.
@@ -331,6 +325,7 @@ async def test_curriculum_subjects_binding_respected(db_session: AsyncSession) -
 # Acceptance Criterion 4: Topics are deduplicated across grades
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_topics_are_deduplicated_across_grades(db_session: AsyncSession) -> None:
     """MATH-NUM appears in multiple grades -> only ONE row in topics table.
@@ -354,6 +349,7 @@ async def test_topics_are_deduplicated_across_grades(db_session: AsyncSession) -
 # Acceptance Criterion 5: Prerequisites resolved correctly
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_prerequisites_when_subtopic_b_requires_a_then_row_exists(db_session: AsyncSession) -> None:
     """After seed: subtopic_prerequisites row exists for a known prerequisite pair.
@@ -362,15 +358,11 @@ async def test_prerequisites_when_subtopic_b_requires_a_then_row_exists(db_sessi
     await run_seeder(db_session, MINIMAL_VALID_JSON)
 
     # Find the subtopics
-    result = await db_session.execute(
-        select(Subtopic).where(Subtopic.canonical_code == "MATH-NUM-G6-02")
-    )
+    result = await db_session.execute(select(Subtopic).where(Subtopic.canonical_code == "MATH-NUM-G6-02"))
     addition = result.scalar_one_or_none()
     assert addition is not None, "Addition subtopic should exist"
 
-    result = await db_session.execute(
-        select(Subtopic).where(Subtopic.canonical_code == "MATH-NUM-G6-01")
-    )
+    result = await db_session.execute(select(Subtopic).where(Subtopic.canonical_code == "MATH-NUM-G6-01"))
     integers = result.scalar_one_or_none()
     assert integers is not None, "Integers subtopic should exist"
 
@@ -389,6 +381,7 @@ async def test_prerequisites_when_subtopic_b_requires_a_then_row_exists(db_sessi
 # Acceptance Criterion 6: Unknown prerequisite -> warning logged, not crash
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_prerequisites_when_unknown_canonical_code_then_warning_logged_not_crash(
     db_session: AsyncSession,
@@ -405,9 +398,7 @@ async def test_prerequisites_when_unknown_canonical_code_then_warning_logged_not
     )
 
     # Subtopic should still be created
-    result = await db_session.execute(
-        select(Subtopic).where(Subtopic.canonical_code == "MATH-NUM-G6-01")
-    )
+    result = await db_session.execute(select(Subtopic).where(Subtopic.canonical_code == "MATH-NUM-G6-01"))
     subtopic = result.scalar_one_or_none()
     assert subtopic is not None, "Subtopic should be created even with unresolvable prerequisite"
 
@@ -423,6 +414,7 @@ async def test_prerequisites_when_unknown_canonical_code_then_warning_logged_not
 # Acceptance Criterion 7: Subtopic learning_objective is non-null
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_subtopics_learning_objective_is_non_null(db_session: AsyncSession) -> None:
     """Every seeded subtopic has a non-null learning_objective."""
@@ -433,17 +425,14 @@ async def test_subtopics_learning_objective_is_non_null(db_session: AsyncSession
     assert len(subtopics) > 0, "Should have at least one subtopic"
 
     for st in subtopics:
-        assert st.learning_objective is not None, (
-            f"Subtopic {st.canonical_code} has null learning_objective"
-        )
-        assert len(st.learning_objective.strip()) > 0, (
-            f"Subtopic {st.canonical_code} has empty learning_objective"
-        )
+        assert st.learning_objective is not None, f"Subtopic {st.canonical_code} has null learning_objective"
+        assert len(st.learning_objective.strip()) > 0, f"Subtopic {st.canonical_code} has empty learning_objective"
 
 
 # ---------------------------------------------------------------------------
 # Acceptance Criterion 8: Subtopic embedding is NULL
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_subtopics_embedding_is_null(db_session: AsyncSession) -> None:
@@ -455,6 +444,4 @@ async def test_subtopics_embedding_is_null(db_session: AsyncSession) -> None:
     assert len(subtopics) > 0, "Should have at least one subtopic"
 
     for st in subtopics:
-        assert st.embedding is None, (
-            f"Subtopic {st.canonical_code} should have NULL embedding, got {st.embedding}"
-        )
+        assert st.embedding is None, f"Subtopic {st.canonical_code} should have NULL embedding, got {st.embedding}"
