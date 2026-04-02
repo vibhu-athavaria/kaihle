@@ -1,5 +1,9 @@
 """Unit tests for structured logging and request logging middleware."""
 
+import os
+
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-logging-tests")
+
 import json
 import logging
 import uuid
@@ -47,6 +51,7 @@ def _setup_logging() -> None:
     then reconfigure with our test settings.
     """
     structlog.reset_defaults()
+    structlog.contextvars.clear_contextvars()
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,

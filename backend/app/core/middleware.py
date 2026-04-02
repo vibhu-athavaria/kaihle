@@ -12,8 +12,6 @@ from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from app.core.config import settings
 
-logger = structlog.get_logger()
-
 # Health check endpoints that should not be logged at INFO level
 HEALTH_ENDPOINTS = {"/health", "/ready"}
 
@@ -57,9 +55,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             }
 
             if is_health_endpoint:
-                logger.debug("request_completed", **log_data)
+                structlog.get_logger().debug("request_completed", **log_data)
             else:
-                logger.info("request_completed", **log_data)
+                structlog.get_logger().info("request_completed", **log_data)
             clear_contextvars()
 
     def _extract_user_context(self, request: Request) -> tuple[str | None, str | None]:
