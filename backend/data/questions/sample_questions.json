@@ -1,0 +1,87 @@
+[
+  {
+    "question_text": "What is the value of x in 2x + 4 = 12?",
+    "question_type": "MCQ",
+    "options": [
+      { "key": "A", "text": "3" },
+      { "key": "B", "text": "4" },
+      { "key": "C", "text": "5" },
+      { "key": "D", "text": "6" }
+    ],
+    "correct_answer": "B",
+    "explanation": "2x = 12 - 4 = 8, so x = 4",
+    "difficulty_level": 2.0,
+    "bloom_taxonomy": "Apply",
+    "curriculum_code": "cambridge_lower",
+    "subject_code": "MATH",
+    "grade_level": 8,
+    "topic_name": "Algebra",
+    "subtopic_name": "Linear Equations"
+  },
+  {
+    "question_text": "Water boils at 100 degrees Celsius.",
+    "question_type": "TRUE_FALSE",
+    "options": null,
+    "correct_answer": "TRUE",
+    "explanation": "At standard atmospheric pressure, water boils at exactly 100°C.",
+    "difficulty_level": 1.0,
+    "bloom_taxonomy": "Remember",
+    "curriculum_code": "cambridge_lower",
+    "subject_code": "SCIENCE",
+    "grade_level": 7,
+    "topic_name": "States of Matter",
+    "subtopic_name": "Boiling Point"
+  },
+  {
+    "question_text": "Which word is a synonym for 'happy'?",
+    "question_type": "MCQ",
+    "options": [
+      { "key": "A", "text": "Sad" },
+      { "key": "B", "text": "Angry" },
+      { "key": "C", "text": "Joyful" },
+      { "key": "D", "text": "Tired" }
+    ],
+    "correct_answer": "C",
+    "explanation": "'Joyful' means feeling or expressing great happiness.",
+    "difficulty_level": 1.0,
+    "bloom_taxonomy": "Remember",
+    "curriculum_code": "cambridge_lower",
+    "subject_code": "ENGLISH",
+    "grade_level": 5,
+    "topic_name": "Vocabulary",
+    "subtopic_name": "Synonyms"
+  },
+  {
+    "question_text": "What is the capital of France?",
+    "question_type": "MCQ",
+    "options": [
+      { "key": "A", "text": "London" },
+      { "key": "B", "text": "Berlin" },
+      { "key": "C", "text": "Paris" },
+      { "key": "D", "text": "Madrid" }
+    ],
+    "correct_answer": "C",
+    "explanation": "Paris has been the capital of France since the 10th century.",
+    "difficulty_level": 1.0,
+    "bloom_taxonomy": "Remember",
+    "curriculum_code": "cambridge_lower",
+    "subject_code": "GEOGRAPHY",
+    "grade_level": 6,
+    "topic_name": "European Countries",
+    "subtopic_name": "Capitals"
+  },
+  {
+    "question_text": "The process by which plants make their own food is called photosynthesis.",
+    "question_type": "TRUE_FALSE",
+    "options": null,
+    "correct_answer": "TRUE",
+    "explanation": "Photosynthesis is the process where plants use sunlight to convert carbon dioxide and water into glucose and oxygen.",
+    "difficulty_level": 2.0,
+    "bloom_taxonomy": "Understand",
+    "curriculum_code": "cambridge_lower",
+    "subject_code": "SCIENCE",
+    "grade_level": 6,
+    "topic_name": "Plant Biology",
+    "subtopic_name": "Photosynthesis"
+  }
+]
