@@ -61,6 +61,16 @@ def compute_canonical_form(question_text: str) -> str:
     return hashlib.sha256(normalized.encode()).hexdigest()
 
 
+def safe_float(value: Any) -> float | None:
+    """Safely convert a value to float, returning None if conversion fails."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
 def build_problem_signature(
     question_type: str,
     difficulty: float | None,
@@ -117,8 +127,15 @@ def normalize_hints(hints: Any) -> list[dict] | None:
     if isinstance(hints, dict):
         # Generated format: {"hint1": "...", "hint2": "..."}
         result = []
-        for key in sorted(hints.keys()):
-            order = int(key.replace("hint", "")) if key.startswith("hint") else 0
+        for i, key in enumerate(sorted(hints.keys())):
+            # Extract numeric part from key if possible, otherwise use position
+            if key.startswith("hint"):
+                try:
+                    order = int(key.replace("hint", ""))
+                except ValueError:
+                    order = i + 1
+            else:
+                order = i + 1
             result.append({"order": order, "text": hints[key]})
         return result
 
@@ -243,7 +260,7 @@ async def process_question_task_format(session, question: dict, row_num: int) ->
         "correct_answer": correct_answer,
         "explanation": question.get("explanation"),
         "hints": normalize_hints(question.get("hints")),
-        "difficulty_level": float(question["difficulty_level"]) if question.get("difficulty_level") else None,
+        "difficulty_level": safe_float(question.get("difficulty_level")),
         "bloom_taxonomy_level": question.get("bloom_taxonomy"),
         "estimated_time_seconds": question.get("estimated_time_seconds"),
         "learning_objectives": question.get("learning_objectives"),
@@ -293,7 +310,7 @@ async def process_question_preresolved_format(session, question: dict, row_num: 
         "correct_answer": correct_answer,
         "explanation": question.get("explanation"),
         "hints": normalize_hints(question.get("hints")),
-        "difficulty_level": float(question["difficulty_level"]) if question.get("difficulty_level") else None,
+        "difficulty_level": safe_float(question.get("difficulty_level")),
         "bloom_taxonomy_level": question.get("bloom_taxonomy_level") or question.get("bloom_taxonomy"),
         "estimated_time_seconds": question.get("estimated_time_seconds"),
         "learning_objectives": question.get("learning_objectives"),
@@ -377,7 +394,12 @@ async def import_questions(
         "errors": [],
     }
 
+    # Process questions in batches for better performance
+    BATCH_SIZE = 100
     async with AsyncSessionLocal() as session:
+        batch_insert_data = []
+        batch_row_numbers = []
+
         for i, question in enumerate(questions_data, 1):
             # Process based on format
             if detected_format == "preresolved":
@@ -394,29 +416,66 @@ async def import_questions(
                 stats["inserted"] += 1
                 continue
 
-            # Insert into database
-            try:
-                from sqlalchemy.dialects.postgresql import insert as pg_insert
+            # Collect for batch insert
+            batch_insert_data.append(insert_data)
+            batch_row_numbers.append(i)
 
-                stmt = pg_insert(QuestionBank).values(**insert_data)
-                await session.execute(stmt)
-                await session.commit()
-                stats["inserted"] += 1
-            except IntegrityError as e:
-                await session.rollback()
-                if "canonical_form" in str(e):
-                    stats["skipped_duplicate"] += 1
-                else:
-                    stats["skipped_error"] += 1
-                    stats["errors"].append(f"Row {i}: {e}")
-            except Exception as e:
-                await session.rollback()
-                stats["skipped_error"] += 1
-                stats["errors"].append(f"Row {i}: {e}")
+            # Insert batch when it reaches BATCH_SIZE or at the end
+            if len(batch_insert_data) >= BATCH_SIZE or i == len(questions_data):
+                try:
+                    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+                    stmt = pg_insert(QuestionBank).values(batch_insert_data)
+                    await session.execute(stmt)
+                    await session.commit()
+                    stats["inserted"] += len(batch_insert_data)
+                except IntegrityError:
+                    await session.rollback()
+                    # Handle duplicates individually in the batch
+                    await session.close()
+                    async with AsyncSessionLocal() as retry_session:
+                        for data, row_num in zip(batch_insert_data, batch_row_numbers):
+                            try:
+                                stmt = pg_insert(QuestionBank).values([data])
+                                await retry_session.execute(stmt)
+                                await retry_session.commit()
+                                stats["inserted"] += 1
+                            except IntegrityError as ie:
+                                await retry_session.rollback()
+                                if "canonical_form" in str(ie):
+                                    stats["skipped_duplicate"] += 1
+                                else:
+                                    stats["skipped_error"] += 1
+                                    stats["errors"].append(f"Row {row_num}: {ie}")
+                            except Exception as ie:
+                                await retry_session.rollback()
+                                stats["skipped_error"] += 1
+                                stats["errors"].append(f"Row {row_num}: {ie}")
+                except Exception:
+                    await session.rollback()
+                    # Retry individual inserts on batch failure
+                    await session.close()
+                    async with AsyncSessionLocal() as retry_session:
+                        for data, row_num in zip(batch_insert_data, batch_row_numbers):
+                            try:
+                                stmt = pg_insert(QuestionBank).values([data])
+                                await retry_session.execute(stmt)
+                                await retry_session.commit()
+                                stats["inserted"] += 1
+                            except Exception as ie:
+                                await retry_session.rollback()
+                                stats["skipped_error"] += 1
+                                stats["errors"].append(f"Row {row_num}: {ie}")
+
+                # Reset batch
+                batch_insert_data = []
+                batch_row_numbers = []
 
     # Log errors to file
     if stats["errors"]:
-        log_dir = Path("backend/logs")
+        # Use script directory as base for log path to avoid hardcoding
+        script_dir = Path(__file__).parent
+        log_dir = script_dir.parent / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         error_log = log_dir / "import_errors.log"
         with open(error_log, "w", encoding="utf-8") as f:
