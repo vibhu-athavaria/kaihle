@@ -109,6 +109,7 @@ async def list_questions(
         query = query.where(QuestionBank.question_text.ilike(f"%{search}%"))
 
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
+    query = query.order_by(QuestionBank.created_at.desc())
     rows = (await db.execute(query.offset((page - 1) * page_size).limit(page_size))).all()
 
     return QuestionBankListResponse(

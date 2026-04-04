@@ -490,8 +490,23 @@ function EditModal({
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("");
   const [selectedSubtopic, setSelectedSubtopic] = useState("");
+  const [filteredSubtopics, setFilteredSubtopics] = useState<FilterOption[]>(
+    [],
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch filtered subtopics when topic is selected
+  useEffect(() => {
+    if (selectedTopic) {
+      apiClient
+        .get("/api/v1/subtopics", { params: { topic_id: selectedTopic } })
+        .then((r) => setFilteredSubtopics(r.data))
+        .catch(() => setFilteredSubtopics([]));
+    } else {
+      setFilteredSubtopics(subtopics);
+    }
+  }, [selectedTopic, subtopics]);
 
   const handleCurriculumChange = (v: string) => {
     setSelectedCurriculum(v);
@@ -641,13 +656,11 @@ function EditModal({
                 onChange={(e) => setSelectedSubtopic(e.target.value)}
               >
                 <option value="">Unchanged</option>
-                {subtopics
-                  .filter((s) => !selectedTopic || true) // In real app, filter by topic_id
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
+                {filteredSubtopics.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
