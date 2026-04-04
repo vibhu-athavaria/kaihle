@@ -19,10 +19,10 @@ from app.models.curriculum import (
     Subtopic,
     Topic,
 )
+from app.models.user import User, UserRole
 
 # Import make_auth_header from conftest (auto-discovered by pytest)
 from app.tests.integration.conftest import make_auth_header
-from app.models.user import User, UserRole
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
