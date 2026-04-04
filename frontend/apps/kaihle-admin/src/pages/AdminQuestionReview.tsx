@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 import { AdminLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
@@ -65,45 +66,59 @@ export function AdminQuestionReview() {
   const search = searchParams.get("search") ?? "";
   const page = parseInt(searchParams.get("page") ?? "1", 10);
 
-  const [curriculums, setCurriculums] = useState<FilterOption[]>([]);
-  const [grades, setGrades] = useState<FilterOption[]>([]);
-  const [subjects, setSubjects] = useState<FilterOption[]>([]);
-  const [topics, setTopics] = useState<FilterOption[]>([]);
-  const [subtopics, setSubtopics] = useState<FilterOption[]>([]);
-  const [curriculumTopics, setCurriculumTopics] = useState<FilterOption[]>([]);
+  // React Query hooks for dropdown data with caching
+  const { data: curriculaData } = useQuery({
+    queryKey: ["curricula"],
+    queryFn: () =>
+      apiClient.get<FilterOption[]>("/api/v1/curricula").then((r) => r.data),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+  const { data: gradesData } = useQuery({
+    queryKey: ["grades"],
+    queryFn: () =>
+      apiClient.get<FilterOption[]>("/api/v1/grades").then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: subjectsData } = useQuery({
+    queryKey: ["subjects"],
+    queryFn: () =>
+      apiClient.get<FilterOption[]>("/api/v1/subjects").then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: topicsData } = useQuery({
+    queryKey: ["topics"],
+    queryFn: () =>
+      apiClient.get<FilterOption[]>("/api/v1/topics").then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: subtopicsData } = useQuery({
+    queryKey: ["subtopics"],
+    queryFn: () =>
+      apiClient.get<FilterOption[]>("/api/v1/subtopics").then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: curriculumTopicsData } = useQuery({
+    queryKey: ["curriculum-topics"],
+    queryFn: () =>
+      apiClient
+        .get<FilterOption[]>("/api/v1/curriculum-topics")
+        .then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Use React Query data or fall back to state
+  const curriculums = curriculaData ?? [];
+  const grades = gradesData ?? [];
+  const subjects = subjectsData ?? [];
+  const topics = topicsData ?? [];
+  const subtopics = subtopicsData ?? [];
+  const curriculumTopics = curriculumTopicsData ?? [];
+
   const [data, setData] = useState<QuestionListResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<QuestionRow | null>(
     null,
   );
-
-  // Load filter dropdown data
-  useEffect(() => {
-    apiClient
-      .get("/api/v1/curricula")
-      .then((r) => setCurriculums(r.data))
-      .catch(() => {});
-    apiClient
-      .get("/api/v1/grades")
-      .then((r) => setGrades(r.data))
-      .catch(() => {});
-    apiClient
-      .get("/api/v1/subjects")
-      .then((r) => setSubjects(r.data))
-      .catch(() => {});
-    apiClient
-      .get("/api/v1/topics")
-      .then((r) => setTopics(r.data))
-      .catch(() => {});
-    apiClient
-      .get("/api/v1/subtopics")
-      .then((r) => setSubtopics(r.data))
-      .catch(() => {});
-    apiClient
-      .get("/api/v1/curriculum-topics")
-      .then((r) => setCurriculumTopics(r.data))
-      .catch(() => {});
-  }, []);
 
   // Load question list
   useEffect(() => {
@@ -496,16 +511,25 @@ function EditModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch filtered subtopics when topic is selected
+  // Fetch filtered subtopics when topic is selected (with AbortController for race condition prevention)
   useEffect(() => {
+    const controller = new AbortController();
     if (selectedTopic) {
       apiClient
-        .get("/api/v1/subtopics", { params: { topic_id: selectedTopic } })
+        .get("/api/v1/subtopics", {
+          params: { topic_id: selectedTopic },
+          signal: controller.signal,
+        })
         .then((r) => setFilteredSubtopics(r.data))
-        .catch(() => setFilteredSubtopics([]));
+        .catch((err) => {
+          if (err.name !== "CanceledError") {
+            setFilteredSubtopics([]);
+          }
+        });
     } else {
       setFilteredSubtopics(subtopics);
     }
+    return () => controller.abort();
   }, [selectedTopic, subtopics]);
 
   const handleCurriculumChange = (v: string) => {
