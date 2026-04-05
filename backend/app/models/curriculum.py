@@ -127,6 +127,8 @@ class CurriculumTopic(Base, UUIDMixin, TimestampMixin):
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    subtopics: Mapped[list["Subtopic"]] = relationship("Subtopic", back_populates="curriculum_topic")
+
     __table_args__ = (
         CheckConstraint(
             "sequence_order IS NULL OR sequence_order > 0",
@@ -164,6 +166,7 @@ class Subtopic(Base, UUIDMixin, TimestampMixin):
         ),
     )
 
+    curriculum_topic: Mapped["CurriculumTopic"] = relationship("CurriculumTopic", back_populates="subtopics")
     questions: Mapped[list["QuestionBank"]] = relationship("QuestionBank", back_populates="subtopic")
 
 
