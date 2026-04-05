@@ -37,6 +37,8 @@ class Curriculum(Base, UUIDMixin, TimestampMixin):
     country: Mapped[str | None] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    curriculum_topics: Mapped[list["CurriculumTopic"]] = relationship("CurriculumTopic", back_populates="curriculum")
+
 
 class Subject(Base, UUIDMixin, TimestampMixin):
     """Global subject catalogue. School-agnostic."""
@@ -127,6 +129,7 @@ class CurriculumTopic(Base, UUIDMixin, TimestampMixin):
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    curriculum: Mapped["Curriculum"] = relationship("Curriculum", back_populates="curriculum_topics")
     subtopics: Mapped[list["Subtopic"]] = relationship("Subtopic", back_populates="curriculum_topic")
 
     __table_args__ = (
