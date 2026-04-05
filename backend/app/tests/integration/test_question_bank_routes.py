@@ -30,19 +30,30 @@ from app.tests.integration.conftest import make_auth_header
 @pytest.fixture
 async def curriculum_graph(db_session: AsyncSession):
     """Create a minimal curriculum graph for testing."""
-    curriculum = Curriculum(name="Test Curriculum")
+    curriculum = Curriculum(
+        name="Test Curriculum",
+        code=f"TEST-{uuid.uuid4().hex[:6]}",
+    )
     db_session.add(curriculum)
     await db_session.flush()
 
-    subject = Subject(name="Test Subject")
+    subject = Subject(
+        name="Test Subject",
+        code=f"TS{uuid.uuid4().hex[:4]}",
+    )
     db_session.add(subject)
     await db_session.flush()
 
-    grade = Grade(name="Test Grade")
+    grade = Grade(
+        name="Test Grade",
+        level=7,
+    )
     db_session.add(grade)
     await db_session.flush()
 
-    topic = Topic(name="Test Topic")
+    topic = Topic(
+        name="Test Topic",
+    )
     db_session.add(topic)
     await db_session.flush()
 
@@ -58,6 +69,7 @@ async def curriculum_graph(db_session: AsyncSession):
     subtopic = Subtopic(
         name="Test Subtopic",
         curriculum_topic_id=curriculum_topic.id,
+        learning_objective="Test learning objective",
     )
     db_session.add(subtopic)
     await db_session.flush()
@@ -75,10 +87,11 @@ async def curriculum_graph(db_session: AsyncSession):
 
 
 @pytest.fixture
-async def student_user(db_session: AsyncSession) -> User:
+async def student_user(db_session: AsyncSession, school) -> User:
     """Create a STUDENT user for access control testing."""
     user = User(
         id=uuid.uuid4(),
+        school_id=school.id,
         email=f"student-{uuid.uuid4().hex[:8]}@test.com",
         first_name="Test",
         last_name="Student",
@@ -99,27 +112,30 @@ async def sample_questions(db_session: AsyncSession, curriculum_graph) -> list[Q
             question_type="MCQ",
             correct_answer="4",
             explanation="Basic addition.",
-            difficulty_level=0.3,
+            difficulty_level=1.0,
             is_active=True,
             subtopic_id=curriculum_graph["subtopic"].id,
+            canonical_form="What is 2 + 2?",
         ),
         QuestionBank(
             question_text="What is 3 + 3?",
             question_type="MCQ",
             correct_answer="6",
             explanation=None,
-            difficulty_level=0.4,
+            difficulty_level=2.0,
             is_active=True,
             subtopic_id=curriculum_graph["subtopic"].id,
+            canonical_form="What is 3 + 3?",
         ),
         QuestionBank(
             question_text="Is the sky blue?",
             question_type="TRUE_FALSE",
             correct_answer="True",
             explanation="The sky appears blue due to Rayleigh scattering.",
-            difficulty_level=0.2,
+            difficulty_level=1.5,
             is_active=False,
             subtopic_id=curriculum_graph["subtopic"].id,
+            canonical_form="Is the sky blue?",
         ),
     ]
     for q in questions:
