@@ -5,7 +5,7 @@ WORKDIR /app
 RUN npm install -g pnpm
 
 # Store lives outside the bind-mounted volume — avoids VirtioFS hard-link failures
-ENV PNPM_HOME=/root/.pnpm-store
+ENV PNPM_HOME=/app/.pnpm-store
 
 EXPOSE 3002
 

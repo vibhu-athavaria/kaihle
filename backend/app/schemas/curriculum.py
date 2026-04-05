@@ -38,3 +38,19 @@ class CurriculumResponse(BaseModel):
     name: str  # e.g. "Cambridge IGCSE"
     code: str  # e.g. "igcse"
     is_active: bool
+
+
+# Simplified schemas for dropdown use (id, name only)
+class TopicSimpleResponse(BaseModel):
+    id: UUID
+    name: str
+
+
+class SubtopicSimpleResponse(BaseModel):
+    id: UUID
+    name: str
+
+
+class CurriculumTopicSimpleResponse(BaseModel):
+    id: UUID
+    name: str

@@ -10,6 +10,7 @@ import { AdminSchools } from "./pages/AdminSchools";
 import { AdminSchoolDetail } from "./pages/AdminSchoolDetail";
 import { AdminConfig } from "./pages/AdminConfig";
 import { AdminUsers } from "./pages/AdminUsers";
+import { AdminQuestionReview } from "./pages/AdminQuestionReview";
 
 export default function App() {
   return (
@@ -42,6 +43,10 @@ export default function App() {
                       />
                       <Route path="config" element={<AdminConfig />} />
                       <Route path="users" element={<AdminUsers />} />
+                      <Route
+                        path="question-bank"
+                        element={<AdminQuestionReview />}
+                      />
                       <Route
                         index
                         element={<Navigate to="dashboard" replace />}

@@ -115,7 +115,7 @@ Add **Content** section between Platform and System sections:
 │  │  │  Question Type *   [MCQ / TRUE_FALSE / SHORT_ANSWER ▾]           │   │ │
 │  │  │  Correct Answer *  [textarea 2 rows]                             │   │ │
 │  │  │  Explanation       [textarea 3 rows, nullable]                   │   │ │
-│  │  │  Difficulty        [number input 0.0–1.0, nullable]              │   │ │
+│  │  │  Difficulty        [number input 1.0–5.0, nullable]              │  │ │
 │  │  │  Active            [toggle — green on, gray off]                 │   │ │
 │  │  └────────────────────────────────────────────────────────────────┘   │ │
 │  │  ┌─ Footer (border-t, px-5 py-4, flex justify-end gap-2) ─────────┐   │ │
@@ -240,7 +240,7 @@ class QuestionBankUpdateRequest(BaseModel):
     question_type: str | None = None
     correct_answer: str | None = None
     explanation: str | None = None
-    difficulty_level: float | None = Field(None, ge=0.0, le=1.0)
+    difficulty_level: float | None = Field(None, ge=1.0, le=5.0)
     is_active: bool | None = None
     subtopic_id: UUID | None = None
 ```
@@ -797,8 +797,8 @@ function EditQuestionModal({ question, allCurriculums, allGrades, allSubjects, a
                   className="w-full border border-[#eaecf0] rounded-md text-[12px] text-[#374151] px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] resize-none" />
               </div>
               <div>
-                <label className="text-[10px] text-[#374151] font-medium mb-1 block">Difficulty (0.0 – 1.0)</label>
-                <input type="number" min={0} max={1} step={0.01} value={difficultyLevel}
+                <label className="text-[10px] text-[#374151] font-medium mb-1 block">Difficulty (1.0 – 5.0)</label>
+                <input type="number" min={1} max={5} step={0.1} value={difficultyLevel}
                   onChange={e => setDifficultyLevel(e.target.value)} placeholder="Leave blank to clear"
                   className="w-full border border-[#eaecf0] rounded-md text-[12px] text-[#374151] px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]" />
               </div>

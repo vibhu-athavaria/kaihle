@@ -31,10 +31,13 @@ from app.models.curriculum import (
 )
 from app.schemas.curriculum import (
     CurriculumResponse,
+    CurriculumTopicSimpleResponse,
     GradeResponse,
     SubjectResponse,
     SubtopicResponse,
+    SubtopicSimpleResponse,
     TopicResponse,
+    TopicSimpleResponse,
 )
 
 router = APIRouter(tags=["curriculum"])
@@ -242,4 +245,57 @@ async def list_topic_subtopics(
             order=s.sequence_order or 0,
         )
         for s in rows
+    ]
+
+
+@router.get("/topics", response_model=list[TopicSimpleResponse])
+async def list_all_topics(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[TopicSimpleResponse]:
+    """List all topics (for dropdown use)."""
+    rows = await db.scalars(select(Topic).where(Topic.is_active.is_(True)).order_by(Topic.name))
+    return [TopicSimpleResponse(id=t.id, name=t.name) for t in rows]
+
+
+@router.get("/subtopics", response_model=list[SubtopicSimpleResponse])
+async def list_all_subtopics(
+    topic_id: UUID | None = Query(None, description="Filter subtopics by topic"),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[SubtopicSimpleResponse]:
+    """List all subtopics, optionally filtered by topic_id."""
+    query = select(Subtopic).where(Subtopic.is_active.is_(True))
+    if topic_id:
+        query = query.join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id).where(
+            CurriculumTopic.topic_id == topic_id
+        )
+    query = query.order_by(Subtopic.name)
+    rows = await db.scalars(query)
+    return [SubtopicSimpleResponse(id=s.id, name=s.name) for s in rows]
+
+
+@router.get("/curriculum-topics", response_model=list[CurriculumTopicSimpleResponse])
+async def list_curriculum_topics(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[CurriculumTopicSimpleResponse]:
+    """List all curriculum topics with a composite name (for dropdown use)."""
+    rows = (
+        await db.execute(
+            select(CurriculumTopic, Curriculum.name, Grade.name, Subject.name, Topic.name)
+            .join(Grade, CurriculumTopic.grade_id == Grade.id)
+            .join(Subject, CurriculumTopic.subject_id == Subject.id)
+            .join(Topic, CurriculumTopic.topic_id == Topic.id)
+            .join(Curriculum, CurriculumTopic.curriculum_id == Curriculum.id)
+            .where(CurriculumTopic.is_active.is_(True))
+            .order_by(Curriculum.name, Grade.level, Subject.name, Topic.name)
+        )
+    ).all()
+    return [
+        CurriculumTopicSimpleResponse(
+            id=ct.id,
+            name=f"{cur_name} → {grade_name} → {subj_name} → {topic_name}",
+        )
+        for ct, cur_name, grade_name, subj_name, topic_name in rows
     ]

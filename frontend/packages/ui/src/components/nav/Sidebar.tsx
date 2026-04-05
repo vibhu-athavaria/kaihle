@@ -12,6 +12,7 @@ import {
   Archive,
   Cog,
   LogOut,
+  FileText,
 } from "lucide-react";
 import { NavItem } from "./NavItem";
 
@@ -107,6 +108,16 @@ const adminSections: NavSection[] = [
       { label: "Schools", href: "/kaihle-admin/schools", icon: Building2 },
       { label: "Users", href: "/kaihle-admin/users", icon: Users },
       { label: "Billing", href: "/kaihle-admin/billing", icon: Settings },
+    ],
+  },
+  {
+    section: "CONTENT",
+    items: [
+      {
+        label: "Assessment Questions",
+        href: "/kaihle-admin/question-bank",
+        icon: FileText,
+      },
     ],
   },
   {

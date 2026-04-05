@@ -21,7 +21,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -36,6 +36,8 @@ class Curriculum(Base, UUIDMixin, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text)
     country: Mapped[str | None] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    curriculum_topics: Mapped[list["CurriculumTopic"]] = relationship("CurriculumTopic", back_populates="curriculum")
 
 
 class Subject(Base, UUIDMixin, TimestampMixin):
@@ -127,6 +129,9 @@ class CurriculumTopic(Base, UUIDMixin, TimestampMixin):
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    curriculum: Mapped["Curriculum"] = relationship("Curriculum", back_populates="curriculum_topics")
+    subtopics: Mapped[list["Subtopic"]] = relationship("Subtopic", back_populates="curriculum_topic")
+
     __table_args__ = (
         CheckConstraint(
             "sequence_order IS NULL OR sequence_order > 0",
@@ -163,6 +168,9 @@ class Subtopic(Base, UUIDMixin, TimestampMixin):
             name="chk_subtopic_difficulty",
         ),
     )
+
+    curriculum_topic: Mapped["CurriculumTopic"] = relationship("CurriculumTopic", back_populates="subtopics")
+    questions: Mapped[list["QuestionBank"]] = relationship("QuestionBank", back_populates="subtopic")
 
 
 class SubtopicPrerequisite(Base):
@@ -248,6 +256,8 @@ class QuestionBank(Base, UUIDMixin, TimestampMixin):
     # 'bank' = from founders 7K import | 'llm' = AI-generated at runtime
     meta_tags: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    subtopic: Mapped["Subtopic"] = relationship("Subtopic", back_populates="questions")
 
     __table_args__ = (
         CheckConstraint(
