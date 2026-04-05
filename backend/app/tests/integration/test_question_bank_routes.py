@@ -112,7 +112,7 @@ async def sample_questions(db_session: AsyncSession, curriculum_graph) -> list[Q
             question_type="MCQ",
             correct_answer="4",
             explanation="Basic addition.",
-            difficulty_level=0.2,
+            difficulty_level=1.0,
             is_active=True,
             subtopic_id=curriculum_graph["subtopic"].id,
             canonical_form="What is 2 + 2?",
@@ -122,7 +122,7 @@ async def sample_questions(db_session: AsyncSession, curriculum_graph) -> list[Q
             question_type="MCQ",
             correct_answer="6",
             explanation=None,
-            difficulty_level=0.5,
+            difficulty_level=3.0,
             is_active=True,
             subtopic_id=curriculum_graph["subtopic"].id,
             canonical_form="What is 3 + 3?",
@@ -132,7 +132,7 @@ async def sample_questions(db_session: AsyncSession, curriculum_graph) -> list[Q
             question_type="TRUE_FALSE",
             correct_answer="True",
             explanation="The sky appears blue due to Rayleigh scattering.",
-            difficulty_level=0.3,
+            difficulty_level=4.5,
             is_active=False,
             subtopic_id=curriculum_graph["subtopic"].id,
             canonical_form="Is the sky blue?",
@@ -315,7 +315,7 @@ class TestUpdateQuestion:
             json={
                 "question_text": "Updated question",
                 "correct_answer": "5",
-                "difficulty_level": 0.8,
+                "difficulty_level": 2.0,
                 "is_active": False,
             },
         )
@@ -323,7 +323,7 @@ class TestUpdateQuestion:
         data = response.json()
         assert data["question_text"] == "Updated question"
         assert data["correct_answer"] == "5"
-        assert data["difficulty_level"] == 0.8
+        assert data["difficulty_level"] == 2.0
         assert data["is_active"] is False
 
     @pytest.mark.asyncio
@@ -370,13 +370,23 @@ class TestUpdateQuestion:
 
     @pytest.mark.asyncio
     async def test_update_difficulty_level_out_of_range(self, client: AsyncClient, kaihle_admin, sample_questions):
-        """Difficulty level outside 0.0-1.0 should return 422."""
+        """Difficulty level outside 1.0-5.0 should return 422."""
         headers = make_auth_header(kaihle_admin)
         q_id = str(sample_questions[0].id)
+
+        # Test upper bound
         response = await client.patch(
             f"/api/v1/question-bank/{q_id}",
             headers=headers,
-            json={"difficulty_level": 1.5},
+            json={"difficulty_level": 5.5},
+        )
+        assert response.status_code == 422
+
+        # Test lower bound (below 1.0)
+        response = await client.patch(
+            f"/api/v1/question-bank/{q_id}",
+            headers=headers,
+            json={"difficulty_level": 0.5},
         )
         assert response.status_code == 422
 

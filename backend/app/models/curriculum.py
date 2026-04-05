@@ -261,7 +261,7 @@ class QuestionBank(Base, UUIDMixin, TimestampMixin):
 
     __table_args__ = (
         CheckConstraint(
-            "difficulty_level IS NULL OR (difficulty_level BETWEEN 0.0 AND 1.0)",
+            "difficulty_level IS NULL OR (difficulty_level BETWEEN 1.0 AND 5.0)",
             name="chk_qb_difficulty",
         ),
         CheckConstraint(
