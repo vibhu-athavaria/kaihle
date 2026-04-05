@@ -21,7 +21,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -164,6 +164,8 @@ class Subtopic(Base, UUIDMixin, TimestampMixin):
         ),
     )
 
+    questions: Mapped[list["QuestionBank"]] = relationship("QuestionBank", back_populates="subtopic")
+
 
 class SubtopicPrerequisite(Base):
     """Prerequisite graph at subtopic level."""
@@ -249,9 +251,11 @@ class QuestionBank(Base, UUIDMixin, TimestampMixin):
     meta_tags: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    subtopic: Mapped["Subtopic"] = relationship("Subtopic", back_populates="questions")
+
     __table_args__ = (
         CheckConstraint(
-            "difficulty_level IS NULL OR (difficulty_level BETWEEN 1.0 AND 5.0)",
+            "difficulty_level IS NULL OR (difficulty_level BETWEEN 0.0 AND 1.0)",
             name="chk_qb_difficulty",
         ),
         CheckConstraint(

@@ -51,6 +51,6 @@ class QuestionBankUpdateRequest(BaseModel):
     question_type: str | None = None
     correct_answer: str | None = None
     explanation: str | None = None
-    difficulty_level: float | None = Field(None, ge=1.0, le=5.0)
+    difficulty_level: float | None = Field(None, ge=0.0, le=1.0)
     is_active: bool | None = None
     subtopic_id: UUID | None = None
