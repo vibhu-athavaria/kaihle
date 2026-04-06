@@ -7,14 +7,23 @@
     "review_status": "approved",
     "date": "2026-03",
     "scope": "Cambridge Lower Secondary (Grades 6-8) + Cambridge IGCSE (Grades 9-10)",
-    "total_curricula": 2,
+    "total_curricula": 4,
     "total_subjects": 7,
     "subject_split_note": "SCI (Integrated Science) is Lower Secondary only. BIO, CHEM, PHY are IGCSE only. ENGL (Literature) is IGCSE only. MATH and ENG span both curricula.",
     "grade_boundary_note": "cambridge_lower = Grades 6-8 (Cambridge Stages 7-9). igcse = Grades 9-10 (IGCSE Years 10-11). This overrides the original task file which incorrectly had cambridge_lower = 6-9.",
     "format_note": "Each curriculum_tree entry uses grade_level (singular integer) not grade_levels (array). The seed script must iterate entries individually.",
-    "prerequisite_patch": "2026-03-25: Prerequisites normalised to canonical_codes; 137 cross-grade links added; MATH-ALG-G8-02 wrong prereq removed. Patch authored by Vidhya (curriculum) + Kramer (validation)."
+    "prerequisite_patch": "2026-03-25: Prerequisites normalised to canonical_codes; 137 cross-grade links added; MATH-ALG-G8-02 wrong prereq removed. Patch authored by Vidhya (curriculum) + Kramer (validation).",
+    "note_on_science": "Grade 11/12 Science splits into BIO, CHEM, PHY (same as IGCSE). No 'SCI' subject at AS/A Level.",
+    "note_on_humanities": "Geography (GEO), Global Perspectives (GP), History (HIST) are new subjects — add to subjects array."
   },
   "curricula": [
+    {
+      "code": "cambridge_primary",
+      "name": "Cambridge Primary",
+      "description": "Cambridge Primary curriculum for Grade 5 (Stage 6). The final year of Cambridge Primary, bridging to Lower Secondary. Covers Mathematics, Integrated Science and English Language.",
+      "country": null,
+      "is_active": true
+    },
     {
       "code": "cambridge_lower",
       "name": "Cambridge Lower Secondary",
@@ -26,6 +35,13 @@
       "code": "igcse",
       "name": "Cambridge IGCSE",
       "description": "Cambridge International General Certificate of Secondary Education for Grades 9-10. Externally assessed qualification recognised by universities worldwide.",
+      "country": null,
+      "is_active": true
+    },
+    {
+      "code": "cambridge_as_level",
+      "name": "Cambridge AS & A Level",
+      "description": "Cambridge International AS & A Level for Grades 11–12. Externally assessed qualification recognised by universities worldwide as preparation for higher education.",
       "country": null,
       "is_active": true
     }
@@ -79,9 +95,35 @@
       "icon": "book",
       "color": "#9333EA",
       "description": "Cambridge IGCSE English Literature covering poetry, prose and drama."
+    },
+    {
+      "code": "GEO",
+      "name": "Geography",
+      "icon": "globe",
+      "color": "#065F46",
+      "description": "Cambridge AS & A Level Geography covering physical and human geography, fieldwork and geographical skills."
+    },
+    {
+      "code": "GP",
+      "name": "Global Perspectives",
+      "icon": "users",
+      "color": "#7C3AED",
+      "description": "Cambridge AS & A Level Global Perspectives & Research covering critical thinking, stakeholder analysis and independent research."
+    },
+    {
+      "code": "HIST",
+      "name": "History",
+      "icon": "book",
+      "color": "#92400E",
+      "description": "Cambridge AS & A Level History covering key historical periods, historiography and thematic studies."
     }
   ],
   "grades": [
+    {
+      "level": 5,
+      "name": "Grade 5",
+      "description": "Cambridge Primary Stage 6"
+    },
     {
       "level": 6,
       "name": "Grade 6",
@@ -119,6 +161,24 @@
     }
   ],
   "curriculum_subjects": [
+    {
+      "curriculum_code": "cambridge_primary",
+      "subject_code": "MATH",
+      "is_core": true,
+      "sort_order": 1
+    },
+    {
+      "curriculum_code": "cambridge_primary",
+      "subject_code": "SCI",
+      "is_core": true,
+      "sort_order": 2
+    },
+    {
+      "curriculum_code": "cambridge_primary",
+      "subject_code": "ENG",
+      "is_core": true,
+      "sort_order": 3
+    },
     {
       "curriculum_code": "cambridge_lower",
       "subject_code": "MATH",
@@ -172,9 +232,588 @@
       "subject_code": "ENGL",
       "is_core": false,
       "sort_order": 6
+    },
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "MATH",
+      "is_core": true,
+      "sort_order": 1
+    },
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "BIO",
+      "is_core": false,
+      "sort_order": 2
+    },
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "CHEM",
+      "is_core": false,
+      "sort_order": 3
+    },
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "PHY",
+      "is_core": false,
+      "sort_order": 4
+    },
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "ENG",
+      "is_core": false,
+      "sort_order": 5
+    },
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "ENGL",
+      "is_core": false,
+      "sort_order": 6
+    },
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "GEO",
+      "is_core": false,
+      "sort_order": 7
+    },
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "GP",
+      "is_core": false,
+      "sort_order": 8
+    },
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "HIST",
+      "is_core": false,
+      "sort_order": 9
     }
   ],
   "curriculum_tree": [
+    {
+      "curriculum_code": "cambridge_primary",
+      "subject_code": "MATH",
+      "grade_level": 5,
+      "standard_code_prefix": "5M",
+      "topics": [
+        {
+          "name": "Number",
+          "canonical_code": "MATH-NUM",
+          "sequence_order": 1,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Understand place value for integers up to 6 digits and decimals",
+            "Work confidently with fractions, decimals and percentages",
+            "Solve problems involving ratio and proportion"
+          ],
+          "subtopics": [
+            {
+              "name": "Integers and Place Value",
+              "canonical_code": "MATH-NUM-G5-01",
+              "learning_objective": "Read, write, order and compare numbers up to 1,000,000; understand the value of each digit; multiply and divide by 10, 100 and 1000.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Fractions",
+              "canonical_code": "MATH-NUM-G5-02",
+              "learning_objective": "Compare and order fractions with different denominators; add and subtract fractions including mixed numbers; find fractions of quantities.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": ["MATH-NUM-G5-01"]
+            },
+            {
+              "name": "Decimals and Percentages",
+              "canonical_code": "MATH-NUM-G5-03",
+              "learning_objective": "Read, write and order decimals with up to 3 decimal places; convert between fractions, decimals and percentages; calculate simple percentages of whole numbers.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["MATH-NUM-G5-02"]
+            },
+            {
+              "name": "Multiplication and Division",
+              "canonical_code": "MATH-NUM-G5-04",
+              "learning_objective": "Multiply numbers up to 4 digits by 1 or 2-digit numbers using formal written methods; divide 4-digit numbers by 1-digit numbers; interpret remainders.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 4,
+              "prerequisites": ["MATH-NUM-G5-01"]
+            },
+            {
+              "name": "Ratio and Proportion",
+              "canonical_code": "MATH-NUM-G5-05",
+              "learning_objective": "Understand ratio as a comparison of two quantities; write and simplify simple ratios; solve straightforward proportion problems using the unitary method.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 5,
+              "prerequisites": ["MATH-NUM-G5-03"]
+            }
+          ]
+        },
+        {
+          "name": "Algebra",
+          "canonical_code": "MATH-ALG",
+          "sequence_order": 2,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Recognise and describe number patterns and sequences",
+            "Use letters to represent unknowns in simple expressions"
+          ],
+          "subtopics": [
+            {
+              "name": "Number Patterns and Sequences",
+              "canonical_code": "MATH-ALG-G5-01",
+              "learning_objective": "Recognise, describe and extend linear number sequences; identify the term-to-term rule; find missing terms in a sequence.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": ["MATH-NUM-G5-01"]
+            },
+            {
+              "name": "Simple Expressions and Formulae",
+              "canonical_code": "MATH-ALG-G5-02",
+              "learning_objective": "Use letters to represent unknown quantities in simple expressions; substitute numerical values into simple formulae; describe a simple rule using algebra.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": ["MATH-ALG-G5-01"]
+            }
+          ]
+        },
+        {
+          "name": "Geometry and Measure",
+          "canonical_code": "MATH-GEO",
+          "sequence_order": 3,
+          "recommended_weeks": 7,
+          "learning_objectives": [
+            "Identify and measure angles; classify 2D and 3D shapes",
+            "Calculate perimeter, area and volume of simple shapes",
+            "Read and plot coordinates in all four quadrants"
+          ],
+          "subtopics": [
+            {
+              "name": "Angles",
+              "canonical_code": "MATH-GEO-G5-01",
+              "learning_objective": "Identify acute, obtuse, right and reflex angles; estimate and measure angles using a protractor; calculate unknown angles on a straight line and around a point.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "2D and 3D Shapes",
+              "canonical_code": "MATH-GEO-G5-02",
+              "learning_objective": "Name and classify 2D shapes by properties including symmetry; identify faces, edges and vertices of 3D shapes; recognise nets of common 3D shapes.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": ["MATH-GEO-G5-01"]
+            },
+            {
+              "name": "Perimeter and Area",
+              "canonical_code": "MATH-GEO-G5-03",
+              "learning_objective": "Calculate the perimeter and area of rectangles and triangles; find the area of compound rectilinear shapes by decomposition.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["MATH-GEO-G5-02"]
+            },
+            {
+              "name": "Volume and Capacity",
+              "canonical_code": "MATH-GEO-G5-04",
+              "learning_objective": "Calculate the volume of cuboids by counting unit cubes and using the formula l × w × h; convert between units of capacity (ml and l).",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 4,
+              "prerequisites": ["MATH-GEO-G5-03"]
+            },
+            {
+              "name": "Coordinates and Translation",
+              "canonical_code": "MATH-GEO-G5-05",
+              "learning_objective": "Read and plot coordinates in all four quadrants; describe translations using column vectors; identify and reflect shapes in horizontal and vertical mirror lines.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 5,
+              "prerequisites": ["MATH-GEO-G5-01"]
+            }
+          ]
+        },
+        {
+          "name": "Statistics and Probability",
+          "canonical_code": "MATH-STAT",
+          "sequence_order": 4,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Collect, organise and represent data in tables and diagrams",
+            "Calculate and interpret mean, median, mode and range",
+            "Express the probability of simple events"
+          ],
+          "subtopics": [
+            {
+              "name": "Data Collection and Graphs",
+              "canonical_code": "MATH-STAT-G5-01",
+              "learning_objective": "Design and use tally charts and frequency tables to collect data; construct and interpret bar charts, line graphs and pie charts from data.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Mean, Median, Mode and Range",
+              "canonical_code": "MATH-STAT-G5-02",
+              "learning_objective": "Calculate the mean of a data set; identify the median and mode from a list of values; calculate the range; interpret these measures in context.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": ["MATH-STAT-G5-01"]
+            },
+            {
+              "name": "Probability",
+              "canonical_code": "MATH-STAT-G5-03",
+              "learning_objective": "Use everyday language (certain, likely, unlikely, impossible) to describe probability; place events on a probability scale from 0 to 1; express probability as a simple fraction.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": ["MATH-STAT-G5-01"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_primary",
+      "subject_code": "SCI",
+      "grade_level": 5,
+      "standard_code_prefix": "5S",
+      "topics": [
+        {
+          "name": "Scientific Enquiry",
+          "canonical_code": "SCI-ENQ",
+          "sequence_order": 1,
+          "recommended_weeks": 3,
+          "learning_objectives": [
+            "Plan simple fair tests and identify variables",
+            "Record results accurately and draw simple conclusions"
+          ],
+          "subtopics": [
+            {
+              "name": "Planning and Fair Testing",
+              "canonical_code": "SCI-ENQ-G5-01",
+              "learning_objective": "Identify what to change, keep the same and measure in a simple investigation; write a prediction; understand what makes a test fair.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Recording and Concluding",
+              "canonical_code": "SCI-ENQ-G5-02",
+              "learning_objective": "Record observations and measurements in tables; display results in bar charts or line graphs; draw conclusions linked to the original prediction.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": ["SCI-ENQ-G5-01"]
+            }
+          ]
+        },
+        {
+          "name": "Biology",
+          "canonical_code": "SCI-BIO",
+          "sequence_order": 2,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Describe the life processes common to living things",
+            "Identify the parts of flowering plants and their functions",
+            "Describe the main organs of the human body and their roles"
+          ],
+          "subtopics": [
+            {
+              "name": "Life Processes and Living Things",
+              "canonical_code": "SCI-BIO-G5-01",
+              "learning_objective": "List and describe the seven life processes (MRS GREN); distinguish between living, dead and never-living things; describe how animals and plants depend on each other.",
+              "bloom_taxonomy_level": "Remember",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Flowering Plants",
+              "canonical_code": "SCI-BIO-G5-02",
+              "learning_objective": "Label the parts of a flowering plant (roots, stem, leaf, flower, fruit, seed); describe the functions of each part; explain pollination and seed dispersal.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": ["SCI-BIO-G5-01"]
+            },
+            {
+              "name": "Human Body and Organs",
+              "canonical_code": "SCI-BIO-G5-03",
+              "learning_objective": "Identify the major organs of the human body (heart, lungs, stomach, liver, kidneys, brain); describe the basic function of each organ; understand the role of a balanced diet and exercise.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["SCI-BIO-G5-01"]
+            },
+            {
+              "name": "Food Chains and Ecosystems",
+              "canonical_code": "SCI-BIO-G5-04",
+              "learning_objective": "Construct and interpret food chains with up to four organisms; identify producers, herbivores, carnivores and omnivores; describe simple interdependence within a habitat.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 4,
+              "prerequisites": ["SCI-BIO-G5-02"]
+            }
+          ]
+        },
+        {
+          "name": "Chemistry",
+          "canonical_code": "SCI-CHEM",
+          "sequence_order": 3,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Describe properties of materials and group them",
+            "Explain the three states of matter using particle ideas"
+          ],
+          "subtopics": [
+            {
+              "name": "Properties and Uses of Materials",
+              "canonical_code": "SCI-CHEM-G5-01",
+              "learning_objective": "Describe and compare the properties of everyday materials (hardness, transparency, flexibility, conductivity); explain why particular materials are chosen for specific uses.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "States of Matter",
+              "canonical_code": "SCI-CHEM-G5-02",
+              "learning_objective": "Describe the three states of matter; explain melting, freezing, boiling and condensation; describe the water cycle using the correct scientific vocabulary.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": ["SCI-CHEM-G5-01"]
+            },
+            {
+              "name": "Mixing and Separating Materials",
+              "canonical_code": "SCI-CHEM-G5-03",
+              "learning_objective": "Describe how to separate mixtures using sieving, filtering and evaporation; distinguish between reversible and irreversible changes with examples.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["SCI-CHEM-G5-02"]
+            }
+          ]
+        },
+        {
+          "name": "Physics",
+          "canonical_code": "SCI-PHY",
+          "sequence_order": 4,
+          "recommended_weeks": 5,
+          "learning_objectives": [
+            "Describe forces and their effects on objects",
+            "Explain how light travels and how shadows are formed",
+            "Draw simple circuit diagrams and predict the effect of changes"
+          ],
+          "subtopics": [
+            {
+              "name": "Forces",
+              "canonical_code": "SCI-PHY-G5-01",
+              "learning_objective": "Identify gravity, friction, air resistance, water resistance and upthrust; describe how forces affect the speed and direction of objects; measure forces using a newton meter.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Light and Shadows",
+              "canonical_code": "SCI-PHY-G5-02",
+              "learning_objective": "Explain that light travels in straight lines from a source; describe how shadows are formed and how their size changes; distinguish between transparent, translucent and opaque materials.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Electricity and Circuits",
+              "canonical_code": "SCI-PHY-G5-03",
+              "learning_objective": "Draw and interpret simple circuit diagrams using standard symbols for battery, bulb, switch and wire; predict the effect of adding or removing components; identify conductors and insulators.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["SCI-PHY-G5-02"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_primary",
+      "subject_code": "ENG",
+      "grade_level": 5,
+      "standard_code_prefix": "5E",
+      "topics": [
+        {
+          "name": "Reading",
+          "canonical_code": "ENG-READ",
+          "sequence_order": 1,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Retrieve and record explicit information from texts",
+            "Make inferences supported by textual evidence",
+            "Comment on a writer's use of language"
+          ],
+          "subtopics": [
+            {
+              "name": "Reading Comprehension",
+              "canonical_code": "ENG-READ-G5-01",
+              "learning_objective": "Locate and retrieve explicit information from a range of fiction and non-fiction texts to answer questions; use quotation or close reference to support answers.",
+              "bloom_taxonomy_level": "Remember",
+              "difficulty_level": 1,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Inference and Deduction",
+              "canonical_code": "ENG-READ-G5-02",
+              "learning_objective": "Make inferences about character, mood and event from implicit information in a text; explain inferences with reference to specific evidence from the text.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": ["ENG-READ-G5-01"]
+            },
+            {
+              "name": "Language and Vocabulary",
+              "canonical_code": "ENG-READ-G5-03",
+              "learning_objective": "Identify and comment on a writer's choice of vocabulary and language features including similes, metaphors and personification; explain the effect of these choices on the reader.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 50,
+              "sequence_order": 3,
+              "prerequisites": ["ENG-READ-G5-02"]
+            }
+          ]
+        },
+        {
+          "name": "Writing",
+          "canonical_code": "ENG-WRITE",
+          "sequence_order": 2,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Plan and write for different purposes and audiences",
+            "Use a range of sentence structures and punctuation accurately",
+            "Write narrative and non-fiction texts with appropriate features"
+          ],
+          "subtopics": [
+            {
+              "name": "Writing for Purpose and Audience",
+              "canonical_code": "ENG-WRITE-G5-01",
+              "learning_objective": "Plan and write texts for different purposes (to inform, persuade, entertain) and audiences; select appropriate vocabulary, tone and structure.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Narrative Writing",
+              "canonical_code": "ENG-WRITE-G5-02",
+              "learning_objective": "Write stories with a clear structure (beginning, build-up, climax, resolution); use descriptive language, dialogue and varied sentence structures to create character and atmosphere.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 2,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": ["ENG-WRITE-G5-01"]
+            },
+            {
+              "name": "Non-Fiction Writing",
+              "canonical_code": "ENG-WRITE-G5-03",
+              "learning_objective": "Write non-fiction texts including instructions, reports and persuasive letters using appropriate layout and language conventions; use headings, bullet points and paragraphs where appropriate.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": ["ENG-WRITE-G5-01"]
+            },
+            {
+              "name": "Grammar and Punctuation",
+              "canonical_code": "ENG-WRITE-G5-04",
+              "learning_objective": "Use a range of punctuation accurately including commas, apostrophes, inverted commas and colons; write in a variety of sentence types (simple, compound, complex); maintain tense consistency.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 45,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "name": "Speaking and Listening",
+          "canonical_code": "ENG-SPEAK",
+          "sequence_order": 3,
+          "recommended_weeks": 3,
+          "learning_objectives": [
+            "Listen actively and respond thoughtfully to others",
+            "Deliver short presentations with clarity and confidence"
+          ],
+          "subtopics": [
+            {
+              "name": "Listening and Responding",
+              "canonical_code": "ENG-SPEAK-G5-01",
+              "learning_objective": "Listen attentively to others; identify the main points of a spoken text; ask and answer relevant questions; build on the contributions of others in group discussion.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 1,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Speaking and Presentation",
+              "canonical_code": "ENG-SPEAK-G5-02",
+              "learning_objective": "Deliver a short prepared presentation to a group or class using clear and varied vocabulary, appropriate pace and volume; make eye contact with the audience.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 1,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": ["ENG-SPEAK-G5-01"]
+            }
+          ]
+        }
+      ]
+    },
     {
       "curriculum_code": "cambridge_lower",
       "subject_code": "MATH",
@@ -3194,6 +3833,1086 @@
               "estimated_minutes": 75,
               "sequence_order": 1,
               "prerequisites": ["ENGL-DRAMA-G9-01"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "MATH",
+      "grade_level": 11,
+      "standard_code_prefix": "11M",
+      "topics": [
+        {
+          "name": "Pure Mathematics",
+          "canonical_code": "MATH-PURE",
+          "sequence_order": 1,
+          "recommended_weeks": 12,
+          "learning_objectives": [
+            "Manipulate algebraic expressions and solve equations including quadratics and polynomials",
+            "Understand and apply functions, transformations and inverse functions",
+            "Differentiate and integrate polynomial and trigonometric functions"
+          ],
+          "subtopics": [
+            {
+              "name": "Advanced Algebra and Functions",
+              "canonical_code": "MATH-PURE-G11-01",
+              "learning_objective": "Manipulate polynomials and rational expressions; solve quadratic, polynomial and rational equations; understand and use function notation, domain and range.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": ["MATH-ALG-G10-01"]
+            },
+            {
+              "name": "Differentiation",
+              "canonical_code": "MATH-PURE-G11-02",
+              "learning_objective": "Differentiate polynomials, trigonometric, exponential and logarithmic functions; apply chain, product and quotient rules; find stationary points and use calculus in optimisation.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": ["MATH-PURE-G11-01"]
+            },
+            {
+              "name": "Integration",
+              "canonical_code": "MATH-PURE-G11-03",
+              "learning_objective": "Integrate polynomials, trigonometric and exponential functions; evaluate definite integrals; calculate areas under and between curves; solve simple differential equations by separation of variables.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 3,
+              "prerequisites": ["MATH-PURE-G11-02"]
+            },
+            {
+              "name": "Trigonometry",
+              "canonical_code": "MATH-PURE-G11-04",
+              "learning_objective": "Use sine, cosine and tangent for any angle; apply the sine and cosine rules; use identities including sin²θ + cos²θ = 1 and double angle formulae; solve trigonometric equations.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 4,
+              "prerequisites": ["MATH-TRIG-G9-02"]
+            },
+            {
+              "name": "Logarithms and Exponentials",
+              "canonical_code": "MATH-PURE-G11-05",
+              "learning_objective": "Understand and use exponential growth and decay; work with natural logarithms; apply the laws of logarithms; convert between exponential and logarithmic forms.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 5,
+              "prerequisites": ["MATH-PURE-G11-01"]
+            }
+          ]
+        },
+        {
+          "name": "Mechanics",
+          "canonical_code": "MATH-MECH",
+          "sequence_order": 2,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Model motion in one and two dimensions using kinematics equations",
+            "Apply Newton's laws to particles in equilibrium and motion",
+            "Calculate work, energy and power in mechanical systems"
+          ],
+          "subtopics": [
+            {
+              "name": "Kinematics and Dynamics",
+              "canonical_code": "MATH-MECH-G11-01",
+              "learning_objective": "Apply equations of uniform acceleration in one and two dimensions; use velocity-time graphs; model projectile motion; apply Newton's second law to connected particles.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": ["PHY-MOTION-G9-01", "PHY-MOTION-G9-02"]
+            },
+            {
+              "name": "Forces and Equilibrium",
+              "canonical_code": "MATH-MECH-G11-02",
+              "learning_objective": "Resolve forces in two dimensions; apply conditions for static equilibrium; analyse friction forces; solve problems involving connected particles on inclined planes.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["MATH-MECH-G11-01"]
+            },
+            {
+              "name": "Work, Energy and Power",
+              "canonical_code": "MATH-MECH-G11-03",
+              "learning_objective": "Calculate work done by constant and variable forces; apply the work-energy theorem; use the principle of conservation of energy; calculate power and efficiency.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 3,
+              "prerequisites": ["MATH-MECH-G11-02"]
+            }
+          ]
+        },
+        {
+          "name": "Statistics",
+          "canonical_code": "MATH-STATS",
+          "sequence_order": 3,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Calculate and interpret measures of location and spread for grouped and ungrouped data",
+            "Use probability distributions including binomial and normal",
+            "Conduct hypothesis tests for population parameters"
+          ],
+          "subtopics": [
+            {
+              "name": "Probability and Distributions",
+              "canonical_code": "MATH-STATS-G11-01",
+              "learning_objective": "Calculate probabilities using addition and multiplication rules; use binomial and normal distributions; find probabilities and critical values from tables and calculators.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": ["MATH-STAT-G9-03"]
+            },
+            {
+              "name": "Hypothesis Testing",
+              "canonical_code": "MATH-STATS-G11-02",
+              "learning_objective": "Formulate null and alternative hypotheses; conduct one-tailed and two-tailed tests for a population proportion using the binomial distribution; interpret p-values and critical regions.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["MATH-STATS-G11-01"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "MATH",
+      "grade_level": 12,
+      "standard_code_prefix": "12M",
+      "topics": [
+        {
+          "name": "Pure Mathematics",
+          "canonical_code": "MATH-PURE",
+          "sequence_order": 1,
+          "recommended_weeks": 14,
+          "learning_objectives": [
+            "Extend algebraic skills to complex numbers, further calculus and differential equations",
+            "Apply vectors and matrices to geometric and algebraic problems"
+          ],
+          "subtopics": [
+            {
+              "name": "Advanced Calculus and Differential Equations",
+              "canonical_code": "MATH-PURE-G12-01",
+              "learning_objective": "Integrate using substitution, by parts and partial fractions; solve first and second order differential equations; apply calculus to volumes of revolution and parametric equations.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 1,
+              "prerequisites": ["MATH-PURE-G11-03"]
+            },
+            {
+              "name": "Complex Numbers",
+              "canonical_code": "MATH-PURE-G12-02",
+              "learning_objective": "Perform arithmetic with complex numbers in Cartesian and modulus-argument form; represent complex numbers on an Argand diagram; find roots of polynomial equations with complex roots.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": ["MATH-PURE-G11-01"]
+            },
+            {
+              "name": "Further Algebra and Functions",
+              "canonical_code": "MATH-PURE-G12-03",
+              "learning_objective": "Use the binomial theorem for rational and negative exponents; apply partial fractions; work with parametric equations; understand proof by induction.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 3,
+              "prerequisites": ["MATH-PURE-G11-05"]
+            },
+            {
+              "name": "Vectors and Matrices",
+              "canonical_code": "MATH-PURE-G12-04",
+              "learning_objective": "Perform vector operations in 3D; find equations of lines and planes; multiply matrices; find determinants and inverse matrices; solve systems of linear equations.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 4,
+              "prerequisites": ["MATH-VEC-G10-02"]
+            }
+          ]
+        },
+        {
+          "name": "Mechanics",
+          "canonical_code": "MATH-MECH",
+          "sequence_order": 2,
+          "recommended_weeks": 6,
+          "learning_objectives": [
+            "Analyse circular motion and oscillations",
+            "Apply advanced energy and momentum principles"
+          ],
+          "subtopics": [
+            {
+              "name": "Advanced Kinematics and Circular Motion",
+              "canonical_code": "MATH-MECH-G12-01",
+              "learning_objective": "Analyse motion in a circle with constant speed; calculate centripetal acceleration and force; apply kinematics using calculus (variable acceleration); model simple harmonic motion.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 1,
+              "prerequisites": ["MATH-MECH-G11-01"]
+            },
+            {
+              "name": "Energy, Work and Mechanical Systems",
+              "canonical_code": "MATH-MECH-G12-02",
+              "learning_objective": "Apply the work-energy principle to variable forces; analyse elastic strings and springs using Hooke's law; use the impulse-momentum theorem; model mechanical systems with energy methods.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 2,
+              "prerequisites": ["MATH-MECH-G11-03"]
+            }
+          ]
+        },
+        {
+          "name": "Statistics",
+          "canonical_code": "MATH-STATS",
+          "sequence_order": 3,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Apply advanced probability distributions",
+            "Conduct and interpret a range of hypothesis tests",
+            "Carry out statistical investigations and present findings critically"
+          ],
+          "subtopics": [
+            {
+              "name": "Advanced Probability Distributions",
+              "canonical_code": "MATH-STATS-G12-01",
+              "learning_objective": "Use Poisson, geometric and normal distributions; apply the central limit theorem; calculate confidence intervals for population means; work with continuous random variables and probability density functions.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 1,
+              "prerequisites": ["MATH-STATS-G11-01"]
+            },
+            {
+              "name": "Advanced Hypothesis Testing",
+              "canonical_code": "MATH-STATS-G12-02",
+              "learning_objective": "Conduct hypothesis tests for population means using the normal and t-distributions; test for correlation; carry out chi-squared tests for goodness of fit and independence.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 2,
+              "prerequisites": ["MATH-STATS-G12-01", "MATH-STATS-G11-02"]
+            },
+            {
+              "name": "Statistical Investigation and Reporting",
+              "canonical_code": "MATH-STATS-G12-03",
+              "learning_objective": "Plan, carry out and critically evaluate a statistical investigation; select appropriate tests; present findings with correct interpretation of results, confidence intervals and limitations.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 3,
+              "prerequisites": ["MATH-STATS-G12-02"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "BIO",
+      "grade_level": 11,
+      "standard_code_prefix": "11B",
+      "topics": [
+        {
+          "name": "Biochemistry and Cell Biology",
+          "canonical_code": "BIO-BIOCHEM",
+          "sequence_order": 1,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Describe the structure and function of biological molecules",
+            "Explain enzyme kinetics and metabolic pathways",
+            "Describe cellular respiration and photosynthesis at a biochemical level"
+          ],
+          "subtopics": [
+            {
+              "name": "Biochemistry and Metabolism",
+              "canonical_code": "BIO-BIOCHEM-G11-01",
+              "learning_objective": "Describe the structure of carbohydrates, lipids, proteins and nucleic acids; explain metabolic pathways including glycolysis, the Krebs cycle and oxidative phosphorylation; describe the role of ATP in energy transfer.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 1,
+              "prerequisites": ["BIO-MOL-G9-02"]
+            },
+            {
+              "name": "DNA, Genes and Protein Synthesis",
+              "canonical_code": "BIO-BIOCHEM-G11-02",
+              "learning_objective": "Describe the structure of DNA and RNA; explain transcription and translation in detail; describe gene expression and its regulation; explain the principles of genetic engineering and PCR.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": ["SCI-BIO-G8-01"]
+            },
+            {
+              "name": "Plant and Animal Physiology",
+              "canonical_code": "BIO-BIOCHEM-G11-03",
+              "learning_objective": "Describe gas exchange in plants, fish, insects and mammals; explain thermoregulation; describe the structure and function of the mammalian kidney in excretion and osmoregulation.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 3,
+              "prerequisites": ["BIO-PHYSIO-G10-03"]
+            },
+            {
+              "name": "Ecology and Conservation",
+              "canonical_code": "BIO-BIOCHEM-G11-04",
+              "learning_objective": "Describe population growth models; explain factors affecting population size; describe energy flow through ecosystems; evaluate conservation strategies and the impact of human activity on biodiversity.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 4,
+              "prerequisites": ["BIO-EVOL-G10-02"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "BIO",
+      "grade_level": 12,
+      "standard_code_prefix": "12B",
+      "topics": [
+        {
+          "name": "Advanced Biology",
+          "canonical_code": "BIO-ADV",
+          "sequence_order": 1,
+          "recommended_weeks": 14,
+          "learning_objectives": [
+            "Apply knowledge of genetics, genomics and biotechnology to current research",
+            "Analyse physiological systems at advanced level",
+            "Evaluate ecological data and conservation issues"
+          ],
+          "subtopics": [
+            {
+              "name": "Genomics and Biotechnology",
+              "canonical_code": "BIO-ADV-G12-01",
+              "learning_objective": "Explain the principles of genomics and gene sequencing; describe the applications of recombinant DNA technology; evaluate the ethical implications of genetic modification and cloning.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 1,
+              "prerequisites": ["BIO-BIOCHEM-G11-02"]
+            },
+            {
+              "name": "Physiology and Health Science",
+              "canonical_code": "BIO-ADV-G12-02",
+              "learning_objective": "Describe the control of heart rate and ventilation; explain the immune response in detail including cell-mediated and humoral immunity; evaluate the physiology of exercise and disease.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": ["BIO-PHYSIO-G10-01"]
+            },
+            {
+              "name": "Ecosystem Analysis",
+              "canonical_code": "BIO-ADV-G12-03",
+              "learning_objective": "Analyse ecosystems using quantitative techniques; evaluate succession and climax communities; interpret population data; discuss global issues including climate change and biodiversity loss.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 3,
+              "prerequisites": ["BIO-BIOCHEM-G11-04"]
+            },
+            {
+              "name": "Research in Life Sciences",
+              "canonical_code": "BIO-ADV-G12-04",
+              "learning_objective": "Design and evaluate biological investigations; apply statistical analysis to biological data; critically evaluate published research; present findings in scientific report format.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 4,
+              "prerequisites": ["BIO-ADV-G12-03"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "CHEM",
+      "grade_level": 11,
+      "standard_code_prefix": "11C",
+      "topics": [
+        {
+          "name": "Advanced Chemistry",
+          "canonical_code": "CHEM-ADV",
+          "sequence_order": 1,
+          "recommended_weeks": 14,
+          "learning_objectives": [
+            "Describe atomic structure, bonding and energetics at advanced level",
+            "Explain reaction kinetics and equilibrium quantitatively",
+            "Apply organic chemistry to functional group reactions"
+          ],
+          "subtopics": [
+            {
+              "name": "Atomic Structure and Bonding",
+              "canonical_code": "CHEM-ADV-G11-01",
+              "learning_objective": "Describe atomic orbitals and electron configuration; explain ionic, covalent, metallic and intermolecular bonding in detail; predict molecular shapes using VSEPR theory; describe lattice structures.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": ["CHEM-BOND-G9-02"]
+            },
+            {
+              "name": "Energetics and Kinetics",
+              "canonical_code": "CHEM-ADV-G11-02",
+              "learning_objective": "Calculate enthalpy changes using Hess's law and bond energies; apply collision theory and Arrhenius equation to reaction rates; describe the effect of catalysts on activation energy.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["CHEM-PHYS-G9-01"]
+            },
+            {
+              "name": "Acids, Bases and Equilibrium",
+              "canonical_code": "CHEM-ADV-G11-03",
+              "learning_objective": "Apply Brønsted-Lowry theory to acid-base reactions; calculate pH and Ka; describe buffer action; apply Le Chatelier's principle and Kc to equilibrium calculations.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 3,
+              "prerequisites": ["CHEM-PHYS-G10-01"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "CHEM",
+      "grade_level": 12,
+      "standard_code_prefix": "12C",
+      "topics": [
+        {
+          "name": "Advanced Chemistry",
+          "canonical_code": "CHEM-ADV",
+          "sequence_order": 1,
+          "recommended_weeks": 14,
+          "learning_objectives": [
+            "Apply spectroscopic techniques to identify organic compounds",
+            "Evaluate contemporary chemical research and applications"
+          ],
+          "subtopics": [
+            {
+              "name": "Spectroscopy and Analysis",
+              "canonical_code": "CHEM-ADV-G12-01",
+              "learning_objective": "Interpret mass spectra, IR, NMR and UV-Vis spectra to identify organic compounds; use chromatography for separation and identification; evaluate analytical data from multiple techniques.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 1,
+              "prerequisites": ["CHEM-ADV-G11-01"]
+            },
+            {
+              "name": "Chemical Research and Applications",
+              "canonical_code": "CHEM-ADV-G12-02",
+              "learning_objective": "Evaluate industrial chemical processes including the Haber and Contact processes; discuss green chemistry principles; design and evaluate synthetic routes for organic molecules; assess environmental impact.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": ["CHEM-ADV-G11-03", "CHEM-ORG-G10-03"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "PHY",
+      "grade_level": 11,
+      "standard_code_prefix": "11P",
+      "topics": [
+        {
+          "name": "Advanced Physics",
+          "canonical_code": "PHY-ADV",
+          "sequence_order": 1,
+          "recommended_weeks": 16,
+          "learning_objectives": [
+            "Apply advanced mechanics including circular motion and oscillations",
+            "Describe thermal physics and thermodynamic principles",
+            "Analyse waves, optics and the electromagnetic spectrum quantitatively"
+          ],
+          "subtopics": [
+            {
+              "name": "Mechanics and Motion",
+              "canonical_code": "PHY-ADV-G11-01",
+              "learning_objective": "Apply Newton's laws to circular motion, rotation and oscillation; analyse simple harmonic motion mathematically; use conservation of energy and momentum in multi-body collisions.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 1,
+              "prerequisites": ["PHY-MOTION-G9-04", "MATH-MECH-G11-01"]
+            },
+            {
+              "name": "Thermal Physics",
+              "canonical_code": "PHY-ADV-G11-02",
+              "learning_objective": "Apply the ideal gas laws and kinetic theory; calculate internal energy, heat and work done in thermodynamic processes; describe the first and second laws of thermodynamics.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["PHY-THERMAL-G9-01"]
+            },
+            {
+              "name": "Waves and Oscillations",
+              "canonical_code": "PHY-ADV-G11-03",
+              "learning_objective": "Describe stationary and progressive waves; explain diffraction, interference and polarisation; apply superposition to double-slit and diffraction grating experiments; describe the Doppler effect.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 3,
+              "prerequisites": ["PHY-WAVES-G9-01"]
+            },
+            {
+              "name": "Electricity and Magnetism",
+              "canonical_code": "PHY-ADV-G11-04",
+              "learning_objective": "Apply Kirchhoff's laws to complex circuits; describe the behaviour of capacitors in DC circuits; explain the magnetic force on moving charges and current-carrying conductors; describe electromagnetic induction quantitatively.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 4,
+              "prerequisites": ["PHY-ELEC-G10-03"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "PHY",
+      "grade_level": 12,
+      "standard_code_prefix": "12P",
+      "topics": [
+        {
+          "name": "Advanced Physics",
+          "canonical_code": "PHY-ADV",
+          "sequence_order": 1,
+          "recommended_weeks": 16,
+          "learning_objectives": [
+            "Describe quantum physics and the wave-particle duality",
+            "Apply electromagnetic theory to advanced contexts",
+            "Explain nuclear and particle physics"
+          ],
+          "subtopics": [
+            {
+              "name": "Quantum Physics",
+              "canonical_code": "PHY-ADV-G12-01",
+              "learning_objective": "Describe the photoelectric effect and photon model; explain wave-particle duality and de Broglie wavelength; describe atomic energy levels, emission and absorption spectra; apply the uncertainty principle.",
+              "bloom_taxonomy_level": "Understand",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 1,
+              "prerequisites": ["PHY-ADV-G11-03"]
+            },
+            {
+              "name": "Electromagnetic Theory",
+              "canonical_code": "PHY-ADV-G12-02",
+              "learning_objective": "Apply Faraday's and Lenz's laws to electromagnetic induction; describe alternating current circuits including capacitors and inductors; explain the operation of transformers and AC generators quantitatively.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": ["PHY-ADV-G11-04"]
+            },
+            {
+              "name": "Nuclear and Particle Physics",
+              "canonical_code": "PHY-ADV-G12-03",
+              "learning_objective": "Describe nuclear stability, binding energy and mass defect; explain fission and fusion; describe fundamental particles and the quark model; apply conservation laws to particle interactions.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 75,
+              "sequence_order": 3,
+              "prerequisites": ["PHY-NUCLEAR-G10-03"]
+            },
+            {
+              "name": "Scientific Investigation and Reporting",
+              "canonical_code": "PHY-ADV-G12-04",
+              "learning_objective": "Plan and execute advanced experimental investigations; identify and minimise sources of error; evaluate results statistically; write a formal scientific report with critical analysis of methodology and findings.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 4,
+              "prerequisites": ["PHY-ADV-G12-03"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "ENG",
+      "grade_level": 11,
+      "standard_code_prefix": "11E",
+      "topics": [
+        {
+          "name": "Reading",
+          "canonical_code": "ENG-READ",
+          "sequence_order": 1,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Analyse texts for meaning, style, context and argument",
+            "Compare literary forms across prose, poetry and drama"
+          ],
+          "subtopics": [
+            {
+              "name": "Advanced Textual Analysis",
+              "canonical_code": "ENG-READ-G11-01",
+              "learning_objective": "Analyse unseen texts for meaning, style, context and argument; evaluate a writer's rhetorical strategies; compare how different literary forms — prose, poetry and drama — achieve effects.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": ["ENG-READ-G10-01"]
+            },
+            {
+              "name": "Argument and Rhetoric",
+              "canonical_code": "ENG-READ-G11-02",
+              "learning_objective": "Evaluate the structure and persuasiveness of argument in non-literary texts; identify rhetorical devices and assess their effectiveness; compare viewpoints across multiple sources.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["ENG-READ-G11-01"]
+            }
+          ]
+        },
+        {
+          "name": "Writing",
+          "canonical_code": "ENG-WRITE",
+          "sequence_order": 2,
+          "recommended_weeks": 10,
+          "learning_objectives": [
+            "Write critical, comparative and interpretive essays with sustained argument",
+            "Develop a consistent and distinctive writing style"
+          ],
+          "subtopics": [
+            {
+              "name": "Critical and Comparative Writing",
+              "canonical_code": "ENG-WRITE-G11-01",
+              "learning_objective": "Write sustained critical, comparative and interpretive essays; construct and develop a coherent argument with embedded evidence; maintain a consistent analytical register throughout extended writing.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 80,
+              "sequence_order": 1,
+              "prerequisites": ["ENG-WRITE-G10-01"]
+            },
+            {
+              "name": "Research and Documentation",
+              "canonical_code": "ENG-WRITE-G11-02",
+              "learning_objective": "Plan and conduct textual research; select, evaluate and synthesise sources; reference accurately using a recognised system; integrate secondary material into original analytical writing.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["ENG-WRITE-G11-01"]
+            },
+            {
+              "name": "Style and Voice",
+              "canonical_code": "ENG-WRITE-G11-03",
+              "learning_objective": "Develop a distinctive and effective writing style; adapt register and tone for different purposes; demonstrate control of sentence structure, vocabulary and stylistic devices in original writing.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 3,
+              "prerequisites": ["ENG-WRITE-G11-01"]
+            }
+          ]
+        },
+        {
+          "name": "Speaking and Listening",
+          "canonical_code": "ENG-SPEAK",
+          "sequence_order": 3,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Deliver a thesis-level presentation and respond to questions",
+            "Participate in and lead formal academic discussion"
+          ],
+          "subtopics": [
+            {
+              "name": "Thesis Presentation and Panel Discussion",
+              "canonical_code": "ENG-SPEAK-G11-01",
+              "learning_objective": "Deliver a structured academic presentation on a chosen thesis; respond to audience questions with evidence and analysis; participate in and manage panel and group discussion with sustained engagement.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": ["ENG-SPEAK-G8-01"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "ENG",
+      "grade_level": 12,
+      "standard_code_prefix": "12E",
+      "topics": [
+        {
+          "name": "Reading",
+          "canonical_code": "ENG-READ",
+          "sequence_order": 1,
+          "recommended_weeks": 8,
+          "learning_objectives": [
+            "Conduct advanced literary analysis across multiple texts",
+            "Synthesise argument and critical perspective at university-entry level"
+          ],
+          "subtopics": [
+            {
+              "name": "Advanced Literary Analysis",
+              "canonical_code": "ENG-READ-G12-01",
+              "learning_objective": "Produce advanced literary analysis demonstrating awareness of literary theory, historical context and intertextuality; evaluate a writer's craft with sustained critical perspective across extended texts.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 1,
+              "prerequisites": ["ENG-READ-G11-01"]
+            },
+            {
+              "name": "Comparative Study and Synthesis",
+              "canonical_code": "ENG-READ-G12-02",
+              "learning_objective": "Compare and synthesise argument, viewpoint and critical perspective across multiple texts and secondary sources; produce a coherent, evidence-based analytical response at university-entry level.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 2,
+              "prerequisites": ["ENG-READ-G12-01", "ENG-READ-G11-02"]
+            }
+          ]
+        },
+        {
+          "name": "Writing",
+          "canonical_code": "ENG-WRITE",
+          "sequence_order": 2,
+          "recommended_weeks": 10,
+          "learning_objectives": [
+            "Write extended analytical essays at university-entry standard",
+            "Produce professional and research-based writing"
+          ],
+          "subtopics": [
+            {
+              "name": "Extended Analytical Essay",
+              "canonical_code": "ENG-WRITE-G12-01",
+              "learning_objective": "Write extended analytical essays at university-entry standard; sustain a sophisticated argument with precise use of textual evidence; demonstrate command of academic register and critical vocabulary.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 90,
+              "sequence_order": 1,
+              "prerequisites": ["ENG-WRITE-G11-01"]
+            },
+            {
+              "name": "Research, Documentation and Professional Writing",
+              "canonical_code": "ENG-WRITE-G12-02",
+              "learning_objective": "Conduct independent textual research; write for professional and academic contexts including reports, proposals and reflective commentaries; apply accurate referencing and academic conventions throughout.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 2,
+              "prerequisites": ["ENG-WRITE-G11-02"]
+            }
+          ]
+        },
+        {
+          "name": "Speaking and Listening",
+          "canonical_code": "ENG-SPEAK",
+          "sequence_order": 3,
+          "recommended_weeks": 4,
+          "learning_objectives": [
+            "Lead seminars and defend scholarship orally",
+            "Critically analyse media and spoken texts"
+          ],
+          "subtopics": [
+            {
+              "name": "Seminar Leadership and Oral Defence",
+              "canonical_code": "ENG-SPEAK-G12-01",
+              "learning_objective": "Lead academic seminars with authority and responsiveness; defend a scholarly argument under questioning; critically analyse spoken and media texts for bias, rhetoric and purpose.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": ["ENG-SPEAK-G11-01"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "GEO",
+      "grade_level": 11,
+      "standard_code_prefix": "11G",
+      "topics": [
+        {
+          "name": "Physical and Human Geography",
+          "canonical_code": "GEO-CORE",
+          "sequence_order": 1,
+          "recommended_weeks": 16,
+          "learning_objectives": [
+            "Explain physical processes including tectonics, hydrology and climate",
+            "Analyse human geography including globalisation and urban development"
+          ],
+          "subtopics": [
+            {
+              "name": "Physical Geography",
+              "canonical_code": "GEO-CORE-G11-01",
+              "learning_objective": "Explain tectonic processes, glaciation and coastal systems; describe the hydrological cycle and river processes; analyse the causes and impacts of natural hazards; interpret OS maps and satellite images.",
+              "bloom_taxonomy_level": "Apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Human Geography and Globalisation",
+              "canonical_code": "GEO-CORE-G11-02",
+              "learning_objective": "Analyse the causes and consequences of globalisation; describe patterns of migration, urbanisation and development; evaluate the impact of transnational corporations and international trade on development.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 2,
+              "prerequisites": ["GEO-CORE-G11-01"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "GEO",
+      "grade_level": 12,
+      "standard_code_prefix": "12G",
+      "topics": [
+        {
+          "name": "Advanced Geography",
+          "canonical_code": "GEO-ADV",
+          "sequence_order": 1,
+          "recommended_weeks": 16,
+          "learning_objectives": [
+            "Conduct geographical fieldwork and research",
+            "Evaluate political, urban and environmental geographical issues"
+          ],
+          "subtopics": [
+            {
+              "name": "Fieldwork and Geographical Research",
+              "canonical_code": "GEO-ADV-G12-01",
+              "learning_objective": "Design and conduct geographical fieldwork; collect, process and analyse primary and secondary data; evaluate methodology and present findings as a structured geographical investigation.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 80,
+              "sequence_order": 1,
+              "prerequisites": ["GEO-CORE-G11-02"]
+            },
+            {
+              "name": "Political, Urban and Environmental Geography",
+              "canonical_code": "GEO-ADV-G12-02",
+              "learning_objective": "Evaluate political geography including borders, governance and supranational organisations; analyse urban regeneration and sustainability; assess responses to environmental challenges including climate change.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": ["GEO-CORE-G11-02"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "GP",
+      "grade_level": 11,
+      "standard_code_prefix": "11GP",
+      "topics": [
+        {
+          "name": "Global Perspectives and Research",
+          "canonical_code": "GP-CORE",
+          "sequence_order": 1,
+          "recommended_weeks": 16,
+          "learning_objectives": [
+            "Apply critical thinking to global issues from multiple perspectives",
+            "Conduct independent research and present findings"
+          ],
+          "subtopics": [
+            {
+              "name": "Stakeholder Analysis and Critical Thinking",
+              "canonical_code": "GP-CORE-G11-01",
+              "learning_objective": "Identify and analyse the perspectives of stakeholders on a global issue; evaluate the credibility and bias of sources; apply critical thinking frameworks to construct a reasoned argument.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 65,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "International Research Projects",
+              "canonical_code": "GP-CORE-G11-02",
+              "learning_objective": "Plan and conduct an international research project on a global issue; gather and synthesise evidence from diverse sources; collaborate with peers to produce a team essay and reflective portfolio.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 3,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["GP-CORE-G11-01"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "GP",
+      "grade_level": 12,
+      "standard_code_prefix": "12GP",
+      "topics": [
+        {
+          "name": "Advanced Global Perspectives",
+          "canonical_code": "GP-ADV",
+          "sequence_order": 1,
+          "recommended_weeks": 16,
+          "learning_objectives": [
+            "Produce an independent capstone research project on a global challenge",
+            "Apply theory to global challenges and present at advanced level"
+          ],
+          "subtopics": [
+            {
+              "name": "Capstone Research Project",
+              "canonical_code": "GP-ADV-G12-01",
+              "learning_objective": "Produce an independent research project on a self-chosen global issue; apply theoretical frameworks; synthesise evidence from multiple perspectives; write a formal research report with bibliography.",
+              "bloom_taxonomy_level": "Create",
+              "difficulty_level": 4,
+              "estimated_minutes": 90,
+              "sequence_order": 1,
+              "prerequisites": ["GP-CORE-G11-02"]
+            },
+            {
+              "name": "Theory and Application to Global Challenges",
+              "canonical_code": "GP-ADV-G12-02",
+              "learning_objective": "Apply social science theory to contemporary global challenges; evaluate policy responses to issues such as climate change, inequality and migration; present conclusions in an academic debate format.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 75,
+              "sequence_order": 2,
+              "prerequisites": ["GP-ADV-G12-01"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "HIST",
+      "grade_level": 11,
+      "standard_code_prefix": "11H",
+      "topics": [
+        {
+          "name": "Historical Study",
+          "canonical_code": "HIST-CORE",
+          "sequence_order": 1,
+          "recommended_weeks": 16,
+          "learning_objectives": [
+            "Analyse key historical periods using primary and secondary sources",
+            "Apply historiographical approaches to historical evidence"
+          ],
+          "subtopics": [
+            {
+              "name": "In-Depth Study of Historical Periods",
+              "canonical_code": "HIST-CORE-G11-01",
+              "learning_objective": "Analyse a chosen historical period using primary and secondary sources; evaluate the significance of key events, individuals and turning points; construct an evidence-based historical argument.",
+              "bloom_taxonomy_level": "Analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 70,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Thematic and Historiographical Studies",
+              "canonical_code": "HIST-CORE-G11-02",
+              "learning_objective": "Analyse historical themes across time periods (war, society, technology, power); evaluate the perspectives of different historians; explain how interpretations of history change over time.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 2,
+              "prerequisites": ["HIST-CORE-G11-01"]
+            }
+          ]
+        }
+      ]
+    },
+
+    {
+      "curriculum_code": "cambridge_as_level",
+      "subject_code": "HIST",
+      "grade_level": 12,
+      "standard_code_prefix": "12H",
+      "topics": [
+        {
+          "name": "Advanced Historical Study",
+          "canonical_code": "HIST-ADV",
+          "sequence_order": 1,
+          "recommended_weeks": 16,
+          "learning_objectives": [
+            "Conduct comparative historical studies across cultures and periods",
+            "Apply historiographical methodology to independent research"
+          ],
+          "subtopics": [
+            {
+              "name": "Comparative Historical Studies",
+              "canonical_code": "HIST-ADV-G12-01",
+              "learning_objective": "Compare historical developments across different societies, cultures and time periods; evaluate the extent to which historical patterns repeat; produce a comparative analytical essay with source evaluation.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 1,
+              "prerequisites": ["HIST-CORE-G11-02"]
+            },
+            {
+              "name": "Historiography and Methodology",
+              "canonical_code": "HIST-ADV-G12-02",
+              "learning_objective": "Apply and evaluate major historiographical schools (Marxist, feminist, postcolonial, revisionist); conduct independent archival or source-based research; present an extended historical argument with full scholarly apparatus.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 80,
+              "sequence_order": 2,
+              "prerequisites": ["HIST-ADV-G12-01"]
+            },
+            {
+              "name": "Modern and Ancient Cultures",
+              "canonical_code": "HIST-ADV-G12-03",
+              "learning_objective": "Explore the interaction between ancient and modern cultures; analyse cultural transmission, syncretism and colonialism; evaluate the legacy of historical periods on contemporary society.",
+              "bloom_taxonomy_level": "Evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 70,
+              "sequence_order": 3,
+              "prerequisites": ["HIST-CORE-G11-01"]
             }
           ]
         }
