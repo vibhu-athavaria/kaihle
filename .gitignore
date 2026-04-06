@@ -24,7 +24,7 @@ src/**/*.js.map
 
 # Misc
 *.DS_Store
-
+*/logs/*
 .coverage
 *coverage.xml
 
