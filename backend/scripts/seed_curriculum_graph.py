@@ -136,18 +136,19 @@ class CurriculumSeeder:
 
     async def _get_or_create_curriculum(self, data: dict) -> uuid.UUID:
         """Fetch existing or insert new Curriculum row. Returns its UUID."""
-        result = await self.db.execute(select(Curriculum).where(Curriculum.code == data["code"]))
-        existing = result.scalar_one_or_none()
-        if existing:
-            self.stats.skipped += 1
-            return existing.id
-
+        # In dry-run mode, skip DB query - just generate IDs and count inserts
         if self.dry_run:
             new_id = uuid.uuid4()
             log.debug("dry_run_would_insert", table="curricula", code=data["code"])
             self._curriculum_ids[data["code"]] = new_id
             self.stats.curricula += 1
             return new_id
+
+        result = await self.db.execute(select(Curriculum).where(Curriculum.code == data["code"]))
+        existing = result.scalar_one_or_none()
+        if existing:
+            self.stats.skipped += 1
+            return existing.id
 
         row = Curriculum(
             id=uuid.uuid4(),
@@ -164,17 +165,18 @@ class CurriculumSeeder:
         return row.id
 
     async def _get_or_create_subject(self, data: dict) -> uuid.UUID:
-        result = await self.db.execute(select(Subject).where(Subject.code == data["code"]))
-        existing = result.scalar_one_or_none()
-        if existing:
-            self.stats.skipped += 1
-            return existing.id
-
+        # In dry-run mode, skip DB query
         if self.dry_run:
             new_id = uuid.uuid4()
             self._subject_ids[data["code"]] = new_id
             self.stats.subjects += 1
             return new_id
+
+        result = await self.db.execute(select(Subject).where(Subject.code == data["code"]))
+        existing = result.scalar_one_or_none()
+        if existing:
+            self.stats.skipped += 1
+            return existing.id
 
         row = Subject(
             id=uuid.uuid4(),
@@ -192,17 +194,18 @@ class CurriculumSeeder:
         return row.id
 
     async def _get_or_create_grade(self, data: dict) -> uuid.UUID:
-        result = await self.db.execute(select(Grade).where(Grade.level == data["level"]))
-        existing = result.scalar_one_or_none()
-        if existing:
-            self.stats.skipped += 1
-            return existing.id
-
+        # In dry-run mode, skip DB query
         if self.dry_run:
             new_id = uuid.uuid4()
             self._grade_ids[data["level"]] = new_id
             self.stats.grades += 1
             return new_id
+
+        result = await self.db.execute(select(Grade).where(Grade.level == data["level"]))
+        existing = result.scalar_one_or_none()
+        if existing:
+            self.stats.skipped += 1
+            return existing.id
 
         row = Grade(
             id=uuid.uuid4(),
@@ -224,6 +227,11 @@ class CurriculumSeeder:
         is_core: bool,
         sort_order: int | None,
     ) -> None:
+        # In dry-run mode, skip DB query
+        if self.dry_run:
+            self.stats.curriculum_subjects += 1
+            return
+
         result = await self.db.execute(
             select(CurriculumSubject).where(
                 CurriculumSubject.curriculum_id == curriculum_id,
@@ -232,10 +240,6 @@ class CurriculumSeeder:
         )
         if result.scalar_one_or_none():
             self.stats.skipped += 1
-            return
-
-        if self.dry_run:
-            self.stats.curriculum_subjects += 1
             return
 
         row = CurriculumSubject(
@@ -251,17 +255,18 @@ class CurriculumSeeder:
     async def _get_or_create_topic(self, data: dict) -> uuid.UUID:
         """Topics are curriculum-agnostic. Deduplicate on canonical_code."""
         canonical_code = data["canonical_code"]
-        result = await self.db.execute(select(Topic).where(Topic.canonical_code == canonical_code))
-        existing = result.scalar_one_or_none()
-        if existing:
-            self.stats.skipped += 1
-            return existing.id
-
+        # In dry-run mode, skip DB query
         if self.dry_run:
             new_id = uuid.uuid4()
             self._topic_ids[canonical_code] = new_id
             self.stats.topics += 1
             return new_id
+
+        result = await self.db.execute(select(Topic).where(Topic.canonical_code == canonical_code))
+        existing = result.scalar_one_or_none()
+        if existing:
+            self.stats.skipped += 1
+            return existing.id
 
         row = Topic(
             id=uuid.uuid4(),
@@ -283,6 +288,12 @@ class CurriculumSeeder:
         topic_id: uuid.UUID,
         data: dict,
     ) -> uuid.UUID:
+        # In dry-run mode, skip DB query
+        if self.dry_run:
+            new_id = uuid.uuid4()
+            self.stats.curriculum_topics += 1
+            return new_id
+
         result = await self.db.execute(
             select(CurriculumTopic).where(
                 CurriculumTopic.curriculum_id == curriculum_id,
@@ -295,11 +306,6 @@ class CurriculumSeeder:
         if existing:
             self.stats.skipped += 1
             return existing.id
-
-        if self.dry_run:
-            new_id = uuid.uuid4()
-            self.stats.curriculum_topics += 1
-            return new_id
 
         row = CurriculumTopic(
             id=uuid.uuid4(),
@@ -324,16 +330,17 @@ class CurriculumSeeder:
         data: dict,
     ) -> uuid.UUID:
         canonical_code = data["canonical_code"]
+        # In dry-run mode, skip DB query
+        if self.dry_run:
+            new_id = uuid.uuid4()
+            self.stats.subtopics += 1
+            return new_id
+
         result = await self.db.execute(select(Subtopic).where(Subtopic.canonical_code == canonical_code))
         existing = result.scalar_one_or_none()
         if existing:
             self.stats.skipped += 1
             return existing.id
-
-        if self.dry_run:
-            new_id = uuid.uuid4()
-            self.stats.subtopics += 1
-            return new_id
 
         row = Subtopic(
             id=uuid.uuid4(),
@@ -359,6 +366,11 @@ class CurriculumSeeder:
         subtopic_id: uuid.UUID,
         prerequisite_id: uuid.UUID,
     ) -> None:
+        # In dry-run mode, skip DB query
+        if self.dry_run:
+            self.stats.prerequisites += 1
+            return
+
         result = await self.db.execute(
             select(SubtopicPrerequisite).where(
                 SubtopicPrerequisite.subtopic_id == subtopic_id,
@@ -367,10 +379,6 @@ class CurriculumSeeder:
         )
         if result.scalar_one_or_none():
             self.stats.skipped += 1
-            return
-
-        if self.dry_run:
-            self.stats.prerequisites += 1
             return
 
         row = SubtopicPrerequisite(
@@ -487,17 +495,29 @@ class CurriculumSeeder:
 
         # ── 6. Prerequisite resolution ───────────────────────────────────
         #
-        # Prerequisites are stored as subtopic NAMES in the JSON.
-        # Resolve within each (curriculum, subject, grade) scope.
-        # Log a warning and skip if a name doesn't resolve — do not crash.
+        # Prerequisites in the JSON are canonical_codes (e.g. "MATH-NUM-G6-01").
+        # They are frequently CROSS-GRADE — Grade 7 subtopics referencing Grade 6
+        # codes. The lookup must be GLOBAL across all entries, not scoped per
+        # (curriculum, subject, grade). Names are also indexed as a fallback.
+        # Log a warning and skip if a value doesn't resolve — do not crash.
 
         log.info("resolving_prerequisites")
+
+        # Build ONE global map covering every subtopic inserted in this run.
+        # canonical_code is unique across the full JSON — use it as the
+        # authoritative key. Names are also indexed for legacy compatibility.
+        global_subtopic_map: dict[str, uuid.UUID] = {}
+        for subtopic_pairs in subtopics_for_prereq.values():
+            for sd, sid in subtopic_pairs:
+                global_subtopic_map[sd["name"]] = sid
+                if sd.get("canonical_code"):
+                    global_subtopic_map[sd["canonical_code"]] = sid
 
         for entry_key, subtopic_pairs in subtopics_for_prereq.items():
             curriculum_code, subject_code, grade_level = entry_key
 
-            # Build name→id map for this entry
-            name_to_id: dict[str, uuid.UUID] = {sd["name"]: sid for sd, sid in subtopic_pairs}
+            # Use the global map so cross-grade prereqs resolve correctly
+            name_to_id = global_subtopic_map
 
             for subtopic_data, subtopic_id in subtopic_pairs:
                 prereq_names: list[str] = subtopic_data.get("prerequisites", [])
