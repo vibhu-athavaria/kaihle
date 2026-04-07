@@ -213,6 +213,16 @@ class CurriculumChunk(Base, UUIDMixin, TimestampMixin):
         ForeignKey("subtopics.id", ondelete="CASCADE"),
         nullable=False,
     )
+    curriculum_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("curricula.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    subject_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subjects.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     chunk_index: Mapped[int] = mapped_column(nullable=False)
     token_count: Mapped[int | None]
