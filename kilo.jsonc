@@ -1,9 +1,14 @@
 {
-  // Kaihle KiloCode Project Config
-  // Always-loaded rules. Applied to every agent in every session.
-  // Skills and agents are defined in .kilo/agents/ and .kilo/skills/
   "instructions": [
-    ".kilo/rules/00-foundation.md",
-    ".kilo/rules/01-app-isolation.md"
+    ".kilo/rules/01-core-principles.md",
+    ".kilo/rules/02-security.md",
+    ".kilo/rules/03-data-and-schema.md",
+    ".kilo/rules/04-transactions-and-idempotency.md",
+    ".kilo/rules/05-testing.md",
+    ".kilo/rules/06-logging.md",
+    ".kilo/rules/07-performance.md",
+    ".kilo/rules/08-ci-and-agent-behavior.md",
+    ".kilo/rules/09-git-workflow.md",
+    ".kilo/rules/10-task-authoring.md"
   ]
 }
