@@ -1,4 +1,27 @@
-# M1-2-T2 — Curriculum PDF Ingestion & Embeddings
+# ~~M1-2-T2 — Curriculum PDF Ingestion & Embeddings~~ — RETIRED
+
+> **RETIRED — DO NOT IMPLEMENT**
+> **Retired by:** Vibhu Athavaria
+> **Date:** April 2026
+> **Reason:** PDF ingestion abandoned. Kaihle does not ingest Cambridge PDFs.
+> LLM-generated explanations stored in `subtopic_content` table replace
+> curriculum_chunks as the content source for quiz generation and lesson
+> planning. pgvector embeddings on subtopics are not needed for MVP.
+>
+> **Replacement architecture:** See `M3-0-T1_subtopic_content_migration_and_seed.md`
+> for the new content pipeline.
+>
+> **Impact on downstream tasks:**
+> - `M3-1-T1_content_curator.md` — updated, no longer depends on this task
+> - `M3-1-T2_quiz_generator.md` — updated, no longer depends on this task
+> - `M4-1-T1_lesson_plan_celery_task.md` — updated, RAG context replaced
+>
+> This file is preserved for historical reference only.
+> No coding agent should implement this task.
+
+---
+
+# M1-2-T2 — Curriculum PDF Ingestion & Embeddings (ORIGINAL — ARCHIVED)
 **Milestone:** M1 — Core Diagnostics Flow
 **Epic:** M1-2 — Curriculum Graph & RAG Ingestion
 **Task:** T2 of 2 in this epic
