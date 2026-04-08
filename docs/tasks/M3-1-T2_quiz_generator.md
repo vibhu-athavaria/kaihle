@@ -1,6 +1,12 @@
 # M3-1-T2 — Quiz Generator (with Interest Injection)
 **Milestone:** M3 · **Epic:** M3-1 · **Task:** T2
-**Depends on:** M1-2-T2 (curriculum_chunks + subtopic embeddings), M0-6-T1 (learning profile)
+**Depends on:** M1-2-T1 (curriculum graph seeded — subtopic LOs available), M0-6-T1 (learning profile)
+
+> **UPDATED April 2026:** RAG context from curriculum_chunks removed. Subtopic
+> context now loaded directly from `subtopic_content.approved_explanation` (or falls
+> back to `subtopic.learning_objective` if no approved explanation exists yet).
+> Do NOT import or call `rag_retriever`. Do NOT reference `curriculum_chunks`.
+> SHORT_ANSWER question type removed — MCQ only (consistent with question bank).
 
 ---
 
@@ -40,15 +46,19 @@ async def generate_quiz(
 
 ## Step-by-Step Logic
 
-### 1. Load RAG Context
+### 1. Load Subtopic Context
 ```python
-# Get 3 most relevant curriculum_chunks for this subtopic
-chunks = await rag_retriever.get_top_k(
-    query_embedding=subtopic.embedding,
-    k=3,
-    filter={"subtopic_id": subtopic.id}
+# Load approved explanation from subtopic_content (no RAG needed)
+from app.models.subtopic_content import SubtopicContent
+
+content = await db.get(SubtopicContent, subtopic.id)
+subtopic_context = (
+    content.approved_explanation
+    if content and content.approved_explanation
+    else f"{subtopic.name}: {subtopic.learning_objective}"
 )
-rag_context = "\n\n".join([c.content for c in chunks])
+# subtopic_context is a plain-language explanation of the subtopic,
+# or falls back to the learning objective text if not yet reviewed.
 ```
 
 ### 2. Load Student Interests
@@ -89,8 +99,7 @@ If validation fails → retry once with same prompt. If second failure → raise
 
 ```jinja2
 System: You are an educational content creator for {{ curriculum_code }} {{ subject_name }}.
-        Generate a 5-question practice quiz.
-        Return ONLY valid JSON — no preamble, no markdown fences.
+        Generate a practice quiz. Return ONLY valid JSON — no preamble, no markdown fences.
 
 Student mastery: {{ mastery_pct }}% on: {{ subtopic_name }}.
 Difficulty calibration: {{ difficulty_label }}.
@@ -98,8 +107,8 @@ Difficulty calibration: {{ difficulty_label }}.
 Learning objectives:
 {{ learning_objectives }}
 
-Curriculum context:
-{{ rag_context }}
+Subtopic explanation (use this to anchor questions to what was taught):
+{{ subtopic_context }}
 
 {% if top_2_interests %}
 Personalisation: Where it fits naturally, frame question scenarios using topics this
@@ -108,8 +117,9 @@ Do NOT force the interest — academic accuracy is always the priority.
 Only use if the scenario genuinely fits the subtopic.
 {% endif %}
 
-Generate exactly 5 questions: 4 MCQ and 1 SHORT_ANSWER.
-MCQ must have exactly 4 options (A, B, C, D).
+Generate exactly 5 MCQ questions.
+Each MCQ must have exactly 4 options (A, B, C, D).
+All questions must be MCQ — no short answer, no true/false.
 
 Return JSON:
 {
@@ -125,13 +135,6 @@ Return JSON:
       ],
       "correct_answer": "B",
       "explanation": "..."
-    },
-    {
-      "question_text": "...",
-      "type": "SHORT_ANSWER",
-      "options": null,
-      "correct_answer": "...",
-      "explanation": "..."
     }
   ]
 }
@@ -145,15 +148,15 @@ Return JSON:
 @dataclass
 class QuizQuestion:
     question_text: str
-    type: QuestionType          # MCQ | SHORT_ANSWER
-    options: list[dict] | None  # [{"key":"A","text":"..."}] for MCQ, None for SHORT_ANSWER
+    type: QuestionType   # MCQ only — SHORT_ANSWER not supported
+    options: list[dict]  # always [{key, text}] — 4 options
     correct_answer: str
     explanation: str
 
 @dataclass
 class GeneratedQuiz:
     subtopic_id: UUID
-    questions: list[QuizQuestion]   # always 5
+    questions: list[QuizQuestion]   # always 5 MCQ
     generated_at: datetime
     interests_used: list[str]       # track which interests were injected
 ```
@@ -168,25 +171,31 @@ class GeneratedQuiz:
 - [ ] `student_mastery=0.2` → prompt contains "foundational"
 - [ ] `student_mastery=0.5` → prompt contains "developing"
 - [ ] `student_mastery=0.8` → prompt contains "advanced"
-- [ ] Output has exactly 5 questions: 4 MCQ + 1 SHORT_ANSWER
+- [ ] Output has exactly 5 questions, all MCQ — no SHORT_ANSWER
 - [ ] Each MCQ has exactly 4 options
+- [ ] Prompt contains `subtopic_context` (not `rag_context`) — verified via prompt string assertion
+- [ ] When `approved_explanation` exists → used as `subtopic_context`
+- [ ] When no `approved_explanation` → falls back to `subtopic.learning_objective`
 - [ ] LLM returns invalid JSON → retry once → if still invalid → raise error
 - [ ] LLM timeout → retry once → raise error
+- [ ] No import of `rag_retriever`, `embedder`, or any reference to `curriculum_chunks`
 
 ---
 
 ## Tests to Write
 
 ```python
-test_generate_quiz_when_interests_present_then_prompt_includes_interests()
-test_generate_quiz_when_no_interests_then_prompt_has_no_personalisation_section()
-test_generate_quiz_when_no_profile_then_quiz_generated_successfully()
-test_generate_quiz_when_mastery_low_then_prompt_has_foundational()
-test_generate_quiz_when_mastery_high_then_prompt_has_advanced()
-test_generate_quiz_when_valid_llm_response_then_5_questions_returned()
-test_generate_quiz_when_invalid_json_then_retry_once()
-test_generate_quiz_when_timeout_then_retry_and_raise()
-test_generated_quiz_has_4_mcq_and_1_short_answer()
+def test_generate_quiz_when_interests_present_then_prompt_includes_interests()
+def test_generate_quiz_when_no_interests_then_prompt_has_no_personalisation_section()
+def test_generate_quiz_when_no_profile_then_quiz_generated_successfully()
+def test_generate_quiz_when_mastery_low_then_prompt_has_foundational()
+def test_generate_quiz_when_mastery_high_then_prompt_has_advanced()
+def test_generate_quiz_when_valid_llm_response_then_5_mcq_returned()
+def test_generate_quiz_when_invalid_json_then_retry_once()
+def test_generate_quiz_when_timeout_then_retry_and_raise()
+def test_generated_quiz_has_5_mcq_no_short_answer()
+def test_subtopic_context_when_approved_explanation_then_uses_it()
+def test_subtopic_context_when_no_approved_then_falls_back_to_learning_objective()
 ```
 
 ---

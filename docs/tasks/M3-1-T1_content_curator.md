@@ -1,25 +1,38 @@
 # M3-1-T1 — Content Curation Engine (with Learning Profile Weighting)
 **Milestone:** M3 · **Epic:** M3-1 · **Task:** T1
-**Depends on:** M1-2-T2 (subtopic embeddings in pgvector), M0-6-T1 (learning profile API)
+**Depends on:** M3-0-T1 (subtopic_content table seeded with approved videos), M0-6-T1 (learning profile API)
+
+> **UPDATED April 2026:** Architecture change. Resource retrieval no longer uses
+> pgvector cosine similarity or curriculum_chunks. Resources are retrieved from
+> `subtopic_content.videos` JSONB array (KaihleAdmin-approved entries only).
+> Khan Academy source and static index removed for MVP.
+> Modality weighting applies to ordering of approved videos.
+> Do NOT implement the old cosine similarity scoring. Do NOT import embedder.py or retriever.py.
 
 ---
 
 ## User Story
-As the system, I want to find the best 2–3 educational resources for a student's gap and rank them based on that student's preferred learning modality.
+As the system, I want to find the best 1–3 educational videos for a student's gap and
+rank them based on that student's preferred learning modality, drawing only from
+KaihleAdmin-approved content.
 
 ---
 
-## Files to Create
+## Files to Create / Modify
 
 ```
-backend/app/ai/content_curator.py
-backend/app/ai/sources/youtube.py
-backend/app/ai/sources/khan_academy.py
-backend/app/ai/sources/static_index.py         # curated fallback list
-backend/data/content/static_resource_index.json
-backend/tests/unit/test_content_curator.py
-backend/tests/integration/test_curation_integration.py
+MODIFY  backend/app/ai/content_curator.py          ← rewrite (replaces old stub)
+CREATE  backend/tests/unit/test_content_curator.py
+CREATE  backend/tests/integration/test_curation_integration.py
+
+REMOVE  backend/app/ai/sources/khan_academy.py     ← delete if it exists
+REMOVE  backend/app/ai/sources/static_index.py     ← delete if it exists
+REMOVE  backend/data/content/static_resource_index.json ← delete if it exists
 ```
+
+> Note: `backend/app/ai/sources/youtube.py` is kept — it is used by the seed
+> pipeline (M3-0-T1) but NOT called at runtime by this curator. The curator
+> reads from the already-seeded `subtopic_content` table.
 
 ---
 
@@ -34,9 +47,10 @@ async def curate_resources(
     redis: Redis,
 ) -> list[Resource]:
     """
-    Returns top 3 resources for the subtopic, ranked by:
-      base_alignment_score × modality_multiplier
+    Returns top 1-3 approved video resources for the subtopic,
+    ordered by modality weighting.
     Cached per (subtopic_id, student_id) for 24 hours.
+    Falls back gracefully if no approved resources exist yet.
     """
 ```
 
@@ -58,59 +72,84 @@ profile = await db.get(StudentLearningProfile, student_id)
 # If None → profile = None (handled gracefully in step 4)
 ```
 
-### 3. Fetch Candidates from Sources (parallel)
+### 3. Load Approved Videos from subtopic_content
 ```python
-candidates = await asyncio.gather(
-    youtube_source.search(subtopic),     # YouTube Data API v3
-    khan_source.search(subtopic),        # Khan Academy topic API
-    static_source.search(subtopic),      # static_resource_index.json lookup
-    return_exceptions=True
-)
-candidates = flatten([c for c in candidates if not isinstance(c, Exception)])
+from app.models.subtopic_content import SubtopicContent
+
+content = await db.get(SubtopicContent, subtopic.id)
+if not content:
+    logger.warning(
+        "subtopic_content_missing",
+        subtopic_id=str(subtopic.id),
+        subtopic_name=subtopic.name,
+    )
+    return []   # Degrade gracefully — content not yet seeded
+
+approved_videos = content.get_approved_videos()
+if not approved_videos:
+    logger.info(
+        "no_approved_videos",
+        subtopic_id=str(subtopic.id),
+        pending_count=len([v for v in (content.videos or []) if v.get("status") == "pending"]),
+    )
+    return []   # KaihleAdmin review pending — degrade gracefully
 ```
 
-**YouTube query:** `f"{subtopic.subject_name} {subtopic.name} {curriculum_code} tutorial"`
-Filter: duration 3–15 minutes, language=English, category=Education
-
-**Khan Academy:** search by subtopic name against Khan topic tree. Return matching exercise + article links.
-
-**Static index:** JSON file of manually curated resources indexed by `subtopic_code`. Fallback when APIs return nothing.
-
-### 4. Score Each Candidate
+### 4. Apply Modality Weighting
 ```python
-for resource in candidates:
-    # Base: cosine similarity between resource embedding and subtopic.embedding
-    resource_embedding = await embed(resource.title + " " + resource.description)
-    base_score = cosine_similarity(resource_embedding, subtopic.embedding)
-
-    # Filter: skip if base_score < 0.72
-    if base_score < 0.72:
-        continue
-
-    # Modality multiplier (v2.1)
+scored = []
+for video in approved_videos:
+    base_score = _normalise_view_count(video.get("view_count", 0))
     multiplier = 1.0
-    if profile:
-        if profile.modality_scores.get("visual", 0) > 0.6:
-            if resource.resource_type == ResourceType.VIDEO:
-                multiplier *= 1.3
-        if profile.modality_scores.get("reading_writing", 0) > 0.6:
-            if resource.resource_type == ResourceType.ARTICLE:
-                multiplier *= 1.3
-        if profile.modality_scores.get("kinesthetic", 0) > 0.6:
-            if resource.resource_type == ResourceType.INTERACTIVE:
-                multiplier *= 1.3
-        if profile.modality_scores.get("auditory", 0) > 0.6:
-            if resource.resource_type == ResourceType.VIDEO:
-                multiplier *= 1.2   # cumulative with visual multiplier
 
-    resource.final_score = base_score * multiplier
+    if profile:
+        # Visual and auditory learners both benefit from video
+        if profile.modality_scores.get("visual", 0) > 0.6:
+            multiplier *= 1.3
+        if profile.modality_scores.get("auditory", 0) > 0.6:
+            multiplier *= 1.2   # cumulative with visual multiplier
+
+    video["final_score"] = base_score * multiplier
+    scored.append(video)
+
+scored.sort(key=lambda v: v["final_score"], reverse=True)
+top_resources = scored[:3]
 ```
 
-### 5. Select Top 3 and Cache
+### 5. Convert to Resource objects and Cache
 ```python
-top3 = sorted(filtered, key=lambda r: r.final_score, reverse=True)[:3]
-await redis.set(cache_key, serialise(top3), ex=86400)  # 24h TTL
-return top3
+resources = [
+    Resource(
+        url=v["url"],
+        title=v["title"],
+        description=v.get("channel", ""),
+        resource_type=ResourceType.VIDEO,
+        duration_seconds=None,
+        source="youtube",
+        thumbnail_url=None,
+        final_score=v["final_score"],
+    )
+    for v in top_resources
+]
+
+await redis.set(cache_key, serialise(resources), ex=86400)  # 24h TTL
+return resources
+```
+
+---
+
+## Helper: View Count Normalisation
+
+```python
+def _normalise_view_count(view_count: int) -> float:
+    """
+    Normalise view count to 0.0–1.0 score using log scale.
+    1M views → ~1.0, 100K → ~0.83, 10K → ~0.67, 1K → ~0.50
+    """
+    import math
+    if view_count <= 0:
+        return 0.0
+    return min(1.0, math.log10(max(1, view_count)) / 6.0)
 ```
 
 ---
@@ -152,27 +191,32 @@ class Resource:
 
 ## Acceptance Criteria
 
-- [ ] Student with `visual=1.0` → VIDEO resources ranked above ARTICLE for same base score
-- [ ] Student with `reading_writing=1.0` → ARTICLE ranked above VIDEO
-- [ ] Student with `kinesthetic=1.0` → INTERACTIVE ranked above VIDEO
-- [ ] Student with no learning profile → falls back to base score only, no error, returns 3 resources
-- [ ] Resources with base score < 0.72 filtered out
-- [ ] YouTube videos outside 3–15 minute range filtered out
-- [ ] Cache hit on second call → no API call made (test with mock)
-- [ ] One source API fails → other sources still used (exception caught)
+- [ ] Student with `visual=1.0` → video with higher view_count still ranked above lower-count video due to score × 1.3 boost
+- [ ] Student with `auditory=1.0` → VIDEO resources get 1.2× boost
+- [ ] Student with both `visual=1.0` and `auditory=1.0` → multiplier is cumulative (1.3 × 1.2)
+- [ ] Student with `reading_writing=1.0` only → no boost (only VIDEO type in this table)
+- [ ] Student with no learning profile → base view_count score used, no error
+- [ ] `subtopic_content` row missing → returns empty list, logs WARNING
+- [ ] No approved videos for subtopic → returns empty list, logs INFO with pending count
+- [ ] Cache hit on second call → no DB call made (test with mock)
 - [ ] Returns at most 3 resources
+- [ ] All returned resources have `status = 'approved'` — never pending or stale
+- [ ] No import of `embedder`, `retriever`, `cosine_similarity`, `khan_academy`, `static_index`
 
 ---
 
 ## Tests to Write
 
 ```python
-test_curate_when_visual_profile_then_videos_ranked_first()
-test_curate_when_reading_profile_then_articles_ranked_first()
-test_curate_when_no_profile_then_base_score_used()
-test_curate_when_base_score_below_threshold_then_filtered()
-test_curate_when_cached_then_no_api_call()
-test_curate_when_youtube_fails_then_other_sources_still_used()
-test_curate_when_all_sources_return_low_scores_then_empty_list()
-test_curate_returns_max_3_resources()
+def test_curate_when_visual_profile_then_multiplier_applied()
+def test_curate_when_auditory_profile_then_video_boosted()
+def test_curate_when_both_visual_and_auditory_then_multipliers_cumulative()
+def test_curate_when_no_profile_then_view_count_score_only()
+def test_curate_when_no_subtopic_content_row_then_empty_list_and_warning()
+def test_curate_when_no_approved_videos_then_empty_list_and_info_log()
+def test_curate_when_cached_then_no_db_call()
+def test_curate_returns_max_3_resources()
+def test_curate_returns_only_approved_status_videos()
+def test_normalise_view_count_when_1M_then_near_1_0()
+def test_normalise_view_count_when_zero_then_returns_0()
 ```
