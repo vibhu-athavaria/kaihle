@@ -63,7 +63,7 @@ Kaihle is an AI-powered learning diagnostics platform for schools. It identifies
 | Concern | Choice |
 |---|---|
 | Database | PostgreSQL 16 + pgvector extension |
-| Vector store | pgvector (inside PostgreSQL — no Pinecone) |
+| Vector store | pgvector (extension present in schema but NOT USED in v1 feature code — see §8) |
 | Cache | Redis 7 |
 | File storage | AWS S3 |
 | Dev | Docker Compose |
@@ -84,8 +84,8 @@ Kaihle is an AI-powered learning diagnostics platform for schools. It identifies
       /services/            ← ALL business logic lives here
       /ai/
         /providers/         ← router.py only (LiteLLM handles all provider adaption)
-        /rag/               ← embedder.py, retriever.py, curriculum.py
         /prompts/           ← .jinja2 prompt templates
+        /sources/           ← youtube.py (seed pipeline only, not called at runtime)
         content_curator.py
         quiz_generator.py
       /tasks/               ← Celery task definitions
@@ -199,6 +199,19 @@ loads use skeletons. Button actions use button spinners. Background generation u
 pulsing badges. No spinner on full-page initial data load. Every list component must
 have an explicit empty state. See `docs/design/DESIGN_SYSTEM_ACCESSIBILITY_ADDENDUM.md`
 §10 for the full standard.
+
+**Rule 23 — Curriculum compliance boundary.** Kaihle is an educational delivery
+aid. Schools are solely responsible for compliance with their chosen curriculum
+framework (Cambridge, IB, or other). Kaihle uses curriculum learning objectives
+as context anchors for content generation only — never as compliance validators.
+
+Task files must never describe generated content as "Cambridge-compliant,"
+"IB-aligned," or "examination-ready." The correct framing is "curriculum-informed."
+
+No task file may introduce logic that validates teacher or student actions against
+examination board policy, mark scheme language, or assessment weighting rules.
+Routes, services, and prompts must treat learning objectives as contextual strings,
+not regulatory constraints.
 ---
 
 ## 5. Authentication and Onboarding Flows (CRITICAL)
@@ -307,14 +320,15 @@ TASK_MODEL_MAP: dict[str, str] = {
     "gap_classification": settings.llm_gap_classification_model,
     "study_plan":         settings.llm_study_plan_model,
     "lesson_plan":        settings.llm_lesson_plan_model,
-    "embeddings":         settings.llm_embeddings_model,
+    "student_pack":       settings.llm_student_pack_model,
+    # "embeddings" removed — subtopic_content table replaces pgvector RAG in v1
 }
 
 TASK_API_BASE_MAP: dict[str, str | None] = {
     "gap_classification": settings.llm_gap_classification_api_base,
     "study_plan":         settings.llm_study_plan_api_base,
     "lesson_plan":        settings.llm_lesson_plan_api_base,
-    "embeddings":         settings.llm_embeddings_api_base,
+    "student_pack":       settings.llm_student_pack_api_base,
 }
 
 async def complete(task: str, messages: list[dict], **kwargs) -> str:
@@ -327,14 +341,6 @@ async def complete(task: str, messages: list[dict], **kwargs) -> str:
     )
     return response.choices[0].message.content
 
-async def embed(task: str, text: str) -> list[float]:
-    """Generate an embedding vector. Provider-agnostic."""
-    response = await litellm.aembedding(
-        model=TASK_MODEL_MAP["embeddings"],
-        api_base=TASK_API_BASE_MAP.get("embeddings"),
-        input=text,
-    )
-    return response.data[0]["embedding"]
 ```
 
 **Task routing table (current defaults — all overridable via environment variables):**
@@ -343,10 +349,18 @@ async def embed(task: str, text: str) -> list[float]:
 |---|---|---|---|
 | `gap_classification` | `gemini/gemini-2.5-flash` | Google | 5s |
 | `study_plan` | `gpt-4.1-mini` | OpenAI | 10s |
-| `lesson_plan` | `gpt-4.1` | OpenAI | 15s |
-| `embeddings` | `text-embedding-004` | Google | — |
+| `lesson_plan` | `openrouter/anthropic/claude-sonnet-4-6` | OpenRouter | 90s |
+| `student_pack` | `gemini/gemini-2.5-pro` | Google | 30s |
 
-**Note — question generation and answer scoring are NOT LLM tasks.** All questions come from the pre-built question bank (`question_bank` table, populated by `import_questions.py`). All answers are MCQ — scoring is a deterministic string comparison (`student_response.selected_key == question.correct_answer_key`) with no LLM involvement. This eliminates the two highest-volume LLM call types from the system entirely.
+**Note — `embeddings` task removed.** pgvector embeddings are not used in v1.
+The `subtopic_content` table (structured SQL retrieval) replaces cosine similarity
+retrieval for all content curation, quiz generation, and lesson planning.
+The `embed()` function in `router.py` remains for forward compatibility but is not
+called by any feature code in v1. Do not add embedding calls without an ADR.
+
+**Note — question generation and answer scoring are NOT LLM tasks.**
+All questions come from the pre-built question bank (`question_bank` table).
+All answers are MCQ — scoring is deterministic string comparison. No LLM involved.
 
 **Self-hosted LLM server configuration example:**
 ```bash
@@ -472,6 +486,3 @@ These components are shared across all five apps. No app may define its own vers
 
 ---
 
-*Kaihle Project Constitution v2.0 · March 2026*
-*LOAD THIS FILE IN EVERY KILOCODE SESSION — no exceptions.*
-*Key changes from v1.0: five-app architecture (ADR-001), mandatory password setup for all magic-link roles, two-layer student onboarding gate (global + per-class), explicit KaihleAdmin bypass rule (Rule 12), Celery dead-letter rule (Rule 18), empty question bank guard (Rule 17), PasswordSetupForm as shared package component, LiteLLM as provider-agnostic abstraction layer replacing individual provider adapters, question_generation and answer_scoring removed from LLM task routing (all questions are pre-built MCQ, scoring is deterministic).*
