@@ -449,3 +449,49 @@ def test_negative_start_min_raises():
 - [ ] `ai_model` column exists on `lesson_plans` table (via migration if needed)
 - [ ] All unit tests in `test_lesson_plan_schema.py` pass
 - [ ] `tsc --noEmit` unaffected (backend-only change)
+
+---
+
+## ADDENDUM — April 2026: Student Pack Architecture
+
+> Added when lesson plan architecture was expanded to produce two distinct outputs:
+> a **Teacher Plan** (this task) and a **Student Pack** (M4-2-T1).
+
+### What changed
+
+The teacher-facing `LessonPlanLLMOutput` schema defined in this task is **unchanged
+and remains the authoritative teacher plan schema**. Do not alter it.
+
+The student-facing plan is a separate on-demand generation — not part of the Monday
+Celery beat task. It is defined and implemented in `M4-2-T1_student_pack_generation.md`.
+
+### Student pack table
+
+The `student_lesson_packs` table is created in migration `M3-0-T1` (added alongside
+`subtopic_content`). The ORM model lives at:
+```
+backend/app/models/student_lesson_pack.py
+```
+
+This task does **not** create or modify that model — M4-2-T1 owns it.
+
+### Key distinction for coding agents
+
+| | Teacher Plan | Student Pack |
+|---|---|---|
+| Task file | **This file (M4-1-T2)** | M4-2-T1 |
+| Schema | `LessonPlanLLMOutput` | `StudentPackLLMOutput` |
+| Generation | Celery beat, Monday 06:00 | On-demand, first student access |
+| Storage table | `lesson_plans` | `student_lesson_packs` |
+| Audience | Teacher only | Student only |
+| LO language | Cambridge codes + formal LO text | Plain language "what you'll learn" |
+| Resources | YouTube links for teacher preview | Embedded video from `subtopic_content` |
+
+### Do NOT add student pack generation to this task
+
+All student pack generation logic belongs in M4-2-T1. This task ends at the teacher
+plan schema, storage, and unit tests. No student-facing schema or endpoint goes here.
+
+---
+
+*Addendum authored by Kramer (Technical Lead) · April 2026*
