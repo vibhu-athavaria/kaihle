@@ -254,7 +254,7 @@ class LessonPlanService:
         gap_map        = await self.gap_service.get_class_gap_map(cls.id)
         focus_subtopics = self._get_weakest_subtopics(gap_map, n=2)
         student_groups  = self._cluster_students(gap_map, focus_subtopics)
-        rag_context     = await self._get_rag_context(focus_subtopics)
+        rag_context     = await self._get_subtopic_context(focus_subtopics)
         learning_style  = await self._get_dominant_style(cls.id)
         vark_profile    = VARK_PROFILES[learning_style]
         week_start      = self._current_week_start()
@@ -383,13 +383,25 @@ class LessonPlanService:
                 groups["C"].append(student_id)
         return groups
 
-    async def _get_rag_context(self, focus_subtopics) -> str:
-        # Retrieve 3 curriculum chunks per subtopic via pgvector cosine similarity
-        chunks = []
+    async def _get_subtopic_context(self, focus_subtopics) -> str:
+        """
+        Load approved explanations from subtopic_content per focus subtopic.
+        Falls back to learning_objective text if no approved explanation exists yet.
+        REPLACES _get_rag_context() — no curriculum_chunks, no pgvector.
+        """
+        from app.models.subtopic_content import SubtopicContent
+        parts = []
         for subtopic in focus_subtopics:
-            results = await self.gap_service.get_rag_chunks(subtopic.id, k=3)
-            chunks.extend([r.content for r in results])
-        return "\n\n---\n\n".join(chunks[:6])  # cap at 6 total chunks
+            content = await self.session.get(SubtopicContent, subtopic.id)
+            if content and content.approved_explanation:
+                parts.append(
+                    f"## {subtopic.name}\n{content.approved_explanation}"
+                )
+            else:
+                parts.append(
+                    f"## {subtopic.name}\n{subtopic.learning_objective}"
+                )
+        return "\n\n---\n\n".join(parts)
 
     async def _get_dominant_style(self, class_id: UUID) -> LearningStyleSlug:
         """

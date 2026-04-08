@@ -50,28 +50,47 @@ backend/app/tests/integration/test_gap_states_updated.py
 This algorithm is the source of truth for all mastery scores in Kaihle. Do not
 deviate from it.
 
-A student's mastery score for a subtopic is the rolling average of their last three
-attempt scores for that subtopic. An "attempt score" for a subtopic within one attempt
-is the mean of all responses for that subtopic in that attempt. This means if a student
-answers five questions all mapped to "Algebraic Fractions" and gets three correct,
-their attempt score for that subtopic is 0.6.
+A student's mastery score for a subtopic is a **recency-weighted moving average**
+of their last three attempt scores for that subtopic. An "attempt score" for a
+subtopic within one attempt is the mean of all responses for that subtopic in that
+attempt. This means if a student answers five questions all mapped to "Algebraic
+Fractions" and gets three correct, their attempt score for that subtopic is 0.6.
 
 ```
 attempt_score_for_subtopic =
     count(is_correct=True for responses in this attempt mapped to subtopic)
     / count(all responses in this attempt mapped to subtopic)
 
+# Confirmed formula — recency-weighted, last 3 attempts:
 mastery_score =
-    mean of last 3 attempt_scores for this (student_id, subtopic_id) pair
-    including the current attempt_score
+    (attempt_n   × 0.5)   # most recent — highest weight
+  + (attempt_n-1 × 0.3)   # second most recent
+  + (attempt_n-2 × 0.2)   # oldest of the three
+
+# Normalise for fewer than 3 attempts:
+1 attempt:  mastery_score = attempt_n × 1.0
+2 attempts: mastery_score = (attempt_n × 0.65) + (attempt_n-1 × 0.35)
+3+ attempts: full weighted formula above
 ```
 
-The rolling average includes the current attempt. So on a student's first attempt,
-mastery equals that attempt's score exactly. On their second attempt, mastery is the
-average of two scores. From the third attempt onward, mastery is the average of the
-three most recent attempt scores — the oldest drops off.
+The weighting reflects a key pedagogical insight: a student who failed twice but
+just scored 0.9 is more likely to have genuinely understood the material than a
+simple average would suggest. Recency carries more weight.
 
 The "last 3" is determined by attempt `completed_at` timestamp, not by attempt ID.
+
+**Enrollment diagnostic seeding:** When an enrollment diagnostic (Tier 1,
+`is_system_generated=True`) is the first and only attempt for a student, the
+mastery score is seeded at **70% of face value** to reflect reduced confidence
+from a single short assessment:
+
+```
+enrollment_initial_mastery = attempt_score × 0.7
+```
+
+After the first post-lesson quiz or Tier 2 attempt, the normal weighted formula
+takes over completely. The 0.7 factor only applies to the seeded state, not to
+subsequent recalculations.
 
 ---
 
@@ -201,13 +220,29 @@ CREATE TABLE student_attempt_subtopic_scores (
 CREATE INDEX idx_subtopic_scores_student_sub ON student_attempt_subtopic_scores(student_id, subtopic_id);
 ```
 
-With the history loaded, compute the rolling average:
+With the history loaded, compute the recency-weighted mastery score:
 
 ```python
 history = [row.score for row in previous_scores]
 history.append(attempt_scores[subtopic_id])  # add current attempt
-rolling_scores = history[-3:]  # last 3 only (may be 1, 2, or 3 entries)
-new_mastery = sum(rolling_scores) / len(rolling_scores)
+recent = history[-3:]  # keep last 3 only
+
+is_enrollment_diagnostic = assessment.is_system_generated
+
+if is_enrollment_diagnostic and len(history) == 1:
+    # First-ever score is an enrollment diagnostic — seed at 70% confidence
+    new_mastery = recent[0] * 0.7
+elif len(recent) == 1:
+    new_mastery = recent[0]
+elif len(recent) == 2:
+    # 2-attempt normalised weights: 0.65 / 0.35
+    new_mastery = (recent[-1] * 0.65) + (recent[-2] * 0.35)
+else:
+    # Full 3-attempt weighted formula: most recent carries highest weight
+    new_mastery = (recent[-1] * 0.5) + (recent[-2] * 0.3) + (recent[-3] * 0.2)
+
+# Clamp to valid range
+new_mastery = max(0.0, min(1.0, new_mastery))
 ```
 
 **Step 6 — Upsert the `gap_states` row.** Use PostgreSQL's `ON CONFLICT DO UPDATE`

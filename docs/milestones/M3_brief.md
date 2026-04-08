@@ -1,8 +1,9 @@
 # M3 Brief — Smart Study Plans
 **Milestone:** 3 of 6
-**Estimated duration:** 3–4 weeks
+**Estimated duration:** 4–5 weeks (extended from 3–4 to accommodate M3-0 content infrastructure)
 **Previous milestone:** M2 — Gap Map & Teacher Dashboard
 **Constitution version:** 2.0
+**Last updated:** April 2026 — content architecture revised; M3-0 epic added
 
 > Load this brief alongside CONSTITUTION.md when working on any M3 task.
 > Load the specific task file for the task you are implementing.
@@ -21,68 +22,157 @@ within seconds.
 
 ## Exit Criteria
 
-- Teacher assigns a study plan from a red or amber gap map cell → student sees curated resources matched to their learning style → student takes a quiz with personally relevant examples → gap state updates after quiz submission
+- `subtopic_content` table seeded with LLM explanations and YouTube video candidates for all active subtopics
+- KaihleAdmin has reviewed and approved at least one video per subtopic before student-facing features are enabled
+- Teacher has reviewed and approved explanations for subtopics in their classes
+- Teacher assigns a study plan from a red or amber gap map cell → student sees curated video matched to their learning style → student takes a quiz with personally relevant examples → gap state updates after quiz submission
+- Nightly stale link Celery job operational and scheduled
+
+---
+
+## Architecture Change from Original Design (April 2026)
+
+**What changed and why:**
+
+The original M3 design used pgvector cosine similarity against `curriculum_chunks`
+(PDF-sourced text) to retrieve and score resources. This design was abandoned when
+PDF ingestion was dropped from the product.
+
+**New architecture:**
+
+Resources come from the `subtopic_content` table — a structured relational table with
+one row per subtopic, storing:
+- LLM-generated explanation text (reviewed and approved by teachers)
+- YouTube video candidates as a JSONB array (reviewed and approved by KaihleAdmin)
+
+Retrieval is a filtered SQL query, not semantic search. No pgvector. No embeddings.
+No `curriculum_chunks`. No `embedder.py` or `retriever.py`.
+
+**Implications for coding agents:**
+
+- Do NOT create `backend/app/ai/rag/` directory or any files within it
+- Do NOT import or call `cosine_similarity`, `embed()`, or pgvector functions
+- Do NOT reference `curriculum_chunks` table in any query
+- Do NOT add `subtopics.embedding` population to any script
+- Resource retrieval = `SELECT FROM subtopic_content WHERE subtopic_id = X AND video status = 'approved'`
+- Quiz context = `subtopic_content.approved_explanation` (falls back to `subtopic.learning_objective`)
 
 ---
 
 ## What This Milestone Delivers
 
+### EPIC M3-0 — Content Infrastructure (NEW — runs before all other M3 tasks)
+
+A `subtopic_content` table and associated workflows that create a quality-controlled
+content library for all subtopics. This is the foundation every subsequent M3 feature
+depends on.
+
+**Subtopic content table and migration**
+
+A `subtopic_content` table with one row per subtopic. Stores LLM-generated explanation
+text (pending teacher review) and an array of YouTube video candidates (pending
+KaihleAdmin review). Also creates the `student_lesson_packs` table used by M4-2-T1.
+Created via Alembic migration. Includes deprecation comment on `curriculum_chunks`.
+
+**YouTube seed pipeline**
+
+A `seed_subtopic_content.py` script that iterates all active subtopics, generates
+an LLM explanation via Gemini 2.5 Pro, searches YouTube Data API v3 for video
+candidates, scores them by view count, and stores the top 3 as `status = 'pending'`.
+Idempotent — safe to re-run. Supports `--subject`, `--limit`, `--dry-run` flags.
+
+**KaihleAdmin video review UI**
+
+A new Content section in `apps/kaihle-admin` where Vibhu and the Kaihle team can
+review YouTube video candidates per subtopic. Each video shows an embedded YouTube
+preview (with correct `sandbox` and `title` attributes), channel, view count, and
+confidence. KaihleAdmin approves or rejects each video. Approved videos become
+available for student packs. Stale videos are flagged by the nightly Celery job.
+
+**Teacher explanation review UI**
+
+A new Content section in `apps/teacher` scoped to the teacher's own classes. Teachers
+review LLM-generated text explanations for subtopics they teach, edit if needed, and
+approve. Interest-injected examples are flagged separately for independent approval.
+The approved explanation becomes the canonical text used in student packs and quiz
+generation. Also surfaced inline within the Gap Map side panel.
+
+**Stale link Celery job**
+
+A nightly Celery beat task (`check_stale_video_links`) running at 02:00 that performs
+HEAD requests on every approved and pending video URL not checked in 7 days. Broken
+URLs (404, 403) are marked `status = 'stale'`. KaihleAdmin is surfaced stale counts
+in the review queue badge. Uses `new_event_loop()` pattern, not `asyncio.run()`.
+Capped at 500 URL checks per run with 0.5s rate-limit delay between requests.
+
+---
+
+### EPIC M3-1 — Content Curation & Quiz Generation (updated)
+
 **Content curation engine**
 
-A `ContentCurator` service that retrieves the best 2–3 resources for a given subtopic
-and student. It uses pgvector cosine similarity against `subtopic.embedding` to find
-aligned curriculum chunks, weights results by the student's `modality_scores` from
-their learning profile (visual learners get more videos, reading/writing learners get
-more articles), and returns a ranked list. Resources are sourced from YouTube (via
-YouTube Data API), Khan Academy, and the internal `curriculum_chunks` table.
+A `ContentCurator` service that retrieves approved YouTube videos for a given subtopic
+from the `subtopic_content` table. Videos are ordered by view-count-normalised score
+weighted by student modality (visual and auditory learners receive a 1.3× and 1.2×
+multiplier respectively). Results are cached per `(subtopic_id, student_id)` for 24
+hours in Redis. Returns empty list gracefully when no approved videos exist yet.
+Does NOT call YouTube API at runtime — the seed pipeline handles that.
 
 **Quiz generation service**
 
-A `QuizGenerator` service that builds a 5-question MCQ quiz for a subtopic. It uses
-the student's `interests` array from their learning profile to inject personalised
-context into the quiz question prompts — a student interested in football gets physics
-problems framed around ball trajectory rather than abstract equations. Questions are
-generated via LiteLLM (`task="study_plan"` routes to GPT-4.1 mini). Academic accuracy
-always takes priority over personalisation — the prompt explicitly instructs the model
-to ensure the question is curriculum-correct before adding interest context.
+A `QuizGenerator` service that builds a 5-question MCQ quiz for a subtopic. Uses
+`subtopic_content.approved_explanation` (or falls back to `subtopic.learning_objective`)
+as the curriculum context — replacing the previous pgvector chunk retrieval. Uses
+`get_compatible_interests()` from `questionnaire_config.py` to inject only subject-
+appropriate student interests into the prompt. All 5 questions are MCQ — no
+`SHORT_ANSWER` type. Called via `get_provider(task="question_generation")`.
 
-**Study plan service**
+**Quiz quality validation**
 
-A `StudyPlanService` that orchestrates curation and quiz generation, writes the
-results to the `study_plans`, `study_plan_resources`, and `study_plan_quizzes` tables,
-and updates `gap_states` after the student submits their quiz answers.
+Unchanged from original design. Validates generated quiz questions for curriculum
+alignment before they reach students.
 
-**Study plan API — stub replacement**
+---
 
-M0-10-T4 created `routes/study_plans.py` with stubs. This milestone replaces all stub
-bodies with real service calls. The frozen contracts from M0-10 must not be changed.
+### EPIC M3-2 — Study Plan Service & UI (unchanged)
 
-**Frontend UI**
-
-The student study plan view builds in `apps/student`. The teacher assignment UI
-builds in `apps/teacher` as an extension of the gap map heatmap from M2-1-T3.
+Study plan service, routes, student UI, and teacher assignment UI are unchanged in
+design intent. The content curator and quiz generator they depend on have changed
+their internal implementation, but their external interfaces (function signatures,
+return types) are identical.
 
 ---
 
 ## Tasks in This Milestone
 
-| Task ID | File | Description |
-|---|---|---|
-| M3-1-T1 | `M3/M3-1-T1_content_curator.md` | Resource curation with learning profile weighting |
-| M3-1-T2 | `M3/M3-1-T2_quiz_generator.md` | Quiz generation with interest injection via LiteLLM |
-| M3-1-T3 | `M3/M3-1-T3_quiz_quality_validation.md` | Quiz quality gate: semantic similarity validation before questions reach students |
-| M3-2-T1 | `M3/M3-2-T1_study_plan_service.md` | Study plan orchestration service |
-| M3-2-T2 | `M3/M3-2-T2_study_plan_routes.md` | Replace study plan stubs with real logic |
-| M3-2-T3 | `M3/M3-2-T3_student_study_plan_ui.md` | Student study plan UI (apps/student) |
-| M3-2-T4 | `M3/M3-2-T4_teacher_assignment_ui.md` | Teacher assignment UI (apps/teacher) |
+| Task ID | File | Description | Status |
+|---|---|---|---|
+| M3-0-T1 | `M3-0-T1_subtopic_content_migration_and_seed.md` | `subtopic_content` table + YouTube seed pipeline | **NEW** |
+| M3-0-T2a | `M3-0-T2a_kaihle_admin_video_review_ui.md` | KaihleAdmin video review queue UI | **NEW** |
+| M3-0-T2b | `M3-0-T2b_teacher_explanation_review_ui.md` | Teacher explanation review UI | **NEW** |
+| M3-0-T3 | `M3-0-T3_stale_link_celery_job.md` | Nightly stale video link Celery job | **NEW** |
+| M3-1-T1 | `M3-1-T1_content_curator.md` | Resource curation from subtopic_content | **UPDATED** |
+| M3-1-T2 | `M3-1-T2_quiz_generator.md` | Quiz generation with subtopic context | **UPDATED** |
+| M3-1-T3 | `M3-1-T3_quiz_quality_validation.md` | Quiz quality gate | Unchanged |
+| M3-2-T1 | `M3-2-T1_study_plan_service.md` | Study plan orchestration service | Unchanged |
+| M3-2-T2 | `M3-2-T2_study_plan_routes.md` | Replace study plan stubs | Unchanged |
+| M3-2-T3 | `M3-2-T3_student_study_plan_ui.md` | Student study plan UI | Unchanged |
+| M3-2-T4 | `M3-2-T4_teacher_assignment_ui.md` | Teacher assignment UI | Unchanged |
 
 ---
 
 ## Task Execution Order
 
 ```
-M3-1-T1 (content curator) ← parallel start
-M3-1-T2 (quiz generator)  ← parallel start
+M3-0-T1 (subtopic_content table + seed pipeline) ← MUST run first
+  → M3-0-T2a (KaihleAdmin video review UI)  ← parallel once T1 complete
+  → M3-0-T2b (teacher explanation review UI) ← parallel once T1 complete
+  → M3-0-T3  (stale link Celery job)         ← parallel once T1 complete
+
+All M3-0 tasks must be complete before M3-1 begins.
+
+M3-1-T1 (content curator) ← parallel start after M3-0 complete
+M3-1-T2 (quiz generator)  ← parallel start after M3-0 complete
   → M3-1-T3 (quiz quality validation) ← add validator to generator
     → M3-2-T1 (study plan service) ← needs both curator and generator
       → M3-2-T2 (study plan routes) ← replace stubs, calls service
@@ -107,15 +197,21 @@ real records.
 
 ## LiteLLM Usage in This Milestone
 
-Both `M3-1-T2` (quiz generation) and `M3-2-T1` (study plan orchestration) make LLM
-calls. All calls must go through `app.ai.providers.router.complete()` — never import
-provider SDKs directly. The task string for study plan generation is `"study_plan"`,
-which routes to GPT-4.1 mini with a 10-second timeout per CONSTITUTION §8.
+`M3-1-T2` (quiz generation) calls via `get_provider(task="question_generation")`.
+`M3-0-T1` seed script calls Gemini 2.5 Pro directly via `litellm.acompletion()` —
+this is a CLI script, not a request-path service, so direct litellm is acceptable.
+All other M3 tasks that need LLM access must go through `app.ai.providers.router.complete()`.
+Never import provider SDKs directly in service or route files.
 
-If the LLM call fails or times out, the study plan should be created in a degraded
-state with resources but no quiz (resources come from deterministic cosine similarity
-retrieval, not LLM). A structured warning log must be emitted. The student should
-see the resources section and a "Quiz unavailable — try again later" message.
+---
+
+## Do NOT Build in This Milestone
+
+- pgvector indexes or cosine similarity queries — not used in v1
+- `embedder.py` or `retriever.py` — do not create these files
+- Khan Academy API integration — removed from MVP
+- Audio generation — deferred
+- Slides generation — deferred
 
 ---
 
@@ -124,12 +220,17 @@ see the resources section and a "Quiz unavailable — try again later" message.
 The student study plan view (`/student/study-plans` and `/student/study-plans/:id`)
 builds in `apps/student`. The teacher assignment modal and button on the gap map cell
 side panel build in `apps/teacher` as an addition to M2-1-T3's heatmap component.
-Neither app touches the other's directory.
+The KaihleAdmin video review builds in `apps/kaihle-admin`. The teacher explanation
+review builds in `apps/teacher`. No app touches another's directory.
 
 ---
 
 ## Definition of Done
 
+- `subtopic_content` table exists and is seeded for all active subtopics
+- At least one video per subtopic has been approved by KaihleAdmin
+- Teacher explanation review UI operational
+- Nightly stale link job registered and confirmed running in staging
 - Teacher can assign study plans from the gap map with one click
 - Resources are personalised based on student's learning modality
 - Quiz scenarios use student's personal interests where applicable
@@ -141,8 +242,9 @@ Neither app touches the other's directory.
 
 ## Key Tables Used in This Milestone
 
-`study_plans`, `study_plan_resources`, `study_plan_quizzes`, `gap_states`, `subtopics`,
-`curriculum_chunks`, `student_learning_profiles`, `question_bank`
+`subtopic_content`, `student_lesson_packs` (created here, used in M4),
+`study_plans`, `study_plan_resources`, `study_plan_quizzes`, `gap_states`,
+`subtopics`, `student_learning_profiles`, `question_bank`
 
 Full schema: `kaihle_v2_1_schema.sql`
 
@@ -153,7 +255,6 @@ Full schema: `kaihle_v2_1_schema.sql`
 `GET /classes/{id}/gap-map` returns real data. The teacher heatmap renders and the
 cell side panel is clickable. `GET /students/{id}/gap-map` returns real subtopic
 scores. `student_learning_profiles` is populated for onboarded students.
-`subtopics.embedding` is in pgvector for cosine similarity retrieval.
 
 ---
 
@@ -161,5 +262,14 @@ scores. `student_learning_profiles` is populated for onboarded students.
 
 Study plans are assignable and `gap_states` update after quiz submission. The lesson
 plan generator in M4 reads the current gap map to identify which subtopics to focus
-on — it benefits from accurate `gap_states` that reflect both Tier 1 and any quiz
-submissions from M3 study plans.
+on. `subtopic_content.approved_explanation` is populated for focus subtopics — M4
+lesson plan generation uses this as curriculum context. `student_lesson_packs` table
+exists (created in M3-0-T1) for M4-2-T1 to write into.
+
+---
+
+*M3 Brief v2.0 · April 2026*
+*Key changes from v1.0: M3-0 epic added (content infrastructure), content curation*
+*architecture changed from pgvector/curriculum_chunks to subtopic_content table,*
+*quiz generator updated to use approved_explanation instead of RAG context,*
+*SHORT_ANSWER question type removed from quiz generator.*
