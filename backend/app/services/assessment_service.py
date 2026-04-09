@@ -62,6 +62,14 @@ class InsufficientQuestionsError(Exception):
         )
 
 
+class AssessmentAccessDeniedError(Exception):
+    """Raised when a user tries to access an assessment that belongs to a different school.
+
+    This produces a 403 Forbidden rather than 404 Not Found so that cross-school
+    access is distinguishable from a missing resource (CONSTITUTION Rule 7).
+    """
+
+
 class TeacherNotClassOwnerError(Exception):
     """Raised when a teacher tries to create an assessment for a class they do not teach."""
 
@@ -194,8 +202,6 @@ class AssessmentService:
             raise ValueError(f"Class not found: class_id={class_id}")
 
         # Count available questions before doing anything else
-        from sqlalchemy import func
-
         question_count_result = await self.db.execute(
             select(func.count(QuestionBank.id))
             .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
@@ -589,17 +595,22 @@ class AssessmentService:
             ValueError: If assessment not found or school_id mismatch.
         """
         # KaihleAdmin can access any assessment; all others are scoped to their school.
-        # school_id filter is in SQL — data is never fetched before authorization.
+        # For non-KaihleAdmin: first check existence, then school membership, so we
+        # can return 403 for cross-school access instead of 404 (CONSTITUTION Rule 7).
         if requesting_user_role == UserRole.KAIHLE_ADMIN:
-            q = select(Assessment).where(Assessment.id == assessment_id)
+            assessment = (
+                await self.db.execute(select(Assessment).where(Assessment.id == assessment_id))
+            ).scalar_one_or_none()
+            if assessment is None:
+                raise ValueError(f"Assessment not found: {assessment_id}")
         else:
-            q = select(Assessment).where(
-                Assessment.id == assessment_id,
-                Assessment.school_id == school_id,
-            )
-        assessment = (await self.db.execute(q)).scalar_one_or_none()
-        if assessment is None:
-            raise ValueError(f"Assessment not found: {assessment_id}")
+            assessment = (
+                await self.db.execute(select(Assessment).where(Assessment.id == assessment_id))
+            ).scalar_one_or_none()
+            if assessment is None:
+                raise ValueError(f"Assessment not found: {assessment_id}")
+            if assessment.school_id != school_id:
+                raise AssessmentAccessDeniedError(f"Assessment {assessment_id} belongs to a different school.")
 
         # Load questions in order_index order
         question_rows = (

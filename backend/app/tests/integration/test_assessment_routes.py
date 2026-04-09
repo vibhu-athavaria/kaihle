@@ -177,7 +177,29 @@ async def test_list_class_assessments_when_teacher_own_class_then_returns_200_wi
 ) -> None:
     """Teacher listing assessments for their own class gets a 200 paginated response."""
     _, _, _, ct, st, teacher, class_ = await _create_full_curriculum_setup(db_session, school)
-    assessment = await _create_draft_assessment(db_session, school, class_, teacher, st)
+    # Create 2 DRAFT and 1 ACTIVE assessments (3 total)
+    await _create_draft_assessment(db_session, school, class_, teacher, st)
+    await _create_draft_assessment(db_session, school, class_, teacher, st)
+    questions = await _add_questions(db_session, st, 3)
+    active_assessment = Assessment(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        class_id=class_.id,
+        created_by=teacher.id,
+        title="Active Assessment",
+        assessment_type="PROGRESS_CHECK",
+        status=AssessmentStatus.ACTIVE,
+        is_system_generated=False,
+        question_count=3,
+        config={},
+    )
+    db_session.add(active_assessment)
+    await db_session.flush()
+    bridge_rows = [
+        AssessmentSelectedQuestion(assessment_id=active_assessment.id, question_id=q.id, order_index=i)
+        for i, q in enumerate(questions)
+    ]
+    db_session.add_all(bridge_rows)
     await db_session.commit()
 
     response = await client.get(
@@ -187,11 +209,9 @@ async def test_list_class_assessments_when_teacher_own_class_then_returns_200_wi
 
     assert response.status_code == 200
     data = response.json()
-    assert data["total"] == 1
+    assert data["total"] == 3
     assert data["page"] == 1
-    assert len(data["data"]) == 1
-    assert data["data"][0]["id"] == str(assessment.id)
-    assert data["data"][0]["status"] == "DRAFT"
+    assert len(data["data"]) == 3
 
 
 @pytest.mark.asyncio
@@ -272,6 +292,44 @@ async def test_list_class_assessments_when_student_then_draft_excluded(
     returned_ids = [item["id"] for item in data["data"]]
     assert str(active.id) in returned_ids
     assert str(draft.id) not in returned_ids
+
+
+@pytest.mark.asyncio
+async def test_list_class_assessments_when_student_then_system_generated_tier1_included(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+    student: User,
+) -> None:
+    """System-generated Tier 1 assessments are always visible to enrolled students."""
+    _, _, _, ct, st, teacher, class_ = await _create_full_curriculum_setup(db_session, school)
+
+    # Create a system-generated assessment (Tier 1 onboarding diagnostic)
+    system_assessment = Assessment(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        class_id=class_.id,
+        created_by=None,
+        title="Onboarding Diagnostic",
+        assessment_type="DIAGNOSTIC",
+        status=AssessmentStatus.ACTIVE,
+        is_system_generated=True,
+        question_count=5,
+        config={"max_questions_per_attempt": 20},
+    )
+    db_session.add(system_assessment)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/classes/{class_.id}/assessments",
+        headers=make_auth_header(student),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    returned_ids = [item["id"] for item in data["data"]]
+    assert str(system_assessment.id) in returned_ids
+    assert data["data"][0]["is_system_generated"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -386,13 +444,13 @@ async def test_create_assessment_when_insufficient_questions_then_422(
 
 
 @pytest.mark.asyncio
-async def test_get_assessment_when_different_school_then_404(
+async def test_get_assessment_when_different_school_then_403(
     client: AsyncClient,
     db_session: AsyncSession,
     school: School,
     other_school: School,
 ) -> None:
-    """Teacher from a different school cannot access assessment (404 from school_id filter)."""
+    """Teacher from a different school gets 403 (cross-school access — CONSTITUTION Rule 7)."""
     _, _, _, ct, st, teacher, class_ = await _create_full_curriculum_setup(db_session, school)
 
     assessment = Assessment(
@@ -427,8 +485,62 @@ async def test_get_assessment_when_different_school_then_404(
         headers=make_auth_header(other_teacher),
     )
 
-    # school_id mismatch → service raises ValueError → 404
-    assert response.status_code == 404
+    # school_id mismatch → service raises PermissionError → 403 (not 404)
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_assessment_when_student_then_correct_answer_excluded(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+    student: User,
+) -> None:
+    """Students can fetch an ACTIVE assessment and correct_answer is not exposed in the JSON."""
+    _, _, _, ct, st, teacher, class_ = await _create_full_curriculum_setup(db_session, school)
+
+    assessment = Assessment(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        class_id=class_.id,
+        created_by=teacher.id,
+        title="Active Check",
+        assessment_type="PROGRESS_CHECK",
+        status=AssessmentStatus.ACTIVE,
+        is_system_generated=False,
+        question_count=0,
+        config={},
+    )
+    db_session.add(assessment)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/assessments/{assessment.id}",
+        headers=make_auth_header(student),
+    )
+
+    assert response.status_code == 200
+    # correct_answer_key must not appear anywhere in the serialized response
+    assert "correct_answer_key" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_get_assessment_when_teacher_then_correct_answer_included(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """Teachers can fetch an assessment they own and receive HTTP 200."""
+    _, _, _, ct, st, teacher, class_ = await _create_full_curriculum_setup(db_session, school)
+    assessment = await _create_draft_assessment(db_session, school, class_, teacher, st)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/assessments/{assessment.id}",
+        headers=make_auth_header(teacher),
+    )
+
+    assert response.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -478,6 +590,37 @@ async def test_publish_when_already_active_then_409(
     )
 
     assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_publish_when_different_teacher_then_403(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """Teacher B trying to publish an assessment owned by Teacher A gets 403."""
+    _, _, _, ct, st, teacher_a, class_ = await _create_full_curriculum_setup(db_session, school)
+    assessment = await _create_draft_assessment(db_session, school, class_, teacher_a, st)
+
+    # Create a second teacher in the same school
+    teacher_b = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"teacher-b-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Teacher",
+        last_name="B",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(teacher_b)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/assessments/{assessment.id}/publish",
+        headers=make_auth_header(teacher_b),
+    )
+
+    assert response.status_code == 403
 
 
 # ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@ from app.schemas.assessments import (
 )
 from app.schemas.common import Page
 from app.services.assessment_service import (
+    AssessmentAccessDeniedError,
     AssessmentService,
     InsufficientQuestionsError,
     TeacherNotClassOwnerError,
@@ -172,6 +173,11 @@ async def get_assessment(
             school_id=current_user.school_id,
             requesting_user_id=current_user.id,
             requesting_user_role=current_user.role,
+        )
+    except AssessmentAccessDeniedError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied.",
         )
     except ValueError as exc:
         raise HTTPException(
