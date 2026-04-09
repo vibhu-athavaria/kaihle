@@ -385,10 +385,13 @@ async def test_class(
 
 
 @pytest_asyncio.fixture
-async def test_assessment(db_session: AsyncSession, test_class: Class, test_teacher: User) -> Assessment:
+async def test_assessment(
+    db_session: AsyncSession, test_class: Class, test_teacher: User, test_school: School
+) -> Assessment:
     """Create a test assessment."""
     assessment = Assessment(
         id=uuid.uuid4(),
+        school_id=test_school.id,
         class_id=test_class.id,
         created_by=test_teacher.id,
         title="Test Assessment",

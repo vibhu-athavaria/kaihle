@@ -41,7 +41,10 @@ class AssessmentResponse(BaseModel):
 
 
 class AssessmentCreateRequest(BaseModel):
-    title: str
+    title: str | None = None  # Auto-generated from type+class+subject when omitted
     topic_ids: list[UUID]
     question_count: int = 20
+    assessment_type: str = "PROGRESS_CHECK"  # DIAGNOSTIC | TOPIC_SPECIFIC | PROGRESS_CHECK
+    difficulty_min: float = 1.0
+    difficulty_max: float = 5.0
     deadline: datetime | None = None

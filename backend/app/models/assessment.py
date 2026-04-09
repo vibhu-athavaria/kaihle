@@ -70,6 +70,11 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
 
     __tablename__ = "assessments"
 
+    school_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("schools.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
     class_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("classes.id", ondelete="CASCADE"),
@@ -121,7 +126,10 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
     #   "time_limit_minutes": null
     # }
     instructions: Mapped[str | None] = mapped_column(Text)
-    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Tier 2 fields (Tier 1 system assessments leave these NULL)
+    question_count: Mapped[int | None] = mapped_column(Integer)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AssessmentSelectedQuestion(Base):

@@ -368,10 +368,13 @@ class TestModelCRUD:
         fetched = result.scalar_one()
         assert fetched.student_id == test_user.id
 
-    async def test_assessment_crud(self, db_session: AsyncSession, test_class: Class, test_teacher: User) -> None:
+    async def test_assessment_crud(
+        self, db_session: AsyncSession, test_class: Class, test_teacher: User, test_school: School
+    ) -> None:
         """Test Assessment model can be written and read."""
         assessment = Assessment(
             id=uuid.uuid4(),
+            school_id=test_school.id,
             class_id=test_class.id,
             created_by=test_teacher.id,
             title="Math Diagnostic",
