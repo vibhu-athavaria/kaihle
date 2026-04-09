@@ -12,9 +12,11 @@ Design:
 
 import random
 import uuid
+from collections import defaultdict
+from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import (
@@ -28,6 +30,7 @@ from app.models.assessment import (
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subject, Subtopic
 from app.models.school import Class
 from app.models.user import User, UserRole
+from app.schemas.assessments import AssessmentCreateRequest
 
 logger = structlog.get_logger()
 
@@ -41,6 +44,28 @@ class QuestionBankEmptyError(Exception):
     """
 
 
+class InsufficientQuestionsError(Exception):
+    """Raised when the question bank has fewer questions than requested.
+
+    Args:
+        requested: Number of questions requested.
+        available: Number of questions found matching the criteria.
+        criteria: Dict describing the filter applied (subject, grade, topic, difficulty).
+    """
+
+    def __init__(self, requested: int, available: int, criteria: dict[str, object]) -> None:
+        self.requested = requested
+        self.available = available
+        self.criteria = criteria
+        super().__init__(
+            f"Requested {requested} questions but only {available} available matching criteria: {criteria}"
+        )
+
+
+class TeacherNotClassOwnerError(Exception):
+    """Raised when a teacher tries to create an assessment for a class they do not teach."""
+
+
 # Total questions selected into assessment_selected_questions at class creation.
 # This is the pool from which adaptive question selection draws at attempt time.
 MAX_DIAGNOSTIC_POOL = 60
@@ -50,7 +75,66 @@ MAX_DIAGNOSTIC_POOL = 60
 MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT = 20
 
 
-def _make_system_assessment(class_id: uuid.UUID, title: str) -> Assessment:
+def _sample_with_topic_distribution(
+    rows: list[tuple[uuid.UUID, uuid.UUID]],
+    n: int,
+) -> list[uuid.UUID]:
+    """Sample n question IDs with balanced topic distribution.
+
+    Groups by curriculum_topic_id (index 1), then round-robins through groups.
+    Within each group, selection is random (random.shuffle).
+    Returns a flat list of up to n question UUIDs.
+
+    Args:
+        rows: List of (question_id, curriculum_topic_id) tuples.
+        n: Number of questions to select.
+
+    Returns:
+        Ordered list of selected question UUIDs (len <= n).
+    """
+    if not rows:
+        return []
+
+    by_topic: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+    for qid, tid in rows:
+        by_topic[tid].append(qid)
+
+    # Shuffle within each topic for random selection
+    for topic_questions in by_topic.values():
+        random.shuffle(topic_questions)  # noqa: S311 — not cryptographic
+
+    # Round-robin across topics until n collected or exhausted
+    topic_lists = list(by_topic.values())
+    selected: list[uuid.UUID] = []
+    idx = 0
+    while len(selected) < n:
+        # One full pass through topics
+        made_progress = False
+        for tlist in topic_lists:
+            if idx < len(tlist) and len(selected) < n:
+                selected.append(tlist[idx])
+                made_progress = True
+        if not made_progress:
+            break
+        idx += 1
+
+    return selected[:n]
+
+
+def _generate_title(body: AssessmentCreateRequest, class_name: str, subject_name: str) -> str:
+    """Generate a human-readable title for a Tier 2 assessment."""
+    if body.title:
+        return body.title
+    prefix = {
+        AssessmentType.DIAGNOSTIC: "Diagnostic",
+        AssessmentType.TOPIC_SPECIFIC: "Topic Assessment",
+        AssessmentType.PROGRESS_CHECK: "Progress Check",
+        AssessmentType.FINAL: "Final Assessment",
+    }.get(body.assessment_type, "Assessment")
+    return f"{prefix} — {subject_name} ({class_name})"
+
+
+def _make_system_assessment(class_id: uuid.UUID, school_id: uuid.UUID, title: str) -> Assessment:
     """Construct a system-generated Assessment.
 
     System-generated assessments have created_by=NULL, distinguished by
@@ -58,6 +142,7 @@ def _make_system_assessment(class_id: uuid.UUID, title: str) -> Assessment:
 
     Args:
         class_id: The class this assessment belongs to.
+        school_id: The school this assessment belongs to (required by Rule 2).
         title: Human-readable title.
 
     Returns:
@@ -65,6 +150,7 @@ def _make_system_assessment(class_id: uuid.UUID, title: str) -> Assessment:
     """
     return Assessment(
         id=uuid.uuid4(),
+        school_id=school_id,
         class_id=class_id,
         created_by=None,
         title=title,
@@ -151,6 +237,7 @@ class AssessmentService:
 
         assessment = _make_system_assessment(
             class_id=class_.id,
+            school_id=class_.school_id,
             title=title,
         )
         self.db.add(assessment)
@@ -355,3 +442,287 @@ class AssessmentService:
                 break
 
         return selected[:MAX_DIAGNOSTIC_POOL]
+
+    # ── Tier 2: teacher-created assessments ─────────────────────────────────
+
+    async def create_assessment(
+        self,
+        school_id: uuid.UUID,
+        teacher_id: uuid.UUID,
+        class_id: uuid.UUID,
+        body: AssessmentCreateRequest,
+    ) -> Assessment:
+        """Create a Tier 2 (teacher-created) assessment with question sampling.
+
+        Validates teacher ownership, samples questions with topic distribution,
+        and persists the assessment + bridge rows atomically.
+
+        Args:
+            school_id: The school ID from the authenticated teacher's JWT.
+            teacher_id: The teacher user ID.
+            class_id: The class this assessment is for (from URL path).
+            body: Assessment configuration (title, topics, count, difficulty).
+
+        Returns:
+            Unsaved (flushed) Assessment in DRAFT status.
+
+        Raises:
+            ValueError: If class not found in this school.
+            TeacherNotClassOwnerError: If teacher does not own the class.
+            InsufficientQuestionsError: If question bank has fewer than requested.
+        """
+        # Step 1 — Verify teacher owns the class
+        class_ = (
+            await self.db.execute(
+                select(Class).where(
+                    Class.id == class_id,
+                    Class.school_id == school_id,
+                    Class.is_active.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+        if class_ is None:
+            raise ValueError(f"Class not found: class_id={class_id}")
+        if class_.teacher_id != teacher_id:
+            raise TeacherNotClassOwnerError(f"Teacher {teacher_id} does not own class {class_id}")
+
+        # Step 2 — Build question filter via Subtopic join (QuestionBank has no direct topic FK)
+        q = (
+            select(QuestionBank.id, Subtopic.curriculum_topic_id)
+            .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
+            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .where(
+                CurriculumTopic.subject_id == class_.subject_id,
+                CurriculumTopic.grade_id == class_.grade_id,
+                QuestionBank.is_active.is_(True),
+                QuestionBank.difficulty_level.between(body.difficulty_min, body.difficulty_max),
+            )
+        )
+        if body.topic_ids:
+            q = q.where(Subtopic.curriculum_topic_id.in_(body.topic_ids))
+
+        # Step 3 — Sample questions
+        rows = (await self.db.execute(q)).all()
+        if len(rows) < body.question_count:
+            raise InsufficientQuestionsError(
+                requested=body.question_count,
+                available=len(rows),
+                criteria={
+                    "subject_id": str(class_.subject_id),
+                    "grade_id": str(class_.grade_id),
+                    "topic_ids": [str(t) for t in body.topic_ids],
+                    "difficulty_min": body.difficulty_min,
+                    "difficulty_max": body.difficulty_max,
+                },
+            )
+        selected_ids = _sample_with_topic_distribution(
+            [(row[0], row[1]) for row in rows],
+            body.question_count,
+        )
+
+        # Step 4 — Resolve title (auto-generate when not provided)
+        if body.title:
+            title = body.title
+        else:
+            subject_result = await self.db.execute(select(Subject.name).where(Subject.id == class_.subject_id))
+            subject_name = subject_result.scalar_one_or_none() or "Unknown Subject"
+            title = _generate_title(body, class_.name, subject_name)
+
+        # Step 5 — Create Assessment in DRAFT status
+        assessment = Assessment(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            class_id=class_id,
+            created_by=teacher_id,
+            assessment_type=body.assessment_type,
+            is_system_generated=False,
+            status=AssessmentStatus.DRAFT,
+            title=title,
+            question_count=body.question_count,
+            deadline=body.deadline,
+            config={},
+        )
+        self.db.add(assessment)
+        await self.db.flush()  # get assessment.id without committing
+
+        # Step 6 — Create bridge rows
+        bridge_rows = [
+            AssessmentSelectedQuestion(
+                assessment_id=assessment.id,
+                question_id=qid,
+                order_index=idx,
+            )
+            for idx, qid in enumerate(selected_ids)
+        ]
+        self.db.add_all(bridge_rows)
+
+        logger.info(
+            "tier2_assessment_created",
+            assessment_id=str(assessment.id),
+            class_id=str(class_id),
+            teacher_id=str(teacher_id),
+            question_count=body.question_count,
+            assessment_type=body.assessment_type,
+        )
+        return assessment
+
+    async def get_assessment(
+        self,
+        assessment_id: uuid.UUID,
+        school_id: uuid.UUID,
+        requesting_user_id: uuid.UUID,
+        requesting_user_role: str,
+    ) -> tuple[Assessment, list[QuestionBank]]:
+        """Load an assessment with its questions in order.
+
+        Args:
+            assessment_id: The assessment UUID.
+            school_id: The requesting user's school (for multi-tenancy check).
+            requesting_user_id: The requesting user's ID.
+            requesting_user_role: Role string (TEACHER, STUDENT, SCHOOL_ADMIN, KAIHLE_ADMIN).
+
+        Returns:
+            Tuple of (Assessment, list[QuestionBank]) where questions are in order_index order.
+            For STUDENT role, correct_answer is set to None on each question.
+
+        Raises:
+            ValueError: If assessment not found or school_id mismatch.
+        """
+        # KaihleAdmin can access any assessment; all others are scoped to their school.
+        # school_id filter is in SQL — data is never fetched before authorization.
+        if requesting_user_role == UserRole.KAIHLE_ADMIN:
+            q = select(Assessment).where(Assessment.id == assessment_id)
+        else:
+            q = select(Assessment).where(
+                Assessment.id == assessment_id,
+                Assessment.school_id == school_id,
+            )
+        assessment = (await self.db.execute(q)).scalar_one_or_none()
+        if assessment is None:
+            raise ValueError(f"Assessment not found: {assessment_id}")
+
+        # Load questions in order_index order
+        question_rows = (
+            await self.db.execute(
+                select(QuestionBank)
+                .join(
+                    AssessmentSelectedQuestion,
+                    AssessmentSelectedQuestion.question_id == QuestionBank.id,
+                )
+                .where(AssessmentSelectedQuestion.assessment_id == assessment_id)
+                .order_by(AssessmentSelectedQuestion.order_index)
+            )
+        ).all()
+        questions = [row[0] for row in question_rows]
+
+        # Strip correct answers for students — never expose to student-facing API
+        if requesting_user_role == UserRole.STUDENT:
+            for q in questions:
+                q.correct_answer = None
+
+        return assessment, questions
+
+    async def publish_assessment(
+        self,
+        assessment_id: uuid.UUID,
+        school_id: uuid.UUID,
+        teacher_id: uuid.UUID,
+        deadline: datetime | None,
+    ) -> Assessment:
+        """Transition a DRAFT assessment to ACTIVE status.
+
+        Args:
+            assessment_id: The assessment UUID.
+            school_id: For multi-tenancy guard.
+            teacher_id: Must match assessment.created_by.
+            deadline: Optional due date; can be None.
+
+        Returns:
+            The updated Assessment with status=ACTIVE.
+
+        Raises:
+            ValueError: If not found, wrong school, wrong teacher, wrong status,
+                        or no questions in the assessment.
+        """
+        assessment = (
+            await self.db.execute(
+                select(Assessment).where(
+                    Assessment.id == assessment_id,
+                    Assessment.school_id == school_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if assessment is None:
+            raise ValueError(f"Assessment not found: {assessment_id}")
+        if assessment.created_by != teacher_id:
+            raise ValueError(f"Only the creating teacher can publish assessment {assessment_id}")
+        if assessment.status != AssessmentStatus.DRAFT:
+            raise ValueError(f"Cannot publish: status is {assessment.status}. Must be DRAFT.")
+
+        # Guard: cannot publish empty assessment
+        q_count = (
+            await self.db.execute(
+                select(func.count(AssessmentSelectedQuestion.question_id)).where(
+                    AssessmentSelectedQuestion.assessment_id == assessment_id
+                )
+            )
+        ).scalar()
+        if not q_count:
+            raise ValueError("Cannot publish assessment with no questions")
+
+        assessment.status = AssessmentStatus.ACTIVE
+        assessment.published_at = datetime.now(UTC)
+        assessment.deadline = deadline
+
+        logger.info(
+            "assessment_published",
+            assessment_id=str(assessment_id),
+            teacher_id=str(teacher_id),
+            deadline=deadline.isoformat() if deadline else None,
+        )
+        return assessment
+
+    async def close_assessment(
+        self,
+        assessment_id: uuid.UUID,
+        school_id: uuid.UUID,
+        teacher_id: uuid.UUID,
+    ) -> Assessment:
+        """Transition an ACTIVE assessment to CLOSED status.
+
+        No new attempts are accepted after closing — enforced in the attempt service.
+
+        Args:
+            assessment_id: The assessment UUID.
+            school_id: For multi-tenancy guard.
+            teacher_id: Must match assessment.created_by.
+
+        Returns:
+            The updated Assessment with status=CLOSED.
+
+        Raises:
+            ValueError: If not found, wrong school, wrong teacher, or status is not ACTIVE.
+        """
+        assessment = (
+            await self.db.execute(
+                select(Assessment).where(
+                    Assessment.id == assessment_id,
+                    Assessment.school_id == school_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if assessment is None:
+            raise ValueError(f"Assessment not found: {assessment_id}")
+        if assessment.created_by != teacher_id:
+            raise ValueError(f"Only the creating teacher can close assessment {assessment_id}")
+        if assessment.status != AssessmentStatus.ACTIVE:
+            raise ValueError(f"Cannot close: status is {assessment.status}. Must be ACTIVE.")
+
+        assessment.status = AssessmentStatus.CLOSED
+
+        logger.info(
+            "assessment_closed",
+            assessment_id=str(assessment_id),
+            teacher_id=str(teacher_id),
+        )
+        return assessment
