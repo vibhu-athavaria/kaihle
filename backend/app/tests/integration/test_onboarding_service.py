@@ -12,16 +12,19 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import Assessment, StudentAttempt
-from app.models.school import Class, ClassEnrollment
+from app.models.school import Class, ClassEnrollment, School
 from app.models.user import OnboardingStatus, User
 from app.services.onboarding_service import OnboardingService
 
 
 @pytest_asyncio.fixture
-async def system_diagnostic_assessment(db_session: AsyncSession, test_class: Class, test_teacher: User) -> Assessment:
+async def system_diagnostic_assessment(
+    db_session: AsyncSession, test_class: Class, test_teacher: User, test_school: School
+) -> Assessment:
     """Create a system-generated diagnostic assessment for the class."""
     assessment = Assessment(
         class_id=test_class.id,
+        school_id=test_school.id,
         created_by=test_teacher.id,
         title="Tier 1 Diagnostic",
         assessment_type="DIAGNOSTIC",
@@ -279,12 +282,14 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
         test_user: User,
         test_class: Class,
         test_teacher: User,
+        test_school: School,
         class_enrollment_pending: ClassEnrollment,
     ) -> None:
         """Test that False is returned when assessment is not system-generated."""
         # Create a non-system-generated assessment
         assessment = Assessment(
             class_id=test_class.id,
+            school_id=test_school.id,
             created_by=test_teacher.id,
             title="Teacher Created Assessment",
             assessment_type="DIAGNOSTIC",
