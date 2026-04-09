@@ -386,7 +386,7 @@ async def test_create_assessment_when_insufficient_questions_then_422(
 
 
 @pytest.mark.asyncio
-async def test_get_assessment_when_different_school_then_403(
+async def test_get_assessment_when_different_school_then_404(
     client: AsyncClient,
     db_session: AsyncSession,
     school: School,

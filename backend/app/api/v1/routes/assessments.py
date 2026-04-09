@@ -199,6 +199,11 @@ async def publish_assessment(
             deadline=deadline,
         )
         await db.commit()
+    except TeacherNotClassOwnerError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to publish this assessment.",
+        )
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():
@@ -223,6 +228,11 @@ async def close_assessment(
             teacher_id=current_user.id,
         )
         await db.commit()
+    except TeacherNotClassOwnerError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to close this assessment.",
+        )
     except ValueError as exc:
         msg = str(exc)
         if "not found" in msg.lower():

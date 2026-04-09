@@ -655,7 +655,7 @@ class AssessmentService:
         if assessment is None:
             raise ValueError(f"Assessment not found: {assessment_id}")
         if assessment.created_by != teacher_id:
-            raise ValueError(f"Only the creating teacher can publish assessment {assessment_id}")
+            raise TeacherNotClassOwnerError(f"Only the creating teacher can publish assessment {assessment_id}")
         if assessment.status != AssessmentStatus.DRAFT:
             raise ValueError(f"Cannot publish: status is {assessment.status}. Must be DRAFT.")
 
@@ -797,7 +797,7 @@ class AssessmentService:
         if assessment is None:
             raise ValueError(f"Assessment not found: {assessment_id}")
         if assessment.created_by != teacher_id:
-            raise ValueError(f"Only the creating teacher can close assessment {assessment_id}")
+            raise TeacherNotClassOwnerError(f"Only the creating teacher can close assessment {assessment_id}")
         if assessment.status != AssessmentStatus.ACTIVE:
             raise ValueError(f"Cannot close: status is {assessment.status}. Must be ACTIVE.")
 
