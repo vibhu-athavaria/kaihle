@@ -519,3 +519,223 @@ class TestGapTaskStructure:
         from app.tasks.gap_tasks import calculate_gap_states
 
         assert calculate_gap_states.max_retries == 3
+
+
+# ── calculate_gap_states_for_attempt integration-style unit tests ─────────────
+
+
+def _build_mock_db_for_calculate(
+    attempt: SimpleNamespace,
+    assessment: SimpleNamespace,
+    responses: list[SimpleNamespace],
+    question_to_subtopic: dict[uuid.UUID, uuid.UUID],
+) -> MagicMock:
+    """Build a mock AsyncSession for calculate_gap_states_for_attempt.
+
+    Call sequence:
+      1. Load attempt (scalar_one_or_none)
+      2. Load assessment (scalar_one_or_none)
+      3. Load responses (scalars().all())
+      4. Map question → subtopic (all())
+      Per subtopic:
+        5+. Historical scores query (all())
+        6+. Gap state upsert (execute with text)
+        7+. Insert subtopic score row (execute with text)
+    """
+    call_count = [0]
+
+    async def side_effect(stmt, params=None):  # type: ignore[no-untyped-def]
+        call_count[0] += 1
+        c = call_count[0]
+        m = MagicMock()
+
+        if c == 1:  # Load attempt
+            m.scalar_one_or_none.return_value = attempt
+        elif c == 2:  # Load assessment
+            m.scalar_one_or_none.return_value = assessment
+        elif c == 3:  # Load responses
+            m.scalars.return_value.all.return_value = responses
+        elif c == 4:  # question → subtopic map
+            m.all.return_value = list(question_to_subtopic.items())
+        else:
+            # Historical score queries return empty; upserts return mock
+            m.all.return_value = []
+        return m
+
+    mock_db = MagicMock()
+    mock_db.execute = AsyncMock(side_effect=side_effect)
+    return mock_db
+
+
+class TestCalculateGapStatesForAttempt:
+    """Unit tests for GapService.calculate_gap_states_for_attempt."""
+
+    @pytest.mark.asyncio
+    async def test_when_attempt_not_found_then_returns_zero_subtopics_updated(self) -> None:
+        """Attempt row missing → warning + early return with 0 subtopics."""
+        attempt_id = uuid.uuid4()
+        mock_db = MagicMock()
+        m = MagicMock()
+        m.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=m)
+
+        service = GapService(mock_db)
+        result = await service.calculate_gap_states_for_attempt(attempt_id)
+
+        assert result == {"attempt_id": str(attempt_id), "subtopics_updated": 0}
+
+    @pytest.mark.asyncio
+    async def test_when_attempt_not_completed_then_returns_zero_subtopics_updated(self) -> None:
+        """Attempt in IN_PROGRESS state → warning + early return."""
+        attempt_id = uuid.uuid4()
+        student_id = uuid.uuid4()
+        assessment_id = uuid.uuid4()
+        attempt = _make_attempt(assessment_id, student_id, status="IN_PROGRESS")
+
+        mock_db = MagicMock()
+        m = MagicMock()
+        m.scalar_one_or_none.return_value = attempt
+        mock_db.execute = AsyncMock(return_value=m)
+
+        service = GapService(mock_db)
+        result = await service.calculate_gap_states_for_attempt(attempt_id)
+
+        assert result == {"attempt_id": str(attempt_id), "subtopics_updated": 0}
+
+    @pytest.mark.asyncio
+    async def test_when_assessment_not_found_then_returns_zero_subtopics_updated(self) -> None:
+        """Assessment row missing → warning + early return."""
+        attempt_id = uuid.uuid4()
+        student_id = uuid.uuid4()
+        assessment_id = uuid.uuid4()
+        attempt = _make_attempt(assessment_id, student_id, status="COMPLETED")
+
+        call_count = [0]
+
+        async def side_effect(stmt, params=None):  # type: ignore[no-untyped-def]
+            call_count[0] += 1
+            m = MagicMock()
+            if call_count[0] == 1:
+                m.scalar_one_or_none.return_value = attempt
+            else:
+                m.scalar_one_or_none.return_value = None
+            return m
+
+        mock_db = MagicMock()
+        mock_db.execute = AsyncMock(side_effect=side_effect)
+
+        service = GapService(mock_db)
+        result = await service.calculate_gap_states_for_attempt(attempt_id)
+
+        assert result == {"attempt_id": str(attempt_id), "subtopics_updated": 0}
+
+    @pytest.mark.asyncio
+    async def test_when_no_responses_then_returns_zero_subtopics_updated(self) -> None:
+        """Attempt completed but no StudentResponse rows → early return."""
+        student_id = uuid.uuid4()
+        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4())
+        attempt = _make_attempt(assessment.id, student_id, status="COMPLETED")
+
+        call_count = [0]
+
+        async def side_effect(stmt, params=None):  # type: ignore[no-untyped-def]
+            call_count[0] += 1
+            m = MagicMock()
+            if call_count[0] == 1:
+                m.scalar_one_or_none.return_value = attempt
+            elif call_count[0] == 2:
+                m.scalar_one_or_none.return_value = assessment
+            else:
+                m.scalars.return_value.all.return_value = []
+            return m
+
+        mock_db = MagicMock()
+        mock_db.execute = AsyncMock(side_effect=side_effect)
+
+        service = GapService(mock_db)
+        result = await service.calculate_gap_states_for_attempt(attempt.id)
+
+        assert result == {"attempt_id": str(attempt.id), "subtopics_updated": 0}
+
+    @pytest.mark.asyncio
+    async def test_when_one_subtopic_no_history_then_subtopics_updated_is_1(self) -> None:
+        """Single subtopic, first attempt → upsert called, returns 1 subtopic updated."""
+        student_id = uuid.uuid4()
+        sub1 = uuid.uuid4()
+        q1 = uuid.uuid4()
+        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4(), is_system_generated=False)
+        attempt = _make_attempt(assessment.id, student_id, status="COMPLETED")
+        responses = [_make_response(q1, is_correct=True)]
+
+        mock_db = _build_mock_db_for_calculate(
+            attempt=attempt,
+            assessment=assessment,
+            responses=responses,
+            question_to_subtopic={q1: sub1},
+        )
+        service = GapService(mock_db)
+        result = await service.calculate_gap_states_for_attempt(attempt.id)
+
+        assert result["subtopics_updated"] == 1
+
+    @pytest.mark.asyncio
+    async def test_when_response_has_unknown_question_id_then_subtopic_skipped(self) -> None:
+        """Question not in question→subtopic map → error logged, subtopic skipped."""
+        student_id = uuid.uuid4()
+        q_unknown = uuid.uuid4()
+        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4())
+        attempt = _make_attempt(assessment.id, student_id, status="COMPLETED")
+        responses = [_make_response(q_unknown, is_correct=True)]
+
+        mock_db = _build_mock_db_for_calculate(
+            attempt=attempt,
+            assessment=assessment,
+            responses=responses,
+            question_to_subtopic={},  # empty map → unknown question
+        )
+        service = GapService(mock_db)
+        result = await service.calculate_gap_states_for_attempt(attempt.id)
+
+        assert result["subtopics_updated"] == 0
+
+    @pytest.mark.asyncio
+    async def test_when_system_generated_first_attempt_then_mastery_weighted_at_0_7(self) -> None:
+        """Tier 1 diagnostic (is_system_generated=True) → mastery = score * 0.7."""
+        student_id = uuid.uuid4()
+        sub1 = uuid.uuid4()
+        q1 = uuid.uuid4()
+        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4(), is_system_generated=True)
+        attempt = _make_attempt(assessment.id, student_id, status="COMPLETED")
+        responses = [_make_response(q1, is_correct=True)]  # 100% correct
+
+        upsert_calls: list[dict] = []
+
+        call_count = [0]
+
+        async def side_effect(stmt, params=None):  # type: ignore[no-untyped-def]
+            call_count[0] += 1
+            c = call_count[0]
+            m = MagicMock()
+            if c == 1:
+                m.scalar_one_or_none.return_value = attempt
+            elif c == 2:
+                m.scalar_one_or_none.return_value = assessment
+            elif c == 3:
+                m.scalars.return_value.all.return_value = responses
+            elif c == 4:
+                m.all.return_value = [(q1, sub1)]
+            elif c == 5:
+                m.all.return_value = []  # no history
+            else:
+                if params and "new_mastery" in str(params):
+                    upsert_calls.append(params)
+                m.all.return_value = []
+            return m
+
+        mock_db = MagicMock()
+        mock_db.execute = AsyncMock(side_effect=side_effect)
+
+        service = GapService(mock_db)
+        result = await service.calculate_gap_states_for_attempt(attempt.id)
+
+        assert result["subtopics_updated"] == 1
