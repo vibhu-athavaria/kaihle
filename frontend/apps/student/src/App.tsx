@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { PrivateRoute, RoleRoute } from "@kaihle/auth";
+import { PrivateRoute, RoleRoute, OnboardingRoute } from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { ErrorBoundary } from "@kaihle/ui";
 import { LoginPage } from "./pages/LoginPage";
@@ -78,9 +78,11 @@ export default function App() {
           path="/student/assessments/:attemptId/take"
           element={
             <PrivateRoute>
-              <ErrorBoundary role="student">
-                <TakeAssessmentPage />
-              </ErrorBoundary>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <TakeAssessmentPage />
+                </ErrorBoundary>
+              </OnboardingRoute>
             </PrivateRoute>
           }
         />
@@ -88,9 +90,11 @@ export default function App() {
           path="/student/assessments/:attemptId/results"
           element={
             <PrivateRoute>
-              <ErrorBoundary role="student">
-                <AssessmentResultsPage />
-              </ErrorBoundary>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <AssessmentResultsPage />
+                </ErrorBoundary>
+              </OnboardingRoute>
             </PrivateRoute>
           }
         />
