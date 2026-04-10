@@ -1,6 +1,7 @@
 """Assessment-related SQLAlchemy models.
 
-Covers: assessments, assessment_selected_questions, student_attempts, student_responses
+Covers: assessments, assessment_selected_questions, student_attempts, student_responses,
+        student_attempt_subtopic_scores
 """
 
 import uuid
@@ -13,8 +14,10 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -233,4 +236,52 @@ class StudentResponse(Base, UUIDMixin):
             "score IS NULL OR (score BETWEEN 0.0 AND 1.0)",
             name="chk_sr_score",
         ),
+    )
+
+
+class StudentAttemptSubtopicScore(Base):
+    """Per-attempt, per-subtopic score used to compute rolling mastery.
+
+    Inserted by the calculate_gap_states Celery task after each attempt is COMPLETED.
+    Used to compute recency-weighted mastery in subsequent task runs.
+    """
+
+    __tablename__ = "student_attempt_subtopic_scores"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    subtopic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subtopics.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    attempt_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("student_attempts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    score: Mapped[float] = mapped_column(nullable=False)
+    # Per-subtopic fraction correct for this attempt: correct / total in subtopic
+    attempted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id",
+            "subtopic_id",
+            "attempt_id",
+            name="uq_sats_student_subtopic_attempt",
+        ),
+        Index("idx_subtopic_scores_student_sub", "student_id", "subtopic_id"),
+        CheckConstraint("score BETWEEN 0.0 AND 1.0", name="chk_sats_score"),
     )
