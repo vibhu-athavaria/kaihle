@@ -15,7 +15,7 @@ Design notes:
 
 import uuid
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Protocol, cast
 
 import structlog
 from sqlalchemy import select
@@ -72,6 +72,10 @@ class QuestionNotInAssessmentError(Exception):
 
 class DuplicateResponseError(Exception):
     """Raised when a response for the same question already exists in the attempt."""
+
+
+class AttemptAccessDeniedError(Exception):
+    """Raised when a user attempts to access an attempt they are not authorised to view."""
 
 
 # ---------------------------------------------------------------------------
@@ -489,7 +493,7 @@ class AttemptService:
         # Authorization
         if requesting_user_role == UserRole.STUDENT:
             if attempt.student_id != requesting_user_id:
-                raise ValueError("Access denied")
+                raise AttemptAccessDeniedError("Access denied")
         elif requesting_user_role == UserRole.KAIHLE_ADMIN:
             pass  # KaihleAdmin can access any attempt — explicit bypass per Rule 12
         else:
@@ -497,7 +501,7 @@ class AttemptService:
             assessment_result = await self.db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
             assessment = assessment_result.scalar_one_or_none()
             if assessment is None or assessment.school_id != school_id:
-                raise ValueError("Access denied")
+                raise AttemptAccessDeniedError("Access denied")
 
         # Compute score from stored responses
         all_responses_result = await self.db.execute(
@@ -513,7 +517,7 @@ class AttemptService:
             total_questions=total,
             correct_count=correct,
             time_taken_seconds=attempt.time_taken_seconds,
-            submitted_at=attempt.completed_at,  # type: ignore[arg-type]
+            submitted_at=cast(datetime, attempt.completed_at),
         )
 
     # ── Internal helpers ─────────────────────────────────────────────────

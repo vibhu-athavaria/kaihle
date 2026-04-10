@@ -8,6 +8,7 @@ student-facing and returns an AttemptResponse — it logically belongs with
 the attempt lifecycle, not with class management.
 """
 
+import uuid as _uuid
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,6 +26,7 @@ from app.schemas.attempts import (
     AttemptSubmitRequest,
 )
 from app.services.attempt_service import (
+    AttemptAccessDeniedError,
     AttemptAlreadyCompletedError,
     AttemptNotFoundError,
     AttemptService,
@@ -74,12 +76,13 @@ async def get_class_diagnostic(
     This endpoint is intentionally NOT gated by require_diagnostic_complete —
     students must be able to access it in order to complete the diagnostic.
     """
+    assert current_user.school_id is not None, "Student must belong to a school"
     service = AttemptService(db)
     try:
         attempt, questions = await service.get_class_diagnostic(
             class_id=class_id,
             student_id=current_user.id,
-            school_id=current_user.school_id,  # type: ignore[arg-type]
+            school_id=current_user.school_id,
         )
     except AttemptNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -146,12 +149,13 @@ async def submit_response(
     Returns 204 No Content on success. Idempotent within an attempt —
     submitting the same question twice returns 409.
     """
+    assert current_user.school_id is not None, "Student must belong to a school"
     service = AttemptService(db)
     try:
         await service.submit_response(
             attempt_id=attempt_id,
             student_id=current_user.id,
-            school_id=current_user.school_id,  # type: ignore[arg-type]
+            school_id=current_user.school_id,
             question_id=body.question_id,
             selected_key=body.selected_key,
         )
@@ -180,6 +184,7 @@ async def submit_attempt(
     calculate_gap_states Celery task, and — for Tier 1 diagnostics —
     calls check_and_update_onboarding_complete.
     """
+    assert current_user.school_id is not None, "Student must belong to a school"
     service = AttemptService(db)
     onboarding_service = OnboardingService(db)
 
@@ -190,7 +195,7 @@ async def submit_attempt(
         result = await service.submit_attempt(
             attempt_id=attempt_id,
             student_id=current_user.id,
-            school_id=current_user.school_id,  # type: ignore[arg-type]
+            school_id=current_user.school_id,
             answers=answers,
             onboarding_service=onboarding_service,
         )
@@ -215,12 +220,17 @@ async def get_attempt_results(
     may view any result within their school.
     """
     service = AttemptService(db)
+    # KAIHLE_ADMIN has no school_id; for all other roles school_id must be set.
+    # The service handles the KAIHLE_ADMIN bypass — pass a sentinel UUID when None.
+    school_id = current_user.school_id if current_user.school_id is not None else _uuid.UUID(int=0)
     try:
         return await service.get_attempt_results(
             attempt_id=attempt_id,
             requesting_user_id=current_user.id,
             requesting_user_role=current_user.role,
-            school_id=current_user.school_id,  # type: ignore[arg-type]
+            school_id=school_id,
         )
+    except AttemptAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied") from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

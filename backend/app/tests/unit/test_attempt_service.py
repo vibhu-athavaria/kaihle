@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import AssessmentStatus, AttemptStatus
 from app.services.attempt_service import (
+    AttemptAccessDeniedError,
     AttemptAlreadyCompletedError,
     AttemptNotFoundError,
     AttemptService,
@@ -780,7 +781,7 @@ class TestGetAttemptResults:
 
         mock_db.execute = AsyncMock(return_value=_scalar_result(attempt))
 
-        with pytest.raises(ValueError, match="Access denied"):
+        with pytest.raises(AttemptAccessDeniedError):
             await service.get_attempt_results(
                 attempt_id=attempt.id,
                 requesting_user_id=other_student_id,
