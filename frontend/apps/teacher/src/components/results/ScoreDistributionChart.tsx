@@ -26,6 +26,8 @@ interface BandCount {
   count: number;
   color: string;
   textColor: string;
+  fillClass: string;
+  pct: number;
 }
 
 export function ScoreDistributionChart({
@@ -55,24 +57,32 @@ export function ScoreDistributionChart({
       count: strong,
       color: "#16a34a",
       textColor: "text-green-700",
+      fillClass: "bg-brand-green",
+      pct: total > 0 ? (strong / total) * 100 : 0,
     },
     {
       label: "Developing (40–69%)",
       count: developing,
       color: "#f59e0b",
       textColor: "text-amber-600",
+      fillClass: "bg-brand-amber",
+      pct: total > 0 ? (developing / total) * 100 : 0,
     },
     {
       label: "Needs Work (<40%)",
       count: needsWork,
       color: "#ef4444",
       textColor: "text-red-600",
+      fillClass: "bg-brand-red",
+      pct: total > 0 ? (needsWork / total) * 100 : 0,
     },
     {
       label: "Not submitted",
       count: notSubmittedCount,
       color: "#d1d5db",
       textColor: "text-gray-400",
+      fillClass: "bg-gray-300",
+      pct: total > 0 ? (notSubmittedCount / total) * 100 : 0,
     },
   ];
 
@@ -90,48 +100,41 @@ export function ScoreDistributionChart({
   }
 
   return (
-    <div>
-      {/* Chart */}
-      <div
-        role="img"
-        aria-label={ariaLabel}
-        className="h-[180px] flex items-end gap-3 px-2"
-      >
-        {bands.map((band) => {
-          const pct = total > 0 ? (band.count / total) * 100 : 0;
-          const barHeight = Math.max(pct * 1.5, band.count > 0 ? 8 : 0);
-          return (
-            <div
-              key={band.label}
-              className="flex-1 flex flex-col items-center justify-end gap-1"
-              style={{ height: "180px" }}
-            >
-              <span className="text-xs font-bold text-brand-ink">
-                {band.count}
-              </span>
-              <div
-                className="w-full rounded-t-md transition-all duration-500"
-                style={{
-                  backgroundColor: band.color,
-                  height: `${barHeight}px`,
-                  minHeight: band.count > 0 ? "8px" : "0",
-                }}
-                title={`${band.label}: ${band.count}`}
-              />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Visible text legend */}
-      <div className="flex flex-wrap gap-3 mt-3 justify-center">
+    <div data-testid="score-distribution">
+      {/* Chart — horizontal bars */}
+      <div role="img" aria-label={ariaLabel} className="flex flex-col gap-2">
         {bands.map((band) => (
-          <div key={band.label} className="flex items-center gap-1.5">
-            <span
-              className="w-3 h-3 rounded-sm flex-shrink-0"
-              style={{ backgroundColor: band.color }}
-            />
-            <span className="text-xs text-brand-body">{band.label}</span>
+          <div key={band.label} className="flex items-center gap-3">
+            {/* Color dot + label */}
+            <div className="flex items-center gap-1.5 w-36 flex-shrink-0">
+              <div
+                className={`w-3 h-3 rounded-sm`}
+                style={{ backgroundColor: band.color }}
+              />
+              <span className="text-xs text-gray-600 font-sans">
+                {band.label}
+              </span>
+            </div>
+            {/* Bar */}
+            <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
+              <div
+                className={`h-full rounded-full flex items-center justify-end pr-2 ${band.fillClass}`}
+                style={{
+                  width: `${band.pct}%`,
+                  minWidth: band.count > 0 ? "2rem" : "0",
+                }}
+              >
+                {band.count > 0 && (
+                  <span className="text-white text-xs font-sans">
+                    {band.count}
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* Count outside if bar too small */}
+            {band.count === 0 && (
+              <span className="text-xs text-gray-500">{band.count}</span>
+            )}
           </div>
         ))}
       </div>

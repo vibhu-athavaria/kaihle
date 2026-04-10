@@ -90,7 +90,10 @@ export function ResultsKPIRow({
   if (submittedCount === 0) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KPICard label="Submitted" ariaLabel="Submitted: 0 of students">
+        <KPICard
+          label="Submitted"
+          ariaLabel={`Submitted: 0 of ${totalStudents} students`}
+        >
           <div className="font-display text-[28px] leading-none text-brand-ink">
             0
           </div>
@@ -165,16 +168,14 @@ export function ResultsKPIRow({
             : 0
         }%, ${highestStyle.label}`}
       >
-        <div
-          className={`font-display text-[28px] leading-none ${highestStyle.textClass}`}
-        >
-          {highest?.score !== null && highest?.score !== undefined
-            ? `${Math.round(highest.score * 100)}%`
-            : "—"}
+        <div className="font-display text-[28px] leading-none text-brand-ink truncate">
+          {highest?.studentName ?? "—"}
         </div>
         {highest && (
-          <div className="text-xs text-brand-muted mt-1 truncate">
-            {highest.studentName}
+          <div className={`text-xs mt-1 ${highestStyle.textClass}`}>
+            {highest.score !== null && highest.score !== undefined
+              ? `${Math.round(highest.score * 100)}% · ${highestStyle.label}`
+              : "—"}
           </div>
         )}
       </KPICard>

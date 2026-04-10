@@ -190,9 +190,7 @@ export function StudentResultsTable({
                         View answers →
                       </Link>
                     ) : (
-                      <span className="text-sm text-brand-muted">
-                        Not submitted
-                      </span>
+                      <span className="text-gray-400 text-sm">—</span>
                     )}
                   </td>
                 </tr>
