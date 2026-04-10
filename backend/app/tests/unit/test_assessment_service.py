@@ -336,7 +336,7 @@ class TestPublishAssessment:
             await service.publish_assessment(assessment_id, school_id, teacher_id, deadline=None)
 
     @pytest.mark.asyncio
-    async def test_publish_when_different_teacher_then_raises_value_error(
+    async def test_publish_when_different_teacher_then_raises_teacher_not_class_owner_error(
         self, service: AssessmentService, mock_db: MagicMock
     ) -> None:
         school_id = uuid.uuid4()
@@ -355,7 +355,7 @@ class TestPublishAssessment:
         mock_result.scalar_one_or_none.return_value = assessment
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(TeacherNotClassOwnerError):
             await service.publish_assessment(assessment_id, school_id, other_teacher_id, deadline=None)
 
     @pytest.mark.asyncio
@@ -475,7 +475,7 @@ class TestCloseAssessment:
             await service.close_assessment(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
 
     @pytest.mark.asyncio
-    async def test_close_when_different_teacher_then_raises_value_error(
+    async def test_close_when_different_teacher_then_raises_teacher_not_class_owner_error(
         self, service: AssessmentService, mock_db: MagicMock
     ) -> None:
         school_id = uuid.uuid4()
@@ -494,7 +494,7 @@ class TestCloseAssessment:
         mock_result.scalar_one_or_none.return_value = assessment
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(TeacherNotClassOwnerError):
             await service.close_assessment(assessment_id, school_id, other_id)
 
 
