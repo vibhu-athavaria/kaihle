@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from fastapi import HTTPException, status
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -337,7 +338,10 @@ class GapService:
             )
         )
         if not class_:
-            raise ValueError(f"Class {class_id} not found in school {school_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Class {class_id} not found in school {school_id}",
+            )
 
         subtopic_rows = (
             await self.db.execute(
@@ -446,11 +450,9 @@ class GapService:
         )
 
         if not enrolled_class:
-            return StudentGapMap(
-                student_id=student_id,
-                subject_id=subject_id,
-                generated_at=datetime.now(UTC),
-                scores=[],
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No class enrollment found for student in this subject",
             )
 
         subtopic_rows = (
@@ -541,7 +543,10 @@ class GapService:
             )
         )
         if not class_:
-            raise ValueError(f"Class {class_id} not found in school {school_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Class {class_id} not found in school {school_id}",
+            )
 
         agg_result = await self.db.execute(
             select(

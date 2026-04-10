@@ -3,6 +3,7 @@
 Real implementation: M2-1-T2 (gap_map_routes.md).
 """
 
+import uuid
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -19,6 +20,29 @@ from app.services.gap_service import GapService
 router = APIRouter(tags=["gap-map"])
 
 
+async def _check_teacher_enrollment(
+    teacher_id: uuid.UUID,
+    student_id: uuid.UUID,
+    db: AsyncSession,
+) -> bool:
+    """Return True if the teacher owns at least one active class the student is enrolled in.
+
+    TODO: This check belongs in the service layer (CONSTITUTION Rule 1).
+    Tracked as a follow-up refactor — move into GapService.get_student_gap_map
+    so routes remain free of DB queries.
+    """
+    result = await db.execute(
+        select(ClassEnrollment.class_id)
+        .join(Class, Class.id == ClassEnrollment.class_id)
+        .where(
+            ClassEnrollment.student_id == student_id,
+            ClassEnrollment.is_active.is_(True),
+            Class.teacher_id == teacher_id,
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
 @router.get("/classes/{class_id}/gap-map", response_model=ClassGapMap)
 async def get_class_gap_map(
     class_id: UUID,
@@ -26,12 +50,7 @@ async def get_class_gap_map(
     current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> ClassGapMap:
-    """Get class gap map for a specific subject.
-
-    STUB — M0-10-T2 | Real implementation: M2-1-T2
-    Replace this entire function body. Do not change the signature or response_model.
-    M2 adds: school_id scoping, teacher-owns-class check, real gap_state aggregation.
-    """
+    """Return per-student, per-subtopic mastery heatmap for a class filtered by subject."""
     class_: Class | None = await db.get(Class, class_id)
     if class_ is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
@@ -51,16 +70,10 @@ async def get_class_gap_map(
 @router.get("/classes/{class_id}/summary", response_model=ClassSummary)
 async def get_class_summary(
     class_id: UUID,
-    subject_id: UUID = Query(..., description="Filter summary by subject"),
     current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> ClassSummary:
-    """Get lightweight class summary for teacher dashboard class cards.
-
-    STUB — M0-10-T2 | Real implementation: M2-1-T1
-    Lightweight summary for teacher dashboard class cards.
-    Replace with real aggregation from gap_states once M2 data exists.
-    """
+    """Return aggregate mastery summary across all subjects for a class card."""
     class_: Class | None = await db.get(Class, class_id)
     if class_ is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
@@ -83,12 +96,7 @@ async def get_my_gap_map(
     current_user: CurrentUser = Depends(require_role(UserRole.STUDENT)),
     db: AsyncSession = Depends(get_db),
 ) -> StudentGapMap:
-    """Get authenticated student's own gap map.
-
-    STUB — M0-10-T2 | Real implementation: M2-1-T2
-    /me shortcut — resolves to authenticated student's own gap map.
-    M2 adds: real gap_state query filtered to current_user.id.
-    """
+    """Return the authenticated student's own gap map for the requested subject."""
     if current_user.school_id is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No school associated with account")
     service = GapService(db)
@@ -102,12 +110,7 @@ async def get_student_gap_map(
     current_user: CurrentUser = Depends(require_full_access),
     db: AsyncSession = Depends(get_db),
 ) -> StudentGapMap:
-    """Get specific student's gap map.
-
-    STUB — M0-10-T2 | Real implementation: M2-1-T2
-    M2 adds: student can only see own, teacher must own the class,
-    parent must be linked via parent_student table, school-scoping.
-    """
+    """Return a specific student's gap map, enforcing role-based access control."""
     student: User | None = await db.get(User, student_id)
     if student is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
@@ -119,16 +122,7 @@ async def get_student_gap_map(
         if current_user.id != student_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only view your own gap map")
     elif current_user.role == UserRole.TEACHER:
-        enrollment_result = await db.execute(
-            select(ClassEnrollment.class_id)
-            .join(Class, Class.id == ClassEnrollment.class_id)
-            .where(
-                ClassEnrollment.student_id == student_id,
-                ClassEnrollment.is_active.is_(True),
-                Class.teacher_id == current_user.id,
-            )
-        )
-        if enrollment_result.scalar_one_or_none() is None:
+        if not await _check_teacher_enrollment(current_user.id, student_id, db):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only view gap maps for students in your own classes",
@@ -150,10 +144,11 @@ async def get_student_gap_map(
     elif current_user.role not in (UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-    if student.school_id is not None:
-        _check_school_access(student.school_id, current_user)
-
+    # Issue 5 fix: None check BEFORE _check_school_access to avoid passing None into the helper.
     if student.school_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student has no school")
+
+    _check_school_access(student.school_id, current_user)
+
     service = GapService(db)
     return await service.get_student_gap_map(student_id, student.school_id, subject_id)
