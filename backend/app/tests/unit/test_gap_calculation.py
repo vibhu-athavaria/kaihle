@@ -439,7 +439,7 @@ class TestCalculateGapStatesTask:
     async def test_calculate_when_response_has_unknown_question_id_then_skipped_not_crashed(
         self,
     ) -> None:
-        """Unknown question_id in responses is silently skipped (logged as WARNING)."""
+        """Unknown question_id in responses is silently skipped (logged as ERROR)."""
         sub1 = uuid.uuid4()
         q_known = uuid.uuid4()
         q_unknown = uuid.uuid4()
