@@ -188,8 +188,15 @@ async def engine() -> AsyncGenerator[AsyncEngine, None]:
 @pytest_asyncio.fixture(scope="function")
 async def db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     """Create a fresh database session for each test."""
+    from sqlalchemy import text
+
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        # Drop all with CASCADE to handle FK dependencies from tables outside
+        # the Python model graph (e.g. student_attempt_subtopic_scores from M1-4-T3).
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
+        # Restore pgvector extension (was in public schema, dropped with it)
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
 
     async_session = async_sessionmaker(
