@@ -288,7 +288,9 @@ class AttemptService:
 
         # Load question for scoring
         question_result = await self.db.execute(select(QuestionBank).where(QuestionBank.id == question_id))
-        question = question_result.scalar_one()
+        question = question_result.scalar_one_or_none()
+        if question is None:
+            raise QuestionNotInAssessmentError(f"Question {question_id} not found in question bank")
 
         is_correct = selected_key.strip().lower() == question.correct_answer.strip().lower()
 
@@ -365,7 +367,14 @@ class AttemptService:
 
         for answer in answers:
             raw_q_id = answer["question_id"]
-            q_id = raw_q_id if isinstance(raw_q_id, uuid.UUID) else uuid.UUID(str(raw_q_id))
+            if isinstance(raw_q_id, uuid.UUID):
+                q_id = raw_q_id
+            else:
+                try:
+                    q_id = uuid.UUID(str(raw_q_id))
+                except (ValueError, AttributeError):
+                    logger.warning("submit_attempt_invalid_question_id", raw_q_id=str(raw_q_id))
+                    continue
             selected_key = str(answer["selected_key"])
 
             if q_id in already_answered:
@@ -387,7 +396,14 @@ class AttemptService:
                 continue
 
             question_result = await self.db.execute(select(QuestionBank).where(QuestionBank.id == q_id))
-            question = question_result.scalar_one()
+            question = question_result.scalar_one_or_none()
+            if question is None:
+                logger.warning(
+                    "submit_attempt_question_not_in_bank",
+                    question_id=str(q_id),
+                    assessment_id=str(attempt.assessment_id),
+                )
+                continue
 
             is_correct = selected_key.strip().lower() == question.correct_answer.strip().lower()
 
@@ -584,5 +600,8 @@ class AttemptService:
         questions = [row[0] for row in rows]
         if strip_answers:
             for q in questions:
+                # Expunge before mutating so SQLAlchemy does not track the change
+                # and cannot accidentally flush NULL back to the DB.
+                self.db.expunge(q)
                 q.correct_answer = None
         return questions

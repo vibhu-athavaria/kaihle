@@ -115,12 +115,22 @@ async def get_attempt(
     """
     from sqlalchemy import select
 
-    from app.models.assessment import StudentAttempt
+    from app.models.assessment import Assessment, StudentAttempt
 
     result = await db.execute(select(StudentAttempt).where(StudentAttempt.id == attempt_id))
     attempt = result.scalar_one_or_none()
     if attempt is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
+
+    # Authorization: KAIHLE_ADMIN bypasses school check; all others must match school.
+    # STUDENT additionally must own the attempt.
+    if current_user.role != UserRole.KAIHLE_ADMIN:
+        assessment_result = await db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
+        assessment = assessment_result.scalar_one_or_none()
+        if assessment is None or assessment.school_id != current_user.school_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if current_user.role == UserRole.STUDENT and attempt.student_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     service = AttemptService(db)
     questions = await service._load_questions(attempt.assessment_id, strip_answers=True)
