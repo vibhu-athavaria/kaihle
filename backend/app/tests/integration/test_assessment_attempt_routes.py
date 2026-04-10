@@ -450,12 +450,16 @@ class TestGetClassDiagnostic:
     """Tests for GET /api/v1/classes/{class_id}/diagnostic."""
 
     @pytest.mark.asyncio
-    async def test_get_class_diagnostic_when_student_then_200(
+    async def test_get_class_diagnostic_when_student_no_assessment_then_404(
         self,
         client: AsyncClient,
         student: User,
     ) -> None:
-        """GET /api/v1/classes/{id}/diagnostic with student JWT returns 200."""
+        """GET /api/v1/classes/{id}/diagnostic with student JWT returns 404 when no assessment exists.
+
+        The real implementation (M1-4-T1) returns 404 when no ACTIVE system-generated
+        assessment exists for the class — updated from stub which returned 200 always.
+        """
         class_id = uuid.uuid4()
         headers = make_auth_header(student)
 
@@ -464,11 +468,7 @@ class TestGetClassDiagnostic:
             headers=headers,
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["student_id"] == str(student.id)
-        assert data["status"] == "NOT_STARTED"
-        assert data["questions"] == []
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_get_class_diagnostic_when_teacher_then_403(
@@ -528,12 +528,15 @@ class TestGetAttempt:
     """Tests for GET /api/v1/attempts/{attempt_id}."""
 
     @pytest.mark.asyncio
-    async def test_get_attempt_when_student_then_200(
+    async def test_get_attempt_when_student_nonexistent_then_404(
         self,
         client: AsyncClient,
         student: User,
     ) -> None:
-        """GET /api/v1/attempts/{id} with student JWT returns 200."""
+        """GET /api/v1/attempts/{id} with student JWT returns 404 for unknown attempt.
+
+        Real implementation (M1-4-T1) returns 404 when attempt doesn't exist.
+        """
         attempt_id = uuid.uuid4()
         headers = make_auth_header(student)
 
@@ -542,19 +545,15 @@ class TestGetAttempt:
             headers=headers,
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["id"] == str(attempt_id)
-        assert data["student_id"] == str(student.id)
-        assert data["status"] == "NOT_STARTED"
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_get_attempt_when_teacher_then_200(
+    async def test_get_attempt_when_teacher_nonexistent_then_404(
         self,
         client: AsyncClient,
         teacher: User,
     ) -> None:
-        """GET /api/v1/attempts/{id} with teacher JWT returns 200 (stub uses require_full_access)."""
+        """GET /api/v1/attempts/{id} with teacher JWT returns 404 for unknown attempt."""
         attempt_id = uuid.uuid4()
         headers = make_auth_header(teacher)
 
@@ -563,15 +562,15 @@ class TestGetAttempt:
             headers=headers,
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_get_attempt_when_parent_then_200(
+    async def test_get_attempt_when_parent_nonexistent_then_404(
         self,
         client: AsyncClient,
         parent_user: User,
     ) -> None:
-        """GET /api/v1/attempts/{id} with parent JWT returns 200 (require_full_access allows all authenticated)."""
+        """GET /api/v1/attempts/{id} with parent JWT returns 404 for unknown attempt."""
         attempt_id = uuid.uuid4()
         headers = make_auth_header(parent_user)
 
@@ -580,19 +579,22 @@ class TestGetAttempt:
             headers=headers,
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 404
 
 
 class TestSubmitResponse:
     """Tests for POST /api/v1/attempts/{attempt_id}/responses."""
 
     @pytest.mark.asyncio
-    async def test_submit_response_when_student_then_204(
+    async def test_submit_response_when_student_nonexistent_attempt_then_404(
         self,
         client: AsyncClient,
         student: User,
     ) -> None:
-        """POST /api/v1/attempts/{id}/responses with student JWT returns 204."""
+        """POST /api/v1/attempts/{id}/responses with student JWT returns 404 for unknown attempt.
+
+        Real implementation (M1-4-T1) returns 404 when attempt doesn't exist.
+        """
         attempt_id = uuid.uuid4()
         headers = make_auth_header(student)
         body = {
@@ -606,7 +608,7 @@ class TestSubmitResponse:
             json=body,
         )
 
-        assert response.status_code == 204
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_submit_response_when_teacher_then_403(
@@ -654,12 +656,15 @@ class TestSubmitAttempt:
     """Tests for POST /api/v1/attempts/{attempt_id}/submit."""
 
     @pytest.mark.asyncio
-    async def test_submit_attempt_when_student_then_200(
+    async def test_submit_attempt_when_student_nonexistent_then_404(
         self,
         client: AsyncClient,
         student: User,
     ) -> None:
-        """POST /api/v1/attempts/{id}/submit with student JWT returns 200."""
+        """POST /api/v1/attempts/{id}/submit with student JWT returns 404 for unknown attempt.
+
+        Real implementation (M1-4-T1) returns 404 when attempt doesn't exist.
+        """
         attempt_id = uuid.uuid4()
         headers = make_auth_header(student)
         body = {
@@ -675,10 +680,7 @@ class TestSubmitAttempt:
             json=body,
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["id"] == str(attempt_id)
-        assert data["status"] == "SUBMITTED"
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_submit_attempt_when_teacher_then_403(
@@ -708,12 +710,15 @@ class TestGetAttemptResults:
     """Tests for GET /api/v1/attempts/{attempt_id}/results."""
 
     @pytest.mark.asyncio
-    async def test_get_attempt_results_when_student_then_200(
+    async def test_get_attempt_results_when_student_nonexistent_then_404(
         self,
         client: AsyncClient,
         student: User,
     ) -> None:
-        """GET /api/v1/attempts/{id}/results with student JWT returns 200."""
+        """GET /api/v1/attempts/{id}/results with student JWT returns 404 for unknown attempt.
+
+        Real implementation (M1-4-T1) returns 404 when attempt doesn't exist.
+        """
         attempt_id = uuid.uuid4()
         headers = make_auth_header(student)
 
@@ -722,19 +727,15 @@ class TestGetAttemptResults:
             headers=headers,
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["attempt_id"] == str(attempt_id)
-        assert "score" in data
-        assert "total_questions" in data
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_get_attempt_results_when_teacher_then_200(
+    async def test_get_attempt_results_when_teacher_nonexistent_then_404(
         self,
         client: AsyncClient,
         teacher: User,
     ) -> None:
-        """GET /api/v1/attempts/{id}/results with teacher JWT returns 200 (stub uses require_full_access)."""
+        """GET /api/v1/attempts/{id}/results with teacher JWT returns 404 for unknown attempt."""
         attempt_id = uuid.uuid4()
         headers = make_auth_header(teacher)
 
@@ -743,15 +744,15 @@ class TestGetAttemptResults:
             headers=headers,
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_get_attempt_results_when_parent_then_200(
+    async def test_get_attempt_results_when_parent_nonexistent_then_404(
         self,
         client: AsyncClient,
         parent_user: User,
     ) -> None:
-        """GET /api/v1/attempts/{id}/results with parent JWT returns 200 (require_full_access allows all authenticated)."""
+        """GET /api/v1/attempts/{id}/results with parent JWT returns 404 for unknown attempt."""
         attempt_id = uuid.uuid4()
         headers = make_auth_header(parent_user)
 
@@ -760,7 +761,7 @@ class TestGetAttemptResults:
             headers=headers,
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 404
 
 
 # =============================================================================
