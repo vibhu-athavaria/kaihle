@@ -16,6 +16,8 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token
+from app.models.assessment import Assessment, AssessmentStatus, AttemptStatus, StudentAttempt
+from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.school import Class, ClassEnrollment, School
 from app.models.user import User, UserRole
 
@@ -190,26 +192,115 @@ async def test_class_topics_when_diagnostic_completed_then_returns_200(
 async def test_diagnostic_endpoint_when_diagnostic_pending_then_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
-    student_with_enrollment: tuple[User, ClassEnrollment],
-    test_class: Class,
 ) -> None:
     """Diagnostic endpoint is NOT gated - student can always access it.
 
-    Note: The M0-10-T3 stub always returns NOT_STARTED regardless of enrollment status.
-    The real implementation (M1-4-T1) will return the actual diagnostic status.
+    Real implementation (M1-4-T1) requires an active system-generated assessment
+    and a corresponding student attempt row. This test creates a self-contained
+    scenario with matching school_id across all objects.
     """
-    student, enrollment = student_with_enrollment
-    headers = make_auth_header(student)
+    # Create self-contained school, teacher, class, assessment, student, attempt
+    diag_school = School(
+        id=uuid.uuid4(),
+        name="Diag Test School",
+        slug=f"diag-{uuid.uuid4().hex[:8]}",
+        status="active",
+    )
+    db_session.add(diag_school)
+    await db_session.flush()
 
+    diag_teacher = User(
+        id=uuid.uuid4(),
+        school_id=diag_school.id,
+        email=f"diag-teacher-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Diag",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(diag_teacher)
+    await db_session.flush()
+
+    diag_grade = Grade(id=uuid.uuid4(), name="Grade 7", level=7, is_active=True)
+    diag_subject = Subject(
+        id=uuid.uuid4(),
+        name=f"Diag Math {uuid.uuid4().hex[:4]}",
+        code=f"DM{uuid.uuid4().hex[:4]}",
+        is_active=True,
+    )
+    diag_curriculum = Curriculum(
+        id=uuid.uuid4(),
+        name=f"Diag Curriculum {uuid.uuid4().hex[:4]}",
+        code=f"DC{uuid.uuid4().hex[:4]}",
+        is_active=True,
+    )
+    db_session.add_all([diag_grade, diag_subject, diag_curriculum])
+    await db_session.flush()
+
+    diag_class = Class(
+        id=uuid.uuid4(),
+        school_id=diag_school.id,
+        grade_id=diag_grade.id,
+        subject_id=diag_subject.id,
+        curriculum_id=diag_curriculum.id,
+        teacher_id=diag_teacher.id,
+        name="Diag Test Class",
+        academic_year="2026",
+        is_active=True,
+    )
+    db_session.add(diag_class)
+    await db_session.flush()
+
+    diag_assessment = Assessment(
+        id=uuid.uuid4(),
+        school_id=diag_school.id,
+        class_id=diag_class.id,
+        created_by=diag_teacher.id,
+        title="Diagnostic Assessment",
+        assessment_type="DIAGNOSTIC",
+        status=AssessmentStatus.ACTIVE,
+        is_system_generated=True,
+        config={},
+    )
+    db_session.add(diag_assessment)
+    await db_session.flush()
+
+    diag_student = User(
+        id=uuid.uuid4(),
+        school_id=diag_school.id,
+        email=f"diag-student-pending-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Diag",
+        last_name="Student",
+        role=UserRole.STUDENT,
+        is_active=True,
+    )
+    db_session.add(diag_student)
+    await db_session.flush()
+
+    enrollment = ClassEnrollment(
+        class_id=diag_class.id,
+        student_id=diag_student.id,
+        is_active=True,
+        onboarding_diagnostic_status="PENDING",
+    )
+    diag_attempt = StudentAttempt(
+        id=uuid.uuid4(),
+        assessment_id=diag_assessment.id,
+        student_id=diag_student.id,
+        status=AttemptStatus.NOT_STARTED,
+    )
+    db_session.add_all([enrollment, diag_attempt])
+    await db_session.commit()
+
+    headers = make_auth_header(diag_student)
     response = await client.get(
-        f"/api/v1/classes/{test_class.id}/diagnostic",
+        f"/api/v1/classes/{diag_class.id}/diagnostic",
         headers=headers,
     )
 
     assert response.status_code == 200
     data = response.json()
-    # Stub returns NOT_STARTED always; real impl will return PENDING/IN_PROGRESS/COMPLETED
-    assert data["status"] == "NOT_STARTED"
+    assert data["status"] == AttemptStatus.NOT_STARTED
 
 
 @pytest.mark.asyncio
@@ -343,19 +434,115 @@ async def test_class_quizzes_when_diagnostic_pending_then_returns_403(
 async def test_diagnostic_endpoint_always_accessible_for_in_progress_student(
     client: AsyncClient,
     db_session: AsyncSession,
-    student_with_in_progress_enrollment: tuple[User, ClassEnrollment],
-    test_class: Class,
 ) -> None:
-    """Student with IN_PROGRESS diagnostic can still access the diagnostic endpoint."""
-    student, enrollment = student_with_in_progress_enrollment
-    headers = make_auth_header(student)
+    """Student with IN_PROGRESS diagnostic can still access the diagnostic endpoint.
 
+    Real implementation (M1-4-T1) requires an active system-generated assessment
+    and a corresponding student attempt row. This test creates a self-contained
+    scenario with matching school_id across all objects.
+    """
+    # Create self-contained school, teacher, class, assessment, student, attempt
+    diag_school = School(
+        id=uuid.uuid4(),
+        name="Diag InProgress School",
+        slug=f"diag-ip-{uuid.uuid4().hex[:8]}",
+        status="active",
+    )
+    db_session.add(diag_school)
+    await db_session.flush()
+
+    diag_teacher = User(
+        id=uuid.uuid4(),
+        school_id=diag_school.id,
+        email=f"diag-ip-teacher-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Diag",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(diag_teacher)
+    await db_session.flush()
+
+    diag_grade = Grade(id=uuid.uuid4(), name="Grade 8", level=8, is_active=True)
+    diag_subject = Subject(
+        id=uuid.uuid4(),
+        name=f"Diag Sci {uuid.uuid4().hex[:4]}",
+        code=f"DS{uuid.uuid4().hex[:4]}",
+        is_active=True,
+    )
+    diag_curriculum = Curriculum(
+        id=uuid.uuid4(),
+        name=f"Diag Curr {uuid.uuid4().hex[:4]}",
+        code=f"DCC{uuid.uuid4().hex[:4]}",
+        is_active=True,
+    )
+    db_session.add_all([diag_grade, diag_subject, diag_curriculum])
+    await db_session.flush()
+
+    diag_class = Class(
+        id=uuid.uuid4(),
+        school_id=diag_school.id,
+        grade_id=diag_grade.id,
+        subject_id=diag_subject.id,
+        curriculum_id=diag_curriculum.id,
+        teacher_id=diag_teacher.id,
+        name="Diag InProgress Class",
+        academic_year="2026",
+        is_active=True,
+    )
+    db_session.add(diag_class)
+    await db_session.flush()
+
+    diag_assessment = Assessment(
+        id=uuid.uuid4(),
+        school_id=diag_school.id,
+        class_id=diag_class.id,
+        created_by=diag_teacher.id,
+        title="Diagnostic Assessment InProgress",
+        assessment_type="DIAGNOSTIC",
+        status=AssessmentStatus.ACTIVE,
+        is_system_generated=True,
+        config={},
+    )
+    db_session.add(diag_assessment)
+    await db_session.flush()
+
+    diag_student = User(
+        id=uuid.uuid4(),
+        school_id=diag_school.id,
+        email=f"diag-student-ip-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Diag",
+        last_name="StudentIP",
+        role=UserRole.STUDENT,
+        is_active=True,
+    )
+    db_session.add(diag_student)
+    await db_session.flush()
+
+    enrollment = ClassEnrollment(
+        class_id=diag_class.id,
+        student_id=diag_student.id,
+        is_active=True,
+        onboarding_diagnostic_status="IN_PROGRESS",
+    )
+    diag_attempt = StudentAttempt(
+        id=uuid.uuid4(),
+        assessment_id=diag_assessment.id,
+        student_id=diag_student.id,
+        status=AttemptStatus.IN_PROGRESS,
+    )
+    db_session.add_all([enrollment, diag_attempt])
+    await db_session.commit()
+
+    headers = make_auth_header(diag_student)
     response = await client.get(
-        f"/api/v1/classes/{test_class.id}/diagnostic",
+        f"/api/v1/classes/{diag_class.id}/diagnostic",
         headers=headers,
     )
 
     assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == AttemptStatus.IN_PROGRESS
 
 
 @pytest.mark.asyncio
