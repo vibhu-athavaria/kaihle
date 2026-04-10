@@ -6,7 +6,7 @@ Covers: gap_states
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -50,6 +50,7 @@ class GapState(Base, UUIDMixin, TimestampMixin):
     last_assessed_at: Mapped[datetime | None]
 
     __table_args__ = (
+        UniqueConstraint("student_id", "subtopic_id", "class_id", name="gap_states_unique"),
         CheckConstraint("mastery_score BETWEEN 0.0 AND 1.0", name="chk_gs_mastery"),
         CheckConstraint("confidence BETWEEN 0.0 AND 1.0", name="chk_gs_confidence"),
         CheckConstraint("total_correct <= total_attempted", name="chk_gs_counts"),
