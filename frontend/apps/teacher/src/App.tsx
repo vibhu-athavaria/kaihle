@@ -1,15 +1,23 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useRoutes,
+} from "react-router-dom";
 import { PrivateRoute, RoleRoute, useAuth } from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardLayout, ErrorBoundary } from "@kaihle/ui";
 import { TeacherDashboard } from "./pages/dashboard/TeacherDashboard";
 import { TeacherSettingsPage } from "./pages/settings/TeacherSettingsPage";
+import { NewAssessmentPage } from "./pages/assessments/NewAssessmentPage";
+import { AssessmentListPage } from "./pages/assessments/AssessmentListPage";
 import { Link } from "react-router-dom";
 import { Button } from "@kaihle/ui";
 import { Plus } from "lucide-react";
 
-function TeacherApp() {
+function TeacherShell() {
   const { user, logout } = useAuth();
 
   const greeting = () => {
@@ -20,6 +28,18 @@ function TeacherApp() {
   };
 
   const teacherName = user?.email?.split("@")[0] || "Teacher";
+
+  // Inner routes rendered inside the DashboardLayout
+  const innerRoutes = useRoutes([
+    { path: "dashboard", element: <TeacherDashboard /> },
+    { path: "assessments/new", element: <NewAssessmentPage /> },
+    {
+      path: "classes/:classId/assessments",
+      element: <AssessmentListPage />,
+    },
+    // Default: redirect to dashboard
+    { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
+  ]);
 
   return (
     <DashboardLayout
@@ -33,13 +53,13 @@ function TeacherApp() {
             size="sm"
             className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4" aria-hidden="true" />
             Assessment
           </Button>
         </Link>
       }
     >
-      <TeacherDashboard />
+      {innerRoutes}
     </DashboardLayout>
   );
 }
@@ -83,7 +103,7 @@ export default function App() {
                 ]}
               >
                 <ErrorBoundary role="teacher">
-                  <TeacherApp />
+                  <TeacherShell />
                 </ErrorBoundary>
               </RoleRoute>
             </PrivateRoute>
