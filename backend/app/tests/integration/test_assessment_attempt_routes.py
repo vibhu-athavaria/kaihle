@@ -70,7 +70,10 @@ class TestGetClassAssessments:
         client: AsyncClient,
         teacher: User,
     ) -> None:
-        """GET /api/v1/classes/{id}/assessments with teacher JWT returns 200."""
+        """GET /api/v1/classes/{id}/assessments with teacher JWT for non-existent class returns 404.
+
+        Updated M1-3-T2: real implementation checks teacher owns class — non-existent class → 404.
+        """
         class_id = uuid.uuid4()
         headers = make_auth_header(teacher)
 
@@ -79,12 +82,8 @@ class TestGetClassAssessments:
             headers=headers,
         )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["data"] == []
-        assert data["total"] == 0
-        assert data["page"] == 1
-        assert data["page_size"] == 20
+        # Teacher querying a non-existent class → 404
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_get_class_assessments_when_school_admin_then_200(
@@ -162,11 +161,14 @@ class TestGetClassAssessments:
     async def test_get_class_assessments_with_pagination(
         self,
         client: AsyncClient,
-        teacher: User,
+        school_admin: User,
     ) -> None:
-        """GET /api/v1/classes/{id}/assessments accepts page and page_size params."""
+        """GET /api/v1/classes/{id}/assessments accepts page and page_size params.
+
+        Updated M1-3-T2: use school_admin (no ownership check) for pagination param test.
+        """
         class_id = uuid.uuid4()
-        headers = make_auth_header(teacher)
+        headers = make_auth_header(school_admin)
 
         response = await client.get(
             f"/api/v1/classes/{class_id}/assessments?page=2&page_size=10",
@@ -182,11 +184,14 @@ class TestGetClassAssessments:
     async def test_get_class_assessments_with_status_filter(
         self,
         client: AsyncClient,
-        teacher: User,
+        school_admin: User,
     ) -> None:
-        """GET /api/v1/classes/{id}/assessments accepts ?status= alias."""
+        """GET /api/v1/classes/{id}/assessments accepts ?status= alias.
+
+        Updated M1-3-T2: use school_admin (no ownership check) for status filter param test.
+        """
         class_id = uuid.uuid4()
-        headers = make_auth_header(teacher)
+        headers = make_auth_header(school_admin)
 
         response = await client.get(
             f"/api/v1/classes/{class_id}/assessments?status=DRAFT",
@@ -214,12 +219,15 @@ class TestPostClassAssessments:
     """Tests for POST /api/v1/classes/{class_id}/assessments."""
 
     @pytest.mark.asyncio
-    async def test_post_class_assessments_when_teacher_then_501(
+    async def test_post_class_assessments_when_teacher_then_404(
         self,
         client: AsyncClient,
         teacher: User,
     ) -> None:
-        """POST /api/v1/classes/{id}/assessments with teacher JWT returns 501 (stub)."""
+        """POST /api/v1/classes/{id}/assessments with teacher JWT for non-existent class returns 404.
+
+        Updated M1-3-T2: real implementation; non-existent class → 404.
+        """
         class_id = uuid.uuid4()
         headers = make_auth_header(teacher)
         body = {
@@ -234,9 +242,7 @@ class TestPostClassAssessments:
             json=body,
         )
 
-        assert response.status_code == 501
-        data = response.json()
-        assert "M1" in data["detail"]
+        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_post_class_assessments_when_student_then_403(
@@ -291,12 +297,15 @@ class TestGetAssessmentById:
     """Tests for GET /api/v1/assessments/{assessment_id}."""
 
     @pytest.mark.asyncio
-    async def test_get_assessment_by_id_when_teacher_then_404_stub(
+    async def test_get_assessment_by_id_when_teacher_then_404_not_found(
         self,
         client: AsyncClient,
         teacher: User,
     ) -> None:
-        """GET /api/v1/assessments/{id} with teacher JWT returns 404 (stub)."""
+        """GET /api/v1/assessments/{id} with teacher JWT for non-existent ID returns 404.
+
+        Updated M1-3-T2: real implementation; non-existent assessment → 404 from service.
+        """
         assessment_id = uuid.uuid4()
         headers = make_auth_header(teacher)
 
@@ -306,8 +315,6 @@ class TestGetAssessmentById:
         )
 
         assert response.status_code == 404
-        data = response.json()
-        assert "No assessments exist yet" in data["detail"]
 
     @pytest.mark.asyncio
     async def test_get_assessment_by_id_when_student_then_404_stub(

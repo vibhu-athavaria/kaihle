@@ -62,6 +62,14 @@ class InsufficientQuestionsError(Exception):
         )
 
 
+class AssessmentAccessDeniedError(Exception):
+    """Raised when a user tries to access an assessment that belongs to a different school.
+
+    This produces a 403 Forbidden rather than 404 Not Found so that cross-school
+    access is distinguishable from a missing resource (CONSTITUTION Rule 7).
+    """
+
+
 class TeacherNotClassOwnerError(Exception):
     """Raised when a teacher tries to create an assessment for a class they do not teach."""
 
@@ -194,8 +202,6 @@ class AssessmentService:
             raise ValueError(f"Class not found: class_id={class_id}")
 
         # Count available questions before doing anything else
-        from sqlalchemy import func
-
         question_count_result = await self.db.execute(
             select(func.count(QuestionBank.id))
             .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
@@ -447,7 +453,7 @@ class AssessmentService:
 
     async def create_assessment(
         self,
-        school_id: uuid.UUID,
+        school_id: uuid.UUID | None,
         teacher_id: uuid.UUID,
         class_id: uuid.UUID,
         body: AssessmentCreateRequest,
@@ -569,7 +575,7 @@ class AssessmentService:
     async def get_assessment(
         self,
         assessment_id: uuid.UUID,
-        school_id: uuid.UUID,
+        school_id: uuid.UUID | None,
         requesting_user_id: uuid.UUID,
         requesting_user_role: str,
     ) -> tuple[Assessment, list[QuestionBank]]:
@@ -589,17 +595,22 @@ class AssessmentService:
             ValueError: If assessment not found or school_id mismatch.
         """
         # KaihleAdmin can access any assessment; all others are scoped to their school.
-        # school_id filter is in SQL — data is never fetched before authorization.
+        # For non-KaihleAdmin: first check existence, then school membership, so we
+        # can return 403 for cross-school access instead of 404 (CONSTITUTION Rule 7).
         if requesting_user_role == UserRole.KAIHLE_ADMIN:
-            q = select(Assessment).where(Assessment.id == assessment_id)
+            assessment = (
+                await self.db.execute(select(Assessment).where(Assessment.id == assessment_id))
+            ).scalar_one_or_none()
+            if assessment is None:
+                raise ValueError(f"Assessment not found: {assessment_id}")
         else:
-            q = select(Assessment).where(
-                Assessment.id == assessment_id,
-                Assessment.school_id == school_id,
-            )
-        assessment = (await self.db.execute(q)).scalar_one_or_none()
-        if assessment is None:
-            raise ValueError(f"Assessment not found: {assessment_id}")
+            assessment = (
+                await self.db.execute(select(Assessment).where(Assessment.id == assessment_id))
+            ).scalar_one_or_none()
+            if assessment is None:
+                raise ValueError(f"Assessment not found: {assessment_id}")
+            if assessment.school_id != school_id:
+                raise AssessmentAccessDeniedError(f"Assessment {assessment_id} belongs to a different school.")
 
         # Load questions in order_index order
         question_rows = (
@@ -625,7 +636,7 @@ class AssessmentService:
     async def publish_assessment(
         self,
         assessment_id: uuid.UUID,
-        school_id: uuid.UUID,
+        school_id: uuid.UUID | None,
         teacher_id: uuid.UUID,
         deadline: datetime | None,
     ) -> Assessment:
@@ -655,7 +666,7 @@ class AssessmentService:
         if assessment is None:
             raise ValueError(f"Assessment not found: {assessment_id}")
         if assessment.created_by != teacher_id:
-            raise ValueError(f"Only the creating teacher can publish assessment {assessment_id}")
+            raise TeacherNotClassOwnerError(f"Only the creating teacher can publish assessment {assessment_id}")
         if assessment.status != AssessmentStatus.DRAFT:
             raise ValueError(f"Cannot publish: status is {assessment.status}. Must be DRAFT.")
 
@@ -682,10 +693,93 @@ class AssessmentService:
         )
         return assessment
 
+    async def list_class_assessments(
+        self,
+        class_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        requesting_user_id: uuid.UUID,
+        requesting_user_role: str,
+        status_filter: str | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[Assessment], int]:
+        """List assessments for a class with role-based visibility rules.
+
+        Role-based visibility:
+        - TEACHER: must own the class; sees all statuses.
+        - STUDENT: sees only ACTIVE and CLOSED (plus system-generated regardless of status).
+        - SCHOOL_ADMIN: sees all assessments within school_id scope.
+        - KAIHLE_ADMIN: sees all (no school_id filter).
+
+        Args:
+            class_id: The class to list assessments for.
+            school_id: Requesting user's school_id (for multi-tenancy guard).
+            requesting_user_id: The requesting user's ID.
+            requesting_user_role: Role string.
+            status_filter: Optional status to filter by (DRAFT, ACTIVE, CLOSED).
+            page: 1-based page number.
+            page_size: Items per page.
+
+        Returns:
+            Tuple of (items, total) where items is the paginated slice.
+
+        Raises:
+            TeacherNotClassOwnerError: If teacher does not own the class.
+            ValueError: If class not found (for teacher/student).
+        """
+        # Build base query
+        if requesting_user_role == UserRole.KAIHLE_ADMIN:
+            base_q = select(Assessment).where(Assessment.class_id == class_id)
+        else:
+            base_q = select(Assessment).where(
+                Assessment.class_id == class_id,
+                Assessment.school_id == school_id,
+            )
+
+        # Role-based ownership/visibility rules
+        if requesting_user_role == UserRole.TEACHER:
+            # Verify teacher owns this class
+            class_result = await self.db.execute(
+                select(Class).where(
+                    Class.id == class_id,
+                    Class.school_id == school_id,
+                    Class.is_active.is_(True),
+                )
+            )
+            class_ = class_result.scalar_one_or_none()
+            if class_ is None:
+                raise ValueError(f"Class not found: class_id={class_id}")
+            if class_.teacher_id != requesting_user_id:
+                raise TeacherNotClassOwnerError(f"Teacher {requesting_user_id} does not own class {class_id}")
+            # Teachers see all statuses — no additional filter
+
+        elif requesting_user_role == UserRole.STUDENT:
+            # Students see only ACTIVE and CLOSED assessments,
+            # EXCEPT system-generated assessments which are always visible
+            base_q = base_q.where(
+                (Assessment.status.in_([AssessmentStatus.ACTIVE, AssessmentStatus.CLOSED]))
+                | (Assessment.is_system_generated.is_(True))
+            )
+
+        # Apply optional status filter (for TEACHER, SCHOOL_ADMIN, KAIHLE_ADMIN)
+        if status_filter and requesting_user_role != UserRole.STUDENT:
+            base_q = base_q.where(Assessment.status == status_filter)
+
+        # Count total
+        count_q = select(func.count()).select_from(base_q.subquery())
+        total = (await self.db.execute(count_q)).scalar() or 0
+
+        # Paginate
+        offset = (page - 1) * page_size
+        items_q = base_q.order_by(Assessment.created_at.desc()).offset(offset).limit(page_size)
+        items = list((await self.db.execute(items_q)).scalars().all())
+
+        return items, total
+
     async def close_assessment(
         self,
         assessment_id: uuid.UUID,
-        school_id: uuid.UUID,
+        school_id: uuid.UUID | None,
         teacher_id: uuid.UUID,
     ) -> Assessment:
         """Transition an ACTIVE assessment to CLOSED status.
@@ -714,7 +808,7 @@ class AssessmentService:
         if assessment is None:
             raise ValueError(f"Assessment not found: {assessment_id}")
         if assessment.created_by != teacher_id:
-            raise ValueError(f"Only the creating teacher can close assessment {assessment_id}")
+            raise TeacherNotClassOwnerError(f"Only the creating teacher can close assessment {assessment_id}")
         if assessment.status != AssessmentStatus.ACTIVE:
             raise ValueError(f"Cannot close: status is {assessment.status}. Must be ACTIVE.")
 
