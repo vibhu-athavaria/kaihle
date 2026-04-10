@@ -14,6 +14,8 @@ import { TeacherDashboard } from "./pages/dashboard/TeacherDashboard";
 import { TeacherSettingsPage } from "./pages/settings/TeacherSettingsPage";
 import { NewAssessmentPage } from "./pages/assessments/NewAssessmentPage";
 import { AssessmentListPage } from "./pages/assessments/AssessmentListPage";
+import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
+import { StudentResultDetailPage } from "./pages/assessments/StudentResultDetailPage";
 import { Link } from "react-router-dom";
 import { Button } from "@kaihle/ui";
 import { Plus } from "lucide-react";
@@ -166,6 +168,30 @@ export default function App() {
           }
         />
         {/* General teacher shell — admins may also view teacher dashboard */}
+        <Route
+          path="/teacher/assessments/:assessmentId/results/:studentId"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+                <ErrorBoundary role="teacher">
+                  <StudentResultDetailPage />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/teacher/assessments/:assessmentId/results"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+                <ErrorBoundary role="teacher">
+                  <AssessmentResultsPage />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
         <Route
           path="/teacher/*"
           element={
