@@ -10,6 +10,8 @@ import { MyProgress } from "./pages/my-progress/MyProgress";
 import { StudyPlans } from "./pages/study-plans/StudyPlans";
 import { Assessments } from "./pages/assessments/Assessments";
 import { StudentSettings } from "./pages/settings/StudentSettings";
+import { TakeAssessmentPage } from "./pages/assessments/TakeAssessmentPage";
+import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 
 export default function App() {
   return (
@@ -68,6 +70,26 @@ export default function App() {
             <PrivateRoute>
               <ErrorBoundary role="student">
                 <Assessments />
+              </ErrorBoundary>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/assessments/:attemptId/take"
+          element={
+            <PrivateRoute>
+              <ErrorBoundary role="student">
+                <TakeAssessmentPage />
+              </ErrorBoundary>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/assessments/:attemptId/results"
+          element={
+            <PrivateRoute>
+              <ErrorBoundary role="student">
+                <AssessmentResultsPage />
               </ErrorBoundary>
             </PrivateRoute>
           }
