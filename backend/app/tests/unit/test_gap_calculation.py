@@ -295,6 +295,21 @@ class TestMasteryWeightingFormulas:
         )
         assert mastery >= 0.0
 
+    def test_calculate_when_first_attempt_3_of_5_correct_then_mastery_0_6(
+        self,
+    ) -> None:
+        """First attempt (non-system_generated), 3 correct out of 5 questions for one subtopic.
+
+        current_score = 3/5 = 0.6, no historical, not system-generated.
+        mastery = 0.6 × 1.0 = 0.6.
+        """
+        mastery = self._compute_mastery(
+            current_score=3 / 5,
+            historical=[],
+            is_system_generated=False,
+        )
+        assert mastery == pytest.approx(0.6, abs=1e-9)
+
 
 # ── Task-level tests (mocked DB) ─────────────────────────────────────────────
 
@@ -469,16 +484,29 @@ class TestGapTaskStructure:
         assert "asyncio.run(" not in source
 
     def test_calculate_gap_states_on_failure_emits_critical_log(self) -> None:
-        """on_failure callback must call logger.critical with required fields."""
-        import inspect
+        """on_failure callback must call logger.critical with required fields.
 
-        from app.tasks import gap_tasks
+        Instantiates CalculateGapStatesTask directly and calls on_failure(),
+        verifying structlog.get_logger().critical is invoked with the expected event.
+        """
+        from unittest.mock import MagicMock, patch
 
-        source = inspect.getsource(gap_tasks.calculate_gap_states)
-        assert "logger.critical" in source
-        assert "calculate_gap_states_permanently_failed" in source
-        assert "attempt_id" in source
-        assert "exc_info=True" in source
+        from app.tasks.gap_tasks import CalculateGapStatesTask
+
+        task = CalculateGapStatesTask()
+        exc = RuntimeError("boom")
+
+        mock_logger = MagicMock()
+        with patch("app.tasks.gap_tasks.logger", mock_logger):
+            task.on_failure(exc, "task-id", ["attempt-id"], {}, None)
+
+        mock_logger.critical.assert_called_once()
+        call_kwargs = mock_logger.critical.call_args
+        # First positional arg is the event name
+        assert call_kwargs[0][0] == "calculate_gap_states_permanently_failed"
+        assert call_kwargs[1].get("task_id") == "task-id"
+        assert call_kwargs[1].get("attempt_id") == "attempt-id"
+        assert call_kwargs[1].get("exc_info") is True
 
     def test_calculate_gap_states_task_name_correct(self) -> None:
         """Task name must follow app.tasks.gap_tasks.calculate_gap_states convention."""

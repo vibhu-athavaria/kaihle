@@ -194,7 +194,7 @@ class GapService:
         for response in responses:
             sub_id = question_to_subtopic.get(response.question_id)
             if sub_id is None:
-                logger.warning(
+                logger.error(
                     "calculate_gap_states_unknown_question_skipped",
                     question_id=str(response.question_id),
                     attempt_id=attempt_id_str,
