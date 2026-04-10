@@ -2,9 +2,22 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
 import { useStudentProfile } from "../hooks/useStudentProfile";
+import { useStudentGapMapForTeacher } from "../hooks/useStudentGapMapForTeacher";
 import { StudentProfileHeader } from "../components/students/StudentProfileHeader";
-import { LearningStyleCard } from "../components/students/LearningStyleCard";
-import { GapProfileSection } from "../components/students/GapProfileSection";
+import { SubjectMasteryCards } from "../components/students/SubjectMasteryCards";
+import { StudentGapMapTab } from "../components/students/StudentGapMapTab";
+import { LearningProfileTab } from "../components/students/LearningProfileTab";
+import { StudyPlanHistoryTab } from "../components/students/StudyPlanHistoryTab";
+import { AssessmentHistoryTab } from "../components/students/AssessmentHistoryTab";
+
+type TabId = "gap-map" | "learning-profile" | "study-plans" | "assessments";
+
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: "gap-map", label: "Gap Map" },
+  { id: "learning-profile", label: "Learning Profile" },
+  { id: "study-plans", label: "Study Plans" },
+  { id: "assessments", label: "Assessments" },
+];
 
 export function StudentProfilePage() {
   const { studentId } = useParams<{ studentId: string }>();
@@ -14,8 +27,16 @@ export function StudentProfilePage() {
     studentId ?? null,
     schoolId,
   );
+  const [activeTab, setActiveTab] = useState<TabId>("gap-map");
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(
     null,
+  );
+
+  const subjectId =
+    selectedSubjectId ?? data?.availableSubjects[0]?.subjectId ?? null;
+  const { data: gapMap } = useStudentGapMapForTeacher(
+    studentId ?? null,
+    subjectId,
   );
 
   if (isLoading) {
@@ -24,10 +45,6 @@ export function StudentProfilePage() {
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-48 bg-gray-200 rounded" />
           <div className="h-4 w-32 bg-gray-100 rounded" />
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 h-64 bg-gray-100 rounded-xl animate-pulse" />
-          <div className="h-48 bg-gray-100 rounded-xl animate-pulse" />
         </div>
       </div>
     );
@@ -43,85 +60,88 @@ export function StudentProfilePage() {
     );
   }
 
-  const filteredGapMap = data.gapMap
-    ? {
-        ...data.gapMap,
-        scores: selectedSubjectId
-          ? data.gapMap.scores.filter((s) => s.topic_id === selectedSubjectId)
-          : data.gapMap.scores,
-      }
-    : null;
-
-  const avgMastery =
-    filteredGapMap && filteredGapMap.scores.length > 0
-      ? filteredGapMap.scores.reduce(
-          (sum, s) => sum + (s.mastery_score ?? 0),
-          0,
-        ) / filteredGapMap.scores.filter((s) => s.mastery_score !== null).length
-      : null;
+  const subjectMasteryCards = data.availableSubjects.map((s) => ({
+    subjectId: s.subjectId,
+    subjectName: s.subjectName,
+    avgMastery: null as number | null,
+  }));
 
   return (
-    <div className="p-6 space-y-6">
-      <StudentProfileHeader
-        name={data.studentName}
-        email={data.email}
-        className={data.className}
-        avgMastery={avgMastery}
-      />
+    <div className="space-y-0">
+      <div className="p-6 pb-4">
+        <StudentProfileHeader
+          name={data.studentName}
+          email={data.email}
+          className={data.className}
+          avgMastery={null}
+        />
+      </div>
 
-      {data.availableSubjects.length > 1 && (
-        <div className="flex items-center gap-4">
-          <span className="text-sm font-medium text-brand-muted">Subject:</span>
-          <div className="flex flex-wrap gap-2">
-            {data.availableSubjects.map((subject) => (
-              <button
-                key={subject.subjectId}
-                type="button"
-                onClick={() => setSelectedSubjectId(subject.subjectId)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  selectedSubjectId === subject.subjectId ||
-                  (!selectedSubjectId &&
-                    subject.subjectId === filteredGapMap?.subject_id)
-                    ? "bg-brand-primary text-white"
-                    : "bg-gray-100 text-brand-muted hover:bg-gray-200"
-                }`}
-              >
-                {subject.subjectName}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setSelectedSubjectId(null)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                selectedSubjectId === null
-                  ? "bg-brand-primary text-white"
-                  : "bg-gray-100 text-brand-muted hover:bg-gray-200"
-              }`}
-            >
-              All Subjects
-            </button>
-          </div>
+      {subjectMasteryCards.length > 0 && (
+        <div className="px-6 py-4">
+          <SubjectMasteryCards subjects={subjectMasteryCards} />
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <GapProfileSection gapMap={filteredGapMap} />
-        </div>
-        <div className="space-y-6">
-          <LearningStyleCard
-            modalityScores={data.learningProfile?.modality_scores ?? {}}
-            interests={data.learningProfile?.interests ?? []}
+      {/* Tab nav */}
+      <div className="sticky top-0 z-10 bg-white border-b border-brand-border">
+        <nav className="flex px-6">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-3 text-sm font-sans font-medium transition-colors ${
+                activeTab === tab.id
+                  ? "border-b-2 border-brand-gold text-brand-gold"
+                  : "text-brand-muted hover:text-brand-ink"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      <div className="p-6">
+        {activeTab === "gap-map" && (
+          <>
+            {data.availableSubjects.length > 1 && (
+              <div className="flex gap-2 mb-4 flex-wrap">
+                {data.availableSubjects.map((s) => (
+                  <button
+                    key={s.subjectId}
+                    type="button"
+                    onClick={() => setSelectedSubjectId(s.subjectId)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      (selectedSubjectId ??
+                        data.availableSubjects[0]?.subjectId) === s.subjectId
+                        ? "bg-brand-light text-brand-primary border border-brand-primary"
+                        : "bg-gray-100 text-brand-muted hover:bg-gray-200"
+                    }`}
+                  >
+                    {s.subjectName}
+                  </button>
+                ))}
+              </div>
+            )}
+            <StudentGapMapTab scores={gapMap?.scores ?? []} />
+          </>
+        )}
+
+        {activeTab === "learning-profile" && data.learningProfile && (
+          <LearningProfileTab
+            modalityScores={data.learningProfile.modality_scores}
+            interests={data.learningProfile.interests}
           />
-          <div className="bg-white rounded-2xl border border-brand-border shadow-sm p-5">
-            <h2 className="font-display font-semibold text-lg text-brand-ink mb-4">
-              Study Plan History
-            </h2>
-            <p className="text-sm text-brand-muted italic">
-              Study plan history will appear here once M3 is complete.
-            </p>
-          </div>
-        </div>
+        )}
+        {activeTab === "learning-profile" && !data.learningProfile && (
+          <p className="text-sm text-brand-muted italic text-center py-12">
+            This student hasn't completed their learning profile yet.
+          </p>
+        )}
+        {activeTab === "study-plans" && <StudyPlanHistoryTab />}
+        {activeTab === "assessments" && <AssessmentHistoryTab />}
       </div>
     </div>
   );
