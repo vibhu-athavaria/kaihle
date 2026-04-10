@@ -32,12 +32,52 @@ function TeacherShell() {
   // Inner routes rendered inside the DashboardLayout
   const innerRoutes = useRoutes([
     { path: "dashboard", element: <TeacherDashboard /> },
+    // Default: redirect to dashboard
+    { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
+  ]);
+
+  return (
+    <DashboardLayout
+      variant="teacher"
+      pageTitle={`${greeting()}, ${teacherName}`}
+      onLogout={logout}
+      topNavAction={
+        <Link to="/teacher/assessments/new">
+          <Button
+            variant="primary"
+            size="sm"
+            className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
+          >
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            Assessment
+          </Button>
+        </Link>
+      }
+    >
+      {innerRoutes}
+    </DashboardLayout>
+  );
+}
+
+// Shell for assessment-specific routes — TEACHER only (no admin impersonation)
+function TeacherAssessmentShell() {
+  const { user, logout } = useAuth();
+
+  const greeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
+  const teacherName = user?.email?.split("@")[0] || "Teacher";
+
+  const innerRoutes = useRoutes([
     { path: "assessments/new", element: <NewAssessmentPage /> },
     {
       path: "classes/:classId/assessments",
       element: <AssessmentListPage />,
     },
-    // Default: redirect to dashboard
     { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
   ]);
 
@@ -91,6 +131,32 @@ export default function App() {
             </PrivateRoute>
           }
         />
+        {/* Assessment creation/management routes — TEACHER only */}
+        <Route
+          path="/teacher/assessments/new"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+                <ErrorBoundary role="teacher">
+                  <TeacherAssessmentShell />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/teacher/classes/:classId/assessments"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+                <ErrorBoundary role="teacher">
+                  <TeacherAssessmentShell />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
+        {/* General teacher shell — admins may also view teacher dashboard */}
         <Route
           path="/teacher/*"
           element={

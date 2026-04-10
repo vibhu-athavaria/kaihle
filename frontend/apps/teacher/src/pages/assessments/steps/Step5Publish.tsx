@@ -32,8 +32,9 @@ export function Step5Publish() {
   const [publishError, setPublishError] = useState<string | null>(null);
 
   function handleSaveDraft() {
+    const targetClassId = classId; // capture before reset clears store
     reset();
-    navigate(`/teacher/classes/${classId}/assessments`);
+    navigate(`/teacher/classes/${targetClassId}/assessments`);
     toast.success("Assessment saved as draft.");
   }
 
@@ -42,10 +43,13 @@ export function Step5Publish() {
     setIsPublishing(true);
     setPublishError(null);
 
+    const targetClassId = classId; // capture before reset clears store
+    const targetAssessmentId = draftAssessmentId; // capture before reset clears store
+
     try {
-      await apiClient.post(`/api/v1/assessments/${draftAssessmentId}/publish`);
+      await apiClient.post(`/api/v1/assessments/${targetAssessmentId}/publish`);
       reset();
-      navigate(`/teacher/classes/${classId}/assessments`);
+      navigate(`/teacher/classes/${targetClassId}/assessments`);
       toast.success("Assessment published and visible to students.");
     } catch (err: unknown) {
       const axiosErr = err as {
