@@ -5,6 +5,7 @@ import {
   Navigate,
   useRoutes,
 } from "react-router-dom";
+import { useMemo } from "react";
 import { PrivateRoute, RoleRoute, useAuth } from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
@@ -30,11 +31,15 @@ function TeacherShell() {
   const teacherName = user?.email?.split("@")[0] || "Teacher";
 
   // Inner routes rendered inside the DashboardLayout
-  const innerRoutes = useRoutes([
-    { path: "dashboard", element: <TeacherDashboard /> },
-    // Default: redirect to dashboard
-    { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
-  ]);
+  const routes = useMemo(
+    () => [
+      { path: "dashboard", element: <TeacherDashboard /> },
+      // Default: redirect to dashboard
+      { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
+    ],
+    [],
+  );
+  const innerRoutes = useRoutes(routes);
 
   return (
     <DashboardLayout
@@ -72,14 +77,18 @@ function TeacherAssessmentShell() {
 
   const teacherName = user?.email?.split("@")[0] || "Teacher";
 
-  const innerRoutes = useRoutes([
-    { path: "assessments/new", element: <NewAssessmentPage /> },
-    {
-      path: "classes/:classId/assessments",
-      element: <AssessmentListPage />,
-    },
-    { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
-  ]);
+  const assessmentRoutes = useMemo(
+    () => [
+      { path: "assessments/new", element: <NewAssessmentPage /> },
+      {
+        path: "classes/:classId/assessments",
+        element: <AssessmentListPage />,
+      },
+      { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
+    ],
+    [],
+  );
+  const innerRoutes = useRoutes(assessmentRoutes);
 
   return (
     <DashboardLayout
