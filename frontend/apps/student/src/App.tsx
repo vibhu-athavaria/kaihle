@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { PrivateRoute, RoleRoute } from "@kaihle/auth";
+import { PrivateRoute, RoleRoute, OnboardingRoute } from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { ErrorBoundary } from "@kaihle/ui";
 import { LoginPage } from "./pages/LoginPage";
@@ -10,6 +10,8 @@ import { MyProgress } from "./pages/my-progress/MyProgress";
 import { StudyPlans } from "./pages/study-plans/StudyPlans";
 import { Assessments } from "./pages/assessments/Assessments";
 import { StudentSettings } from "./pages/settings/StudentSettings";
+import { TakeAssessmentPage } from "./pages/assessments/TakeAssessmentPage";
+import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 
 export default function App() {
   return (
@@ -69,6 +71,30 @@ export default function App() {
               <ErrorBoundary role="student">
                 <Assessments />
               </ErrorBoundary>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/assessments/:attemptId/take"
+          element={
+            <PrivateRoute>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <TakeAssessmentPage />
+                </ErrorBoundary>
+              </OnboardingRoute>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/assessments/:attemptId/results"
+          element={
+            <PrivateRoute>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <AssessmentResultsPage />
+                </ErrorBoundary>
+              </OnboardingRoute>
             </PrivateRoute>
           }
         />

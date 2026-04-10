@@ -52,6 +52,7 @@ export function ScoreRing({
       aria-label={ariaLabel}
       className={className}
     >
+      <title>{ariaLabel}</title>
       {/* Background arc */}
       <circle
         cx={cx}

@@ -9,6 +9,7 @@ export default {
   moduleNameMapper: {
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
     '^@kaihle/auth$': '<rootDir>/src/hooks/__tests__/__mocks__/apiClient.ts',
+    '^@kaihle/types$': '<rootDir>/../../packages/types/src/index.ts',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {

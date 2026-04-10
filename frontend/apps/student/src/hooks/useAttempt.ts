@@ -1,0 +1,135 @@
+/**
+ * Hooks for interacting with assessment attempts.
+ * All API calls go through apiClient which auto-attaches the Bearer token.
+ *
+ * Endpoints exercised:
+ *   GET  /api/v1/attempts/:attemptId          → fetch attempt + questions
+ *   POST /api/v1/attempts/:attemptId/responses → save single answer
+ *   POST /api/v1/attempts/:attemptId/submit    → submit entire attempt
+ */
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiClient } from "@kaihle/auth";
+
+// ─────────────────────────────────────────────────────────────
+//  Types
+// ─────────────────────────────────────────────────────────────
+
+/** A single MCQ option as returned by the backend. */
+export interface QuestionOption {
+  key: string; // "A" | "B" | "C" | "D"
+  text: string;
+}
+
+/** One question inside an attempt. */
+export interface AttemptQuestion {
+  question_id: string;
+  question_text: string;
+  options: QuestionOption[];
+}
+
+/** Status values mirroring AssessmentAttemptStatus enum in the backend. */
+export type AttemptStatus = "IN_PROGRESS" | "COMPLETED" | "TIMED_OUT";
+
+/**
+ * Full attempt payload returned by GET /api/v1/attempts/:attemptId
+ * Includes metadata AND the question list.
+ */
+export interface AttemptResponse {
+  id: string;
+  assessment_id: string;
+  student_id: string;
+  status: AttemptStatus;
+  started_at: string; // ISO 8601
+  submitted_at: string | null;
+  score: number | null; // 0.0–1.0 or null while IN_PROGRESS
+  questions: AttemptQuestion[];
+}
+
+/** One answer entry in the bulk-submit body. */
+export interface AttemptAnswer {
+  question_id: string;
+  selected_key: string;
+}
+
+/**
+ * Result payload returned by POST /api/v1/attempts/:attemptId/submit
+ * Contains the final score and number of correct answers.
+ */
+export interface AttemptResultResponse {
+  attempt_id: string;
+  score: number; // 0.0–1.0
+  correct_count: number;
+  total_questions: number;
+  status: AttemptStatus;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Hooks
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Fetches a single attempt (including its question list) by ID.
+ *
+ * - `refetchOnWindowFocus: false` prevents disrupting an in-progress assessment
+ *   when the student switches between browser tabs.
+ */
+export function useAttempt(attemptId: string) {
+  return useQuery<AttemptResponse>({
+    queryKey: ["student", "attempt", attemptId],
+    queryFn: async () => {
+      const res = await apiClient.get<AttemptResponse>(
+        `/api/v1/attempts/${attemptId}`,
+      );
+      return res.data;
+    },
+    enabled: !!attemptId,
+    refetchOnWindowFocus: false, // don't disrupt mid-assessment
+  });
+}
+
+// ─── Save single answer ──────────────────────────────────────
+
+interface SubmitResponseVars {
+  attemptId: string;
+  questionId: string;
+  selectedKey: string;
+}
+
+/**
+ * Saves a single question response in the background.
+ * Called automatically after the student selects an option and clicks Next.
+ * Failures are surfaced via `isError` — they do NOT block page navigation.
+ */
+export function useSubmitResponse() {
+  return useMutation<void, Error, SubmitResponseVars>({
+    mutationFn: async ({ attemptId, questionId, selectedKey }) => {
+      await apiClient.post(`/api/v1/attempts/${attemptId}/responses`, {
+        question_id: questionId,
+        selected_key: selectedKey,
+      });
+    },
+  });
+}
+
+// ─── Submit entire attempt ───────────────────────────────────
+
+interface SubmitAttemptVars {
+  attemptId: string;
+  answers: AttemptAnswer[];
+}
+
+/**
+ * Submits the entire attempt with all collected answers.
+ * Triggers scoring on the backend and returns the result summary.
+ */
+export function useSubmitAttempt() {
+  return useMutation<AttemptResultResponse, Error, SubmitAttemptVars>({
+    mutationFn: async ({ attemptId, answers }) => {
+      const res = await apiClient.post<AttemptResultResponse>(
+        `/api/v1/attempts/${attemptId}/submit`,
+        { answers },
+      );
+      return res.data;
+    },
+  });
+}
