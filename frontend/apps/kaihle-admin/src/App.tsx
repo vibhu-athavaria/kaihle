@@ -11,6 +11,8 @@ import { AdminSchoolDetail } from "./pages/AdminSchoolDetail";
 import { AdminConfig } from "./pages/AdminConfig";
 import { AdminUsers } from "./pages/AdminUsers";
 import { AdminQuestionReview } from "./pages/AdminQuestionReview";
+import { VideoReviewQueue } from "./pages/content/VideoReviewQueue";
+import { VideoReviewDetail } from "./pages/content/VideoReviewDetail";
 
 export default function App() {
   return (
@@ -46,6 +48,14 @@ export default function App() {
                       <Route
                         path="question-bank"
                         element={<AdminQuestionReview />}
+                      />
+                      <Route
+                        path="content/videos"
+                        element={<VideoReviewQueue />}
+                      />
+                      <Route
+                        path="content/videos/:subtopicId"
+                        element={<VideoReviewDetail />}
                       />
                       <Route
                         index

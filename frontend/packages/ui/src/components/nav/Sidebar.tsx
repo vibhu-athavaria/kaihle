@@ -13,6 +13,7 @@ import {
   Cog,
   LogOut,
   FileText,
+  Video,
 } from "lucide-react";
 import { NavItem } from "./NavItem";
 
@@ -117,6 +118,11 @@ const adminSections: NavSection[] = [
         label: "Assessment Questions",
         href: "/kaihle-admin/question-bank",
         icon: FileText,
+      },
+      {
+        label: "Video Library",
+        href: "/kaihle-admin/content/videos",
+        icon: Video,
       },
     ],
   },
