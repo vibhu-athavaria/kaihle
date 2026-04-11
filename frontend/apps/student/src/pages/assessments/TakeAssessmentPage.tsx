@@ -156,7 +156,7 @@ export function TakeAssessmentPage() {
   const answeredCount = Object.keys(answers).length;
   const isLastQuestion = currentIndex === totalQuestions - 1;
   const selectedKey = currentQuestion
-    ? answers[currentQuestion.question_id] ?? null
+    ? (answers[currentQuestion.question_id] ?? null)
     : null;
 
   // Progress: % of answered questions

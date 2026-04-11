@@ -57,7 +57,7 @@ function AssessmentResultsContent({ assessmentId }: { assessmentId: string }) {
   }
 
   const typeBadge = data
-    ? TYPE_BADGE[data.assessmentType] ?? TYPE_BADGE["FINAL"]
+    ? (TYPE_BADGE[data.assessmentType] ?? TYPE_BADGE["FINAL"])
     : null;
 
   const attempts = data?.attempts ?? [];

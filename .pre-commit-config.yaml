@@ -34,11 +34,15 @@ repos:
   # ─── FRONTEND ───────────────────────────────────────────────────────────────
 
   # Prettier: formatting check (matches CI's `prettier --check`)
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+  # Using pnpm exec prettier directly to match CI's version (v3.8.2 from package.json)
+  - repo: local
     hooks:
       - id: prettier
+        name: Prettier (via pnpm)
+        entry: bash -c "cd frontend && pnpm exec prettier --check"
+        language: system
         types_or: [ts, tsx, json, css]
+        pass_filenames: false
         exclude: "^frontend/dist/"
 
   # TypeScript: type check (matches CI's per-app tsc --noEmit)
