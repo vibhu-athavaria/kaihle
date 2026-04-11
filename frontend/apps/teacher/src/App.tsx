@@ -16,6 +16,7 @@ import { NewAssessmentPage } from "./pages/assessments/NewAssessmentPage";
 import { AssessmentListPage } from "./pages/assessments/AssessmentListPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudentResultDetailPage } from "./pages/assessments/StudentResultDetailPage";
+import { ExplanationReviewPage } from "./pages/classes/ExplanationReviewPage";
 import { Link } from "react-router-dom";
 import { Button } from "@kaihle/ui";
 import { Plus } from "lucide-react";
@@ -115,6 +116,54 @@ function TeacherAssessmentShell() {
   );
 }
 
+// Shell for class-specific content routes — TEACHER only
+function TeacherContentShell() {
+  const { user, logout } = useAuth();
+
+  const greeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
+  const teacherName = user?.email?.split("@")[0] || "Teacher";
+
+  const contentRoutes = useMemo(
+    () => [
+      {
+        path: "classes/:classId/explanation-review",
+        element: <ExplanationReviewPage />,
+      },
+      { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
+    ],
+    [],
+  );
+  const innerRoutes = useRoutes(contentRoutes);
+
+  return (
+    <DashboardLayout
+      variant="teacher"
+      pageTitle={`${greeting()}, ${teacherName}`}
+      onLogout={logout}
+      topNavAction={
+        <Link to="/teacher/assessments/new">
+          <Button
+            variant="primary"
+            size="sm"
+            className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
+          >
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            Assessment
+          </Button>
+        </Link>
+      }
+    >
+      {innerRoutes}
+    </DashboardLayout>
+  );
+}
+
 function TeacherSettingsApp() {
   const { logout } = useAuth();
 
@@ -162,6 +211,19 @@ export default function App() {
               <RoleRoute allowedRoles={[UserRole.TEACHER]}>
                 <ErrorBoundary role="teacher">
                   <TeacherAssessmentShell />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
+        {/* Class content review routes — TEACHER only */}
+        <Route
+          path="/teacher/classes/:classId/explanation-review"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+                <ErrorBoundary role="teacher">
+                  <TeacherContentShell />
                 </ErrorBoundary>
               </RoleRoute>
             </PrivateRoute>

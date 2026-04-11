@@ -48,6 +48,11 @@ const teacherSections: NavSection[] = [
         href: "/teacher/classes/:classId/lesson-plans",
         icon: BookOpen,
       },
+      {
+        label: "Explanation Review",
+        href: "/teacher/classes/:classId/explanation-review",
+        icon: FileText,
+      },
     ],
   },
   {
@@ -59,10 +64,6 @@ const teacherSections: NavSection[] = [
         icon: Users,
       },
     ],
-  },
-  {
-    section: "TOOLS",
-    items: [{ label: "Study Plans", href: "#", icon: BookOpen }],
   },
   {
     section: "ACCOUNT",

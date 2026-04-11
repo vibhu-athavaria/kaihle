@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlalchemy import Boolean, CheckConstraint, Enum, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -72,6 +72,18 @@ class StudyPlan(Base, UUIDMixin, TimestampMixin):
     started_at: Mapped[datetime | None]
     completed_at: Mapped[datetime | None]
 
+    # ORM relationships for eager loading (prevents N+1 queries in list endpoints)
+    resources: Mapped[list["StudyPlanResource"]] = relationship(
+        "StudyPlanResource",
+        cascade="all, delete-orphan",
+        order_by="StudyPlanResource.order_index",
+    )
+    quiz: Mapped["StudyPlanQuiz | None"] = relationship(
+        "StudyPlanQuiz",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
 
 class StudyPlanResource(Base, UUIDMixin, TimestampMixin):
     """Curated external resources (2-3 per plan)."""
@@ -129,7 +141,7 @@ class StudyPlanQuiz(Base, UUIDMixin):
     #   "options": [{"key": "A", "text": "..."},...],
     #   "correct_answer": "A", "explanation": "..."
     # }]
-    student_answers: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    student_answers: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     # [{index: 0, answer: "A", is_correct: true, score: 1.0}]
     # NULL until student submits
     score: Mapped[float | None]

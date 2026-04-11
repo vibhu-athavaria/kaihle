@@ -6,7 +6,7 @@ curriculum_topics, subtopics, subtopic_prerequisites, curriculum_chunks, questio
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -22,6 +22,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+if TYPE_CHECKING:
+    from app.models.subtopic_content import SubtopicContent
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -177,6 +180,9 @@ class Subtopic(Base, UUIDMixin, TimestampMixin):
 
     curriculum_topic: Mapped["CurriculumTopic"] = relationship("CurriculumTopic", back_populates="subtopics")
     questions: Mapped[list["QuestionBank"]] = relationship("QuestionBank", back_populates="subtopic")
+    subtopic_contents: Mapped[list["SubtopicContent"]] = relationship(  # noqa: F821
+        "SubtopicContent", back_populates="subtopic"
+    )
 
 
 class SubtopicPrerequisite(Base):

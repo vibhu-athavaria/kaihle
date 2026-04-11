@@ -129,6 +129,7 @@ class SubtopicContent(Base, UUIDMixin):
     # Relationships
     interest_category = relationship("InterestCategory", viewonly=True)
     reviewed_by = relationship("User", foreign_keys=[reviewed_by_id], viewonly=True)
+    subtopic = relationship("Subtopic", viewonly=True)
 
     __table_args__ = (
         Index("idx_subtopic_content_subtopic", "subtopic_id"),
