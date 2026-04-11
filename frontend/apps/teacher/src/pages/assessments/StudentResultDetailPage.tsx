@@ -57,7 +57,7 @@ function StudentDetailContent({
   }
 
   const typeBadge = data
-    ? TYPE_BADGE[data.assessmentType] ?? TYPE_BADGE["FINAL"]
+    ? (TYPE_BADGE[data.assessmentType] ?? TYPE_BADGE["FINAL"])
     : null;
 
   return (

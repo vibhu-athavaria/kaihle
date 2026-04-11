@@ -143,8 +143,8 @@ export function ScoreDistributionChart({
       {showReteachBanner && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mt-3">
           <p className="text-amber-800 text-sm">
-            ⚠ More than 30% of students scored below 40%. This topic may
-            benefit from whole-class reteaching before moving on.
+            ⚠ More than 30% of students scored below 40%. This topic may benefit
+            from whole-class reteaching before moving on.
           </p>
         </div>
       )}

@@ -5,6 +5,7 @@ import { PendingAction } from "../pages/dashboard/PendingActionBanner";
 export interface TeacherClass {
   id: string;
   name: string;
+  subjectId: string;
   subjectName: string;
   gradeName: string;
   studentCount: number;
@@ -29,9 +30,9 @@ async function fetchTeacherDashboard(schoolId: string): Promise<{
   analytics: Record<string, number>;
 }> {
   const [classesRes, analyticsRes] = await Promise.all([
-    apiClient.get(`/api/v1/admin/schools/${schoolId}/classes`),
+    apiClient.get(`/api/v1/schools/${schoolId}/classes`),
     apiClient
-      .get(`/api/v1/admin/schools/${schoolId}/analytics`)
+      .get(`/api/v1/schools/${schoolId}/analytics`)
       .catch(() => ({ data: {} })),
   ]);
 
@@ -39,6 +40,7 @@ async function fetchTeacherDashboard(schoolId: string): Promise<{
   const classes = (classesRes.data || []).map((c: any) => ({
     id: c.id,
     name: c.name,
+    subjectId: c.subject_id ?? "",
     subjectName: c.subjectName || c.name?.split(" ")[0] || "Unknown",
     gradeName: c.gradeName || c.name?.split(" ")[1] || "Unknown",
     studentCount: 0,

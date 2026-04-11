@@ -2,15 +2,35 @@
 
 Computes per-subtopic mastery scores and upserts gap_states rows.
 Used by the calculate_gap_states Celery task.
+
+Also provides read methods for the gap map UI (M2-1-T2):
+  - get_class_gap_map: teacher heatmap
+  - get_student_gap_map: student progress view
+  - get_class_summary: lightweight class card summary
 """
 
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
-from sqlalchemy import select, text
+from fastapi import HTTPException, status
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.curriculum import CurriculumTopic, Subtopic, Topic
+from app.models.gap import GapState
+from app.models.school import Class, ClassEnrollment
+from app.models.user import User
+from app.schemas.gap_map import (
+    ClassGapMap,
+    ClassSummary,
+    GapMapNode,
+    StudentGapMap,
+    StudentGapScore,
+    StudentSubtopicScore,
+)
 
 logger = structlog.get_logger()
 
@@ -288,3 +308,293 @@ class GapService:
             subtopics_updated += 1
 
         return {"attempt_id": attempt_id_str, "subtopics_updated": subtopics_updated}
+
+    async def get_class_gap_map(
+        self,
+        class_id: uuid.UUID,
+        school_id: uuid.UUID,
+        subject_id: uuid.UUID,
+    ) -> ClassGapMap:
+        """Aggregate gap_states for all enrolled students in a class, grouped by subtopic.
+
+        Returns one GapMapNode per subtopic belonging to the given subject and grade.
+        Subtopics with no gap_state rows are still included with empty student_scores
+        and class_average=None (not yet assessed, different from low mastery).
+
+        Multi-tenancy: verifies class_.school_id == school_id before any data access.
+        gap_states does not have school_id — scoping is enforced via class_id which
+        is itself scoped to school_id.
+
+        Args:
+            class_id: The class to aggregate for. Must belong to school_id.
+            school_id: Used to verify class ownership — CONSTITUTION Rule 3.
+            subject_id: Filter subtopics to this subject.
+        """
+        class_ = await self.db.scalar(
+            select(Class).where(
+                Class.id == class_id,
+                Class.school_id == school_id,
+                Class.is_active.is_(True),
+            )
+        )
+        if not class_:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Class {class_id} not found in school {school_id}",
+            )
+
+        subtopic_rows = (
+            await self.db.execute(
+                select(
+                    Subtopic.id.label("subtopic_id"),
+                    Subtopic.name.label("subtopic_name"),
+                    Topic.id.label("topic_id"),
+                    Topic.name.label("topic_name"),
+                )
+                .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                .join(Topic, Topic.id == CurriculumTopic.topic_id)
+                .where(
+                    CurriculumTopic.subject_id == subject_id,
+                    CurriculumTopic.grade_id == class_.grade_id,
+                    CurriculumTopic.is_active.is_(True),
+                    Subtopic.is_active.is_(True),
+                )
+                .order_by(Topic.name, Subtopic.name)
+            )
+        ).all()
+
+        gap_rows = (
+            await self.db.execute(
+                select(
+                    GapState.subtopic_id,
+                    GapState.student_id,
+                    GapState.mastery_score,
+                    GapState.last_assessed_at,
+                    User.first_name,
+                    User.last_name,
+                )
+                .join(User, User.id == GapState.student_id)
+                .where(
+                    GapState.class_id == class_id,
+                )
+            )
+        ).all()
+
+        gaps_by_subtopic: dict[uuid.UUID, list[Any]] = defaultdict(list)
+        for row in gap_rows:
+            gaps_by_subtopic[row.subtopic_id].append(row)
+
+        nodes = []
+        for st in subtopic_rows:
+            student_gaps = gaps_by_subtopic.get(st.subtopic_id, [])
+            student_scores = [
+                StudentGapScore(
+                    student_id=g.student_id,
+                    student_name=f"{g.first_name} {g.last_name}",
+                    mastery_score=g.mastery_score,
+                    last_assessed_at=g.last_assessed_at,
+                )
+                for g in student_gaps
+            ]
+            scored = [s for s in student_scores if s.mastery_score is not None]
+            class_average: float | None = (
+                sum(s.mastery_score for s in scored if s.mastery_score is not None) / len(scored) if scored else None
+            )
+            nodes.append(
+                GapMapNode(
+                    subtopic_id=st.subtopic_id,
+                    subtopic_name=st.subtopic_name,
+                    topic_id=st.topic_id,
+                    topic_name=st.topic_name,
+                    class_average=class_average,
+                    student_count=len(student_scores),
+                    student_scores=student_scores,
+                )
+            )
+
+        return ClassGapMap(
+            class_id=class_id,
+            subject_id=subject_id,
+            generated_at=datetime.now(UTC),
+            nodes=nodes,
+        )
+
+    async def get_student_gap_map(
+        self,
+        student_id: uuid.UUID,
+        school_id: uuid.UUID,
+        subject_id: uuid.UUID,
+    ) -> StudentGapMap:
+        """Return gap_states for a single student filtered by subject.
+
+        Subtopics with no gap state are included with mastery_score=None and
+        last_assessed_at=None (frontend renders as grey "Not assessed").
+
+        Multi-tenancy: only returns data for classes where Class.school_id == school_id.
+
+        Args:
+            student_id: The student to return data for.
+            school_id: Multi-tenancy guard — CONSTITUTION Rule 3.
+            subject_id: Filter to one subject's subtopics.
+        """
+        enrolled_class = await self.db.scalar(
+            select(Class)
+            .join(ClassEnrollment, ClassEnrollment.class_id == Class.id)
+            .where(
+                ClassEnrollment.student_id == student_id,
+                ClassEnrollment.is_active.is_(True),
+                Class.school_id == school_id,
+                Class.subject_id == subject_id,
+                Class.is_active.is_(True),
+            )
+        )
+
+        if not enrolled_class:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No class enrollment found for student in this subject",
+            )
+
+        subtopic_rows = (
+            await self.db.execute(
+                select(
+                    Subtopic.id.label("subtopic_id"),
+                    Subtopic.name.label("subtopic_name"),
+                    Topic.id.label("topic_id"),
+                    Topic.name.label("topic_name"),
+                )
+                .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                .join(Topic, Topic.id == CurriculumTopic.topic_id)
+                .where(
+                    CurriculumTopic.subject_id == subject_id,
+                    CurriculumTopic.grade_id == enrolled_class.grade_id,
+                    CurriculumTopic.is_active.is_(True),
+                    Subtopic.is_active.is_(True),
+                )
+                .order_by(Topic.name, Subtopic.name)
+            )
+        ).all()
+
+        subtopic_ids = [row.subtopic_id for row in subtopic_rows]
+
+        gap_rows = (
+            (
+                await self.db.execute(
+                    select(
+                        GapState.subtopic_id,
+                        GapState.mastery_score,
+                        GapState.last_assessed_at,
+                    ).where(
+                        GapState.student_id == student_id,
+                        GapState.class_id == enrolled_class.id,
+                        GapState.subtopic_id.in_(subtopic_ids),
+                    )
+                )
+            ).all()
+            if subtopic_ids
+            else []
+        )
+
+        gaps_by_subtopic = {row.subtopic_id: row for row in gap_rows}
+
+        scores = [
+            StudentSubtopicScore(
+                subtopic_id=st.subtopic_id,
+                subtopic_name=st.subtopic_name,
+                topic_id=st.topic_id,
+                topic_name=st.topic_name,
+                mastery_score=gaps_by_subtopic[st.subtopic_id].mastery_score
+                if st.subtopic_id in gaps_by_subtopic
+                else None,
+                last_assessed_at=gaps_by_subtopic[st.subtopic_id].last_assessed_at
+                if st.subtopic_id in gaps_by_subtopic
+                else None,
+            )
+            for st in subtopic_rows
+        ]
+
+        return StudentGapMap(
+            student_id=student_id,
+            subject_id=subject_id,
+            generated_at=datetime.now(UTC),
+            scores=scores,
+        )
+
+    async def get_class_summary(
+        self,
+        class_id: uuid.UUID,
+        school_id: uuid.UUID,
+    ) -> ClassSummary:
+        """Return lightweight mastery summary for a teacher dashboard class card.
+
+        Cheaper than get_class_gap_map — returns aggregate counts only, no per-student
+        breakdown. Used to populate avg_mastery on class cards.
+
+        Multi-tenancy: verifies class_.school_id == school_id before any data access.
+
+        Args:
+            class_id: Must belong to school_id.
+            school_id: Multi-tenancy guard — CONSTITUTION Rule 3.
+        """
+        class_ = await self.db.scalar(
+            select(Class).where(
+                Class.id == class_id,
+                Class.school_id == school_id,
+            )
+        )
+        if not class_:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Class {class_id} not found in school {school_id}",
+            )
+
+        agg_result = await self.db.execute(
+            select(
+                func.avg(GapState.mastery_score).label("avg_mastery"),
+                func.count(func.distinct(GapState.student_id)).label("assessed_students"),
+                func.max(GapState.last_assessed_at).label("last_updated"),
+            ).where(
+                GapState.class_id == class_id,
+            )
+        )
+        row = agg_result.one()
+
+        total_students = await self.db.scalar(
+            select(func.count())
+            .select_from(ClassEnrollment)
+            .where(
+                ClassEnrollment.class_id == class_id,
+                ClassEnrollment.is_active.is_(True),
+            )
+        )
+
+        return ClassSummary(
+            class_id=class_id,
+            avg_mastery=float(row.avg_mastery) if row.avg_mastery is not None else None,
+            student_count=total_students or 0,
+            assessed_student_count=row.assessed_students or 0,
+            last_updated_at=row.last_updated,
+        )
+
+    async def _verify_teacher_has_student_access(
+        self,
+        teacher_id: uuid.UUID,
+        student_id: uuid.UUID,
+        school_id: uuid.UUID,
+    ) -> bool:
+        """Return True if the teacher owns at least one active class the student is enrolled in,
+        within the given school.
+
+        CONSTITUTION Rule 3: school_id filter prevents cross-school enrollment leakage.
+        """
+        result = await self.db.execute(
+            select(ClassEnrollment.class_id)
+            .join(Class, Class.id == ClassEnrollment.class_id)
+            .where(
+                ClassEnrollment.student_id == student_id,
+                ClassEnrollment.is_active.is_(True),
+                Class.teacher_id == teacher_id,
+                Class.school_id == school_id,
+            )
+        )
+        return result.scalar_one_or_none() is not None
