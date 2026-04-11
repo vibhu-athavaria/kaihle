@@ -26,11 +26,14 @@ from app.models.curriculum import (
     Topic,
 )
 from app.models.gap import GapState
+from app.models.interest_category import InterestCategory
 from app.models.lesson_plan import LessonPlan
 from app.models.onboarding import StudentLearningProfile
 from app.models.parent import ParentReportSnapshot
 from app.models.school import Class, ClassEnrollment, School, SchoolCurriculum
+from app.models.student_lesson_pack import StudentLessonPack
 from app.models.study_plan import StudyPlan, StudyPlanQuiz, StudyPlanResource
+from app.models.subtopic_content import SubtopicContent
 from app.models.user import (
     AuthToken,
     ParentStudent,
@@ -48,6 +51,8 @@ __all__ = [
     "CurriculumSubject",
     "CurriculumTopic",
     "Subtopic",
+    "StudentLessonPack",
+    "SubtopicContent",
     "SubtopicPrerequisite",
     "CurriculumChunk",
     "QuestionBank",
@@ -66,6 +71,7 @@ __all__ = [
     "StudentAttempt",
     "StudentResponse",
     "GapState",
+    "InterestCategory",
     "StudyPlan",
     "StudyPlanResource",
     "StudyPlanQuiz",

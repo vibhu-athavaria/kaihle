@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     llm_embeddings_model: str = "text-embedding-004"
     llm_embeddings_api_base: str | None = None
 
+    llm_question_generation_model: str = "gemini/gemini-2.5-flash"
+    llm_question_generation_api_base: str | None = None
+
+    llm_student_pack_model: str = "gemini/gemini-2.5-pro"
+    llm_student_pack_api_base: str | None = None
+
     # Platform stats — overridable via environment variables
     platform_llm_provider: str = "openai"
     platform_runpod_status: str = "blocked"

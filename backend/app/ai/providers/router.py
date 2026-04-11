@@ -26,6 +26,8 @@ TASK_MODEL_MAP: dict[str, str] = {
     "gap_classification": settings.llm_gap_classification_model,
     "study_plan": settings.llm_study_plan_model,
     "lesson_plan": settings.llm_lesson_plan_model,
+    "question_generation": settings.llm_question_generation_model,
+    "student_pack": settings.llm_student_pack_model,
     "embeddings": settings.llm_embeddings_model,
 }
 
@@ -33,6 +35,8 @@ TASK_API_BASE_MAP: dict[str, str | None] = {
     "gap_classification": settings.llm_gap_classification_api_base,
     "study_plan": settings.llm_study_plan_api_base,
     "lesson_plan": settings.llm_lesson_plan_api_base,
+    "question_generation": settings.llm_question_generation_api_base,
+    "student_pack": settings.llm_student_pack_api_base,
     "embeddings": settings.llm_embeddings_api_base,
 }
 

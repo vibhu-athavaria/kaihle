@@ -149,3 +149,105 @@ class TestGetCompatibleInterests:
             "cooking",
             "nature",
         ]
+
+
+# ---------------------------------------------------------------------------
+# Tests for M3 interest category mapping
+# ---------------------------------------------------------------------------
+
+
+class TestGetInterestCategory:
+    """Tests for get_interest_category() — maps interest keys to category names."""
+
+    def test_sports_maps_to_sports_fitness(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("sports") == "Sports & Fitness"
+
+    def test_music_maps_to_music_arts(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("music") == "Music & Arts"
+
+    def test_art_maps_to_music_arts(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("art") == "Music & Arts"
+
+    def test_nature_maps_to_nature_science(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("nature") == "Nature & Science"
+
+    def test_animals_maps_to_nature_science(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("animals") == "Nature & Science"
+
+    def test_cooking_maps_to_everyday_life(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("cooking") == "Everyday Life"
+
+    def test_fashion_maps_to_everyday_life(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("fashion") == "Everyday Life"
+
+    def test_technology_maps_to_tech_innovation(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("technology") == "Technology & Innovation"
+
+    def test_gaming_maps_to_tech_innovation(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("gaming") == "Technology & Innovation"
+
+    def test_travel_maps_to_adventure_exploration(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("travel") == "Adventure & Exploration"
+
+    def test_unknown_key_returns_none(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("unknown_interest") is None
+
+    def test_case_insensitive(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        assert get_interest_category("SPORTS") == "Sports & Fitness"
+        assert get_interest_category("Music") == "Music & Arts"
+
+    def test_all_known_interest_keys_have_a_category(self) -> None:
+        from app.core.questionnaire_config import get_interest_category
+
+        for key in KNOWN_INTEREST_KEYS:
+            result = get_interest_category(key)
+            assert result is not None, f"Interest key '{key}' has no category mapping"
+
+
+class TestGetAllInterestCategories:
+    """Tests for get_all_interest_categories()."""
+
+    def test_returns_distinct_sorted_list(self) -> None:
+        from app.core.questionnaire_config import get_all_interest_categories
+
+        categories = get_all_interest_categories()
+        assert isinstance(categories, list)
+        assert len(categories) == len(set(categories)), "No duplicates"
+        assert categories == sorted(categories), "Must be sorted"
+
+    def test_returns_all_expected_categories(self) -> None:
+        from app.core.questionnaire_config import get_all_interest_categories
+
+        expected = {
+            "Adventure & Exploration",
+            "Music & Arts",
+            "Nature & Science",
+            "Everyday Life",
+            "Sports & Fitness",
+            "Technology & Innovation",
+        }
+        assert set(get_all_interest_categories()) == expected

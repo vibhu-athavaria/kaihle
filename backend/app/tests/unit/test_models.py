@@ -3,8 +3,11 @@
 import uuid
 
 from app.models.assessment import Assessment, AssessmentStatus
+from app.models.interest_category import InterestCategory
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import ClassEnrollment
+from app.models.student_lesson_pack import PackStatus, PackType, StudentLessonPack
+from app.models.subtopic_content import ReviewStatus, SubtopicContent
 from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
 
 
@@ -145,3 +148,202 @@ class TestClassEnrollment:
         """Test that onboarding_diagnostic_status is NOT NULL."""
         col = ClassEnrollment.__table__.c.onboarding_diagnostic_status
         assert col.nullable is False
+
+
+# ---------------------------------------------------------------------------
+# Tests for M3 Content Infrastructure Models
+# ---------------------------------------------------------------------------
+
+
+class TestSubtopicContent:
+    """Tests for SubtopicContent model (M3-0-T1)."""
+
+    def test_tablename_is_subtopic_content(self) -> None:
+        assert SubtopicContent.__tablename__ == "subtopic_content"
+
+    def test_no_school_id_column(self) -> None:
+        """subtopic_content has no school_id — curriculum-layer table per CONSTITUTION Rule 2."""
+        columns = {c.name for c in SubtopicContent.__table__.columns}
+        assert "school_id" not in columns
+
+    def test_has_subtopic_id_foreign_key(self) -> None:
+        fk_cols = {c.name for c in SubtopicContent.__table__.columns if c.foreign_keys}
+        assert "subtopic_id" in fk_cols
+
+    def test_has_interest_category_id_foreign_key(self) -> None:
+        fk_cols = {c.name for c in SubtopicContent.__table__.columns if c.foreign_keys}
+        assert "interest_category_id" in fk_cols
+
+    def test_review_status_has_pending_default(self) -> None:
+        col = SubtopicContent.__table__.c.review_status
+        assert col.server_default is not None
+
+    def test_is_active_default_true(self) -> None:
+        col = SubtopicContent.__table__.c.is_active
+        assert col.server_default is not None
+
+    def test_is_stale_default_false(self) -> None:
+        col = SubtopicContent.__table__.c.is_stale
+        assert col.server_default is not None
+
+    def test_is_archived_default_false(self) -> None:
+        col = SubtopicContent.__table__.c.is_archived
+        assert col.server_default is not None
+
+    def test_get_approved_videos_returns_only_active_approved(self) -> None:
+        """get_approved_videos should return only active, approved, non-archived videos."""
+        content = SubtopicContent(
+            subtopic_id=uuid.uuid4(),
+            content_type="video",
+            video_url="https://youtube.com/watch?v=abc",
+            review_status=ReviewStatus.APPROVED,
+            is_active=True,
+            is_stale=False,
+            is_archived=False,
+        )
+        videos = content.get_approved_videos()
+        assert len(videos) == 1
+
+    def test_get_approved_videos_excludes_pending(self) -> None:
+        content = SubtopicContent(
+            subtopic_id=uuid.uuid4(),
+            content_type="video",
+            video_url="https://youtube.com/watch?v=abc",
+            review_status=ReviewStatus.PENDING,
+            is_active=True,
+            is_stale=False,
+            is_archived=False,
+        )
+        videos = content.get_approved_videos()
+        assert len(videos) == 0
+
+    def test_get_approved_videos_excludes_archived(self) -> None:
+        content = SubtopicContent(
+            subtopic_id=uuid.uuid4(),
+            content_type="video",
+            video_url="https://youtube.com/watch?v=abc",
+            review_status=ReviewStatus.APPROVED,
+            is_active=True,
+            is_stale=False,
+            is_archived=True,
+        )
+        videos = content.get_approved_videos()
+        assert len(videos) == 0
+
+    def test_get_display_explanation_returns_explanation_text(self) -> None:
+        content = SubtopicContent(
+            subtopic_id=uuid.uuid4(),
+            content_type="explanation",
+            explanation_text="This is an explanation",
+            review_status="approved",
+            is_active=True,
+            is_stale=False,
+            is_archived=False,
+        )
+        result = content.get_display_explanation()
+        assert result == "This is an explanation"
+
+
+class TestStudentLessonPack:
+    """Tests for StudentLessonPack model (M3-0-T1)."""
+
+    def test_tablename_is_student_lesson_packs(self) -> None:
+        assert StudentLessonPack.__tablename__ == "student_lesson_packs"
+
+    def test_has_student_id_foreign_key(self) -> None:
+        fk_cols = {c.name for c in StudentLessonPack.__table__.columns if c.foreign_keys}
+        assert "student_id" in fk_cols
+
+    def test_has_school_id_foreign_key(self) -> None:
+        fk_cols = {c.name for c in StudentLessonPack.__table__.columns if c.foreign_keys}
+        assert "school_id" in fk_cols
+
+    def test_content_ids_is_array_of_uuids(self) -> None:
+        col = StudentLessonPack.__table__.c.content_ids
+        assert col.type is not None
+
+    def test_subtopic_ids_is_array_of_uuids(self) -> None:
+        col = StudentLessonPack.__table__.c.subtopic_ids
+        assert col.type is not None
+
+    def test_pack_status_enum_has_expected_values(self) -> None:
+        """PackStatus should have all required states."""
+        assert PackStatus.GENERATED == "generated"
+        assert PackStatus.SENT == "sent"
+        assert PackStatus.IN_PROGRESS == "in_progress"
+        assert PackStatus.COMPLETED == "completed"
+        assert PackStatus.EXPIRED == "expired"
+
+    def test_pack_type_enum_has_expected_values(self) -> None:
+        """PackType should have all required types."""
+        assert PackType.QUIZ == "quiz"
+        assert PackType.VIDEO == "video"
+        assert PackType.EXPLANATION == "explanation"
+        assert PackType.MIXED == "mixed"
+
+    def test_is_expired_returns_false_when_no_expiry(self) -> None:
+        pack = StudentLessonPack(
+            student_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            content_ids=[],
+            subtopic_ids=[],
+            title="Test Pack",
+            target_tier=1,
+            status=PackStatus.GENERATED,
+            expires_at=None,
+        )
+        assert pack.is_expired() is False
+
+    def test_is_active_returns_true_for_generated_pack(self) -> None:
+        pack = StudentLessonPack(
+            student_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            content_ids=[],
+            subtopic_ids=[],
+            title="Test Pack",
+            target_tier=1,
+            status=PackStatus.GENERATED,
+            is_archived=False,
+        )
+        assert pack.is_active() is True
+
+    def test_is_active_returns_false_for_archived_pack(self) -> None:
+        pack = StudentLessonPack(
+            student_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            content_ids=[],
+            subtopic_ids=[],
+            title="Test Pack",
+            target_tier=1,
+            status=PackStatus.GENERATED,
+            is_archived=True,
+        )
+        assert pack.is_active() is False
+
+    def test_is_active_returns_false_for_completed_pack(self) -> None:
+        pack = StudentLessonPack(
+            student_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            content_ids=[],
+            subtopic_ids=[],
+            title="Test Pack",
+            target_tier=1,
+            status=PackStatus.COMPLETED,
+            is_archived=False,
+        )
+        assert pack.is_active() is False
+
+
+class TestInterestCategory:
+    """Tests for InterestCategory model (M3-0-T1)."""
+
+    def test_tablename_is_interest_categories(self) -> None:
+        assert InterestCategory.__tablename__ == "interest_categories"
+
+    def test_name_is_unique(self) -> None:
+        col = InterestCategory.__table__.c.name
+        assert col.unique is True
+
+    def test_name_is_indexed(self) -> None:
+        col = InterestCategory.__table__.c.name
+        assert col.index is True
