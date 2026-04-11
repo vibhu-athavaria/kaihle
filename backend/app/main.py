@@ -25,6 +25,7 @@ from app.api.v1.routes import (
     student_content,
     students,
     study_plans,
+    subtopic_content,
     users,
 )
 from app.core.config import settings
@@ -102,6 +103,7 @@ app.include_router(platform.router, prefix="/api/v1")
 app.include_router(question_bank.router, prefix="/api/v1")
 app.include_router(schools.router, prefix="/api/v1")
 app.include_router(study_plans.router, prefix="/api/v1")
+app.include_router(subtopic_content.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(onboarding.router, prefix="/api/v1")
 app.include_router(student_content.router, prefix="/api/v1")

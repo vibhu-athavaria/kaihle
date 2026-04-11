@@ -128,6 +128,68 @@ class SubtopicContentSummary(SubtopicContentBase):
     created_at: datetime
 
 
+# --- Video review schemas (M3-0-T2a) ---
+
+
+class VideoEntry(BaseModel):
+    """A single video entry from the videos JSONB array."""
+
+    url: str
+    title: str
+    channel: str
+    view_count: int | None = None
+    status: str = "pending"  # 'pending' | 'approved' | 'rejected' | 'stale'
+    last_checked_at: str | None = None
+
+
+class SubtopicContentReviewResponse(BaseModel):
+    """Full subtopic content detail for video review."""
+
+    subtopic_id: uuid.UUID
+    subtopic_name: str
+    subject_code: str
+    grade_level: int
+    curriculum_code: str
+    learning_objective: str
+    videos: list[VideoEntry]
+    pending_count: int
+    approved_count: int
+    explanation_review_status: str
+
+
+class ReviewQueueItem(BaseModel):
+    """One subtopic in the review queue list."""
+
+    subtopic_id: uuid.UUID
+    subtopic_name: str
+    subject_code: str
+    grade_level: int
+    pending_video_count: int
+    approved_video_count: int
+
+
+class ReviewQueueResponse(BaseModel):
+    """Paginated review queue response."""
+
+    items: list[ReviewQueueItem]
+    total: int
+    pending_total: int  # total videos awaiting review across all subtopics
+
+
+class VideoStatusUpdateRequest(BaseModel):
+    """Request to update a video's status."""
+
+    status: str = Field(..., pattern="^(approved|rejected)$")
+
+
+class ManualVideoAddRequest(BaseModel):
+    """Request to add a manual video entry."""
+
+    url: str
+    title: str
+    channel: str = "manual"
+
+
 # --- StudentLessonPack schemas ---
 
 

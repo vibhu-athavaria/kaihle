@@ -81,11 +81,14 @@ def upgrade() -> None:
             ),
             nullable=False,
         ),
-        # video fields
+        # video fields (individual columns for single video per row)
         sa.Column("video_url", sa.Text(), nullable=True),
         sa.Column("video_provider", sa.Text(), nullable=True),
         sa.Column("video_duration_seconds", sa.Integer(), nullable=True),
         sa.Column("video_thumbnail_url", sa.Text(), nullable=True),
+        # videos JSONB array for multiple video candidates per subtopic
+        # Each entry: {url, title, channel, view_count, status, last_checked_at}
+        sa.Column("videos", JSONB(astext=False), nullable=True),
         # explanation fields
         sa.Column("explanation_text", sa.Text(), nullable=True),
         # practice / quiz fields — JSON array of question objects

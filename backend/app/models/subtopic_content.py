@@ -71,6 +71,9 @@ class SubtopicContent(Base, UUIDMixin):
     video_provider: Mapped[str | None] = mapped_column(Text, nullable=True)
     video_duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     video_thumbnail_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Videos JSONB array for multiple video candidates per subtopic
+    # Each entry: {url, title, channel, view_count, status, last_checked_at}
+    videos: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
 
     # Explanation field (used when content_type == 'explanation')
     explanation_text: Mapped[str | None] = mapped_column(Text, nullable=True)
