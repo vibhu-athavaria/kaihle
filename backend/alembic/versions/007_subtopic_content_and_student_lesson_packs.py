@@ -16,19 +16,14 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
 # revision identifiers, used by Alembic.
 revision = "007"
-down_revision = "006"
+down_revision = "c1156cdb4c15"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    # Create enums first (if not exists —idempotent)
-    op.execute("CREATE TYPE IF NOT EXISTS content_type_enum AS ENUM ('video', 'explanation', 'practice', 'quiz')")
-    op.execute("CREATE TYPE IF NOT EXISTS review_status_enum AS ENUM ('pending', 'approved', 'rejected')")
-    op.execute("CREATE TYPE IF NOT EXISTS pack_type_enum AS ENUM ('quiz', 'video', 'explanation', 'mixed')")
-    op.execute(
-        "CREATE TYPE IF NOT EXISTS pack_status_enum AS ENUM ('generated', 'sent', 'in_progress', 'completed', 'expired')"
-    )
+    # Enums will be created automatically by SQLAlchemy when first referenced in table creation
+    # No need to manually create them here
 
     # --- interest_categories table ---
     # Lookup table for interest categories used in content personalisation.
@@ -88,12 +83,12 @@ def upgrade() -> None:
         sa.Column("video_thumbnail_url", sa.Text(), nullable=True),
         # videos JSONB array for multiple video candidates per subtopic
         # Each entry: {url, title, channel, view_count, status, last_checked_at}
-        sa.Column("videos", JSONB(astext=False), nullable=True),
+        sa.Column("videos", JSONB, nullable=True),
         # explanation fields
         sa.Column("explanation_text", sa.Text(), nullable=True),
         # practice / quiz fields — JSON array of question objects
         # each: { "question_id": str, "question_text": str, "options": [...], "correct_answer": str, "explanation": str }
-        sa.Column("quiz_questions", JSONB(astext=False), nullable=True),
+        sa.Column("quiz_questions", JSONB, nullable=True),
         sa.Column(
             "quiz_questions_count",
             sa.Integer(),
