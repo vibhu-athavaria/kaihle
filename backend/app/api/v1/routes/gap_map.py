@@ -3,7 +3,6 @@
 Real implementation: M2-1-T2 (gap_map_routes.md).
 """
 
-import uuid
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,35 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, _check_school_access, require_full_access, require_role
-from app.models.school import Class, ClassEnrollment
-from app.models.user import User, UserRole
+from app.models.school import Class
+from app.models.user import ParentStudent, User, UserRole
 from app.schemas.gap_map import ClassGapMap, ClassSummary, StudentGapMap
 from app.services.gap_service import GapService
 
 router = APIRouter(tags=["gap-map"])
-
-
-async def _check_teacher_enrollment(
-    teacher_id: uuid.UUID,
-    student_id: uuid.UUID,
-    db: AsyncSession,
-) -> bool:
-    """Return True if the teacher owns at least one active class the student is enrolled in.
-
-    TODO: This check belongs in the service layer (CONSTITUTION Rule 1).
-    Tracked as a follow-up refactor — move into GapService.get_student_gap_map
-    so routes remain free of DB queries.
-    """
-    result = await db.execute(
-        select(ClassEnrollment.class_id)
-        .join(Class, Class.id == ClassEnrollment.class_id)
-        .where(
-            ClassEnrollment.student_id == student_id,
-            ClassEnrollment.is_active.is_(True),
-            Class.teacher_id == teacher_id,
-        )
-    )
-    return result.scalar_one_or_none() is not None
 
 
 @router.get("/classes/{class_id}/gap-map", response_model=ClassGapMap)
@@ -122,13 +98,17 @@ async def get_student_gap_map(
         if current_user.id != student_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only view your own gap map")
     elif current_user.role == UserRole.TEACHER:
-        if not await _check_teacher_enrollment(current_user.id, student_id, db):
+        if current_user.school_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No school associated with account")
+        service = GapService(db)
+        if not await service._verify_teacher_has_student_access(current_user.id, student_id, current_user.school_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only view gap maps for students in your own classes",
             )
     elif current_user.role == UserRole.PARENT:
-        from app.models.user import ParentStudent
+        if student.school_id != current_user.school_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
         parent_link = await db.execute(
             select(ParentStudent).where(

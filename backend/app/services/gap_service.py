@@ -575,3 +575,26 @@ class GapService:
             assessed_student_count=row.assessed_students or 0,
             last_updated_at=row.last_updated,
         )
+
+    async def _verify_teacher_has_student_access(
+        self,
+        teacher_id: uuid.UUID,
+        student_id: uuid.UUID,
+        school_id: uuid.UUID,
+    ) -> bool:
+        """Return True if the teacher owns at least one active class the student is enrolled in,
+        within the given school.
+
+        CONSTITUTION Rule 3: school_id filter prevents cross-school enrollment leakage.
+        """
+        result = await self.db.execute(
+            select(ClassEnrollment.class_id)
+            .join(Class, Class.id == ClassEnrollment.class_id)
+            .where(
+                ClassEnrollment.student_id == student_id,
+                ClassEnrollment.is_active.is_(True),
+                Class.teacher_id == teacher_id,
+                Class.school_id == school_id,
+            )
+        )
+        return result.scalar_one_or_none() is not None

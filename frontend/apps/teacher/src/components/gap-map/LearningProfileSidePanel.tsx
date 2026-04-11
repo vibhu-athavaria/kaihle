@@ -92,7 +92,7 @@ export function LearningProfileSidePanel({
                 <span className="text-sm text-brand-muted">
                   Dominant modality:
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-full text-sm font-medium">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-gold-light text-brand-gold-dark rounded-full text-sm font-medium">
                   {IconComponent && (
                     <IconComponent className="w-4 h-4" aria-hidden="true" />
                   )}

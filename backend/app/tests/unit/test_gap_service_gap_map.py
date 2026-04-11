@@ -228,3 +228,41 @@ class TestGetClassSummary:
         assert result.assessed_student_count == 2
         assert result.avg_mastery is not None
         assert abs(result.avg_mastery - 0.6) < 0.001
+
+
+class TestVerifyTeacherHasStudentAccess:
+    @pytest.mark.asyncio
+    async def test_verify_teacher_has_student_access_when_correct_school_then_returns_true(self) -> None:
+        db = _make_db()
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none.return_value = uuid.uuid4()  # found a class_id
+        db.execute.return_value = execute_result
+        service = GapService(db)
+
+        result = await service._verify_teacher_has_student_access(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_verify_teacher_has_student_access_when_wrong_school_then_returns_false(self) -> None:
+        db = _make_db()
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none.return_value = None  # no matching class in this school
+        db.execute.return_value = execute_result
+        service = GapService(db)
+
+        result = await service._verify_teacher_has_student_access(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
+
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_verify_teacher_has_student_access_when_inactive_enrollment_then_returns_false(self) -> None:
+        db = _make_db()
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none.return_value = None  # inactive enrollment filtered out
+        db.execute.return_value = execute_result
+        service = GapService(db)
+
+        result = await service._verify_teacher_has_student_access(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
+
+        assert result is False

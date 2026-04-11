@@ -138,7 +138,9 @@ export function GapMapPage() {
 
       {!isLoading && data && students.length === 0 && (
         <div className="bg-white rounded-2xl border border-brand-border p-12 text-center">
-          <div className="text-4xl mb-3">📊</div>
+          <span className="text-4xl mb-3" role="img" aria-label="chart">
+            📊
+          </span>
           <h3 className="font-display font-semibold text-brand-ink mb-1">
             No assessment data yet
           </h3>
