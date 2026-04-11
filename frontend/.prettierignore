@@ -17,3 +17,6 @@ pnpm-lock.yaml
 # IDE
 .idea/
 .vscode/
+
+# pnpm store
+.pnpm-store/

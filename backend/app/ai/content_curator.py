@@ -73,7 +73,7 @@ async def curate_resources(
     student_id: UUID,
     school_id: UUID,
     db: AsyncSession,
-    redis_client: redis.Redis[Any] | None = None,
+    redis_client: redis.Redis | None = None,  # type: ignore[type-arg]
 ) -> list[Resource]:
     """Return top 1–3 approved video resources for a subtopic, ranked by modality score.
 

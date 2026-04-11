@@ -106,7 +106,10 @@ function DetailPanel({
   subtopicId: string;
   onBack: () => void;
 }) {
-  const { data, isLoading, isError } = useExplanationReviewDetail(classId, subtopicId);
+  const { data, isLoading, isError } = useExplanationReviewDetail(
+    classId,
+    subtopicId,
+  );
   const updateExplanation = useUpdateExplanation();
   const [showOverrideEditor, setShowOverrideEditor] = useState(false);
   const [overrideText, setOverrideText] = useState("");
@@ -152,7 +155,11 @@ function DetailPanel({
   function handleAddOverride() {
     if (!overrideText.trim()) return;
     updateExplanation.mutate(
-      { classId, subtopicId, body: { teacher_explanation: overrideText.trim() } },
+      {
+        classId,
+        subtopicId,
+        body: { teacher_explanation: overrideText.trim() },
+      },
       {
         onSuccess: () => {
           toast.success("Teacher override added.");
@@ -184,7 +191,9 @@ function DetailPanel({
 
       <div className="bg-white border border-brand-border rounded-xl p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
-          <h3 className="font-semibold text-brand-ink text-sm">AI Explanation</h3>
+          <h3 className="font-semibold text-brand-ink text-sm">
+            AI Explanation
+          </h3>
           <StatusBadge status={data.review_status} />
         </div>
         {data.explanation_text ? (
@@ -300,7 +309,9 @@ function DetailPanel({
 export function ExplanationReviewPage() {
   const { classId } = useParams<{ classId: string }>();
   const [statusFilter, setStatusFilter] = useState<string | null>("pending");
-  const [selectedSubtopicId, setSelectedSubtopicId] = useState<string | null>(null);
+  const [selectedSubtopicId, setSelectedSubtopicId] = useState<string | null>(
+    null,
+  );
   const updateExplanation = useUpdateExplanation();
 
   const { data, isLoading, isError } = useExplanationReviewList(
@@ -352,7 +363,9 @@ export function ExplanationReviewPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-brand-ink">Explanation Review</h1>
+          <h1 className="text-xl font-bold text-brand-ink">
+            Explanation Review
+          </h1>
           <p className="text-sm text-brand-muted mt-0.5">
             Review and approve AI-generated explanations for your class
           </p>

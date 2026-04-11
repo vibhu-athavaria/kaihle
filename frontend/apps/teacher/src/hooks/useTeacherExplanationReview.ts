@@ -87,7 +87,14 @@ export function useExplanationReviewList(
   pageSize: number = 20,
 ) {
   return useQuery({
-    queryKey: ["teacher", "explanation-review", classId, status, page, pageSize],
+    queryKey: [
+      "teacher",
+      "explanation-review",
+      classId,
+      status,
+      page,
+      pageSize,
+    ],
     queryFn: () => fetchExplanationReviewList(classId, status, page, pageSize),
     enabled: !!classId,
   });
