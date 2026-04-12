@@ -17,6 +17,9 @@ import { AssessmentListPage } from "./pages/assessments/AssessmentListPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudentResultDetailPage } from "./pages/assessments/StudentResultDetailPage";
 import { ExplanationReviewPage } from "./pages/classes/ExplanationReviewPage";
+import { GapMapPage } from "./pages/gap-map/GapMapPage";
+import { MyStudentsPage } from "./pages/MyStudents";
+import { StudentProfilePage } from "./pages/StudentProfilePage";
 import { Link } from "react-router-dom";
 import { Button } from "@kaihle/ui";
 import { Plus } from "lucide-react";
@@ -37,61 +40,17 @@ function TeacherShell() {
   const routes = useMemo(
     () => [
       { path: "dashboard", element: <TeacherDashboard /> },
+      { path: "students", element: <MyStudentsPage /> },
+      {
+        path: "students/:studentId/profile",
+        element: <StudentProfilePage />,
+      },
       // Default: redirect to dashboard
       { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
     ],
     [],
   );
   const innerRoutes = useRoutes(routes);
-
-  return (
-    <DashboardLayout
-      variant="teacher"
-      pageTitle={`${greeting()}, ${teacherName}`}
-      onLogout={logout}
-      topNavAction={
-        <Link to="/teacher/assessments/new">
-          <Button
-            variant="primary"
-            size="sm"
-            className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
-          >
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            Assessment
-          </Button>
-        </Link>
-      }
-    >
-      {innerRoutes}
-    </DashboardLayout>
-  );
-}
-
-// Shell for assessment-specific routes — TEACHER only (no admin impersonation)
-function TeacherAssessmentShell() {
-  const { user, logout } = useAuth();
-
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
-  };
-
-  const teacherName = user?.email?.split("@")[0] || "Teacher";
-
-  const assessmentRoutes = useMemo(
-    () => [
-      { path: "assessments/new", element: <NewAssessmentPage /> },
-      {
-        path: "classes/:classId/assessments",
-        element: <AssessmentListPage />,
-      },
-      { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
-    ],
-    [],
-  );
-  const innerRoutes = useRoutes(assessmentRoutes);
 
   return (
     <DashboardLayout
@@ -131,10 +90,14 @@ function TeacherContentShell() {
 
   const contentRoutes = useMemo(
     () => [
+      { path: "gap-map", element: <GapMapPage /> },
+      { path: "assessments", element: <AssessmentListPage /> },
       {
-        path: "classes/:classId/explanation-review",
+        path: "explanation-review",
         element: <ExplanationReviewPage />,
       },
+      // T-002: { path: "study-plan", element: <StudyPlanPage /> },
+      // T-002: { path: "lesson-plans", element: <LessonPlansPage /> },
       { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
     ],
     [],
@@ -174,6 +137,41 @@ function TeacherSettingsApp() {
   );
 }
 
+function NewAssessmentApp() {
+  const { user, logout } = useAuth();
+
+  const greeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
+  const teacherName = user?.email?.split("@")[0] || "Teacher";
+
+  return (
+    <DashboardLayout
+      variant="teacher"
+      pageTitle={`${greeting()}, ${teacherName}`}
+      onLogout={logout}
+      topNavAction={
+        <Link to="/teacher/assessments/new">
+          <Button
+            variant="primary"
+            size="sm"
+            className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
+          >
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            Assessment
+          </Button>
+        </Link>
+      }
+    >
+      <NewAssessmentPage />
+    </DashboardLayout>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -191,34 +189,20 @@ export default function App() {
             </PrivateRoute>
           }
         />
-        {/* Assessment creation/management routes — TEACHER only */}
         <Route
           path="/teacher/assessments/new"
           element={
             <PrivateRoute>
               <RoleRoute allowedRoles={[UserRole.TEACHER]}>
                 <ErrorBoundary role="teacher">
-                  <TeacherAssessmentShell />
+                  <NewAssessmentApp />
                 </ErrorBoundary>
               </RoleRoute>
             </PrivateRoute>
           }
         />
         <Route
-          path="/teacher/classes/:classId/assessments"
-          element={
-            <PrivateRoute>
-              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
-                <ErrorBoundary role="teacher">
-                  <TeacherAssessmentShell />
-                </ErrorBoundary>
-              </RoleRoute>
-            </PrivateRoute>
-          }
-        />
-        {/* Class content review routes — TEACHER only */}
-        <Route
-          path="/teacher/classes/:classId/explanation-review"
+          path="/teacher/classes/:classId/*"
           element={
             <PrivateRoute>
               <RoleRoute allowedRoles={[UserRole.TEACHER]}>
@@ -229,7 +213,6 @@ export default function App() {
             </PrivateRoute>
           }
         />
-        {/* General teacher shell — admins may also view teacher dashboard */}
         <Route
           path="/teacher/assessments/:assessmentId/results/:studentId"
           element={
