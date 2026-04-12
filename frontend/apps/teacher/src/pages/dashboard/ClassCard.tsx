@@ -69,6 +69,7 @@ export function ClassCard({
           <Link
             to={`/teacher/classes/${classId}/gap-map`}
             className="text-sm font-medium text-brand-muted hover:text-brand-primary transition-colors"
+            title="See where each student is struggling by subtopic"
           >
             Gap Map
           </Link>
@@ -81,10 +82,11 @@ export function ClassCard({
           </Link>
           <span className="text-brand-muted">·</span>
           <Link
-            to={`/teacher/classes/${classId}/study-plan`}
+            to={`/teacher/classes/${classId}/gap-map`}
             className="text-sm font-medium text-brand-muted hover:text-brand-primary transition-colors"
+            title="See where each student is struggling by subtopic"
           >
-            Study Plan
+            Gap Map
           </Link>
         </div>
         <div className="flex items-center justify-between">
