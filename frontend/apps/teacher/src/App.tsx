@@ -17,6 +17,8 @@ import { AssessmentListPage } from "./pages/assessments/AssessmentListPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudentResultDetailPage } from "./pages/assessments/StudentResultDetailPage";
 import { ExplanationReviewPage } from "./pages/classes/ExplanationReviewPage";
+import { AllAssessmentsPage } from "./pages/assessments/AllAssessmentsPage";
+import { AllAssessmentsPage } from "./pages/assessments/AllAssessmentsPage";
 import { ClassesPage } from "./pages/classes/ClassesPage";
 import { ClassDetailPage } from "./pages/classes/ClassDetailPage";
 import { GapMapPage } from "./pages/gap-map/GapMapPage";
@@ -44,6 +46,8 @@ function TeacherShell() {
       { path: "dashboard", element: <TeacherDashboard /> },
       { path: "classes", element: <ClassesPage /> },
       { path: "students", element: <MyStudentsPage /> },
+      { path: "assessments", element: <AllAssessmentsPage /> },
+      { path: "assessments", element: <AllAssessmentsPage /> },
       {
         path: "students/:studentId/profile",
         element: <StudentProfilePage />,
