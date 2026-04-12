@@ -35,7 +35,7 @@ function QuestionRow({ question, index }: QuestionRowProps) {
       <div className="ml-9 space-y-2">
         {question.isCorrect ? (
           /* Correct — single row only */
-          <div className="bg-green-50 text-green-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+          <div className="bg-brand-green-light text-brand-green rounded-lg px-3 py-2 text-sm flex items-center gap-2">
             <span className="font-bold">Answer:</span>
             <span>{question.selectedAnswer ?? question.correctAnswer}</span>
             <span className="ml-auto font-bold" aria-label="Correct">
@@ -45,14 +45,14 @@ function QuestionRow({ question, index }: QuestionRowProps) {
         ) : (
           /* Wrong — two rows: given answer and correct answer */
           <>
-            <div className="bg-red-50 text-red-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+            <div className="bg-brand-red-light text-brand-red rounded-lg px-3 py-2 text-sm flex items-center gap-2">
               <span className="font-bold">Given:</span>
               <span>{question.selectedAnswer ?? "—"}</span>
               <span className="ml-auto font-bold" aria-label="Incorrect">
                 ✕
               </span>
             </div>
-            <div className="bg-green-50 text-green-700 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
+            <div className="bg-brand-green-light text-brand-green rounded-lg px-3 py-2 text-sm flex items-center gap-2">
               <span className="font-bold">Correct:</span>
               <span>{question.correctAnswer}</span>
               <span className="ml-auto font-bold" aria-label="Correct">

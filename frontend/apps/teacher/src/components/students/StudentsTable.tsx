@@ -97,14 +97,14 @@ export function StudentsTable({
             placeholder="Search students..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+            className="w-full pl-9 pr-4 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold"
           />
         </div>
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           aria-label="Sort students by"
-          className="px-3 py-2 border border-brand-border rounded-xl text-sm text-brand-body bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary"
+          className="px-3 py-2 border border-brand-border rounded-xl text-sm text-brand-body bg-white focus:outline-none focus:ring-2 focus:ring-brand-gold"
         >
           <option value="name">Name A–Z</option>
           <option value="mastery-asc">Mastery ↑</option>

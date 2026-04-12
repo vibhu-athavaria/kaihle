@@ -13,15 +13,19 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
-from app.models.assessment import Assessment
+from app.models.assessment import Assessment, StudentAttempt
+from app.models.school import Class
 from app.models.user import UserRole
 from app.schemas.assessments import (
     AssessmentCreateRequest,
     AssessmentResponse,
+    AssessmentResultsResponse,
+    StudentAttemptSummary,
 )
 from app.schemas.common import Page
 from app.services.assessment_service import (
@@ -247,3 +251,112 @@ async def close_assessment(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
 
     return _assessment_to_response(assessment)
+
+
+@router.delete("/assessments/{assessment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_assessment(
+    assessment_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete a draft assessment. Only assessments with no student attempts can be deleted."""
+    result = await db.execute(select(Assessment).where(Assessment.id == assessment_id))
+    assessment = result.scalar_one_or_none()
+    if assessment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assessment not found")
+
+    # Teacher must own the class (or be admin)
+    if current_user.role == UserRole.TEACHER:
+        class_result = await db.execute(select(Class).where(Class.id == assessment.class_id))
+        class_ = class_result.scalar_one_or_none()
+        if class_ is None or class_.teacher_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    elif current_user.role != UserRole.KAIHLE_ADMIN:
+        if assessment.school_id != current_user.school_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    # Only allow deletion of assessments with no student attempts
+    attempts_result = await db.execute(select(StudentAttempt).where(StudentAttempt.assessment_id == assessment_id))
+    if attempts_result.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete assessment that has student attempts. Close it instead.",
+        )
+
+    await db.delete(assessment)
+    await db.commit()
+
+
+@router.get("/assessments/{assessment_id}/results", response_model=AssessmentResultsResponse)
+async def get_assessment_results(
+    assessment_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> AssessmentResultsResponse:
+    """Return all student attempts for an assessment — used by the teacher results page."""
+    from app.models.school import ClassEnrollment
+    from app.models.user import User
+
+    result = await db.execute(select(Assessment).where(Assessment.id == assessment_id))
+    assessment = result.scalar_one_or_none()
+    if assessment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assessment not found")
+
+    # Authorization
+    if current_user.role != UserRole.KAIHLE_ADMIN:
+        if assessment.school_id != current_user.school_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if current_user.role == UserRole.TEACHER:
+            class_result = await db.execute(select(Class).where(Class.id == assessment.class_id))
+            class_ = class_result.scalar_one_or_none()
+            if class_ is None or class_.teacher_id != current_user.id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    # Get all enrollments for the class
+    enrollments_result = await db.execute(
+        select(ClassEnrollment).where(ClassEnrollment.class_id == assessment.class_id)
+    )
+    enrollments = enrollments_result.scalars().all()
+    total_students = len(enrollments)
+
+    # Get all attempts for this assessment
+    attempts_result = await db.execute(select(StudentAttempt).where(StudentAttempt.assessment_id == assessment_id))
+    attempts = attempts_result.scalars().all()
+    attempt_map = {a.student_id: a for a in attempts}
+
+    student_attempts = []
+    for enrollment in enrollments:
+        student = await db.get(User, enrollment.student_id)
+        if student is None:
+            continue
+        attempt = attempt_map.get(enrollment.student_id)
+        if attempt:
+            student_attempts.append(
+                StudentAttemptSummary(
+                    attempt_id=attempt.id,
+                    student_id=student.id,
+                    student_name=f"{student.first_name or ''} {student.last_name or ''}".strip() or student.email,
+                    score=attempt.overall_score,
+                    status=attempt.status,
+                    submitted_at=attempt.completed_at,
+                )
+            )
+        else:
+            student_attempts.append(
+                StudentAttemptSummary(
+                    attempt_id=UUID(int=0),
+                    student_id=student.id,
+                    student_name=f"{student.first_name or ''} {student.last_name or ''}".strip() or student.email,
+                    score=None,
+                    status="NOT_STARTED",
+                    submitted_at=None,
+                )
+            )
+
+    return AssessmentResultsResponse(
+        assessment_id=assessment.id,
+        assessment_name=assessment.title or "Untitled Assessment",
+        assessment_type=assessment.assessment_type or "DIAGNOSTIC",
+        total_students=total_students,
+        attempts=student_attempts,
+    )

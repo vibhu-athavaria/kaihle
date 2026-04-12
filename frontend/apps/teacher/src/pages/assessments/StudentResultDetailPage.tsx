@@ -9,8 +9,6 @@
  *   2. QuestionBreakdown — correct/wrong answers with pagination
  */
 import { useParams, useSearchParams, Link } from "react-router-dom";
-import { useAuth } from "@kaihle/auth";
-import { DashboardLayout } from "@kaihle/ui";
 import { useAttemptResult } from "../../hooks/useAssessmentResults";
 import { ScoreRing } from "../../components/results/ScoreRing";
 import { QuestionBreakdown } from "../../components/results/QuestionBreakdown";
@@ -146,27 +144,12 @@ export function StudentResultDetailPage() {
   }>();
   const [searchParams] = useSearchParams();
   const attemptId = searchParams.get("attempt");
-  const { logout } = useAuth();
 
   if (!assessmentId) {
     return (
-      <DashboardLayout
-        variant="teacher"
-        pageTitle="Student Result"
-        onLogout={logout}
-      >
-        <div className="p-6 text-red-600">Invalid assessment ID.</div>
-      </DashboardLayout>
+      <div className="p-6 text-red-600">Invalid assessment ID.</div>
     );
   }
 
-  return (
-    <DashboardLayout
-      variant="teacher"
-      pageTitle="Student Result"
-      onLogout={logout}
-    >
-      <StudentDetailContent assessmentId={assessmentId} attemptId={attemptId} />
-    </DashboardLayout>
-  );
+  return <StudentDetailContent assessmentId={assessmentId} attemptId={attemptId} />;
 }

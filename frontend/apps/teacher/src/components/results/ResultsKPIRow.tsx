@@ -27,7 +27,7 @@ function KPICard({ label, children, ariaLabel }: KPICardProps) {
       className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
       aria-label={ariaLabel}
     >
-      <div className="font-sans text-[11px] uppercase tracking-[0.08em] text-gray-400 mb-1">
+      <div className="font-sans text-xs uppercase tracking-[0.08em] text-gray-400 mb-1">
         {label}
       </div>
       {children}
@@ -94,7 +94,7 @@ export function ResultsKPIRow({
           label="Submitted"
           ariaLabel={`Submitted: 0 of ${totalStudents} students`}
         >
-          <div className="font-display text-[28px] leading-none text-brand-ink">
+          <div className="font-display text-3xl leading-none text-brand-ink">
             0
           </div>
           <div className="text-xs text-brand-muted mt-1">
@@ -105,7 +105,7 @@ export function ResultsKPIRow({
           label="Class avg"
           ariaLabel="Class average: no submissions yet"
         >
-          <div className="font-display text-[28px] leading-none text-brand-muted">
+          <div className="font-display text-3xl leading-none text-brand-muted">
             —
           </div>
           <div className="text-xs text-brand-muted mt-1">
@@ -113,7 +113,7 @@ export function ResultsKPIRow({
           </div>
         </KPICard>
         <KPICard label="Highest" ariaLabel="Highest: no submissions yet">
-          <div className="font-display text-[28px] leading-none text-brand-muted">
+          <div className="font-display text-3xl leading-none text-brand-muted">
             —
           </div>
         </KPICard>
@@ -121,7 +121,7 @@ export function ResultsKPIRow({
           label="Needs attention"
           ariaLabel="Needs attention: no submissions yet"
         >
-          <div className="font-display text-[28px] leading-none text-gray-400">
+          <div className="font-display text-3xl leading-none text-gray-400">
             0
           </div>
           <div className="text-xs text-brand-muted mt-1">scoring below 40%</div>
@@ -137,7 +137,7 @@ export function ResultsKPIRow({
         label="Submitted"
         ariaLabel={`Submitted: ${submittedCount} of ${totalStudents}`}
       >
-        <div className="font-display text-[28px] leading-none text-brand-ink">
+        <div className="font-display text-3xl leading-none text-brand-ink">
           {submittedCount} of {totalStudents}
         </div>
       </KPICard>
@@ -150,7 +150,7 @@ export function ResultsKPIRow({
         }%, ${avgStyle.label}`}
       >
         <div
-          className={`font-display text-[28px] leading-none ${avgStyle.textClass}`}
+          className={`font-display text-3xl leading-none ${avgStyle.textClass}`}
         >
           {avgScore !== null ? `${Math.round(avgScore * 100)}%` : "—"}
         </div>
@@ -168,7 +168,7 @@ export function ResultsKPIRow({
             : 0
         }%, ${highestStyle.label}`}
       >
-        <div className="font-display text-[28px] leading-none text-brand-ink truncate">
+        <div className="font-display text-3xl leading-none text-brand-ink truncate">
           {highest?.studentName ?? "—"}
         </div>
         {highest && (
@@ -186,8 +186,8 @@ export function ResultsKPIRow({
         ariaLabel={`Needs attention: ${needsAttentionCount} students scoring below 40%`}
       >
         <div
-          className={`font-display text-[28px] leading-none ${
-            needsAttentionCount > 0 ? "text-red-600" : "text-gray-400"
+          className={`font-display text-3xl leading-none ${
+            needsAttentionCount > 0 ? "text-brand-red" : "text-gray-400"
           }`}
         >
           {needsAttentionCount}

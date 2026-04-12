@@ -26,7 +26,7 @@ export function GapMapCell({
       data-mastery-score={masteryScore}
       className={[
         "w-12 h-12 rounded flex items-center justify-center text-xs font-semibold transition-all",
-        "hover:scale-105 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1",
+        "hover:scale-105 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-1",
         bgClass,
         textClass,
       ].join(" ")}

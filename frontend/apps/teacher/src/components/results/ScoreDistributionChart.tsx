@@ -56,7 +56,7 @@ export function ScoreDistributionChart({
       label: "Strong (≥70%)",
       count: strong,
       color: "#16a34a",
-      textColor: "text-green-700",
+      textColor: "text-brand-green",
       fillClass: "bg-brand-green",
       pct: total > 0 ? (strong / total) * 100 : 0,
     },
@@ -64,7 +64,7 @@ export function ScoreDistributionChart({
       label: "Developing (40–69%)",
       count: developing,
       color: "#f59e0b",
-      textColor: "text-amber-600",
+      textColor: "text-brand-amber",
       fillClass: "bg-brand-amber",
       pct: total > 0 ? (developing / total) * 100 : 0,
     },
@@ -72,7 +72,7 @@ export function ScoreDistributionChart({
       label: "Needs Work (<40%)",
       count: needsWork,
       color: "#ef4444",
-      textColor: "text-red-600",
+      textColor: "text-brand-red",
       fillClass: "bg-brand-red",
       pct: total > 0 ? (needsWork / total) * 100 : 0,
     },
@@ -141,8 +141,8 @@ export function ScoreDistributionChart({
 
       {/* Reteach banner — shown when >30% of submitted students scored <40% */}
       {showReteachBanner && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mt-3">
-          <p className="text-amber-800 text-sm">
+        <div className="bg-brand-amber-light border border-brand-gold-mid rounded-xl p-3 mt-3">
+          <p className="text-brand-gold-dark text-sm">
             ⚠ More than 30% of students scored below 40%. This topic may benefit
             from whole-class reteaching before moving on.
           </p>

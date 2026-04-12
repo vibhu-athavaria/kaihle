@@ -123,7 +123,7 @@ export function GapMapPage() {
       </div>
 
       {isError && (
-        <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm">
+        <div className="p-4 bg-brand-red-light text-brand-red rounded-xl text-sm">
           Failed to load gap map data. Please try again.
         </div>
       )}
@@ -131,7 +131,7 @@ export function GapMapPage() {
       {isLoading && (
         <div className="animate-pulse space-y-2">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-12 bg-gray-100 rounded-lg" />
+            <div key={i} className="h-12 bg-brand-border rounded-lg" />
           ))}
         </div>
       )}

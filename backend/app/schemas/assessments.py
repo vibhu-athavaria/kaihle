@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class QuestionOption(BaseModel):
@@ -48,3 +48,22 @@ class AssessmentCreateRequest(BaseModel):
     difficulty_min: float = 1.0
     difficulty_max: float = 5.0
     deadline: datetime | None = None
+
+
+class StudentAttemptSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    attempt_id: UUID
+    student_id: UUID
+    student_name: str
+    score: float | None = None
+    status: str
+    submitted_at: datetime | None = None
+
+
+class AssessmentResultsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    assessment_id: UUID
+    assessment_name: str
+    assessment_type: str
+    total_students: int
+    attempts: list[StudentAttemptSummary] = []

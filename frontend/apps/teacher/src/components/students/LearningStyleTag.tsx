@@ -1,8 +1,11 @@
-const modalityConfig: Record<string, { icon: string; label: string }> = {
-  visual: { icon: "👁", label: "Visual" },
-  auditory: { icon: "👂", label: "Auditory" },
-  reading_writing: { icon: "📖", label: "Reader" },
-  kinesthetic: { icon: "🤲", label: "Hands-on" },
+import { Eye, Headphones, Book, Hand } from "lucide-react";
+import React from "react";
+
+const modalityConfig: Record<string, { icon: React.ReactNode; label: string }> = {
+  visual: { icon: <Eye className="w-3.5 h-3.5" />, label: "Visual" },
+  auditory: { icon: <Headphones className="w-3.5 h-3.5" />, label: "Auditory" },
+  reading_writing: { icon: <Book className="w-3.5 h-3.5" />, label: "Reader" },
+  kinesthetic: { icon: <Hand className="w-3.5 h-3.5" />, label: "Hands-on" },
 };
 
 interface LearningStyleTagProps {

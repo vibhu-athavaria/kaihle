@@ -17,6 +17,9 @@ import { AssessmentListPage } from "./pages/assessments/AssessmentListPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudentResultDetailPage } from "./pages/assessments/StudentResultDetailPage";
 import { ExplanationReviewPage } from "./pages/classes/ExplanationReviewPage";
+import { GapMapPage } from "./pages/gap-map/GapMapPage";
+import { StudentProfilePage } from "./pages/StudentProfilePage";
+import { LessonPlansPage } from "./pages/lesson-plans/LessonPlansPage";
 import { Link } from "react-router-dom";
 import { Button } from "@kaihle/ui";
 import { Plus } from "lucide-react";
@@ -135,6 +138,14 @@ function TeacherContentShell() {
         path: "classes/:classId/explanation-review",
         element: <ExplanationReviewPage />,
       },
+      {
+        path: "classes/:classId/gap-map",
+        element: <GapMapPage />,
+      },
+      {
+        path: "classes/:classId/lesson-plans",
+        element: <LessonPlansPage />,
+      },
       { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
     ],
     [],
@@ -229,19 +240,7 @@ export default function App() {
             </PrivateRoute>
           }
         />
-        {/* General teacher shell — admins may also view teacher dashboard */}
-        <Route
-          path="/teacher/assessments/:assessmentId/results/:studentId"
-          element={
-            <PrivateRoute>
-              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
-                <ErrorBoundary role="teacher">
-                  <StudentResultDetailPage />
-                </ErrorBoundary>
-              </RoleRoute>
-            </PrivateRoute>
-          }
-        />
+        {/* Assessment results routes — standalone (no shell needed, pages provide own layout) */}
         <Route
           path="/teacher/assessments/:assessmentId/results"
           element={
@@ -254,6 +253,32 @@ export default function App() {
             </PrivateRoute>
           }
         />
+        <Route
+          path="/teacher/assessments/:assessmentId/results/:studentId"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+                <ErrorBoundary role="teacher">
+                  <StudentResultDetailPage />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
+        {/* Student profile route — TEACHER only */}
+        <Route
+          path="/teacher/students/:studentId/profile"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+                <ErrorBoundary role="teacher">
+                  <StudentProfilePage />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
+        {/* General teacher shell — admins may also view teacher dashboard */}
         <Route
           path="/teacher/*"
           element={

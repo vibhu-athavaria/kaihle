@@ -14,8 +14,6 @@
  *   Each has a distinct colour per spec.
  */
 import { useParams, Link } from "react-router-dom";
-import { useAuth } from "@kaihle/auth";
-import { DashboardLayout } from "@kaihle/ui";
 import { useAssessmentResults } from "../../hooks/useAssessmentResults";
 import { ResultsKPIRow } from "../../components/results/ResultsKPIRow";
 import { ScoreDistributionChart } from "../../components/results/ScoreDistributionChart";
@@ -135,27 +133,12 @@ function AssessmentResultsContent({ assessmentId }: { assessmentId: string }) {
 
 export function AssessmentResultsPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
-  const { logout } = useAuth();
 
   if (!assessmentId) {
     return (
-      <DashboardLayout
-        variant="teacher"
-        pageTitle="Assessment Results"
-        onLogout={logout}
-      >
-        <div className="p-6 text-red-600">Invalid assessment ID.</div>
-      </DashboardLayout>
+      <div className="p-6 text-red-600">Invalid assessment ID.</div>
     );
   }
 
-  return (
-    <DashboardLayout
-      variant="teacher"
-      pageTitle="Assessment Results"
-      onLogout={logout}
-    >
-      <AssessmentResultsContent assessmentId={assessmentId} />
-    </DashboardLayout>
-  );
+  return <AssessmentResultsContent assessmentId={assessmentId} />;
 }
