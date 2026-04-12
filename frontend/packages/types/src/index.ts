@@ -1,6 +1,10 @@
 export { getMasteryStyle, scoreToPercent } from "./mastery";
 export type { MasteryLabel, MasteryStyle } from "./mastery";
 
+export { getSubjectColor, SUBJECT_COLORS } from "./subjects";
+
+export { getSubjectColor, SUBJECT_COLORS } from "./subjects";
+
 export {
   UserRole,
   RoleGroup,

@@ -1,23 +1,8 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
-import { getMasteryStyle, scoreToPercent } from "@kaihle/types";
+import { getMasteryStyle, scoreToPercent, getSubjectColor } from "@kaihle/types";
 import { ClassCardSkeleton } from "../dashboard/ClassCard";
-
-const subjectColorMap: Record<string, string> = {
-  Mathematics: "bg-brand-primary",
-  "Integrated Science": "bg-violet-600",
-  Biology: "bg-green-600",
-  Chemistry: "bg-amber-600",
-  Physics: "bg-blue-600",
-  "English Language": "bg-red-600",
-  "English Literature": "bg-purple-600",
-  default: "bg-brand-muted",
-};
-
-function getSubjectColor(subjectName: string): string {
-  return subjectColorMap[subjectName] || subjectColorMap.default;
-}
 
 export function ClassesPage() {
   const { user } = useAuth();

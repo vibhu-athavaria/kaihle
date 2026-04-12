@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { getMasteryStyle, scoreToPercent } from "@kaihle/types";
+import { getMasteryStyle, scoreToPercent, getSubjectColor } from "@kaihle/types";
 
 interface ClassCardProps {
   classId: string;
@@ -8,21 +8,6 @@ interface ClassCardProps {
   gradeName: string;
   studentCount: number;
   avgMastery: number | null;
-}
-
-const subjectColorMap: Record<string, string> = {
-  Mathematics: "bg-brand-primary",
-  "Integrated Science": "bg-violet-600",
-  Biology: "bg-green-600",
-  Chemistry: "bg-amber-600",
-  Physics: "bg-blue-600",
-  "English Language": "bg-red-600",
-  "English Literature": "bg-purple-600",
-  default: "bg-brand-muted",
-};
-
-function getSubjectColor(subjectName: string): string {
-  return subjectColorMap[subjectName] || subjectColorMap.default;
 }
 
 export function ClassCard({
@@ -56,7 +41,7 @@ export function ClassCard({
           {studentCount} student{studentCount !== 1 ? "s" : ""}
         </div>
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${dotClass}`} />
+          <span className={`w-2 h-2 rounded-full ${dotClass}`} aria-label={label} role="img" />
           <span className={`text-sm font-semibold ${textClass}`}>
             {displayPct}
           </span>

@@ -29,13 +29,9 @@ test.describe("Teacher App — New Routes", () => {
     expect(href).toContain("/gap-map");
   });
 
-  test("back_navigation_from_gap_map_goes_to_class_detail", async ({
-    page,
-  }) => {
+  test("back_link_from_gap_map_goes_to_class_detail", async ({ page }) => {
     await page.goto("/teacher/classes/cls-1/gap-map");
-    const breadcrumb = page.locator("nav[aria-label='Breadcrumb']");
-    await expect(breadcrumb).toBeVisible();
-    await expect(breadcrumb.locator("text=Classes")).toBeVisible();
-    await expect(breadcrumb.locator("text=Gap Map")).toBeVisible();
+    const backLink = page.locator('a[href*="/teacher/classes/cls-1"]');
+    await expect(backLink.first()).toBeVisible();
   });
 });

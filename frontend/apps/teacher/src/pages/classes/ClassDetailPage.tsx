@@ -1,40 +1,10 @@
 import { useParams, Link } from "react-router-dom";
-import { getMasteryStyle, scoreToPercent } from "@kaihle/types";
+import { getMasteryStyle, scoreToPercent, getSubjectColor } from "@kaihle/types";
 import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { useMyStudents } from "../../hooks/useMyStudents";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
 import { useAuth } from "@kaihle/auth";
 import { ArrowLeft, Users, BarChart2, FileText, BookOpen } from "lucide-react";
-
-const subjectColorMap: Record<string, string> = {
-  Mathematics: "bg-brand-primary",
-  "Integrated Science": "bg-violet-600",
-  Biology: "bg-green-600",
-  Chemistry: "bg-amber-600",
-  Physics: "bg-blue-600",
-  "English Language": "bg-red-600",
-  "English Literature": "bg-purple-600",
-  default: "bg-brand-muted",
-};
-
-function getSubjectColor(subjectName: string): string {
-  return subjectColorMap[subjectName] || subjectColorMap.default;
-}
-
-function statusBadge(status: string) {
-  const variants: Record<string, string> = {
-    DRAFT: "bg-gray-100 text-gray-600",
-    ACTIVE: "bg-brand-green-light text-brand-green",
-    CLOSED: "bg-brand-amber-light text-brand-amber",
-  };
-  return (
-    <span
-      className={`px-2 py-0.5 text-xs font-medium rounded-full ${variants[status] ?? "bg-gray-100 text-gray-600"}`}
-    >
-      {status}
-    </span>
-  );
-}
 
 export function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
