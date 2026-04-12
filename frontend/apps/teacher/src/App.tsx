@@ -17,6 +17,7 @@ import { AssessmentListPage } from "./pages/assessments/AssessmentListPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudentResultDetailPage } from "./pages/assessments/StudentResultDetailPage";
 import { ExplanationReviewPage } from "./pages/classes/ExplanationReviewPage";
+import { ClassesPage } from "./pages/classes/ClassesPage";
 import { GapMapPage } from "./pages/gap-map/GapMapPage";
 import { MyStudentsPage } from "./pages/MyStudents";
 import { StudentProfilePage } from "./pages/StudentProfilePage";
@@ -40,6 +41,7 @@ function TeacherShell() {
   const routes = useMemo(
     () => [
       { path: "dashboard", element: <TeacherDashboard /> },
+      { path: "classes", element: <ClassesPage /> },
       { path: "students", element: <MyStudentsPage /> },
       {
         path: "students/:studentId/profile",
