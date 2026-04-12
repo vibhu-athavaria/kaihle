@@ -11,6 +11,7 @@ from app.schemas.class_enrollment import (
     ClassCreate,
     EnrollResponse,
     StudentSummary,
+    TeacherStudentItem,
 )
 from app.tasks.onboarding_tasks import trigger_onboarding_diagnostics
 
@@ -241,4 +242,84 @@ class ClassService:
                 last_name=student.last_name,
             )
             for student in students
+        ]
+
+    async def get_teacher_students(
+        self,
+        teacher_id: uuid.UUID,
+        school_id: uuid.UUID,
+    ) -> list[TeacherStudentItem]:
+        """Get all students enrolled in a teacher's active classes.
+
+        Aggregates students across all classes, collecting class_ids and class_names
+        per student. Returns lightweight summaries (no mastery/learning profile data).
+
+        Args:
+            teacher_id: The teacher's UUID
+            school_id: The school UUID for scoping
+
+        Returns:
+            List of TeacherStudentItem
+        """
+        # Fetch all active classes for this teacher
+        classes_result = await self.db.execute(
+            select(Class).where(
+                Class.teacher_id == teacher_id,
+                Class.school_id == school_id,
+                Class.is_active.is_(True),
+            )
+        )
+        classes = classes_result.scalars().all()
+
+        if not classes:
+            return []
+
+        class_ids = [c.id for c in classes]
+        class_name_map = {c.id: c.name for c in classes}
+
+        # Fetch all enrollments for these classes
+        enrollments_result = await self.db.execute(
+            select(ClassEnrollment).where(
+                ClassEnrollment.class_id.in_(class_ids),
+                ClassEnrollment.is_active.is_(True),
+            )
+        )
+        enrollments = enrollments_result.scalars().all()
+
+        if not enrollments:
+            return []
+
+        enrollment_student_ids = [e.student_id for e in enrollments]
+
+        # Fetch all students in one query
+        students_result = await self.db.execute(
+            select(User).where(
+                User.id.in_(enrollment_student_ids),
+                User.school_id == school_id,
+                User.role == UserRole.STUDENT,
+            )
+        )
+        students = {s.id: s for s in students_result.scalars().all()}
+
+        # Aggregate: student_id -> {class_ids, class_names}
+        student_classes: dict[uuid.UUID, dict] = {}
+        for enrollment in enrollments:
+            sid = enrollment.student_id
+            cid = enrollment.class_id
+            if sid not in student_classes:
+                student_classes[sid] = {"class_ids": [], "class_names": []}
+            student_classes[sid]["class_ids"].append(cid)
+            student_classes[sid]["class_names"].append(class_name_map[cid])
+
+        return [
+            TeacherStudentItem(
+                id=student_id,
+                first_name=students[student_id].first_name,
+                last_name=students[student_id].last_name,
+                email=students[student_id].email,
+                class_ids=data["class_ids"],
+                class_names=data["class_names"],
+            )
+            for student_id, data in student_classes.items()
+            if student_id in students
         ]

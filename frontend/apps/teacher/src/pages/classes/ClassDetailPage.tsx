@@ -15,8 +15,8 @@ export function ClassDetailPage() {
   const { data: assessments, isLoading: assessmentsLoading } =
     useClassAssessments(classId);
   const { data: students, isLoading: studentsLoading } = useMyStudents(
-    classId ?? null,
-    null,
+    classId ? [classId] : [],
+    [],
   );
 
   const cls = dashboardData?.classes.find((c) => c.id === classId);

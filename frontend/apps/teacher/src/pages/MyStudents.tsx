@@ -1,48 +1,47 @@
 import { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  useTeacherDashboard,
-  TeacherClass,
-} from "../hooks/useTeacherDashboard";
-import { useMyStudents, StudentRow } from "../hooks/useMyStudents";
-import { StudentsTable } from "../components/students/StudentsTable";
+import { useTeacherStudents, TeacherStudent } from "../hooks/useTeacherStudents";
+import { StudentListTable } from "../components/students/StudentListTable";
 import { useAuth } from "@kaihle/auth";
 
-function useClassStudents(classId: string | null, subjectId: string | null) {
-  return useMyStudents(classId, subjectId);
-}
-
 export function MyStudentsPage() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const schoolId = user?.school_id || null;
-  const { data: dashboardData, isLoading: dashboardLoading } =
-    useTeacherDashboard(schoolId);
+  const { data: teacherStudents, isLoading: studentsLoading } =
+    useTeacherStudents(schoolId);
 
-  const classes: TeacherClass[] = dashboardData?.classes ?? [];
   const [filterClassId, setFilterClassId] = useState<string | null>(null);
 
-  const classResults = classes.map((cls) =>
-    useClassStudents(cls.id, cls.subjectId),
-  );
+  const allClassIds = useMemo(() => {
+    if (!teacherStudents) return [];
+    return [...new Set(teacherStudents.flatMap((s) => s.class_ids))];
+  }, [teacherStudents]);
 
-  const allStudents = useMemo(() => {
-    const seen = new Map<string, StudentRow>();
-    for (const result of classResults) {
-      if (result.data) {
-        for (const s of result.data) {
-          if (!seen.has(s.id)) seen.set(s.id, s);
-        }
+  const classIdNameMap = useMemo(() => {
+    if (!teacherStudents) return new Map<string, string>();
+    const map = new Map<string, string>();
+    for (const student of teacherStudents) {
+      for (let i = 0; i < student.class_ids.length; i++) {
+        map.set(student.class_ids[i], student.class_names[i]);
       }
     }
-    return Array.from(seen.values());
-  }, [classResults]);
+    return map;
+  }, [teacherStudents]);
 
-  const isLoading = dashboardLoading || classResults.some((r) => r.isLoading);
+  const allStudents = useMemo(() => {
+    if (!teacherStudents) return [];
+    return teacherStudents.map((s: TeacherStudent) => ({
+      id: s.id,
+      name: `${s.first_name} ${s.last_name}`.trim(),
+      email: s.email,
+      classIds: s.class_ids,
+      classNames: s.class_names,
+    }));
+  }, [teacherStudents]);
 
-  const handleStudentClick = (studentId: string) => {
-    navigate(`/teacher/students/${studentId}/profile`);
-  };
+  const filteredStudents = useMemo(() => {
+    if (filterClassId === null) return allStudents;
+    return allStudents.filter((s) => s.classIds?.includes(filterClassId));
+  }, [allStudents, filterClassId]);
 
   return (
     <div className="p-6 space-y-6">
@@ -51,11 +50,11 @@ export function MyStudentsPage() {
           Students
         </h1>
         <p className="text-sm text-brand-muted">
-          View student roster and mastery across all your classes
+          View student roster across all your classes
         </p>
       </div>
 
-      {classes.length > 1 && (
+      {allClassIds.length > 1 && (
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -68,27 +67,26 @@ export function MyStudentsPage() {
           >
             All ({allStudents.length})
           </button>
-          {classes.map((cls) => (
+          {allClassIds.map((classId) => (
             <button
-              key={cls.id}
+              key={classId}
               type="button"
-              onClick={() => setFilterClassId(cls.id)}
+              onClick={() => setFilterClassId(classId)}
               className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                filterClassId === cls.id
+                filterClassId === classId
                   ? "bg-brand-gold text-white"
                   : "bg-white border border-brand-border text-brand-muted hover:text-brand-ink"
               }`}
             >
-              {cls.name}
+              {classIdNameMap.get(classId)}
             </button>
           ))}
         </div>
       )}
 
-      <StudentsTable
-        students={allStudents}
-        onStudentClick={handleStudentClick}
-        isLoading={isLoading}
+      <StudentListTable
+        students={filteredStudents}
+        isLoading={studentsLoading}
       />
     </div>
   );
