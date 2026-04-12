@@ -25,10 +25,9 @@ export interface TeacherDashboardData {
   lessonPlan: LessonPlanInfo | null;
 }
 
-async function fetchTeacherDashboard(schoolId: string): Promise<{
-  classes: TeacherClass[];
-  analytics: Record<string, number>;
-}> {
+async function fetchTeacherDashboard(schoolId: string): Promise<
+  TeacherClass[]
+> {
   const [classesRes, analyticsRes] = await Promise.all([
     apiClient.get(`/api/v1/schools/${schoolId}/classes`),
     apiClient
@@ -36,22 +35,35 @@ async function fetchTeacherDashboard(schoolId: string): Promise<{
       .catch(() => ({ data: {} })),
   ]);
 
-  // Transform classes to include subjectName and gradeName
-  const classes = (classesRes.data || []).map((c: any) => ({
-    id: c.id,
-    name: c.name,
-    subjectId: c.subject_id ?? "",
-    subjectName: c.subjectName || c.name?.split(" ")[0] || "Unknown",
-    gradeName: c.gradeName || c.name?.split(" ")[1] || "Unknown",
-    studentCount: 0,
-    avgMastery: null,
-    lessonPlanStatus: "none" as const,
-  }));
+  // Build a lookup map from analytics class breakdowns
+  const analyticsMap = new Map<
+    string,
+    { studentCount: number; avgMastery: number | null }
+  >();
+  const classBreakdowns = analyticsRes.data?.classes || [];
+  for (const cb of classBreakdowns) {
+    analyticsMap.set(cb.class_id, {
+      studentCount: cb.student_count ?? 0,
+      avgMastery: cb.avg_mastery ?? null,
+    });
+  }
 
-  return {
-    classes,
-    analytics: analyticsRes.data || {},
-  };
+  // Transform classes to include subjectName, gradeName, and analytics data
+  const classes = (classesRes.data || []).map((c: any) => {
+    const analytics = analyticsMap.get(c.id);
+    return {
+      id: c.id,
+      name: c.name,
+      subjectId: c.subject_id ?? "",
+      subjectName: c.subjectName || c.name?.split(" ")[0] || "Unknown",
+      gradeName: c.gradeName || c.name?.split(" ")[1] || "Unknown",
+      studentCount: analytics?.studentCount ?? 0,
+      avgMastery: analytics?.avgMastery ?? null,
+      lessonPlanStatus: "none" as const,
+    };
+  });
+
+  return classes;
 }
 
 export function useTeacherDashboard(schoolId: string | null) {
