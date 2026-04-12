@@ -163,18 +163,16 @@ export function AssessmentListPage() {
                     <div className="flex items-center justify-end gap-2">
                       {(assessment.status === "ACTIVE" ||
                         assessment.status === "CLOSED") && (
-                        <button
-                          type="button"
-                          disabled
-                          title="Results view coming soon"
-                          className="flex items-center gap-1.5 text-xs font-sans font-bold text-brand-muted cursor-not-allowed px-2 py-1"
+                        <Link
+                          to={`/teacher/assessments/${assessment.id}/results`}
+                          className="flex items-center gap-1.5 text-xs font-sans font-bold text-brand-muted hover:text-brand-ink transition-colors px-2 py-1"
                         >
                           <BarChart2
                             className="w-3.5 h-3.5"
                             aria-hidden="true"
                           />
                           View Results
-                        </button>
+                        </Link>
                       )}
 
                       {assessment.status === "ACTIVE" && (

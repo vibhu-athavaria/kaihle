@@ -164,12 +164,7 @@ export function GapMapPage() {
                       key={s.student_id}
                       className="px-2 py-3 text-center text-xs font-bold uppercase tracking-widest text-role-teacher-muted border-b border-brand-border min-w-[60px]"
                     >
-                      <div
-                        style={{
-                          writingMode: "vertical-rl",
-                          transform: "rotate(180deg)",
-                        }}
-                      >
+                      <div className="[writing-mode:vertical-rl] rotate-180">
                         {s.student_name}
                       </div>
                     </th>
