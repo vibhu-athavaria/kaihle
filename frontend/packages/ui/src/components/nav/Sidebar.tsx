@@ -13,6 +13,7 @@ import {
   Cog,
   LogOut,
   FileText,
+  Video,
 } from "lucide-react";
 import { NavItem } from "./NavItem";
 
@@ -47,6 +48,11 @@ const teacherSections: NavSection[] = [
         href: "/teacher/classes/:classId/lesson-plans",
         icon: BookOpen,
       },
+      {
+        label: "Explanation Review",
+        href: "/teacher/classes/:classId/explanation-review",
+        icon: FileText,
+      },
     ],
   },
   {
@@ -58,10 +64,6 @@ const teacherSections: NavSection[] = [
         icon: Users,
       },
     ],
-  },
-  {
-    section: "TOOLS",
-    items: [{ label: "Study Plans", href: "#", icon: BookOpen }],
   },
   {
     section: "ACCOUNT",
@@ -117,6 +119,11 @@ const adminSections: NavSection[] = [
         label: "Assessment Questions",
         href: "/kaihle-admin/question-bank",
         icon: FileText,
+      },
+      {
+        label: "Video Library",
+        href: "/kaihle-admin/content/videos",
+        icon: Video,
       },
     ],
   },

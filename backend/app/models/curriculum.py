@@ -6,7 +6,7 @@ curriculum_topics, subtopics, subtopic_prerequisites, curriculum_chunks, questio
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -22,6 +22,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+if TYPE_CHECKING:
+    from app.models.subtopic_content import SubtopicContent
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -52,6 +55,8 @@ class Subject(Base, UUIDMixin, TimestampMixin):
     color: Mapped[str | None] = mapped_column(String(7))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    curriculum_topics: Mapped[list["CurriculumTopic"]] = relationship("CurriculumTopic", back_populates="subject")
+
 
 class Grade(Base, UUIDMixin, TimestampMixin):
     """Global grade levels. School-agnostic."""
@@ -64,6 +69,8 @@ class Grade(Base, UUIDMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     __table_args__ = (CheckConstraint("level BETWEEN 1 AND 13", name="grades_level_range"),)
+
+    curriculum_topics: Mapped[list["CurriculumTopic"]] = relationship("CurriculumTopic", back_populates="grade")
 
 
 class Topic(Base, UUIDMixin, TimestampMixin):
@@ -130,6 +137,8 @@ class CurriculumTopic(Base, UUIDMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     curriculum: Mapped["Curriculum"] = relationship("Curriculum", back_populates="curriculum_topics")
+    subject: Mapped["Subject"] = relationship("Subject", back_populates="curriculum_topics")
+    grade: Mapped["Grade"] = relationship("Grade", back_populates="curriculum_topics")
     subtopics: Mapped[list["Subtopic"]] = relationship("Subtopic", back_populates="curriculum_topic")
 
     __table_args__ = (
@@ -171,6 +180,9 @@ class Subtopic(Base, UUIDMixin, TimestampMixin):
 
     curriculum_topic: Mapped["CurriculumTopic"] = relationship("CurriculumTopic", back_populates="subtopics")
     questions: Mapped[list["QuestionBank"]] = relationship("QuestionBank", back_populates="subtopic")
+    subtopic_contents: Mapped[list["SubtopicContent"]] = relationship(  # noqa: F821
+        "SubtopicContent", back_populates="subtopic"
+    )
 
 
 class SubtopicPrerequisite(Base):

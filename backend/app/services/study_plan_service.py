@@ -1,0 +1,458 @@
+"""Study Plan Service — M3-2-T1.
+
+Orchestrates creation of personalised study plans:
+- create_bulk_study_plans: creates multiple plans (one per student)
+- get_study_plan: fetches a plan with ownership check
+- list_student_plans: paginated list with school isolation via Class join
+- submit_quiz: scores quiz, updates plan status, triggers gap recalculation
+- mark_resource_watched: marks a resource as watched
+
+The async content generation (curation + quiz generation) is handled by
+the Celery task generate_study_plan_content.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID
+
+import structlog
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.models import Class, StudyPlan, StudyPlanQuiz, StudyPlanResource
+from app.models.study_plan import StudyPlanStatus
+from app.schemas.common import Page
+from app.schemas.study_plans import (
+    QuizSubmitRequest,
+    QuizSubmitResponse,
+    StudyPlanAssignRequest,
+    StudyPlanItem,
+    StudyPlanResponse,
+)
+from app.schemas.study_plans import (
+    StudyPlanResource as StudyPlanResourceSchema,
+)
+
+logger = structlog.get_logger()
+
+# Score threshold above which a study plan is considered "mastered"
+MASTERED_THRESHOLD = 0.75
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+async def create_bulk_study_plans(
+    config: StudyPlanAssignRequest,
+    class_id: UUID,
+    assigned_by: UUID,
+    db: AsyncSession,
+    redis: Any | None = None,
+) -> list[StudyPlanItem]:
+    """Create one study plan per student, each individually personalised.
+
+    Args:
+        config: Assignment request (subtopic_id and optional student_ids).
+        class_id: UUID of the class (from route path param — not in request body).
+        assigned_by: UUID of the teacher.
+        db: Async SQLAlchemy session.
+        redis: Optional Redis client.
+
+    Returns:
+        List of StudyPlanItems (one per student), all in GENERATING status.
+    """
+    from app.tasks.study_plan_tasks import generate_study_plan_content
+
+    # Get student IDs if not provided
+    student_ids = config.student_ids
+    if not student_ids:
+        student_ids = await _get_enrolled_students(class_id, db)
+
+    plans: list[StudyPlanItem] = []
+    for student_id in student_ids:
+        plan = StudyPlan(
+            student_id=student_id,
+            subtopic_id=config.subtopic_id,
+            class_id=class_id,
+            assigned_by=assigned_by,
+            status=StudyPlanStatus.GENERATING,
+        )
+        db.add(plan)
+        await db.flush()
+
+        try:
+            generate_study_plan_content.delay(str(plan.id))
+        except Exception as exc:
+            logger.warning(
+                "celery_queue_failed_bulk",
+                plan_id=str(plan.id),
+                error=str(exc),
+            )
+
+        plans.append(
+            StudyPlanItem(
+                plan_id=plan.id,
+                student_id=student_id,
+                status=StudyPlanStatus.GENERATING,
+            )
+        )
+
+    await db.commit()
+    logger.info(
+        "bulk_study_plans_created",
+        count=len(plans),
+        subtopic_id=str(config.subtopic_id),
+        class_id=str(class_id),
+    )
+    return plans
+
+
+async def get_study_plan(
+    plan_id: UUID,
+    student_id: UUID,
+    school_id: UUID,
+    user_role: str,
+    db: AsyncSession,
+) -> StudyPlanResponse:
+    """Fetch a study plan by ID with role-based ownership enforcement.
+
+    CONSTITUTION Rule 12: KaihleAdmin bypass is explicit and first.
+    STUDENT: must own the plan.
+    TEACHER: must be the teacher of the class the plan belongs to.
+    KAIHLE_ADMIN: can access any plan.
+
+    Args:
+        plan_id: UUID of the study plan.
+        student_id: Requesting user's ID.
+        school_id: Requesting user's school_id.
+        user_role: Requesting user's role string.
+        db: Async SQLAlchemy session.
+
+    Raises:
+        ValueError: If plan not found.
+        PermissionError: If caller is not authorised to view this plan.
+    """
+    from app.models.curriculum import Subtopic
+
+    result = await db.execute(
+        select(StudyPlan)
+        .where(StudyPlan.id == plan_id)
+        .options(
+            selectinload(StudyPlan.resources),
+            selectinload(StudyPlan.quiz),
+        )
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise ValueError(f"Study plan {plan_id} not found")
+
+    # Ownership / access check
+    if user_role == "KAIHLE_ADMIN":
+        pass  # explicit bypass per Rule 12
+    elif user_role == "STUDENT":
+        if plan.student_id != student_id:
+            raise PermissionError("Access denied: plan belongs to a different student")
+    elif user_role == "TEACHER":
+        # Teacher must own the class
+        class_result = await db.execute(select(Class).where(Class.id == plan.class_id))
+        class_row = class_result.scalar_one_or_none()
+        if not class_row or class_row.teacher_id != student_id:
+            raise PermissionError("Access denied: not the teacher for this class")
+    else:
+        raise PermissionError("Access denied")
+
+    # Load subtopic info
+    subtopic_result = await db.execute(select(Subtopic).where(Subtopic.id == plan.subtopic_id))
+    subtopic = subtopic_result.scalar_one_or_none()
+    subtopic_name = subtopic.name if subtopic else ""
+
+    return _build_plan_response(plan, subtopic_name)
+
+
+async def submit_quiz(
+    plan_id: UUID,
+    student_id: UUID,
+    request: QuizSubmitRequest,
+    db: AsyncSession,
+) -> QuizSubmitResponse:
+    """Submit quiz responses for a study plan.
+
+    Scores each response, updates the quiz record and plan status,
+    and triggers gap state recalculation.
+
+    Args:
+        plan_id: UUID of the study plan.
+        student_id: UUID of the student submitting.
+        request: Quiz responses (QuizSubmitRequest schema).
+        db: Async SQLAlchemy session.
+
+    Returns:
+        QuizSubmitResponse with score and correctness breakdown.
+
+    Raises:
+        ValueError: If plan not found, not owned by student, or not ACTIVE.
+    """
+    from app.tasks.gap_tasks import update_gap_state_from_quiz
+
+    # Load and validate plan
+    result = await db.execute(select(StudyPlan).where(StudyPlan.id == plan_id))
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise ValueError(f"Study plan {plan_id} not found")
+    if plan.student_id != student_id:
+        raise ValueError("Plan is not owned by this student")
+    if plan.status != StudyPlanStatus.ACTIVE:
+        raise ValueError(f"Plan is not active (status: {plan.status})")
+
+    # Load quiz
+    quiz_result = await db.execute(select(StudyPlanQuiz).where(StudyPlanQuiz.plan_id == plan_id))
+    quiz = quiz_result.scalar_one_or_none()
+    if not quiz:
+        raise ValueError("No quiz found for this plan")
+
+    # Score responses
+    questions = quiz.questions.get("questions", [])
+    scored_results: list[dict[str, Any]] = []
+    correct_count = 0
+
+    for resp in request.responses:
+        if resp.question_index >= len(questions):
+            scored_results.append(
+                {
+                    "index": resp.question_index,
+                    "answer": resp.answer,
+                    "is_correct": False,
+                    "score": 0.0,
+                }
+            )
+            continue
+
+        question = questions[resp.question_index]
+        correct = question.get("correct_answer", "").upper()
+        given = resp.answer.upper()
+        is_correct = given == correct
+        score = 1.0 if is_correct else 0.0
+        if is_correct:
+            correct_count += 1
+
+        scored_results.append(
+            {
+                "index": resp.question_index,
+                "answer": resp.answer,
+                "is_correct": is_correct,
+                "score": score,
+            }
+        )
+
+    total_questions = len(questions)
+    final_score = correct_count / total_questions if total_questions > 0 else 0.0
+
+    # Update quiz record
+    quiz.student_answers = scored_results
+    quiz.score = final_score
+    quiz.completed_at = datetime.now(UTC)
+
+    # Update plan status
+    plan.status = StudyPlanStatus.COMPLETED
+    plan.completed_at = datetime.now(UTC)
+
+    await db.commit()
+
+    logger.info(
+        "quiz_submitted",
+        plan_id=str(plan_id),
+        student_id=str(student_id),
+        score=final_score,
+        correct_count=correct_count,
+        total_questions=total_questions,
+    )
+
+    # Trigger gap state recalculation (async)
+    try:
+        update_gap_state_from_quiz.delay(str(plan_id), str(plan.subtopic_id))
+    except Exception as exc:
+        logger.warning(
+            "gap_recalculation_queue_failed",
+            plan_id=str(plan_id),
+            error=str(exc),
+        )
+
+    return QuizSubmitResponse(
+        score=final_score,
+        correct_count=correct_count,
+        total_questions=total_questions,
+        plan_status=StudyPlanStatus.COMPLETED,
+    )
+
+
+async def list_student_plans(
+    student_id: UUID,
+    school_id: UUID,
+    db: AsyncSession,
+    status_filter: str | None = None,
+    subject_id: UUID | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> Page[StudyPlanResponse]:
+    """List study plans for a student with optional filtering.
+
+    School isolation is enforced via a JOIN to the classes table
+    (study_plans has no school_id column — see kaihle_v2_1_schema.sql).
+
+    Args:
+        student_id: UUID of the student.
+        school_id: UUID of the school (enforces isolation via Class join).
+        db: Async SQLAlchemy session.
+        status_filter: Optional status to filter by.
+        subject_id: Optional subject UUID to filter by.
+        page: Page number (1-indexed).
+        page_size: Number of items per page.
+
+    Returns:
+        Page of StudyPlanResponse objects.
+    """
+    from app.models import Subtopic
+    from app.schemas.common import Page as PydanticPage
+
+    # Base query with school isolation via Class join (Rule 3)
+    query = (
+        select(StudyPlan)
+        .join(Class, StudyPlan.class_id == Class.id)
+        .where(StudyPlan.student_id == student_id)
+        .where(Class.school_id == school_id)
+        .options(
+            selectinload(StudyPlan.resources),
+            selectinload(StudyPlan.quiz),
+        )
+        .order_by(StudyPlan.created_at.desc())
+    )
+
+    _valid_statuses = {
+        StudyPlanStatus.GENERATING,
+        StudyPlanStatus.ACTIVE,
+        StudyPlanStatus.COMPLETED,
+        StudyPlanStatus.ABANDONED,
+    }
+    if status_filter and status_filter in _valid_statuses:
+        query = query.where(StudyPlan.status == status_filter)
+
+    if subject_id:
+        from app.models.curriculum import CurriculumTopic  # noqa: PLC0415
+
+        query = (
+            query.join(Subtopic, Subtopic.id == StudyPlan.subtopic_id)
+            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .where(CurriculumTopic.subject_id == subject_id)
+        )
+
+    # Count total (without selectinload)
+    count_query = select(func.count()).select_from(query.options().with_only_columns(StudyPlan.id).subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar_one() or 0
+
+    # Paginate
+    offset = (page - 1) * page_size
+    result = await db.execute(query.offset(offset).limit(page_size))
+    plans = result.scalars().all()
+
+    # Batch-load subtopic names in a single query (no N+1)
+    subtopic_ids = list({p.subtopic_id for p in plans})
+    subtopic_map: dict[UUID, str] = {}
+    if subtopic_ids:
+        st_result = await db.execute(select(Subtopic).where(Subtopic.id.in_(subtopic_ids)))
+        subtopic_map = {s.id: s.name for s in st_result.scalars().all()}
+
+    responses = [_build_plan_response(plan, subtopic_map.get(plan.subtopic_id, "")) for plan in plans]
+
+    return PydanticPage(data=responses, total=total, page=page, page_size=page_size)
+
+
+async def mark_resource_watched(
+    plan_id: UUID,
+    resource_id: UUID,
+    student_id: UUID,
+    db: AsyncSession,
+) -> None:
+    """Mark a study plan resource as watched by the student.
+
+    Args:
+        plan_id: UUID of the study plan.
+        resource_id: UUID of the resource.
+        student_id: UUID of the student (must own the plan).
+
+    Raises:
+        ValueError: If plan not found or not owned by student.
+    """
+    from sqlalchemy import update
+
+    result = await db.execute(select(StudyPlan).where(StudyPlan.id == plan_id))
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise ValueError("Study plan not found")
+    if plan.student_id != student_id:
+        raise PermissionError("Not authorized to update this plan")
+
+    stmt = (
+        update(StudyPlanResource)
+        .where(StudyPlanResource.id == resource_id)
+        .where(StudyPlanResource.plan_id == plan_id)
+        .values(is_watched=True)
+    )
+    await db.execute(stmt)
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_plan_response(plan: StudyPlan, subtopic_name: str) -> StudyPlanResponse:
+    """Build a StudyPlanResponse from an ORM plan instance.
+
+    Assumes plan.resources and plan.quiz are already loaded (via selectinload).
+    """
+    resources = [
+        StudyPlanResourceSchema(
+            resource_id=r.id,
+            title=r.title,
+            resource_type=r.resource_type,
+            url=r.url,
+            source="KAIHLE",
+            duration_minutes=r.duration_seconds // 60 if r.duration_seconds else None,
+            is_watched=r.is_watched,
+        )
+        for r in (plan.resources or [])
+    ]
+
+    quiz_questions: list[dict[str, Any]] = []
+    quiz_score: float | None = None
+    if plan.quiz and plan.quiz.questions:
+        quiz_questions = plan.quiz.questions.get("questions", [])
+        quiz_score = plan.quiz.score
+
+    return StudyPlanResponse(
+        id=plan.id,
+        student_id=plan.student_id,
+        class_id=plan.class_id,
+        subtopic_id=plan.subtopic_id,
+        subtopic_name=subtopic_name,
+        status=plan.status,
+        resources=resources,
+        quiz_questions=quiz_questions,
+        quiz_score=quiz_score,
+        created_at=plan.created_at or datetime.now(UTC),
+    )
+
+
+async def _get_enrolled_students(class_id: UUID, db: AsyncSession) -> list[UUID]:
+    """Return all student user IDs enrolled in a class."""
+    from app.models import ClassEnrollment
+
+    result = await db.execute(select(ClassEnrollment.student_id).where(ClassEnrollment.class_id == class_id))
+    return [row[0] for row in result.all()]

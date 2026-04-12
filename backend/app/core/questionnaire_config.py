@@ -242,3 +242,52 @@ def get_option_by_key(question_id: str, option_key: str) -> dict[str, Any] | Non
         if option["key"] == option_key:
             return cast(dict[str, Any], option)
     return None
+
+
+# ---------------------------------------------------------------------------
+# Interest category mapping
+# ---------------------------------------------------------------------------
+# Used to tag subtopic_content with interest categories for personalisation.
+# Maps interest keys (from questionnaire Q6-Q10) to category names.
+# The actual category UUIDs are stored in the interest_categories table;
+# this module maps keys to names.  Service layer resolves names to UUIDs.
+
+INTEREST_KEY_TO_CATEGORY: dict[str, str] = {
+    "travel": "Adventure & Exploration",
+    "music": "Music & Arts",
+    "art": "Music & Arts",
+    "nature": "Nature & Science",
+    "animals": "Nature & Science",
+    "cooking": "Everyday Life",
+    "sports": "Sports & Fitness",
+    "technology": "Technology & Innovation",
+    "gaming": "Technology & Innovation",
+    "fashion": "Everyday Life",
+}
+
+
+def get_interest_category(interest_key: str) -> str | None:
+    """Return the interest category name for a given interest key.
+
+    Used when tagging subtopic_content rows with an interest_category_id
+    during content generation (M3-1-T1 content curator) so that
+    content can be personalised for students who share that interest.
+
+    Args:
+        interest_key: One of the interest option keys from Q6-Q10 of the
+                     onboarding questionnaire (e.g. "sports", "music", "gaming").
+
+    Returns:
+        The matching interest category name, or None if the key is unknown.
+
+    Example:
+        get_interest_category("sports")   → "Sports & Fitness"
+        get_interest_category("music")    → "Music & Arts"
+        get_interest_category("unknown")  → None
+    """
+    return INTEREST_KEY_TO_CATEGORY.get(interest_key.lower())
+
+
+def get_all_interest_categories() -> list[str]:
+    """Return the set of all distinct interest category names."""
+    return sorted(set(INTEREST_KEY_TO_CATEGORY.values()))
