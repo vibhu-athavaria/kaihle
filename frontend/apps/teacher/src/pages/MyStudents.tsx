@@ -1,34 +1,44 @@
-import { useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
-import { ChevronLeft } from "lucide-react";
+import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   useTeacherDashboard,
   TeacherClass,
 } from "../hooks/useTeacherDashboard";
-import { useMyStudents } from "../hooks/useMyStudents";
+import { useMyStudents, StudentRow } from "../hooks/useMyStudents";
 import { StudentsTable } from "../components/students/StudentsTable";
 import { useAuth } from "@kaihle/auth";
 
+function useClassStudents(classId: string | null, subjectId: string | null) {
+  return useMyStudents(classId, subjectId);
+}
+
 export function MyStudentsPage() {
-  const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const schoolId = user?.school_id || null;
-  const { data: dashboardData } = useTeacherDashboard(schoolId);
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(
-    classId ?? null,
-  );
+  const { data: dashboardData, isLoading: dashboardLoading } =
+    useTeacherDashboard(schoolId);
 
   const classes: TeacherClass[] = dashboardData?.classes ?? [];
-  const selectedClass = classes.find(
-    (c: TeacherClass) => c.id === selectedClassId,
+  const [filterClassId, setFilterClassId] = useState<string | null>(null);
+
+  const classResults = classes.map((cls) =>
+    useClassStudents(cls.id, cls.subjectId),
   );
-  const subjectId = selectedClass?.subjectId ?? null;
-  const {
-    data: students,
-    isLoading,
-    isError,
-  } = useMyStudents(selectedClassId, subjectId);
+
+  const allStudents = useMemo(() => {
+    const seen = new Map<string, StudentRow>();
+    for (const result of classResults) {
+      if (result.data) {
+        for (const s of result.data) {
+          if (!seen.has(s.id)) seen.set(s.id, s);
+        }
+      }
+    }
+    return Array.from(seen.values());
+  }, [classResults]);
+
+  const isLoading = dashboardLoading || classResults.some((r) => r.isLoading);
 
   const handleStudentClick = (studentId: string) => {
     navigate(`/teacher/students/${studentId}/profile`);
@@ -36,62 +46,50 @@ export function MyStudentsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <Link
-        to="/teacher/dashboard"
-        className="inline-flex items-center gap-1 text-sm text-brand-muted hover:text-brand-ink transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded"
-      >
-        <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-        Back to dashboard
-      </Link>
-
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display font-bold text-2xl text-brand-ink">
-            My Students
-          </h1>
-          <p className="text-sm text-brand-muted">
-            View student roster and mastery for your classes
-          </p>
-        </div>
-        {classes.length > 1 && (
-          <select
-            value={selectedClassId ?? ""}
-            onChange={(e) => setSelectedClassId(e.target.value || null)}
-            className="px-3 py-2 border border-brand-border rounded-lg text-sm text-brand-ink bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary"
-          >
-            <option value="">Select a class</option>
-            {classes.map((cls: TeacherClass) => (
-              <option key={cls.id} value={cls.id}>
-                {cls.name} — {cls.subjectName}
-              </option>
-            ))}
-          </select>
-        )}
+      <div>
+        <h1 className="font-display font-bold text-2xl text-brand-ink">
+          Students
+        </h1>
+        <p className="text-sm text-brand-muted">
+          View student roster and mastery across all your classes
+        </p>
       </div>
 
-      {isError && (
-        <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm">
-          Failed to load student data. Please try again.
+      {classes.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setFilterClassId(null)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              filterClassId === null
+                ? "bg-brand-gold text-white"
+                : "bg-white border border-brand-border text-brand-muted hover:text-brand-ink"
+            }`}
+          >
+            All ({allStudents.length})
+          </button>
+          {classes.map((cls) => (
+            <button
+              key={cls.id}
+              type="button"
+              onClick={() => setFilterClassId(cls.id)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                filterClassId === cls.id
+                  ? "bg-brand-gold text-white"
+                  : "bg-white border border-brand-border text-brand-muted hover:text-brand-ink"
+              }`}
+            >
+              {cls.name}
+            </button>
+          ))}
         </div>
       )}
 
-      {selectedClassId ? (
-        <StudentsTable
-          students={students ?? []}
-          onStudentClick={handleStudentClick}
-          isLoading={isLoading}
-        />
-      ) : (
-        <div className="bg-white rounded-2xl border border-brand-border p-12 text-center">
-          <div className="text-4xl mb-3">📋</div>
-          <h3 className="font-display font-semibold text-brand-ink mb-1">
-            Select a class
-          </h3>
-          <p className="text-sm text-brand-muted">
-            Choose a class from the dropdown above to view your student roster.
-          </p>
-        </div>
-      )}
+      <StudentsTable
+        students={allStudents}
+        onStudentClick={handleStudentClick}
+        isLoading={isLoading}
+      />
     </div>
   );
 }
