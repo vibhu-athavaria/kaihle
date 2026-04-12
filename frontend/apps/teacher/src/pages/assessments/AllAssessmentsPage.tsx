@@ -7,7 +7,7 @@ import {
   type AssessmentStatus,
   type Assessment,
 } from "../../hooks/useClassAssessments";
-import { Plus, BarChart2 } from "lucide-react";
+import { BarChart2 } from "lucide-react";
 import { Button, Badge, EmptyState, SkeletonCard } from "@kaihle/ui";
 
 function statusBadge(status: AssessmentStatus) {

@@ -1,5 +1,5 @@
-import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useState } from "react";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { Button, Badge, EmptyState, SkeletonCard } from "@kaihle/ui";
 import { toast } from "@kaihle/ui";
 import { Plus, BarChart2, X } from "lucide-react";
@@ -31,7 +31,7 @@ function typeBadge(type: string) {
 
 export function AssessmentListPage() {
   const { classId } = useParams<{ classId: string }>();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [dismissedBanner, setDismissedBanner] = useState(false);
 
   const {

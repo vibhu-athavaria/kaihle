@@ -76,7 +76,7 @@ export function useTeacherDashboard(schoolId: string | null) {
   const pendingActions: PendingAction[] = [];
 
   if (dashboardQuery.data) {
-    for (const cls of dashboardQuery.data.classes) {
+    for (const cls of dashboardQuery.data) {
       if (cls.avgMastery !== null && cls.avgMastery < 0.4) {
         pendingActions.push({
           type: "study-plan",
@@ -97,7 +97,7 @@ export function useTeacherDashboard(schoolId: string | null) {
 
   return {
     data: {
-      classes: dashboardQuery.data?.classes || [],
+      classes: dashboardQuery.data || [],
       pendingActions,
       lessonPlan: null,
     } as TeacherDashboardData,

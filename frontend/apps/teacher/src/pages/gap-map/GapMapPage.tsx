@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ChevronLeft, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { useAuth } from "@kaihle/auth";
 import { useClassGapMap } from "../../hooks/useClassGapMap";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
