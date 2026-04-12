@@ -59,16 +59,11 @@ async def get_review_queue(
     """
     from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic
 
-    # Base query: join subtopic_content with subtopics and curriculum chain
+    # Base query: join subtopic_content with subtopics
     # We want video content type only
     base_query = (
         select(SubtopicContent)
         .join(Subtopic, SubtopicContent.subtopic_id == Subtopic.id)
-        .options(
-            joinedload(Subtopic.curriculum_topic).joinedload(CurriculumTopic.subject),
-            joinedload(Subtopic.curriculum_topic).joinedload(CurriculumTopic.grade),
-            joinedload(Subtopic.curriculum_topic).joinedload(CurriculumTopic.curriculum),
-        )
         .where(SubtopicContent.content_type == "video")
     )
 
