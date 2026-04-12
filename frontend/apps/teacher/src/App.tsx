@@ -18,6 +18,7 @@ import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage
 import { StudentResultDetailPage } from "./pages/assessments/StudentResultDetailPage";
 import { ExplanationReviewPage } from "./pages/classes/ExplanationReviewPage";
 import { ClassesPage } from "./pages/classes/ClassesPage";
+import { ClassDetailPage } from "./pages/classes/ClassDetailPage";
 import { GapMapPage } from "./pages/gap-map/GapMapPage";
 import { MyStudentsPage } from "./pages/MyStudents";
 import { StudentProfilePage } from "./pages/StudentProfilePage";
@@ -92,6 +93,7 @@ function TeacherContentShell() {
 
   const contentRoutes = useMemo(
     () => [
+      { path: "", element: <ClassDetailPage /> },
       { path: "gap-map", element: <GapMapPage /> },
       { path: "assessments", element: <AssessmentListPage /> },
       {
