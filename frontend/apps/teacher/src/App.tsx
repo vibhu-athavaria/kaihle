@@ -18,7 +18,6 @@ import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage
 import { StudentResultDetailPage } from "./pages/assessments/StudentResultDetailPage";
 import { ExplanationReviewPage } from "./pages/classes/ExplanationReviewPage";
 import { AllAssessmentsPage } from "./pages/assessments/AllAssessmentsPage";
-import { AllAssessmentsPage } from "./pages/assessments/AllAssessmentsPage";
 import { ClassesPage } from "./pages/classes/ClassesPage";
 import { ClassDetailPage } from "./pages/classes/ClassDetailPage";
 import { GapMapPage } from "./pages/gap-map/GapMapPage";
@@ -28,7 +27,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@kaihle/ui";
 import { Plus } from "lucide-react";
 
-function TeacherShell() {
+function useTeacherShellProps() {
   const { user, logout } = useAuth();
 
   const greeting = () => {
@@ -40,19 +39,39 @@ function TeacherShell() {
 
   const teacherName = user?.email?.split("@")[0] || "Teacher";
 
-  // Inner routes rendered inside the DashboardLayout
+  const topNavAction = (
+    <Link to="/teacher/assessments/new">
+      <Button
+        variant="primary"
+        size="sm"
+        className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
+      >
+        <Plus className="w-4 h-4" aria-hidden="true" />
+        Assessment
+      </Button>
+    </Link>
+  );
+
+  return {
+    pageTitle: `${greeting()}, ${teacherName}`,
+    onLogout: logout,
+    topNavAction,
+  };
+}
+
+function TeacherShell() {
+  const { pageTitle, onLogout, topNavAction } = useTeacherShellProps();
+
   const routes = useMemo(
     () => [
       { path: "dashboard", element: <TeacherDashboard /> },
       { path: "classes", element: <ClassesPage /> },
       { path: "students", element: <MyStudentsPage /> },
       { path: "assessments", element: <AllAssessmentsPage /> },
-      { path: "assessments", element: <AllAssessmentsPage /> },
       {
         path: "students/:studentId/profile",
         element: <StudentProfilePage />,
       },
-      // Default: redirect to dashboard
       { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
     ],
     [],
@@ -62,38 +81,17 @@ function TeacherShell() {
   return (
     <DashboardLayout
       variant="teacher"
-      pageTitle={`${greeting()}, ${teacherName}`}
-      onLogout={logout}
-      topNavAction={
-        <Link to="/teacher/assessments/new">
-          <Button
-            variant="primary"
-            size="sm"
-            className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
-          >
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            Assessment
-          </Button>
-        </Link>
-      }
+      pageTitle={pageTitle}
+      onLogout={onLogout}
+      topNavAction={topNavAction}
     >
       {innerRoutes}
     </DashboardLayout>
   );
 }
 
-// Shell for class-specific content routes — TEACHER only
 function TeacherContentShell() {
-  const { user, logout } = useAuth();
-
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
-  };
-
-  const teacherName = user?.email?.split("@")[0] || "Teacher";
+  const { pageTitle, onLogout, topNavAction } = useTeacherShellProps();
 
   const contentRoutes = useMemo(
     () => [
@@ -115,20 +113,9 @@ function TeacherContentShell() {
   return (
     <DashboardLayout
       variant="teacher"
-      pageTitle={`${greeting()}, ${teacherName}`}
-      onLogout={logout}
-      topNavAction={
-        <Link to="/teacher/assessments/new">
-          <Button
-            variant="primary"
-            size="sm"
-            className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
-          >
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            Assessment
-          </Button>
-        </Link>
-      }
+      pageTitle={pageTitle}
+      onLogout={onLogout}
+      topNavAction={topNavAction}
     >
       {innerRoutes}
     </DashboardLayout>
@@ -146,34 +133,14 @@ function TeacherSettingsApp() {
 }
 
 function NewAssessmentApp() {
-  const { user, logout } = useAuth();
-
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
-  };
-
-  const teacherName = user?.email?.split("@")[0] || "Teacher";
+  const { pageTitle, onLogout, topNavAction } = useTeacherShellProps();
 
   return (
     <DashboardLayout
       variant="teacher"
-      pageTitle={`${greeting()}, ${teacherName}`}
-      onLogout={logout}
-      topNavAction={
-        <Link to="/teacher/assessments/new">
-          <Button
-            variant="primary"
-            size="sm"
-            className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
-          >
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            Assessment
-          </Button>
-        </Link>
-      }
+      pageTitle={pageTitle}
+      onLogout={onLogout}
+      topNavAction={topNavAction}
     >
       <NewAssessmentPage />
     </DashboardLayout>
