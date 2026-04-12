@@ -11,12 +11,13 @@ interface ClassCardProps {
 }
 
 const subjectColorMap: Record<string, string> = {
-  Mathematics: "bg-brand-blue",
-  Science: "bg-brand-green",
-  English: "bg-brand-amber",
-  History: "bg-brand-red",
-  Art: "bg-brand-purple",
-  Music: "bg-brand-pink",
+  Mathematics: "bg-brand-primary",
+  "Integrated Science": "bg-violet-600",
+  Biology: "bg-green-600",
+  Chemistry: "bg-amber-600",
+  Physics: "bg-blue-600",
+  "English Language": "bg-red-600",
+  "English Literature": "bg-purple-600",
   default: "bg-brand-muted",
 };
 
@@ -37,7 +38,7 @@ export function ClassCard({
   const subjectColor = getSubjectColor(subjectName);
 
   return (
-    <div className="bg-white rounded-2xl border border-role-teacher-border p-5 hover:-translate-y-0.5 hover:shadow-card-hover transition-all">
+    <div className="bg-white rounded-2xl border border-brand-border p-5 hover:-translate-y-0.5 hover:shadow-card-hover transition-all">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className={`w-3 h-3 rounded-full ${subjectColor}`} />
@@ -51,7 +52,7 @@ export function ClassCard({
       </div>
 
       <div className="mb-3">
-        <div className="text-xs text-role-teacher-muted mb-1">
+        <div className="text-xs text-brand-muted mb-1">
           {studentCount} student{studentCount !== 1 ? "s" : ""}
         </div>
         <div className="flex items-center gap-2">
@@ -63,19 +64,43 @@ export function ClassCard({
         </div>
       </div>
 
-      <div className="border-t border-brand-border pt-3 flex gap-4">
-        <Link
-          to={`/teacher/classes/${classId}/gap-map`}
-          className="text-sm font-semibold text-brand-body hover:text-brand-primary"
-        >
-          Gap Map →
-        </Link>
-        <Link
-          to={`/teacher/classes/${classId}/assessments`}
-          className="text-sm font-semibold text-brand-body hover:text-brand-primary"
-        >
-          Assessment →
-        </Link>
+      <div className="border-t border-brand-border pt-3">
+        <div className="flex gap-3 mb-2">
+          <Link
+            to={`/teacher/classes/${classId}/gap-map`}
+            className="text-sm font-medium text-brand-muted hover:text-brand-primary transition-colors"
+          >
+            Gap Map
+          </Link>
+          <span className="text-brand-muted">·</span>
+          <Link
+            to={`/teacher/classes/${classId}/assessments`}
+            className="text-sm font-medium text-brand-muted hover:text-brand-primary transition-colors"
+          >
+            Assessments
+          </Link>
+          <span className="text-brand-muted">·</span>
+          <Link
+            to={`/teacher/classes/${classId}/study-plan`}
+            className="text-sm font-medium text-brand-muted hover:text-brand-primary transition-colors"
+          >
+            Study Plan
+          </Link>
+        </div>
+        <div className="flex items-center justify-between">
+          <Link
+            to={`/teacher/classes/${classId}/lesson-plans`}
+            className="text-sm font-medium text-brand-muted hover:text-brand-primary transition-colors"
+          >
+            Lesson Plans
+          </Link>
+          <Link
+            to={`/teacher/classes/${classId}`}
+            className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark"
+          >
+            View →
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -83,7 +108,7 @@ export function ClassCard({
 
 export function ClassCardSkeleton() {
   return (
-    <div className="bg-white rounded-2xl border border-role-teacher-border p-5 animate-pulse">
+    <div className="bg-white rounded-2xl border border-brand-border p-5 animate-pulse">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-3 h-3 rounded-full bg-gray-200" />
