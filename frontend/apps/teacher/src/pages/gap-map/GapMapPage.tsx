@@ -92,13 +92,24 @@ export function GapMapPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <Link
-          to={`/teacher/classes/${classId}`}
-          className="inline-flex items-center gap-1 text-sm text-brand-muted hover:text-brand-ink transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded"
-        >
-          <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-          Back to class
-        </Link>
+        <nav className="flex items-center gap-2 text-sm text-brand-muted" aria-label="Breadcrumb">
+          <Link to="/teacher/classes" className="hover:text-brand-ink transition-colors">
+            Classes
+          </Link>
+          <span aria-hidden="true">/</span>
+          <Link to={`/teacher/classes/${classId}`} className="hover:text-brand-ink transition-colors">
+            {currentClass?.name ?? "Class"}
+          </Link>
+          <span aria-hidden="true">/</span>
+          <span className="text-brand-ink font-medium">Gap Map</span>
+        </nav>
+          <span aria-hidden="true">/</span>
+          <Link to={`/teacher/classes/${classId}`} className="hover:text-brand-ink transition-colors">
+            {currentClass?.name ?? "Class"}
+          </Link>
+          <span aria-hidden="true">/</span>
+          <span className="text-brand-ink font-medium">Gap Map</span>
+        </nav>
         {data && (
           <button
             type="button"
