@@ -22,7 +22,7 @@ export function StudentProfileHeader({
     <div className="flex items-start justify-between gap-4">
       <div className="flex items-start gap-4">
         <Link
-          to="/teacher/dashboard"
+          to="/teacher/students"
           className="mt-1 inline-flex items-center gap-1 text-sm text-brand-muted hover:text-brand-ink transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded"
         >
           <ChevronLeft className="w-4 h-4" aria-hidden="true" />

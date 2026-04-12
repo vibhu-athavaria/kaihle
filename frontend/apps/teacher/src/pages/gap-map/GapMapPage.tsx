@@ -93,11 +93,11 @@ export function GapMapPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <Link
-          to="/teacher/dashboard"
+          to={`/teacher/classes/${classId}`}
           className="inline-flex items-center gap-1 text-sm text-brand-muted hover:text-brand-ink transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded"
         >
           <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-          Back to dashboard
+          Back to class
         </Link>
         {data && (
           <button
