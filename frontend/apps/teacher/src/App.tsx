@@ -240,6 +240,30 @@ export default function App() {
             </PrivateRoute>
           }
         />
+        <Route
+          path="/teacher/classes/:classId/gap-map"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+                <ErrorBoundary role="teacher">
+                  <TeacherContentShell />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/teacher/classes/:classId/lesson-plans"
+          element={
+            <PrivateRoute>
+              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+                <ErrorBoundary role="teacher">
+                  <TeacherContentShell />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRoute>
+          }
+        />
         {/* Assessment results routes — standalone (no shell needed, pages provide own layout) */}
         <Route
           path="/teacher/assessments/:assessmentId/results"
