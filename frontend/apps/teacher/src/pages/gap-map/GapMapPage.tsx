@@ -103,13 +103,6 @@ export function GapMapPage() {
           <span aria-hidden="true">/</span>
           <span className="text-brand-ink font-medium">Gap Map</span>
         </nav>
-          <span aria-hidden="true">/</span>
-          <Link to={`/teacher/classes/${classId}`} className="hover:text-brand-ink transition-colors">
-            {currentClass?.name ?? "Class"}
-          </Link>
-          <span aria-hidden="true">/</span>
-          <span className="text-brand-ink font-medium">Gap Map</span>
-        </nav>
         {data && (
           <button
             type="button"
