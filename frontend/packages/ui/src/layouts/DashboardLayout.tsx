@@ -8,7 +8,6 @@ interface DashboardLayoutProps {
   pageTitle: string;
   pageSubtitle?: string;
   topNavAction?: React.ReactNode;
-  classId?: string;
   onLogout?: () => void;
 }
 
@@ -18,7 +17,6 @@ export function DashboardLayout({
   pageTitle,
   pageSubtitle,
   topNavAction,
-  classId,
   onLogout,
 }: DashboardLayoutProps) {
   const bgClass =
@@ -26,7 +24,7 @@ export function DashboardLayout({
 
   return (
     <div className={`flex h-screen overflow-hidden ${bgClass}`}>
-      <Sidebar variant={variant} classId={classId} onLogout={onLogout} />
+      <Sidebar variant={variant} onLogout={onLogout} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <TopNav
           pageTitle={pageTitle}
