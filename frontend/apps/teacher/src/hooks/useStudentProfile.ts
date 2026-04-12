@@ -55,9 +55,9 @@ async function fetchStudentProfile(
 
   const allClasses: any[] = classesRes.data ?? [];
 
-  // Find which classes this student is enrolled in
+  // Cap parallel enrollment checks at 5 to avoid N+1 API explosion
   const enrollmentChecks = await Promise.all(
-    allClasses.slice(0, 10).map(async (cls: any) => {
+    allClasses.slice(0, 5).map(async (cls: any) => {
       const res = await apiClient
         .get(`/api/v1/classes/${cls.id}/enrollments`)
         .catch(() => ({ data: [] }));
@@ -113,6 +113,6 @@ export function useStudentProfile(
     queryKey: ["teacher", "student-profile", studentId, schoolId] as const,
     queryFn: () => fetchStudentProfile(studentId!, schoolId!),
     enabled: !!studentId && !!schoolId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
   });
 }
