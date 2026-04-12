@@ -111,7 +111,7 @@ function AssessmentResultsContent({ assessmentId }: { assessmentId: string }) {
       />
 
       {/* Score distribution chart */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+      <div className="bg-white rounded-2xl border border-brand-border p-5">
         <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-role-teacher-muted mb-4">
           Score distribution
         </h2>
