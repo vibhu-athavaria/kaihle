@@ -25,9 +25,9 @@ export interface TeacherDashboardData {
   lessonPlan: LessonPlanInfo | null;
 }
 
-async function fetchTeacherDashboard(schoolId: string): Promise<
-  TeacherClass[]
-> {
+async function fetchTeacherDashboard(
+  schoolId: string,
+): Promise<TeacherClass[]> {
   const [classesRes, analyticsRes] = await Promise.all([
     apiClient.get(`/api/v1/schools/${schoolId}/classes`),
     apiClient

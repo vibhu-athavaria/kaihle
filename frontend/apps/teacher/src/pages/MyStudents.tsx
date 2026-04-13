@@ -1,5 +1,8 @@
 import { useState, useMemo } from "react";
-import { useTeacherStudents, TeacherStudent } from "../hooks/useTeacherStudents";
+import {
+  useTeacherStudents,
+  TeacherStudent,
+} from "../hooks/useTeacherStudents";
 import { StudentListTable } from "../components/students/StudentListTable";
 import { useAuth } from "@kaihle/auth";
 

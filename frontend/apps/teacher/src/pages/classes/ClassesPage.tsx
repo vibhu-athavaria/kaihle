@@ -1,7 +1,11 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
-import { getMasteryStyle, scoreToPercent, getSubjectColor } from "@kaihle/types";
+import {
+  getMasteryStyle,
+  scoreToPercent,
+  getSubjectColor,
+} from "@kaihle/types";
 import { ClassCardSkeleton } from "../dashboard/ClassCard";
 
 export function ClassesPage() {
@@ -50,7 +54,9 @@ export function ClassesPage() {
       </h1>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {data.classes.map((cls) => {
-          const { textClass, dotClass, label } = getMasteryStyle(cls.avgMastery);
+          const { textClass, dotClass, label } = getMasteryStyle(
+            cls.avgMastery,
+          );
           const displayPct = scoreToPercent(cls.avgMastery);
           const subjectColor = getSubjectColor(cls.subjectName);
 

@@ -1,5 +1,9 @@
 import { Link } from "react-router-dom";
-import { getMasteryStyle, scoreToPercent, getSubjectColor } from "@kaihle/types";
+import {
+  getMasteryStyle,
+  scoreToPercent,
+  getSubjectColor,
+} from "@kaihle/types";
 
 interface ClassCardProps {
   classId: string;
@@ -41,7 +45,11 @@ export function ClassCard({
           {studentCount} student{studentCount !== 1 ? "s" : ""}
         </div>
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${dotClass}`} aria-label={label} role="img" />
+          <span
+            className={`w-2 h-2 rounded-full ${dotClass}`}
+            aria-label={label}
+            role="img"
+          />
           <span className={`text-sm font-semibold ${textClass}`}>
             {displayPct}
           </span>

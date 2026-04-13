@@ -124,9 +124,7 @@ export function StudentListTable({
                       <button
                         type="button"
                         onClick={() =>
-                          navigate(
-                            `/teacher/students/${student.id}/profile`,
-                          )
+                          navigate(`/teacher/students/${student.id}/profile`)
                         }
                         className="inline-flex items-center gap-1 px-3 py-1.5 bg-brand-gold text-white text-sm font-medium rounded-lg hover:bg-brand-gold/90 transition-colors"
                       >

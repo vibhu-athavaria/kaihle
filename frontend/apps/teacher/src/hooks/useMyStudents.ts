@@ -28,16 +28,16 @@ function getDominantModality(
   return entries.reduce((max, curr) => (curr[1] > max[1] ? curr : max))[0];
 }
 
-export function useMyStudents(
-  classIds: string[],
-  subjectIds: string[],
-) {
+export function useMyStudents(classIds: string[], subjectIds: string[]) {
   // Stable query configuration using useMemo to prevent recreating queries on each render
   const classIdSubjectPairs = useMemo(
-    () => classIds.map((classId, index) => ({
-      classId,
-      subjectId: subjectIds[index] ?? "",
-    })).filter(pair => pair.classId && pair.subjectId),
+    () =>
+      classIds
+        .map((classId, index) => ({
+          classId,
+          subjectId: subjectIds[index] ?? "",
+        }))
+        .filter((pair) => pair.classId && pair.subjectId),
     [classIds, subjectIds],
   );
 
@@ -45,7 +45,9 @@ export function useMyStudents(
     queries: classIdSubjectPairs.map((pair) => ({
       queryKey: ["teacher", "enrollments", pair.classId] as const,
       queryFn: async (): Promise<EnrollmentSummary[]> => {
-        const res = await apiClient.get(`/api/v1/classes/${pair.classId}/enrollments`);
+        const res = await apiClient.get(
+          `/api/v1/classes/${pair.classId}/enrollments`,
+        );
         return res.data ?? [];
       },
       enabled: classIdSubjectPairs.length > 0,
@@ -93,7 +95,12 @@ export function useMyStudents(
 
   const gapMapQueries = useQueries({
     queries: classIdSubjectPairs.map((pair) => ({
-      queryKey: ["teacher", "class-gap-map", pair.classId, pair.subjectId] as const,
+      queryKey: [
+        "teacher",
+        "class-gap-map",
+        pair.classId,
+        pair.subjectId,
+      ] as const,
       queryFn: async () => {
         const res = await apiClient
           .get(`/api/v1/classes/${pair.classId}/gap-map`, {
@@ -102,7 +109,8 @@ export function useMyStudents(
           .catch(() => ({ data: null }));
         return res.data;
       },
-      enabled: classIdSubjectPairs.length > 0 && !!pair.classId && !!pair.subjectId,
+      enabled:
+        classIdSubjectPairs.length > 0 && !!pair.classId && !!pair.subjectId,
       staleTime: 10 * 60 * 1000,
       refetchOnWindowFocus: false,
       refetchOnMount: false,
@@ -151,9 +159,7 @@ export function useMyStudents(
     const enrollment = allEnrollments.find((e) => e.id === studentId);
     const studentClassIds = [
       ...new Set(
-        allEnrollments
-          .filter((e) => e.id === studentId)
-          .map((e) => e.classId),
+        allEnrollments.filter((e) => e.id === studentId).map((e) => e.classId),
       ),
     ];
 

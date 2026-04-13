@@ -1,5 +1,9 @@
 import { useParams, Link } from "react-router-dom";
-import { getMasteryStyle, scoreToPercent, getSubjectColor } from "@kaihle/types";
+import {
+  getMasteryStyle,
+  scoreToPercent,
+  getSubjectColor,
+} from "@kaihle/types";
 import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { useMyStudents } from "../../hooks/useMyStudents";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
@@ -127,7 +131,9 @@ export function ClassDetailPage() {
           <div className="text-sm font-semibold text-brand-ink">
             Lesson Plans
           </div>
-          <div className="text-xs text-brand-muted">AI-generated lesson plans</div>
+          <div className="text-xs text-brand-muted">
+            AI-generated lesson plans
+          </div>
         </Link>
       </div>
 
@@ -139,11 +145,16 @@ export function ClassDetailPage() {
           {studentsLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+                <div
+                  key={i}
+                  className="h-12 bg-gray-100 rounded-lg animate-pulse"
+                />
               ))}
             </div>
           ) : sortedStudents.length === 0 ? (
-            <div className="text-sm text-brand-muted">No students enrolled yet.</div>
+            <div className="text-sm text-brand-muted">
+              No students enrolled yet.
+            </div>
           ) : (
             <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
               {sortedStudents.map((student, i) => {
@@ -155,12 +166,16 @@ export function ClassDetailPage() {
                     className={`flex items-center justify-between px-4 py-3 hover:bg-brand-border-soft/50 transition-colors ${i > 0 ? "border-t border-brand-border" : ""}`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className={`w-2 h-2 rounded-full ${style.dotClass}`} />
+                      <span
+                        className={`w-2 h-2 rounded-full ${style.dotClass}`}
+                      />
                       <span className="text-sm font-medium text-brand-ink">
                         {student.name}
                       </span>
                     </div>
-                    <span className={`text-sm font-semibold ${style.textClass}`}>
+                    <span
+                      className={`text-sm font-semibold ${style.textClass}`}
+                    >
                       {scoreToPercent(student.avgMastery)}
                     </span>
                   </Link>
@@ -177,7 +192,10 @@ export function ClassDetailPage() {
           {assessmentsLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />
+                <div
+                  key={i}
+                  className="h-12 bg-gray-100 rounded-lg animate-pulse"
+                />
               ))}
             </div>
           ) : recentAssessments.length === 0 ? (

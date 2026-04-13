@@ -92,12 +92,21 @@ export function GapMapPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <nav className="flex items-center gap-2 text-sm text-brand-muted" aria-label="Breadcrumb">
-          <Link to="/teacher/classes" className="hover:text-brand-ink transition-colors">
+        <nav
+          className="flex items-center gap-2 text-sm text-brand-muted"
+          aria-label="Breadcrumb"
+        >
+          <Link
+            to="/teacher/classes"
+            className="hover:text-brand-ink transition-colors"
+          >
             Classes
           </Link>
           <span aria-hidden="true">/</span>
-          <Link to={`/teacher/classes/${classId}`} className="hover:text-brand-ink transition-colors">
+          <Link
+            to={`/teacher/classes/${classId}`}
+            className="hover:text-brand-ink transition-colors"
+          >
             {currentClass?.name ?? "Class"}
           </Link>
           <span aria-hidden="true">/</span>

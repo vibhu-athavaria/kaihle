@@ -4,7 +4,12 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
 import { apiClient } from "@kaihle/auth";
-import { statusBadge, typeBadge, type Assessment, type AssessmentStatus } from "../../utils/assessment";
+import {
+  statusBadge,
+  typeBadge,
+  type Assessment,
+  type AssessmentStatus,
+} from "../../utils/assessment";
 import { BarChart2 } from "lucide-react";
 import { Button, EmptyState, SkeletonCard } from "@kaihle/ui";
 
@@ -25,7 +30,9 @@ export function AllAssessmentsPage() {
     queries: classes.map((cls) => ({
       queryKey: ["assessments", "class", cls.id],
       queryFn: async () => {
-        const res = await apiClient.get(`/api/v1/classes/${cls.id}/assessments`);
+        const res = await apiClient.get(
+          `/api/v1/classes/${cls.id}/assessments`,
+        );
         return res.data.data || [];
       },
       enabled: classes.length > 0,

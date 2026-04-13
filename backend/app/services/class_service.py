@@ -1,7 +1,7 @@
 """Class management and enrollment service layer."""
 
 import uuid
-from typing import TypedDict, cast
+from typing import TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
