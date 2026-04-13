@@ -198,7 +198,8 @@ class TestGetClassSummary:
     async def test_get_class_summary_when_no_assessments_then_avg_mastery_none(self) -> None:
         db = _make_db()
         class_id, school_id = uuid.uuid4(), uuid.uuid4()
-        db.scalar.side_effect = [_make_class(class_id, school_id, uuid.uuid4()), 5]
+        # scalar calls in order: class lookup, below_threshold count, total enrollment count
+        db.scalar.side_effect = [_make_class(class_id, school_id, uuid.uuid4()), 0, 5]
         agg_row = SimpleNamespace(avg_mastery=None, assessed_students=0, last_updated=None)
         agg_result = MagicMock()
         agg_result.one.return_value = agg_row
@@ -210,12 +211,14 @@ class TestGetClassSummary:
         assert result.avg_mastery is None
         assert result.student_count == 5
         assert result.assessed_student_count == 0
+        assert result.students_below_threshold == 0
 
     @pytest.mark.asyncio
     async def test_get_class_summary_when_2_of_5_assessed_then_counts_correct(self) -> None:
         db = _make_db()
         class_id, school_id = uuid.uuid4(), uuid.uuid4()
-        db.scalar.side_effect = [_make_class(class_id, school_id, uuid.uuid4()), 5]
+        # scalar calls in order: class lookup, below_threshold count (1 student below 0.4), total enrollment count
+        db.scalar.side_effect = [_make_class(class_id, school_id, uuid.uuid4()), 1, 5]
         agg_row = SimpleNamespace(avg_mastery=0.6, assessed_students=2, last_updated=datetime(2026, 4, 1, tzinfo=UTC))
         agg_result = MagicMock()
         agg_result.one.return_value = agg_row
@@ -228,6 +231,7 @@ class TestGetClassSummary:
         assert result.assessed_student_count == 2
         assert result.avg_mastery is not None
         assert abs(result.avg_mastery - 0.6) < 0.001
+        assert result.students_below_threshold == 1
 
 
 class TestVerifyTeacherHasStudentAccess:

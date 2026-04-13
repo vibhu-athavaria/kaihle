@@ -37,3 +37,16 @@ class AttemptResultResponse(BaseModel):
     correct_count: int
     time_taken_seconds: int | None
     submitted_at: datetime
+
+
+class StudentAttemptHistoryItem(BaseModel):
+    attempt_id: UUID
+    assessment_id: UUID
+    assessment_title: str
+    assessment_type: str
+    class_id: UUID
+    class_name: str
+    score: float | None
+    status: str
+    submitted_at: datetime | None
+    created_at: datetime

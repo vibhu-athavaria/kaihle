@@ -57,4 +57,5 @@ class ClassSummary(BaseModel):
     avg_mastery: float | None  # None when no assessments have been taken
     student_count: int
     assessed_student_count: int  # students who have taken at least one assessment
+    students_below_threshold: int = 0  # count of students whose avg mastery < 0.4
     last_updated_at: datetime | None

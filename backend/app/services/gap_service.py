@@ -559,6 +559,21 @@ class GapService:
         )
         row = agg_result.one()
 
+        # Count students whose per-student average mastery is below the 0.4 threshold.
+        # Uses a subquery so we compare per-student averages, not individual gap rows.
+        student_avg_sub = (
+            select(
+                GapState.student_id,
+                func.avg(GapState.mastery_score).label("student_avg"),
+            )
+            .where(GapState.class_id == class_id)
+            .group_by(GapState.student_id)
+            .subquery()
+        )
+        below_result = await self.db.scalar(
+            select(func.count()).select_from(student_avg_sub).where(student_avg_sub.c.student_avg < 0.4)
+        )
+
         total_students = await self.db.scalar(
             select(func.count())
             .select_from(ClassEnrollment)
@@ -573,6 +588,7 @@ class GapService:
             avg_mastery=float(row.avg_mastery) if row.avg_mastery is not None else None,
             student_count=total_students or 0,
             assessed_student_count=row.assessed_students or 0,
+            students_below_threshold=below_result or 0,
             last_updated_at=row.last_updated,
         )
 
