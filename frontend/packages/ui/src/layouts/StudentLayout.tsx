@@ -257,7 +257,7 @@ export function StudentLayout({
           {/* Left: greeting + grade/curriculum */}
           <div>
             <div className="font-sans font-medium text-topnav-sub text-brand-ink leading-tight">
-              {getGreeting()}, {firstName} 👋
+              {getGreeting()}, {firstName} <span aria-hidden="true">👋</span>
             </div>
             {gradeName && curriculumName && (
               <div className="font-sans text-topnav-sub text-brand-muted leading-tight">
