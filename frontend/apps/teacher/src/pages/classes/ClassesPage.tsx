@@ -1,11 +1,11 @@
 import { useAuth } from "@kaihle/auth";
-import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
+import { useTeacherClasses } from "../../hooks/useTeacherClasses";
 import { ClassCard, ClassCardSkeleton } from "../dashboard/ClassCard";
 
 export function ClassesPage() {
   const { user } = useAuth();
   const schoolId = user?.school_id ?? null;
-  const { data, isLoading } = useTeacherDashboard(schoolId);
+  const { data, isLoading } = useTeacherClasses(schoolId);
 
   return (
     <div className="p-6">
@@ -19,7 +19,7 @@ export function ClassesPage() {
             <ClassCardSkeleton key={i} />
           ))}
         </div>
-      ) : !data?.classes || data.classes.length === 0 ? (
+      ) : !data || data.length === 0 ? (
         <div className="bg-white rounded-2xl border border-brand-border p-12 text-center">
           <div className="text-4xl mb-3" role="img" aria-label="books">
             📚
@@ -33,7 +33,7 @@ export function ClassesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {data.classes.map((cls) => (
+          {data.map((cls) => (
             <ClassCard
               key={cls.id}
               classId={cls.id}

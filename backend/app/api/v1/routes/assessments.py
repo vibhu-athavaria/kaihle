@@ -23,6 +23,7 @@ from app.schemas.assessments import (
     AssessmentCreateRequest,
     AssessmentResponse,
     AssessmentResultsSummary,
+    AssessmentWithClassResponse,
 )
 from app.schemas.common import Page
 from app.services.assessment_service import (
@@ -106,6 +107,49 @@ async def list_class_assessments(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/teachers/me/assessments", response_model=list[AssessmentWithClassResponse])
+async def list_teacher_assessments(
+    status_filter: str | None = Query(None, alias="status"),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> list[AssessmentWithClassResponse]:
+    """List all assessments across all classes owned by the current teacher.
+
+    More efficient than fetching assessments per-class. Returns assessments
+    with class name included for display.
+    """
+    if not current_user.school_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has no school associated",
+        )
+
+    service = AssessmentService(db)
+    assessments = await service.list_teacher_assessments(
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+        status_filter=status_filter,
+    )
+
+    return [
+        AssessmentWithClassResponse(
+            id=a["id"],
+            class_id=a["class_id"],
+            class_name=a["class_name"],
+            title=a["title"],
+            assessment_type=a["assessment_type"],
+            is_system_generated=a["is_system_generated"],
+            status=a["status"],
+            topic_ids=[],
+            question_count=a["question_count"] or 0,
+            created_at=a["created_at"],
+            published_at=a["published_at"],
+            deadline=a["deadline"],
+        )
+        for a in assessments
+    ]
 
 
 @router.post(

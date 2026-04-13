@@ -16,6 +16,9 @@ interface AssessmentWizardState {
   currentStep: 1 | 2 | 3 | 4 | 5;
   classId: string | null;
   className: string | null;
+  subjectId: string | null;
+  gradeId: string | null;
+  curriculumId: string | null;
   assessmentType: AssessmentType | null;
   topicIds: string[];
   questionCount: number;
@@ -26,7 +29,7 @@ interface AssessmentWizardState {
   previewQuestions: PreviewQuestion[];
   // actions
   setStep: (step: 1 | 2 | 3 | 4 | 5) => void;
-  setClassId: (id: string, name: string) => void;
+  setClassId: (id: string, name: string, subjectId: string, gradeId: string, curriculumId: string) => void;
   setAssessmentType: (type: AssessmentType) => void;
   setTopicIds: (ids: string[]) => void;
   setQuestionCount: (n: number) => void;
@@ -40,6 +43,9 @@ const initialState = {
   currentStep: 1 as const,
   classId: null,
   className: null,
+  subjectId: null,
+  gradeId: null,
+  curriculumId: null,
   assessmentType: null,
   topicIds: [],
   questionCount: 10,
@@ -55,7 +61,8 @@ export const useAssessmentWizard = create<AssessmentWizardState>((set) => ({
 
   setStep: (step) => set({ currentStep: step }),
 
-  setClassId: (id, name) => set({ classId: id, className: name }),
+  setClassId: (id, name, subjectId, gradeId, curriculumId) =>
+    set({ classId: id, className: name, subjectId, gradeId, curriculumId }),
 
   setAssessmentType: (type) => set({ assessmentType: type }),
 

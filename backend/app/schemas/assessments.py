@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class QuestionOption(BaseModel):
@@ -34,6 +34,25 @@ class AssessmentResponse(BaseModel):
     assessment_type: str  # "DIAGNOSTIC" | "PROGRESS_CHECK"
     is_system_generated: bool  # True = Tier 1, False = Tier 2
     status: str  # "DRAFT" | "ACTIVE" | "CLOSED"
+    topic_ids: list[UUID]
+    question_count: int
+    created_at: datetime
+    published_at: datetime | None
+    deadline: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AssessmentWithClassResponse(BaseModel):
+    """Assessment response with class info for teacher's all-assessments list."""
+
+    id: UUID
+    class_id: UUID
+    class_name: str
+    title: str
+    assessment_type: str
+    is_system_generated: bool
+    status: str
     topic_ids: list[UUID]
     question_count: int
     created_at: datetime

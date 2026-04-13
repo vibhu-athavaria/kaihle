@@ -1,0 +1,67 @@
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@kaihle/auth";
+
+export type AssessmentStatus = "DRAFT" | "ACTIVE" | "CLOSED";
+
+export interface TeacherAssessment {
+  id: string;
+  classId: string;
+  className: string;
+  title: string;
+  assessment_type: string;
+  is_system_generated: boolean;
+  status: AssessmentStatus;
+  question_count: number;
+  created_at: string;
+  published_at: string | null;
+  deadline: string | null;
+}
+
+interface AssessmentWithClassResponse {
+  id: string;
+  class_id: string;
+  class_name: string;
+  title: string;
+  assessment_type: string;
+  is_system_generated: boolean;
+  status: string;
+  topic_ids: string[];
+  question_count: number;
+  created_at: string;
+  published_at: string | null;
+  deadline: string | null;
+}
+
+async function fetchTeacherAssessments(
+  status?: AssessmentStatus
+): Promise<TeacherAssessment[]> {
+  const params: Record<string, string> = {};
+  if (status) {
+    params.status = status;
+  }
+  const res = await apiClient.get<AssessmentWithClassResponse[]>(
+    `/api/v1/teachers/me/assessments`,
+    { params }
+  );
+  return (res.data ?? []).map((a) => ({
+    id: a.id,
+    classId: a.class_id,
+    className: a.class_name,
+    title: a.title,
+    assessment_type: a.assessment_type,
+    is_system_generated: a.is_system_generated,
+    status: a.status as AssessmentStatus,
+    question_count: a.question_count,
+    created_at: a.created_at,
+    published_at: a.published_at,
+    deadline: a.deadline,
+  }));
+}
+
+export function useTeacherAssessments(status?: AssessmentStatus) {
+  return useQuery({
+    queryKey: ["teacher", "assessments", status],
+    queryFn: () => fetchTeacherAssessments(status),
+    staleTime: 30 * 1000,
+  });
+}

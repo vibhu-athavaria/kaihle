@@ -12,22 +12,26 @@ identifies the class.
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, _check_school_access, require_role
+from app.models.curriculum import Grade, Subject
 from app.models.school import Class
 from app.models.user import UserRole
 from app.schemas.class_enrollment import (
     ClassCreate,
     ClassResponse,
+    ClassWithSummary,
     EnrollRequest,
     EnrollResponse,
     StudentSummary,
     TeacherStudentsResponse,
 )
 from app.services.class_service import ClassService
+from app.services.gap_service import GapService
 
 router = APIRouter(tags=["classes"])
 
@@ -71,17 +75,60 @@ async def create_class(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/schools/{school_id}/classes", response_model=list[ClassResponse])
+@router.get("/schools/{school_id}/classes")
 async def list_classes(
     school_id: uuid.UUID,
+    include_summary: bool = Query(False, description="Include grade/subject names and class summary"),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
-) -> list[ClassResponse]:
-    """List classes. Teacher sees own classes only. SchoolAdmin/KaihleAdmin see all."""
+) -> list[ClassWithSummary] | list[ClassResponse]:
+    """List classes. Teacher sees own classes only. SchoolAdmin/KaihleAdmin see all.
+
+    When include_summary=true, returns enriched data including grade_name, subject_name,
+    avg_mastery, student_count, and students_below_threshold. This is more efficient than
+    making separate calls for each class.
+    """
     _check_school_access(school_id, current_user)
     service = ClassService(db)
     teacher_id = current_user.id if current_user.role == UserRole.TEACHER else None
     classes = await service.list_classes(school_id, teacher_id)
+
+    if include_summary:
+        grades_result = await db.execute(select(Grade).where(Grade.id.in_([c.grade_id for c in classes])))
+        grades = {g.id: g.name for g in grades_result.scalars().all()}
+
+        subjects_result = await db.execute(select(Subject).where(Subject.id.in_([c.subject_id for c in classes])))
+        subjects = {s.id: s.name for s in subjects_result.scalars().all()}
+
+        gap_service = GapService(db)
+        summaries = await gap_service.get_class_summaries_batch(
+            class_ids=[c.id for c in classes],
+            school_id=school_id,
+        )
+
+        results = []
+        for cls in classes:
+            summary = summaries.get(cls.id)
+            results.append(
+                ClassWithSummary(
+                    id=cls.id,
+                    school_id=cls.school_id,
+                    grade_id=cls.grade_id,
+                    subject_id=cls.subject_id,
+                    curriculum_id=cls.curriculum_id,
+                    teacher_id=cls.teacher_id,
+                    name=cls.name,
+                    academic_year=cls.academic_year,
+                    is_active=cls.is_active,
+                    grade_name=grades.get(cls.grade_id, ""),
+                    subject_name=subjects.get(cls.subject_id, ""),
+                    avg_mastery=summary.avg_mastery if summary else None,
+                    student_count=summary.student_count if summary else 0,
+                    students_below_threshold=summary.students_below_threshold if summary else 0,
+                )
+            )
+        return results
+
     return [_class_to_response(c) for c in classes]
 
 

@@ -614,3 +614,93 @@ class GapService:
             )
         )
         return result.scalar_one_or_none() is not None
+
+    async def get_class_summaries_batch(
+        self,
+        class_ids: list[uuid.UUID],
+        school_id: uuid.UUID,
+    ) -> dict[uuid.UUID, ClassSummary]:
+        """Return mastery summaries for multiple classes in a single query.
+
+        More efficient than calling get_class_summary() in a loop - uses batched
+        queries with GROUP BY class_id.
+
+        Args:
+            class_ids: List of class UUIDs to fetch summaries for.
+            school_id: Multi-tenancy guard - only returns classes belonging to this school.
+
+        Returns:
+            Dict mapping class_id to ClassSummary (missing classes not included).
+        """
+        if not class_ids:
+            return {}
+
+        classes_result = await self.db.execute(
+            select(Class.id).where(
+                Class.id.in_(class_ids),
+                Class.school_id == school_id,
+            )
+        )
+        valid_class_ids = [row for row in classes_result.scalars().all()]
+
+        if not valid_class_ids:
+            return {}
+
+        gap_agg = (
+            select(
+                GapState.class_id,
+                func.avg(GapState.mastery_score).label("avg_mastery"),
+                func.count(func.distinct(GapState.student_id)).label("assessed_students"),
+                func.max(GapState.last_assessed_at).label("last_updated"),
+            )
+            .where(GapState.class_id.in_(valid_class_ids))
+            .group_by(GapState.class_id)
+        )
+        gap_results = {row.class_id: row for row in (await self.db.execute(gap_agg)).all()}
+
+        enroll_counts_query = (
+            select(
+                ClassEnrollment.class_id,
+                func.count(ClassEnrollment.student_id).label("count"),
+            )
+            .where(
+                ClassEnrollment.class_id.in_(valid_class_ids),
+                ClassEnrollment.is_active.is_(True),
+            )
+            .group_by(ClassEnrollment.class_id)
+        )
+        enroll_results = {row.class_id: row.count for row in (await self.db.execute(enroll_counts_query)).all()}
+
+        student_avgs = (
+            select(
+                GapState.class_id,
+                GapState.student_id,
+                func.avg(GapState.mastery_score).label("student_avg"),
+            )
+            .where(GapState.class_id.in_(valid_class_ids))
+            .group_by(GapState.class_id, GapState.student_id)
+            .subquery()
+        )
+        below_counts_query = (
+            select(
+                student_avgs.c.class_id,
+                func.count(student_avgs.c.student_id).label("below_count"),
+            )
+            .where(student_avgs.c.student_avg < 0.4)
+            .group_by(student_avgs.c.class_id)
+        )
+        below_results = {row.class_id: row.below_count for row in (await self.db.execute(below_counts_query)).all()}
+
+        results = {}
+        for class_id in valid_class_ids:
+            row = gap_results.get(class_id)
+            results[class_id] = ClassSummary(
+                class_id=class_id,
+                avg_mastery=float(row.avg_mastery) if row and row.avg_mastery is not None else None,
+                student_count=enroll_results.get(class_id, 0),
+                assessed_student_count=row.assessed_students if row and row.assessed_students else 0,
+                students_below_threshold=below_results.get(class_id, 0),
+                last_updated_at=row.last_updated if row else None,
+            )
+
+        return results

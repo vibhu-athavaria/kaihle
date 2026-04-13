@@ -14,6 +14,7 @@ import random
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from sqlalchemy import and_, func, select
@@ -775,6 +776,59 @@ class AssessmentService:
         items = list((await self.db.execute(items_q)).scalars().all())
 
         return items, total
+
+    async def list_teacher_assessments(
+        self,
+        teacher_id: uuid.UUID,
+        school_id: uuid.UUID,
+        status_filter: str | None,
+    ) -> list[dict[str, Any]]:
+        """List all assessments across all classes owned by a teacher.
+
+        More efficient than calling list_class_assessments for each class - uses a single
+        query with JOIN to filter by teacher's classes.
+
+        Args:
+            teacher_id: The teacher's ID.
+            school_id: The school to scope to.
+            status_filter: Optional status filter.
+
+        Returns:
+            List of dicts with assessment and class_name.
+        """
+        base_q = (
+            select(Assessment, Class.name.label("class_name"))
+            .join(Class, Class.id == Assessment.class_id)
+            .where(
+                Class.teacher_id == teacher_id,
+                Class.school_id == school_id,
+                Class.is_active.is_(True),
+                Assessment.school_id == school_id,
+            )
+        )
+
+        if status_filter:
+            base_q = base_q.where(Assessment.status == status_filter)
+
+        results = await self.db.execute(base_q.order_by(Assessment.created_at.desc()))
+        rows = results.all()
+
+        return [
+            {
+                "id": row[0].id,
+                "class_id": row[0].class_id,
+                "class_name": row[1],
+                "title": row[0].title,
+                "assessment_type": row[0].assessment_type,
+                "is_system_generated": row[0].is_system_generated,
+                "status": row[0].status,
+                "question_count": row[0].question_count,
+                "created_at": row[0].created_at,
+                "published_at": row[0].published_at,
+                "deadline": row[0].deadline,
+            }
+            for row in rows
+        ]
 
     async def close_assessment(
         self,
