@@ -21,7 +21,7 @@ interface StudentResultsTableProps {
 function ScorePill({ score }: { score: number | null }) {
   if (score === null) {
     return (
-      <span className="rounded-full px-3 py-1 text-sm bg-gray-100 text-gray-400">
+      <span className="rounded-full px-3 py-1 text-sm bg-brand-border-soft text-brand-muted">
         Pending
       </span>
     );
@@ -98,7 +98,7 @@ export function StudentResultsTable({
 
   if (attempts.length === 0) {
     return (
-      <div className="text-center py-16 px-6 bg-gray-50 rounded-xl">
+      <div className="text-center py-16 px-6 bg-brand-bg rounded-xl">
         <div className="text-4xl mb-4">📋</div>
         <h3 className="font-display font-bold text-xl text-brand-ink mb-2">
           No students enrolled
@@ -141,10 +141,10 @@ export function StudentResultsTable({
           No students match your search.
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-brand-border overflow-hidden shadow-card">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
+              <tr className="border-b border-brand-border bg-brand-bg">
                 <th className="text-left px-5 py-3 text-xs font-bold uppercase tracking-widest text-brand-muted">
                   Student
                 </th>
@@ -157,11 +157,11 @@ export function StudentResultsTable({
                 <th className="px-5 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-brand-border-soft">
               {sorted.map((attempt) => (
                 <tr
                   key={attempt.attemptId}
-                  className="hover:bg-gray-50 transition-colors"
+                  className="hover:bg-brand-border-soft/50 transition-colors"
                 >
                   <td className="px-5 py-4 font-sans text-sm font-medium text-brand-ink">
                     {attempt.studentName}
@@ -190,7 +190,7 @@ export function StudentResultsTable({
                         View answers →
                       </Link>
                     ) : (
-                      <span className="text-gray-400 text-sm">—</span>
+                      <span className="text-brand-muted text-sm">—</span>
                     )}
                   </td>
                 </tr>

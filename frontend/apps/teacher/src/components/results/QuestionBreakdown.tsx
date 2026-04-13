@@ -22,9 +22,9 @@ interface QuestionRowProps {
 
 function QuestionRow({ question, index }: QuestionRowProps) {
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4">
+    <div className="bg-white rounded-xl border border-brand-border p-4">
       <div className="flex items-start gap-3 mb-3">
-        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-xs font-bold flex items-center justify-center">
+        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-border-soft text-brand-muted text-xs font-bold flex items-center justify-center">
           {index + 1}
         </span>
         <p className="text-sm text-brand-ink font-medium leading-relaxed">
@@ -71,7 +71,7 @@ export function QuestionBreakdown({ questions }: QuestionBreakdownProps) {
 
   if (questions.length === 0) {
     return (
-      <div className="bg-gray-50 rounded-xl p-8 text-center">
+      <div className="bg-brand-bg rounded-xl p-8 text-center">
         <p className="text-sm text-brand-muted">No answers submitted yet.</p>
       </div>
     );

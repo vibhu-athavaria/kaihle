@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 import { Button, Badge } from "@kaihle/ui";
 import { toast } from "@kaihle/ui";
@@ -28,6 +29,7 @@ export function Step5Publish() {
     setStep,
   } = useAssessmentWizard();
 
+  const queryClient = useQueryClient();
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
@@ -48,8 +50,15 @@ export function Step5Publish() {
 
     try {
       await apiClient.post(`/api/v1/assessments/${targetAssessmentId}/publish`);
+
+      // Invalidate stale assessment list cache before navigating
+      await queryClient.invalidateQueries({
+        queryKey: ["assessments", "class", targetClassId],
+      });
+
       reset();
       navigate(`/teacher/classes/${targetClassId}/assessments?published=true`);
+      toast.success("Assessment published — students can now access it.");
     } catch (err: unknown) {
       const axiosErr = err as {
         response?: { data?: { detail?: string } };
@@ -134,6 +143,12 @@ export function Step5Publish() {
           <p className="text-sm font-sans text-brand-red">{publishError}</p>
         </div>
       )}
+
+      {/* Student access note */}
+      <div className="bg-brand-bg rounded-xl p-4 text-sm text-brand-body border border-brand-border">
+        Once published, students can access this assessment from their Kaihle
+        dashboard. They won't receive an email — they need to log in to see it.
+      </div>
 
       {/* Footer */}
       <div className="flex justify-between items-center pt-2">
