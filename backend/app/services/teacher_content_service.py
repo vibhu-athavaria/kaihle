@@ -15,7 +15,6 @@ from sqlalchemy.orm import joinedload
 
 from app.models import Class, SubtopicContent
 from app.models.curriculum import CurriculumTopic, Subtopic
-from app.models.subtopic_content import ContentType, ReviewStatus
 
 _ST = TypeVar("_ST", bound="tuple[Any, ...]")
 
@@ -48,7 +47,7 @@ async def list_explanation_content(
     # Base JOIN condition shared across all queries
     def _base_where(q: Select[_ST]) -> Select[_ST]:
         return q.where(
-            SubtopicContent.content_type == ContentType.EXPLANATION,
+            SubtopicContent.content_type == "explanation",
             CurriculumTopic.subject_id == subject_id,
             CurriculumTopic.grade_id == grade_id,
         )
@@ -73,7 +72,7 @@ async def list_explanation_content(
         select(func.count(SubtopicContent.id))
         .join(Subtopic, Subtopic.id == SubtopicContent.subtopic_id)
         .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
-    ).where(SubtopicContent.review_status == ReviewStatus.PENDING)
+    ).where(SubtopicContent.review_status == "pending")
     pending_result = await db.execute(pending_q)
     pending_count = pending_result.scalar_one() or 0
 
