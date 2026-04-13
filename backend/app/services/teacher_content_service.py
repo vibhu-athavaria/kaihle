@@ -127,19 +127,39 @@ async def list_all_explanation_content(
     Returns:
         List of dicts with explanation data and class info.
     """
+    # First get the teacher's class subject+grade combinations
+    class_subj_grade = select(Class.id, Class.name, Class.subject_id, Class.grade_id).where(
+        Class.teacher_id == teacher_id,
+        Class.school_id == school_id,
+        Class.is_active.is_(True),
+    )
+    class_result = await db.execute(class_subj_grade)
+    classes = list(class_result.all())
+
+    if not classes:
+        return []
+
+    # Build sets of subject_ids and grade_ids for the teacher's classes
+    subject_ids = {c.subject_id for c in classes}
+    grade_ids = {c.grade_id for c in classes}
+
+    # Build a lookup from (subject_id, grade_id) -> class name
+    class_lookup: dict[tuple[UUID, UUID], str] = {}
+    class_id_lookup: dict[tuple[UUID, UUID], UUID] = {}
+    for c in classes:
+        key = (c.subject_id, c.grade_id)
+        class_lookup[key] = c.name
+        class_id_lookup[key] = c.id
+
+    # Query subtopic content for these subject+grade combinations
     base_q = (
-        select(SubtopicContent, Class.id.label("class_id"), Class.name.label("class_name"))
+        select(SubtopicContent, CurriculumTopic.subject_id, CurriculumTopic.grade_id)
         .join(Subtopic, Subtopic.id == SubtopicContent.subtopic_id)
         .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
-        .join(
-            Class,
-            (Class.subject_id == CurriculumTopic.subject_id) & (Class.grade_id == CurriculumTopic.grade_id),
-        )
         .where(
             SubtopicContent.content_type == "explanation",
-            Class.teacher_id == teacher_id,
-            Class.school_id == school_id,
-            Class.is_active.is_(True),
+            CurriculumTopic.subject_id.in_(subject_ids),
+            CurriculumTopic.grade_id.in_(grade_ids),
         )
     )
 
@@ -154,7 +174,11 @@ async def list_all_explanation_content(
     rows = result.unique().all()
 
     items: list[dict[str, Any]] = []
-    for sc, class_id, class_name in rows:
+    for sc, subj_id, grade_id in rows:
+        key = (subj_id, grade_id)
+        class_name = class_lookup.get(key, "Unknown")
+        class_id = class_id_lookup.get(key, None)
+
         items.append(
             {
                 "subtopic_content_id": sc.id,
@@ -164,7 +188,7 @@ async def list_all_explanation_content(
                 "teacher_explanation": sc.teacher_explanation,
                 "review_status": sc.review_status,
                 "has_teacher_override": sc.teacher_explanation is not None,
-                "class_id": str(class_id),
+                "class_id": str(class_id) if class_id else "",
                 "class_name": class_name,
                 "created_at": sc.created_at.isoformat() if sc.created_at else "",
             }
