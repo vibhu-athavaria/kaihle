@@ -5,7 +5,7 @@ import { ClassCard, ClassCardSkeleton } from "../dashboard/ClassCard";
 export function ClassesPage() {
   const { user } = useAuth();
   const schoolId = user?.school_id ?? null;
-  const { data, isLoading } = useTeacherClasses(schoolId);
+  const { data, isLoading } = useTeacherClasses(schoolId, true);
 
   return (
     <div className="p-6">

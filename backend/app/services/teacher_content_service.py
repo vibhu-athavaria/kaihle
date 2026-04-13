@@ -9,11 +9,11 @@ from __future__ import annotations
 from typing import Any, TypeVar
 from uuid import UUID
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.models import SubtopicContent
+from app.models import Class, SubtopicContent
 from app.models.curriculum import CurriculumTopic, Subtopic
 from app.models.subtopic_content import ContentType, ReviewStatus
 
@@ -44,7 +44,6 @@ async def list_explanation_content(
             - total: total number of explanation rows (before filter)
             - pending_count: number of rows with status PENDING
     """
-    from sqlalchemy import func
 
     # Base JOIN condition shared across all queries
     def _base_where(q: Select[_ST]) -> Select[_ST]:
@@ -107,3 +106,69 @@ async def list_explanation_content(
         for sc in rows
     ]
     return items, total, pending_count
+
+
+async def list_all_explanation_content(
+    db: AsyncSession,
+    teacher_id: UUID,
+    school_id: UUID,
+    status_filter: str | None,
+) -> list[dict[str, Any]]:
+    """Query explanation content across all classes owned by a teacher.
+
+    More efficient than calling list_explanation_content for each class - uses a single
+    query with JOIN to filter by teacher's classes.
+
+    Args:
+        db: Async SQLAlchemy session.
+        teacher_id: The teacher's ID.
+        school_id: The school to scope to.
+        status_filter: Optional status string to filter by.
+
+    Returns:
+        List of dicts with explanation data and class info.
+    """
+    base_q = (
+        select(SubtopicContent, Class.id.label("class_id"), Class.name.label("class_name"))
+        .join(Subtopic, Subtopic.id == SubtopicContent.subtopic_id)
+        .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+        .join(
+            Class,
+            (Class.subject_id == CurriculumTopic.subject_id) & (Class.grade_id == CurriculumTopic.grade_id),
+        )
+        .where(
+            SubtopicContent.content_type == ContentType.EXPLANATION,
+            Class.teacher_id == teacher_id,
+            Class.school_id == school_id,
+            Class.is_active.is_(True),
+        )
+    )
+
+    if status_filter and status_filter != "all":
+        base_q = base_q.where(SubtopicContent.review_status == status_filter)
+
+    data_q = base_q.options(joinedload(SubtopicContent.subtopic).joinedload(Subtopic.curriculum_topic)).order_by(
+        SubtopicContent.id.desc()
+    )
+
+    result = await db.execute(data_q)
+    rows = result.unique().all()
+
+    items: list[dict[str, Any]] = []
+    for sc, class_id, class_name in rows:
+        items.append(
+            {
+                "subtopic_content_id": sc.id,
+                "subtopic_id": sc.subtopic_id,
+                "subtopic_name": sc.subtopic.name if sc.subtopic else str(sc.subtopic_id),
+                "explanation_text": sc.explanation_text,
+                "teacher_explanation": sc.teacher_explanation,
+                "review_status": sc.review_status,
+                "has_teacher_override": sc.teacher_explanation is not None,
+                "class_id": str(class_id),
+                "class_name": class_name,
+                "created_at": sc.created_at.isoformat() if sc.created_at else "",
+            }
+        )
+
+    return items

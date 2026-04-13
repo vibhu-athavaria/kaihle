@@ -3,21 +3,10 @@
 
 import { useState, useMemo } from "react";
 import { useAuth } from "@kaihle/auth";
-import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
-import { apiClient } from "@kaihle/auth";
-import { useQueries } from "@tanstack/react-query";
+import { useTeacherClasses } from "../../hooks/useTeacherClasses";
+import { useAllTeacherExplanationReview, type TeacherReviewStatus } from "../../hooks/useTeacherExplanationReview";
 import { Badge, EmptyState, SkeletonCard } from "@kaihle/ui";
 import { CheckCircle, XCircle } from "lucide-react";
-
-interface ReviewItem {
-  id: string;
-  subtopic_name: string;
-  explanation_text: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  created_at: string;
-  className: string;
-  classId: string;
-}
 
 type FilterStatus = "PENDING" | "APPROVED" | "REJECTED" | "all";
 
@@ -37,48 +26,28 @@ function statusBadge(status: string) {
 export function ContentReviewPage() {
   const { user } = useAuth();
   const schoolId = user?.school_id ?? null;
-  const { data: dashboardData, isLoading: dashboardLoading } =
-    useTeacherDashboard(schoolId);
 
-  const classes = dashboardData?.classes ?? [];
+  const { data: classes = [], isLoading: classesLoading } = useTeacherClasses(
+    schoolId,
+    false
+  );
+
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("PENDING");
   const [classFilter, setClassFilter] = useState<string | null>(null);
 
-  const reviewQueries = useQueries({
-    queries: classes.map((cls) => ({
-      queryKey: ["explanation-review", cls.id, statusFilter],
-      queryFn: async () => {
-        const params =
-          statusFilter !== "all" ? `?status=${statusFilter.toLowerCase()}` : "";
-        const res = await apiClient
-          .get(
-            `/api/v1/teacher/classes/${cls.id}/explanation-review${params}`,
-          )
-          .catch(() => ({ data: { data: [] } }));
-        const items = res.data.data ?? res.data ?? [];
-        return items.map((item: ReviewItem) => ({
-          ...item,
-          className: cls.name,
-          classId: cls.id,
-        }));
-      },
-      enabled: classes.length > 0,
-    })),
-  });
+  const { data: items = [], isLoading: itemsLoading } =
+    useAllTeacherExplanationReview(
+      statusFilter === "all" ? undefined : statusFilter as TeacherReviewStatus
+    );
 
-  const isLoading =
-    dashboardLoading || reviewQueries.some((q) => q.isPending);
+  const isLoading = classesLoading || itemsLoading;
 
   const allItems = useMemo(() => {
-    const result: ReviewItem[] = [];
-    reviewQueries.forEach((q) => {
-      if (q.data) result.push(...(q.data as ReviewItem[]));
-    });
-    return result.sort(
+    return [...items].sort(
       (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [reviewQueries]);
+  }, [items]);
 
   const filteredItems = useMemo(() => {
     if (!classFilter) return allItems;
@@ -171,23 +140,23 @@ export function ContentReviewPage() {
         <div className="space-y-3">
           {filteredItems.map((item) => (
             <div
-              key={item.id}
+              key={item.subtopicContentId}
               className="bg-white rounded-2xl border border-brand-border p-5"
             >
               <div className="flex items-start justify-between gap-4 mb-3">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    {statusBadge(item.status)}
+                    {statusBadge(item.reviewStatus)}
                     <span className="text-xs text-brand-muted">
                       {item.className}
                     </span>
                   </div>
                   <h3 className="font-display font-semibold text-brand-ink">
-                    {item.subtopic_name}
+                    {item.subtopicName}
                   </h3>
                 </div>
                 <span className="text-xs text-brand-muted whitespace-nowrap">
-                  {new Date(item.created_at).toLocaleDateString("en-GB", {
+                  {new Date(item.createdAt).toLocaleDateString("en-GB", {
                     day: "numeric",
                     month: "short",
                     year: "numeric",
@@ -196,10 +165,10 @@ export function ContentReviewPage() {
               </div>
 
               <p className="text-sm text-brand-body leading-relaxed mb-4">
-                {item.explanation_text}
+                {item.explanationText}
               </p>
 
-              {item.status === "PENDING" && (
+              {item.reviewStatus === "PENDING" && (
                 <div className="flex gap-2">
                   <button
                     type="button"

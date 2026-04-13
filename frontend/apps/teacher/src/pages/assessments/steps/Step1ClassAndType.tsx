@@ -49,7 +49,8 @@ export function Step1ClassAndType() {
     useAssessmentWizard();
 
   const { data: classes = [], isLoading: classesLoading } = useTeacherClasses(
-    schoolId || null
+    schoolId || null,
+    false
   );
 
   const selectedClass = classes.find((c) => c.id === classId);

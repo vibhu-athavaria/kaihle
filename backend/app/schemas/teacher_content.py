@@ -19,6 +19,21 @@ class TeacherExplanationReviewItem(BaseModel):
     has_teacher_override: bool = False
 
 
+class TeacherExplanationReviewWithClass(BaseModel):
+    """Explanation review item with class info for teacher-wide list."""
+
+    subtopic_content_id: UUID
+    subtopic_id: UUID
+    subtopic_name: str
+    explanation_text: str | None = None
+    teacher_explanation: str | None = None
+    review_status: str
+    has_teacher_override: bool = False
+    class_id: UUID
+    class_name: str
+    created_at: str
+
+
 class TeacherExplanationReviewListResponse(BaseModel):
     """Paginated list of explanation content for a class."""
 

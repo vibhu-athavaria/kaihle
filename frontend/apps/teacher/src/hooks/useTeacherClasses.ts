@@ -31,10 +31,10 @@ interface ClassWithSummaryResponse {
   students_below_threshold: number;
 }
 
-async function fetchTeacherClasses(schoolId: string): Promise<TeacherClassSummary[]> {
+async function fetchTeacherClasses(schoolId: string, includeSummary: boolean | false): Promise<TeacherClassSummary[]> {
   const res = await apiClient.get<ClassWithSummaryResponse[]>(
     `/api/v1/schools/${schoolId}/classes`,
-    { params: { include_summary: true } }
+    { params: { include_summary: includeSummary || false } }
   );
   return (res.data ?? []).map((c) => ({
     id: c.id,
@@ -50,10 +50,10 @@ async function fetchTeacherClasses(schoolId: string): Promise<TeacherClassSummar
   }));
 }
 
-export function useTeacherClasses(schoolId: string | null) {
+export function useTeacherClasses(schoolId: string | null, includeSummary: boolean | false) {
   return useQuery({
     queryKey: ["teacher", "classes-summary", schoolId],
-    queryFn: () => fetchTeacherClasses(schoolId!),
+    queryFn: () => fetchTeacherClasses(schoolId!, includeSummary),
     enabled: !!schoolId,
     staleTime: 5 * 60 * 1000,
   });
