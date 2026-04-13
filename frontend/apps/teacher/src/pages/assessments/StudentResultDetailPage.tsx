@@ -72,7 +72,7 @@ function StudentDetailContent({
       </Link>
 
       {/* Header card — student name + score ring */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <div className="bg-white rounded-2xl border border-brand-border p-6">
         {isLoading ? (
           <div className="animate-pulse flex items-center gap-6">
             <div className="w-24 h-24 bg-gray-100 rounded-full" />

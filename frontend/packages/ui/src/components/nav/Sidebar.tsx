@@ -1,25 +1,22 @@
 import { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
-  Map,
-  ClipboardList,
-  BookOpen,
-  Users,
-  BadgeDollarSign,
-  BarChart3,
   Building2,
+  Users,
+  ClipboardList,
   Settings,
   Archive,
   Cog,
   LogOut,
   FileText,
   Video,
+  BarChart3,
+  BadgeDollarSign,
 } from "lucide-react";
 import { NavItem } from "./NavItem";
 
 interface SidebarProps {
   variant: "teacher" | "school-admin" | "admin";
-  classId?: string;
   onLogout?: () => void;
 }
 
@@ -30,38 +27,15 @@ interface NavSection {
 
 const teacherSections: NavSection[] = [
   {
-    section: "MY CLASSES",
+    section: "MY WORKSPACE",
     items: [
       { label: "Dashboard", href: "/teacher/dashboard", icon: LayoutDashboard },
-      {
-        label: "Gap Map",
-        href: "/teacher/classes/:classId/gap-map",
-        icon: Map,
-      },
+      { label: "Classes", href: "/teacher/classes", icon: Building2 },
+      { label: "Students", href: "/teacher/students", icon: Users },
       {
         label: "Assessments",
-        href: "/teacher/classes/:classId/assessments",
+        href: "/teacher/assessments",
         icon: ClipboardList,
-      },
-      {
-        label: "Lesson Plans",
-        href: "/teacher/classes/:classId/lesson-plans",
-        icon: BookOpen,
-      },
-      {
-        label: "Explanation Review",
-        href: "/teacher/classes/:classId/explanation-review",
-        icon: FileText,
-      },
-    ],
-  },
-  {
-    section: "STUDENTS",
-    items: [
-      {
-        label: "My Students",
-        href: "/teacher/classes/:classId/students",
-        icon: Users,
       },
     ],
   },
@@ -143,14 +117,7 @@ function getCurrentPath(): string {
   return "";
 }
 
-function resolveHref(href: string, classId?: string): string {
-  if (href.includes(":classId") && classId) {
-    return href.replace(":classId", classId);
-  }
-  return href;
-}
-
-export function Sidebar({ variant, classId, onLogout }: SidebarProps) {
+export function Sidebar({ variant, onLogout }: SidebarProps) {
   const sections =
     variant === "teacher"
       ? teacherSections
@@ -192,17 +159,16 @@ export function Sidebar({ variant, classId, onLogout }: SidebarProps) {
               {section.section}
             </div>
             {section.items.map((item) => {
-              const resolvedHref = resolveHref(item.href, classId);
               const isActive =
-                resolvedHref === currentPath ||
-                (resolvedHref !== "#" &&
-                  currentPath.startsWith(resolvedHref.split("?")[0]));
+                item.href === currentPath ||
+                (item.href !== "#" &&
+                  currentPath.startsWith(item.href.split("?")[0]));
 
               return (
                 <NavItem
                   key={item.href}
                   label={item.label}
-                  href={resolvedHref}
+                  href={item.href}
                   icon={item.icon}
                   isActive={isActive}
                   variant={variant}

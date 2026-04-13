@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ChevronLeft, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { useAuth } from "@kaihle/auth";
 import { useClassGapMap } from "../../hooks/useClassGapMap";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
@@ -92,13 +92,26 @@ export function GapMapPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <Link
-          to="/teacher/dashboard"
-          className="inline-flex items-center gap-1 text-sm text-brand-muted hover:text-brand-ink transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded"
+        <nav
+          className="flex items-center gap-2 text-sm text-brand-muted"
+          aria-label="Breadcrumb"
         >
-          <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-          Back to dashboard
-        </Link>
+          <Link
+            to="/teacher/classes"
+            className="hover:text-brand-ink transition-colors"
+          >
+            Classes
+          </Link>
+          <span aria-hidden="true">/</span>
+          <Link
+            to={`/teacher/classes/${classId}`}
+            className="hover:text-brand-ink transition-colors"
+          >
+            {currentClass?.name ?? "Class"}
+          </Link>
+          <span aria-hidden="true">/</span>
+          <span className="text-brand-ink font-medium">Gap Map</span>
+        </nav>
         {data && (
           <button
             type="button"
@@ -164,12 +177,7 @@ export function GapMapPage() {
                       key={s.student_id}
                       className="px-2 py-3 text-center text-xs font-bold uppercase tracking-widest text-role-teacher-muted border-b border-brand-border min-w-[60px]"
                     >
-                      <div
-                        style={{
-                          writingMode: "vertical-rl",
-                          transform: "rotate(180deg)",
-                        }}
-                      >
+                      <div className="[writing-mode:vertical-rl] rotate-180">
                         {s.student_name}
                       </div>
                     </th>

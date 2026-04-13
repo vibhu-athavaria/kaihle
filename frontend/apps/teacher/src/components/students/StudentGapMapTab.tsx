@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { getMasteryStyle } from "@kaihle/types";
 
 interface Score {
@@ -31,12 +32,12 @@ export function StudentGapMapTab({ scores, classId }: StudentGapMapTabProps) {
           class Gap Map and select this student's cell.
         </span>
         {classId && (
-          <a
-            href={`/teacher/classes/${classId}/gap-map`}
-            className="ml-3 font-bold underline whitespace-nowrap"
+          <Link
+            to={`/teacher/classes/${classId}/gap-map`}
+            className="ml-3 font-bold text-brand-gold hover:text-brand-gold-dark underline whitespace-nowrap"
           >
             Go to Gap Map →
-          </a>
+          </Link>
         )}
       </div>
 

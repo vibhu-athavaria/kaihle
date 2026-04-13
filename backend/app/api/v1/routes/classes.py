@@ -25,6 +25,7 @@ from app.schemas.class_enrollment import (
     EnrollRequest,
     EnrollResponse,
     StudentSummary,
+    TeacherStudentsResponse,
 )
 from app.services.class_service import ClassService
 
@@ -153,3 +154,30 @@ async def create_enrollments(
             detail="You can only enroll students in your own classes",
         )
     return await service.enroll_students(class_id, body.student_ids)
+
+
+# ── Teacher student list (aggregated across all classes) ──────────────────────
+
+
+@router.get("/teachers/me/students", response_model=TeacherStudentsResponse)
+async def list_teacher_students(
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> TeacherStudentsResponse:
+    """List all students enrolled in the current teacher's active classes.
+
+    Returns lightweight student summaries (name, email, class_ids, class_names).
+    Does NOT include mastery or learning profile data — those are loaded on-demand
+    when viewing student detail.
+    """
+    service = ClassService(db)
+    if not current_user.school_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has no school associated",
+        )
+    students = await service.get_teacher_students(
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+    )
+    return TeacherStudentsResponse(students=students)

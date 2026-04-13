@@ -44,6 +44,28 @@ export const EmptyState = ({
 export const Skeleton = () =>
   React.createElement("div", { className: "animate-pulse" });
 
+export const SkeletonCard = () =>
+  React.createElement("div", { className: "animate-pulse" });
+
+export const Badge = ({
+  children,
+  variant,
+}: {
+  children: React.ReactNode;
+  variant?: string;
+}) =>
+  React.createElement(
+    "span",
+    { className: `badge badge-${variant}` },
+    children,
+  );
+
+export const toast = {
+  success: jest.fn(),
+  error: jest.fn(),
+  info: jest.fn(),
+};
+
 export const ScoreRing = ({
   score,
   className,

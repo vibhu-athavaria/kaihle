@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
 import { useStudentProfile } from "../hooks/useStudentProfile";
 import { useStudentGapMapForTeacher } from "../hooks/useStudentGapMapForTeacher";
@@ -21,13 +21,14 @@ const TABS: Array<{ id: TabId; label: string }> = [
 
 export function StudentProfilePage() {
   const { studentId } = useParams<{ studentId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const schoolId = user?.school_id ?? null;
   const { data, isLoading, isError } = useStudentProfile(
     studentId ?? null,
     schoolId,
   );
-  const [activeTab, setActiveTab] = useState<TabId>("gap-map");
+  const activeTab = (searchParams.get("tab") as TabId) ?? "gap-map";
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(
     null,
   );
@@ -38,6 +39,10 @@ export function StudentProfilePage() {
     studentId ?? null,
     subjectId,
   );
+
+  const handleTabChange = (tab: TabId) => {
+    setSearchParams({ tab });
+  };
 
   if (isLoading) {
     return (
@@ -90,7 +95,7 @@ export function StudentProfilePage() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`px-4 py-3 text-sm font-sans font-medium transition-colors ${
                 activeTab === tab.id
                   ? "border-b-2 border-brand-gold text-brand-gold"

@@ -18,8 +18,10 @@ export function TeacherDashboard() {
       )}
 
       {data?.pendingActions && data.pendingActions.length > 0 && (
-        <div className="mb-6">
-          <PendingActionBanner action={data.pendingActions[0]} />
+        <div className="mb-6 space-y-3">
+          {data.pendingActions.slice(0, 3).map((action, i) => (
+            <PendingActionBanner key={i} action={action} />
+          ))}
         </div>
       )}
 

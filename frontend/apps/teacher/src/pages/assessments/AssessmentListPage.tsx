@@ -1,4 +1,5 @@
-import { useParams, Link } from "react-router-dom";
+import { useState } from "react";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { Button, Badge, EmptyState, SkeletonCard } from "@kaihle/ui";
 import { toast } from "@kaihle/ui";
 import { Plus, BarChart2, X } from "lucide-react";
@@ -30,6 +31,8 @@ function typeBadge(type: string) {
 
 export function AssessmentListPage() {
   const { classId } = useParams<{ classId: string }>();
+  const [searchParams] = useSearchParams();
+  const [dismissedBanner, setDismissedBanner] = useState(false);
 
   const {
     data: assessments,
@@ -39,6 +42,9 @@ export function AssessmentListPage() {
 
   const closeAssessment = useCloseAssessment(classId ?? "");
   const deleteAssessment = useDeleteAssessment(classId ?? "");
+
+  const justPublished = searchParams.get("published") === "true";
+  const showBanner = justPublished && !dismissedBanner;
 
   function handleClose(assessmentId: string) {
     closeAssessment.mutate(assessmentId, {
@@ -56,6 +62,22 @@ export function AssessmentListPage() {
 
   return (
     <div className="p-6">
+      {showBanner && (
+        <div className="bg-brand-green-light border border-brand-green rounded-xl p-4 flex items-center justify-between mb-4">
+          <span className="text-sm font-medium text-brand-ink">
+            ✓ Assessment published — students can now complete it.
+          </span>
+          <button
+            type="button"
+            onClick={() => setDismissedBanner(true)}
+            className="text-brand-muted hover:text-brand-ink transition-colors"
+            aria-label="Dismiss success banner"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       {/* Page header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-display font-bold text-2xl text-brand-ink">
@@ -163,18 +185,16 @@ export function AssessmentListPage() {
                     <div className="flex items-center justify-end gap-2">
                       {(assessment.status === "ACTIVE" ||
                         assessment.status === "CLOSED") && (
-                        <button
-                          type="button"
-                          disabled
-                          title="Results view coming soon"
-                          className="flex items-center gap-1.5 text-xs font-sans font-bold text-brand-muted cursor-not-allowed px-2 py-1"
+                        <Link
+                          to={`/teacher/assessments/${assessment.id}/results`}
+                          className="flex items-center gap-1.5 text-xs font-sans font-bold text-brand-muted hover:text-brand-ink transition-colors px-2 py-1"
                         >
                           <BarChart2
                             className="w-3.5 h-3.5"
                             aria-hidden="true"
                           />
                           View Results
-                        </button>
+                        </Link>
                       )}
 
                       {assessment.status === "ACTIVE" && (

@@ -55,3 +55,20 @@ class StudentSummary(BaseModel):
     last_name: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TeacherStudentItem(BaseModel):
+    """Lightweight student summary for teacher's student list."""
+
+    id: uuid.UUID
+    first_name: str
+    last_name: str
+    email: str
+    class_ids: list[uuid.UUID]
+    class_names: list[str]
+
+
+class TeacherStudentsResponse(BaseModel):
+    """Response for teacher's aggregated student list."""
+
+    students: list[TeacherStudentItem]

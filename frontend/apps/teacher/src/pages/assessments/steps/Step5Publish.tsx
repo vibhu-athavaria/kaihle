@@ -49,8 +49,7 @@ export function Step5Publish() {
     try {
       await apiClient.post(`/api/v1/assessments/${targetAssessmentId}/publish`);
       reset();
-      navigate(`/teacher/classes/${targetClassId}/assessments`);
-      toast.success("Assessment published and visible to students.");
+      navigate(`/teacher/classes/${targetClassId}/assessments?published=true`);
     } catch (err: unknown) {
       const axiosErr = err as {
         response?: { data?: { detail?: string } };

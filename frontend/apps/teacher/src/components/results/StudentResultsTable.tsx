@@ -161,7 +161,7 @@ export function StudentResultsTable({
               {sorted.map((attempt) => (
                 <tr
                   key={attempt.attemptId}
-                  className="hover:bg-gray-50 transition-colors min-h-[56px]"
+                  className="hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-5 py-4 font-sans text-sm font-medium text-brand-ink">
                     {attempt.studentName}

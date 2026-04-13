@@ -35,7 +35,7 @@ export function StudentsTable({
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<
     "name" | "mastery-asc" | "mastery-desc" | "last-active"
-  >("name");
+  >("mastery-asc");
 
   const filteredAndSorted = useMemo(() => {
     let result = [...students];
