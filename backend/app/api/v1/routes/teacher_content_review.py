@@ -37,6 +37,7 @@ from app.services.teacher_content_service import list_all_explanation_content, l
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/teacher/classes", tags=["teacher-content-review"])
+teacher_router = APIRouter(prefix="/teachers", tags=["teacher-content-review"])
 
 
 # --- Helpers ---
@@ -212,7 +213,7 @@ async def update_explanation_review(
 # --- Teacher-wide endpoints (no class_id) ---
 
 
-@router.get(
+@teacher_router.get(
     "/me/explanation-review",
     response_model=list[TeacherExplanationReviewWithClass],
 )

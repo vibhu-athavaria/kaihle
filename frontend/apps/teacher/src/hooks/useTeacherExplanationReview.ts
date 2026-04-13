@@ -169,7 +169,7 @@ async function fetchAllTeacherExplanationReview(
     params.status = status.toLowerCase();
   }
   const res = await apiClient.get<TeacherExplanationReviewResponse[]>(
-    `/api/v1/teacher/me/explanation-review`,
+    `/api/v1/teachers/me/explanation-review`,
     { params }
   );
   return (res.data ?? []).map((item) => ({
