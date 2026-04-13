@@ -71,12 +71,13 @@ describe("ClassCard", () => {
     expect(screen.getByText("Not assessed")).toBeInTheDocument();
   });
 
-  test("test_class_card_when_rendered_then_all_four_quick_links_present", () => {
+  test("test_class_card_when_rendered_then_three_quick_links_present", () => {
     renderWithRouter(<ClassCard {...defaultProps} />);
     expect(screen.getByText("Gap Map")).toBeInTheDocument();
     expect(screen.getByText("Assessments")).toBeInTheDocument();
-    expect(screen.getByText("Study Plan")).toBeInTheDocument();
     expect(screen.getByText("Lesson Plans")).toBeInTheDocument();
+    // Study Plan was removed — no longer a dead link
+    expect(screen.queryByText("Study Plan")).not.toBeInTheDocument();
   });
 
   test("test_class_card_when_rendered_then_quick_links_have_correct_hrefs", () => {
@@ -89,14 +90,18 @@ describe("ClassCard", () => {
       "href",
       "/teacher/classes/cls-1/assessments",
     );
-    expect(screen.getByText("Study Plan")).toHaveAttribute(
-      "href",
-      "/teacher/classes/cls-1/study-plan",
-    );
     expect(screen.getByText("Lesson Plans")).toHaveAttribute(
       "href",
       "/teacher/classes/cls-1/lesson-plans",
     );
+  });
+
+  test("test_class_card_when_rendered_then_quick_links_have_focus_visible_ring", () => {
+    renderWithRouter(<ClassCard {...defaultProps} />);
+    expect(screen.getByText("Gap Map")).toHaveClass("focus-visible:ring-2");
+    expect(screen.getByText("Assessments")).toHaveClass("focus-visible:ring-2");
+    expect(screen.getByText("Lesson Plans")).toHaveClass("focus-visible:ring-2");
+    expect(screen.getByText("View →")).toHaveClass("focus-visible:ring-2");
   });
 
   test("test_class_card_when_rendered_then_view_link_has_correct_href", () => {

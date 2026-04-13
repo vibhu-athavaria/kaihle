@@ -58,43 +58,39 @@ export function ClassCard({
       </div>
 
       <div className="border-t border-brand-border pt-3">
-        <div className="flex gap-3 mb-2">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mb-2">
           <Link
             to={`/teacher/classes/${classId}/gap-map`}
-            className="text-sm font-medium text-brand-muted hover:text-brand-primary transition-colors"
-            title="See where each student is struggling by subtopic"
+            title="See where each student is struggling by topic"
+            className="text-sm text-brand-muted hover:text-brand-primary transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-1 rounded"
           >
             Gap Map
           </Link>
-          <span className="text-brand-muted">·</span>
+          <span className="text-brand-border" aria-hidden="true">
+            ·
+          </span>
           <Link
             to={`/teacher/classes/${classId}/assessments`}
-            className="text-sm font-medium text-brand-muted hover:text-brand-primary transition-colors"
+            className="text-sm text-brand-muted hover:text-brand-primary transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-1 rounded"
           >
             Assessments
           </Link>
-          <span className="text-brand-muted">·</span>
-          <Link
-            to={`/teacher/classes/${classId}/study-plan`}
-            className="text-sm font-medium text-brand-muted hover:text-brand-primary transition-colors"
-          >
-            Study Plan
-          </Link>
-        </div>
-        <div className="flex items-center justify-between">
+          <span className="text-brand-border" aria-hidden="true">
+            ·
+          </span>
           <Link
             to={`/teacher/classes/${classId}/lesson-plans`}
-            className="text-sm font-medium text-brand-muted hover:text-brand-primary transition-colors"
+            className="text-sm text-brand-muted hover:text-brand-primary transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-1 rounded"
           >
             Lesson Plans
           </Link>
-          <Link
-            to={`/teacher/classes/${classId}`}
-            className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark"
-          >
-            View →
-          </Link>
         </div>
+        <Link
+          to={`/teacher/classes/${classId}`}
+          className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark float-right focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-1 rounded"
+        >
+          View →
+        </Link>
       </div>
     </div>
   );

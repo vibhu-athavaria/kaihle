@@ -23,44 +23,21 @@ import { ClassDetailPage } from "./pages/classes/ClassDetailPage";
 import { GapMapPage } from "./pages/gap-map/GapMapPage";
 import { MyStudentsPage } from "./pages/MyStudents";
 import { StudentProfilePage } from "./pages/StudentProfilePage";
-import { Link } from "react-router-dom";
-import { Button } from "@kaihle/ui";
-import { Plus } from "lucide-react";
+import { AllLessonPlansPage } from "./pages/lesson-plans/AllLessonPlansPage";
+import { ContentReviewPage } from "./pages/content-review/ContentReviewPage";
 
-function useTeacherShellProps() {
-  const { user, logout } = useAuth();
-
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
-  };
-
-  const teacherName = user?.email?.split("@")[0] || "Teacher";
-
-  const topNavAction = (
-    <Link to="/teacher/assessments/new">
-      <Button
-        variant="primary"
-        size="sm"
-        className="gap-1 bg-brand-gold hover:bg-brand-gold-dark"
-      >
-        <Plus className="w-4 h-4" aria-hidden="true" />
-        Assessment
-      </Button>
-    </Link>
-  );
-
-  return {
-    pageTitle: `${greeting()}, ${teacherName}`,
-    onLogout: logout,
-    topNavAction,
-  };
+// Plain function — no state, no effects, no React APIs
+function getTeacherGreeting(email: string | undefined): { pageTitle: string } {
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const name = email?.split("@")[0] || "Teacher";
+  return { pageTitle: `${greeting}, ${name}` };
 }
 
 function TeacherShell() {
-  const { pageTitle, onLogout, topNavAction } = useTeacherShellProps();
+  const { user, logout } = useAuth();
+  const { pageTitle } = getTeacherGreeting(user?.email);
 
   const routes = useMemo(
     () => [
@@ -68,6 +45,8 @@ function TeacherShell() {
       { path: "classes", element: <ClassesPage /> },
       { path: "students", element: <MyStudentsPage /> },
       { path: "assessments", element: <AllAssessmentsPage /> },
+      { path: "lesson-plans", element: <AllLessonPlansPage /> },
+      { path: "content-review", element: <ContentReviewPage /> },
       {
         path: "students/:studentId/profile",
         element: <StudentProfilePage />,
@@ -79,31 +58,26 @@ function TeacherShell() {
   const innerRoutes = useRoutes(routes);
 
   return (
-    <DashboardLayout
-      variant="teacher"
-      pageTitle={pageTitle}
-      onLogout={onLogout}
-      topNavAction={topNavAction}
-    >
+    <DashboardLayout variant="teacher" pageTitle={pageTitle} onLogout={logout}>
       {innerRoutes}
     </DashboardLayout>
   );
 }
 
 function TeacherContentShell() {
-  const { pageTitle, onLogout, topNavAction } = useTeacherShellProps();
+  const { user, logout } = useAuth();
+  const { pageTitle } = getTeacherGreeting(user?.email);
 
   const contentRoutes = useMemo(
     () => [
       { path: "", element: <ClassDetailPage /> },
       { path: "gap-map", element: <GapMapPage /> },
       { path: "assessments", element: <AssessmentListPage /> },
+      { path: "lesson-plans", element: <AllLessonPlansPage /> },
       {
         path: "explanation-review",
         element: <ExplanationReviewPage />,
       },
-      // T-002: { path: "study-plan", element: <StudyPlanPage /> },
-      // T-002: { path: "lesson-plans", element: <LessonPlansPage /> },
       { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
     ],
     [],
@@ -111,12 +85,7 @@ function TeacherContentShell() {
   const innerRoutes = useRoutes(contentRoutes);
 
   return (
-    <DashboardLayout
-      variant="teacher"
-      pageTitle={pageTitle}
-      onLogout={onLogout}
-      topNavAction={topNavAction}
-    >
+    <DashboardLayout variant="teacher" pageTitle={pageTitle} onLogout={logout}>
       {innerRoutes}
     </DashboardLayout>
   );
@@ -133,15 +102,11 @@ function TeacherSettingsApp() {
 }
 
 function NewAssessmentApp() {
-  const { pageTitle, onLogout, topNavAction } = useTeacherShellProps();
+  const { user, logout } = useAuth();
+  const { pageTitle } = getTeacherGreeting(user?.email);
 
   return (
-    <DashboardLayout
-      variant="teacher"
-      pageTitle={pageTitle}
-      onLogout={onLogout}
-      topNavAction={topNavAction}
-    >
+    <DashboardLayout variant="teacher" pageTitle={pageTitle} onLogout={logout}>
       <NewAssessmentPage />
     </DashboardLayout>
   );
@@ -156,7 +121,13 @@ export default function App() {
           path="/teacher/settings"
           element={
             <PrivateRoute>
-              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+              <RoleRoute
+                allowedRoles={[
+                  UserRole.TEACHER,
+                  UserRole.SCHOOL_ADMIN,
+                  UserRole.KAIHLE_ADMIN,
+                ]}
+              >
                 <ErrorBoundary role="teacher">
                   <TeacherSettingsApp />
                 </ErrorBoundary>
@@ -168,7 +139,13 @@ export default function App() {
           path="/teacher/assessments/new"
           element={
             <PrivateRoute>
-              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+              <RoleRoute
+                allowedRoles={[
+                  UserRole.TEACHER,
+                  UserRole.SCHOOL_ADMIN,
+                  UserRole.KAIHLE_ADMIN,
+                ]}
+              >
                 <ErrorBoundary role="teacher">
                   <NewAssessmentApp />
                 </ErrorBoundary>
@@ -180,7 +157,13 @@ export default function App() {
           path="/teacher/classes/:classId/*"
           element={
             <PrivateRoute>
-              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+              <RoleRoute
+                allowedRoles={[
+                  UserRole.TEACHER,
+                  UserRole.SCHOOL_ADMIN,
+                  UserRole.KAIHLE_ADMIN,
+                ]}
+              >
                 <ErrorBoundary role="teacher">
                   <TeacherContentShell />
                 </ErrorBoundary>
@@ -192,7 +175,13 @@ export default function App() {
           path="/teacher/assessments/:assessmentId/results/:studentId"
           element={
             <PrivateRoute>
-              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+              <RoleRoute
+                allowedRoles={[
+                  UserRole.TEACHER,
+                  UserRole.SCHOOL_ADMIN,
+                  UserRole.KAIHLE_ADMIN,
+                ]}
+              >
                 <ErrorBoundary role="teacher">
                   <StudentResultDetailPage />
                 </ErrorBoundary>
@@ -204,7 +193,13 @@ export default function App() {
           path="/teacher/assessments/:assessmentId/results"
           element={
             <PrivateRoute>
-              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
+              <RoleRoute
+                allowedRoles={[
+                  UserRole.TEACHER,
+                  UserRole.SCHOOL_ADMIN,
+                  UserRole.KAIHLE_ADMIN,
+                ]}
+              >
                 <ErrorBoundary role="teacher">
                   <AssessmentResultsPage />
                 </ErrorBoundary>
