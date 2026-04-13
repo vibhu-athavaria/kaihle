@@ -32,7 +32,7 @@ export function Modal({
   titleClassName,
 }: ModalProps) {
   const defaultTitleClass =
-    "font-fraunces text-xl text-brand-ink font-bold mb-1 pr-8";
+    "font-display text-xl text-brand-ink font-bold mb-1 pr-8";
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>

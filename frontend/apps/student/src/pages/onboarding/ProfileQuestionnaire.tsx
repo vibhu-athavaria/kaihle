@@ -121,7 +121,7 @@ export function ProfileQuestionnaire() {
                     relative p-4 rounded-xl border-2 transition-all min-h-[44px]
                     ${
                       isSelected
-                        ? "border-brand-primary bg-brand-light"
+                        ? "border-brand-primary bg-brand-green-light"
                         : "border-brand-border hover:border-brand-mid"
                     }
                   `}
@@ -164,7 +164,7 @@ export function ProfileQuestionnaire() {
                   relative p-6 rounded-xl border-2 transition-all text-left min-h-[44px]
                   ${
                     isSelected
-                      ? "border-brand-primary bg-brand-light"
+                      ? "border-brand-primary bg-brand-green-light"
                       : "border-brand-border hover:border-brand-mid"
                   }
                 `}
