@@ -4,6 +4,7 @@ import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { useMyStudents } from "../../hooks/useMyStudents";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
 import { useAuth } from "@kaihle/auth";
+import { statusBadge } from "../../utils/assessment";
 import { ArrowLeft, Users, BarChart2, FileText, BookOpen } from "lucide-react";
 
 export function ClassDetailPage() {

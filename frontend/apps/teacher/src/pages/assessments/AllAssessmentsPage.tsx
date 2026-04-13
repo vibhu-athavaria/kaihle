@@ -2,32 +2,10 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
-import {
-  useClassAssessments,
-  type AssessmentStatus,
-  type Assessment,
-} from "../../hooks/useClassAssessments";
+import { useClassAssessments } from "../../hooks/useClassAssessments";
+import { statusBadge, typeBadge, type Assessment, type AssessmentStatus } from "../../utils/assessment";
 import { BarChart2 } from "lucide-react";
-import { Button, Badge, EmptyState, SkeletonCard } from "@kaihle/ui";
-
-function statusBadge(status: AssessmentStatus) {
-  switch (status) {
-    case "DRAFT":
-      return <Badge variant="neutral">Draft</Badge>;
-    case "ACTIVE":
-      return <Badge variant="success">Active</Badge>;
-    case "CLOSED":
-      return <Badge variant="info">Closed</Badge>;
-  }
-}
-
-function typeBadge(type: string) {
-  const label = type
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-  return <Badge variant="gold">{label}</Badge>;
-}
+import { Button, EmptyState, SkeletonCard } from "@kaihle/ui";
 
 interface AssessmentWithClass extends Assessment {
   className: string;
