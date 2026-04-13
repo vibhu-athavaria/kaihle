@@ -15,7 +15,7 @@ export function OnboardingLayout({
   stepLabel,
 }: OnboardingLayoutProps) {
   return (
-    <div className="min-h-screen bg-brand-bg">
+    <div className="min-h-screen bg-white">
       <header className="bg-white border-b border-brand-border h-14 flex items-center px-6">
         <span className="font-display font-bold text-lg text-brand-ink">
           Kaihle

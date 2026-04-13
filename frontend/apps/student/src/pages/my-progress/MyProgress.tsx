@@ -129,7 +129,7 @@ export function MyProgress() {
                   className={`px-4 py-2 rounded-lg font-sans text-sm font-medium transition-colors ${
                     selectedSubjectId === subject.subjectId
                       ? "bg-brand-primary text-white"
-                      : "bg-white border border-brand-border text-brand-ink hover:bg-brand-bg"
+                      : "bg-white border border-brand-border text-brand-ink hover:bg-gray-50"
                   }`}
                 >
                   {subject.subjectName}
@@ -155,7 +155,7 @@ export function MyProgress() {
               </div>
             ) : (
               <div className="space-y-4">
-                <h2 className="font-sans text-section-label font-bold uppercase tracking-[0.8px] text-brand-body">
+                <h2 className="font-sans text-section-label font-bold uppercase tracking-[0.8px] text-brand-muted">
                   {selectedSubject?.subjectName} — Topic Breakdown
                 </h2>
                 <div className="space-y-3">
@@ -173,7 +173,7 @@ export function MyProgress() {
                   <h3 className="font-sans font-semibold text-brand-amber mb-1">
                     Suggested next steps
                   </h3>
-                  <p className="font-sans text-sm text-brand-amber/80">
+                  <p className="font-sans text-sm text-brand-amber">
                     Complete more assessments to see personalized
                     recommendations
                   </p>
