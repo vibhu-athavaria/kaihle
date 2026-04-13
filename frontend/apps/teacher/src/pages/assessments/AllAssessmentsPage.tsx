@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
-import { useClassAssessments } from "../../hooks/useClassAssessments";
+import { apiClient } from "@kaihle/auth";
 import { statusBadge, typeBadge, type Assessment, type AssessmentStatus } from "../../utils/assessment";
 import { BarChart2 } from "lucide-react";
 import { Button, EmptyState, SkeletonCard } from "@kaihle/ui";
@@ -19,9 +20,17 @@ export function AllAssessmentsPage() {
     useTeacherDashboard(schoolId);
 
   const classes = dashboardData?.classes ?? [];
-  const classAssessments = classes.map((cls) =>
-    useClassAssessments(cls.id),
-  );
+
+  const classAssessments = useQueries({
+    queries: classes.map((cls) => ({
+      queryKey: ["assessments", "class", cls.id],
+      queryFn: async () => {
+        const res = await apiClient.get(`/api/v1/classes/${cls.id}/assessments`);
+        return res.data.data || [];
+      },
+      enabled: classes.length > 0,
+    })),
+  });
 
   const [filter, setFilter] = useState<"all" | AssessmentStatus>("all");
 
