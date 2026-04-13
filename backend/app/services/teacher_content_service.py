@@ -137,7 +137,7 @@ async def list_all_explanation_content(
             (Class.subject_id == CurriculumTopic.subject_id) & (Class.grade_id == CurriculumTopic.grade_id),
         )
         .where(
-            SubtopicContent.content_type == ContentType.EXPLANATION,
+            SubtopicContent.content_type == "explanation",
             Class.teacher_id == teacher_id,
             Class.school_id == school_id,
             Class.is_active.is_(True),
