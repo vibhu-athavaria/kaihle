@@ -23,8 +23,8 @@ export function AccountActionsSection() {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
-      <h2 className="font-fraunces text-base text-brand-ink px-6 pt-5 pb-3 border-b border-gray-50">
+    <div className="bg-white rounded-2xl border border-role-student-border shadow-sm">
+      <h2 className="font-display text-base text-brand-ink px-6 pt-5 pb-3 border-b border-brand-border-soft">
         Account actions
       </h2>
 
@@ -44,7 +44,7 @@ export function AccountActionsSection() {
             "Sign out"
           )}
         </button>
-        <p className="text-xs text-gray-400 mt-2 text-center">
+        <p className="text-xs text-brand-muted mt-2 text-center">
           You'll need to sign in again on this device
         </p>
       </div>

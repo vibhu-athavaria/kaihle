@@ -1,4 +1,4 @@
-import { StudentLayout } from "@kaihle/ui";
+import { StudentLayout, EmptyState } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
 import { useStudentInfo } from "../../hooks/useStudentInfo";
 import {
@@ -42,9 +42,11 @@ export function Assessments() {
         <h1 className="font-display font-bold text-2xl text-brand-ink">
           Assessments
         </h1>
-        <p className="text-brand-muted">
-          Your assessments will appear here once your teacher assigns them.
-        </p>
+        <EmptyState
+          emoji="📝"
+          title="No assessments yet"
+          description="Your teacher will assign assessments when they are ready."
+        />
       </div>
     </StudentLayout>
   );
