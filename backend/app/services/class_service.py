@@ -1,6 +1,7 @@
 """Class management and enrollment service layer."""
 
 import uuid
+from typing import TypedDict, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,11 @@ from app.schemas.class_enrollment import (
     TeacherStudentItem,
 )
 from app.tasks.onboarding_tasks import trigger_onboarding_diagnostics
+
+
+class _StudentClassData(TypedDict):
+    class_ids: list[uuid.UUID]
+    class_names: list[str]
 
 
 class ClassService:
@@ -302,7 +308,7 @@ class ClassService:
         students = {s.id: s for s in students_result.scalars().all()}
 
         # Aggregate: student_id -> {class_ids, class_names}
-        student_classes: dict[uuid.UUID, dict] = {}
+        student_classes: dict[uuid.UUID, _StudentClassData] = {}
         for enrollment in enrollments:
             sid = enrollment.student_id
             cid = enrollment.class_id
