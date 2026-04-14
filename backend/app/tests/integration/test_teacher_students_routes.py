@@ -102,7 +102,7 @@ async def _create_teacher_with_classes(
         all_students.extend(students)
         await db.flush()
 
-        for student in students:
+        for student in all_students:
             enrollment = ClassEnrollment(
                 class_id=class_.id,
                 student_id=student.id,
@@ -133,7 +133,7 @@ async def test_get_teacher_students_when_multiple_classes(
 
     assert response.status_code == 200
     data = response.json()
-    assert isinstance(data, list)
+    assert isinstance(data, dict)
     assert len(data) == 6
 
 
@@ -144,7 +144,7 @@ async def test_get_teacher_students_when_no_classes_then_empty(
     school: School,
 ) -> None:
     """Test that teacher with no classes gets empty list."""
-    teacher = User(
+    teacher_with_no_class = User(
         id=uuid.uuid4(),
         email=f"teacher-no-class-{uuid.uuid4().hex[:6]}@school.com",
         first_name="Test",
@@ -153,12 +153,12 @@ async def test_get_teacher_students_when_no_classes_then_empty(
         school_id=school.id,
         is_active=True,
     )
-    db_session.add(teacher)
+    db_session.add(teacher_with_no_class)
     await db_session.commit()
 
     response = await client.get(
         "/api/v1/teachers/me/students",
-        headers=make_auth_header(teacher),
+        headers=make_auth_header(teacher_with_no_class),
     )
 
     assert response.status_code == 200
