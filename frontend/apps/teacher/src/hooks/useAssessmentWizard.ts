@@ -29,7 +29,13 @@ interface AssessmentWizardState {
   previewQuestions: PreviewQuestion[];
   // actions
   setStep: (step: 1 | 2 | 3 | 4 | 5) => void;
-  setClassId: (id: string, name: string, subjectId: string, gradeId: string, curriculumId: string) => void;
+  setClassId: (
+    id: string,
+    name: string,
+    subjectId: string,
+    gradeId: string,
+    curriculumId: string,
+  ) => void;
   setAssessmentType: (type: AssessmentType) => void;
   setTopicIds: (ids: string[]) => void;
   setQuestionCount: (n: number) => void;

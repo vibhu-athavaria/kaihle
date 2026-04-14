@@ -11,7 +11,7 @@ interface Topic {
 async function fetchTopicsForClass(
   subjectId: string,
   gradeId: string,
-  curriculumId: string
+  curriculumId: string,
 ): Promise<Topic[]> {
   try {
     const res = await apiClient.get(`/api/v1/subjects/${subjectId}/topics`, {
@@ -35,8 +35,7 @@ export function Step2Topics() {
 
   const { data: topics = [], isLoading } = useQuery({
     queryKey: ["topics", subjectId, gradeId, curriculumId],
-    queryFn: () =>
-      fetchTopicsForClass(subjectId!, gradeId!, curriculumId!),
+    queryFn: () => fetchTopicsForClass(subjectId!, gradeId!, curriculumId!),
     enabled: !!subjectId && !!gradeId && !!curriculumId,
   });
 

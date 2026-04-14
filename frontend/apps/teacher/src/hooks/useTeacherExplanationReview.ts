@@ -162,7 +162,7 @@ interface TeacherExplanationReviewResponse {
 }
 
 async function fetchAllTeacherExplanationReview(
-  status?: TeacherReviewStatus
+  status?: TeacherReviewStatus,
 ): Promise<TeacherExplanationReviewWithClass[]> {
   const params: Record<string, string> = {};
   if (status) {
@@ -170,7 +170,7 @@ async function fetchAllTeacherExplanationReview(
   }
   const res = await apiClient.get<TeacherExplanationReviewResponse[]>(
     `/api/v1/teachers/me/explanation-review`,
-    { params }
+    { params },
   );
   return (res.data ?? []).map((item) => ({
     subtopicContentId: item.subtopic_content_id,

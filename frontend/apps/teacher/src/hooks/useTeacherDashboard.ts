@@ -55,7 +55,9 @@ export function useGrades() {
   return useQuery<GradeResponse[]>({
     queryKey: ["grades"],
     queryFn: () =>
-      apiClient.get("/api/v1/grades").then((r) => r.data?.grades ?? r.data ?? []),
+      apiClient
+        .get("/api/v1/grades")
+        .then((r) => r.data?.grades ?? r.data ?? []),
     staleTime: Infinity,
   });
 }

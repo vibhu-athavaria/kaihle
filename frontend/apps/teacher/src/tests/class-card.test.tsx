@@ -100,7 +100,9 @@ describe("ClassCard", () => {
     renderWithRouter(<ClassCard {...defaultProps} />);
     expect(screen.getByText("Gap Map")).toHaveClass("focus-visible:ring-2");
     expect(screen.getByText("Assessments")).toHaveClass("focus-visible:ring-2");
-    expect(screen.getByText("Lesson Plans")).toHaveClass("focus-visible:ring-2");
+    expect(screen.getByText("Lesson Plans")).toHaveClass(
+      "focus-visible:ring-2",
+    );
     expect(screen.getByText("View →")).toHaveClass("focus-visible:ring-2");
   });
 

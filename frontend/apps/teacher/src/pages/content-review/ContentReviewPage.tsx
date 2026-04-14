@@ -4,7 +4,10 @@
 import { useState, useMemo } from "react";
 import { useAuth } from "@kaihle/auth";
 import { useTeacherClasses } from "../../hooks/useTeacherClasses";
-import { useAllTeacherExplanationReview, type TeacherReviewStatus } from "../../hooks/useTeacherExplanationReview";
+import {
+  useAllTeacherExplanationReview,
+  type TeacherReviewStatus,
+} from "../../hooks/useTeacherExplanationReview";
 import { Badge, EmptyState, SkeletonCard } from "@kaihle/ui";
 import { CheckCircle, XCircle } from "lucide-react";
 
@@ -29,7 +32,7 @@ export function ContentReviewPage() {
 
   const { data: classes = [], isLoading: classesLoading } = useTeacherClasses(
     schoolId,
-    false
+    false,
   );
 
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("PENDING");
@@ -37,7 +40,9 @@ export function ContentReviewPage() {
 
   const { data: items = [], isLoading: itemsLoading } =
     useAllTeacherExplanationReview(
-      statusFilter === "all" ? undefined : statusFilter as TeacherReviewStatus
+      statusFilter === "all"
+        ? undefined
+        : (statusFilter as TeacherReviewStatus),
     );
 
   const isLoading = classesLoading || itemsLoading;

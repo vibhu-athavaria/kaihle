@@ -33,7 +33,7 @@ interface AssessmentWithClassResponse {
 }
 
 async function fetchTeacherAssessments(
-  status?: AssessmentStatus
+  status?: AssessmentStatus,
 ): Promise<TeacherAssessment[]> {
   const params: Record<string, string> = {};
   if (status) {
@@ -41,7 +41,7 @@ async function fetchTeacherAssessments(
   }
   const res = await apiClient.get<AssessmentWithClassResponse[]>(
     `/api/v1/teachers/me/assessments`,
-    { params }
+    { params },
   );
   return (res.data ?? []).map((a) => ({
     id: a.id,

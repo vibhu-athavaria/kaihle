@@ -1,6 +1,9 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useTeacherAssessments, type AssessmentStatus } from "../../hooks/useTeacherAssessments";
+import {
+  useTeacherAssessments,
+  type AssessmentStatus,
+} from "../../hooks/useTeacherAssessments";
 import {
   statusBadge,
   typeBadge,
@@ -18,7 +21,7 @@ export function AllAssessmentsPage() {
   const [filter, setFilter] = useState<"all" | AssessmentStatus>("all");
 
   const { data: assessments = [], isLoading } = useTeacherAssessments(
-    filter === "all" ? undefined : filter
+    filter === "all" ? undefined : filter,
   );
 
   const allAssessments = useMemo((): AssessmentWithClass[] => {

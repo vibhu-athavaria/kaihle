@@ -50,7 +50,7 @@ export function Step1ClassAndType() {
 
   const { data: classes = [], isLoading: classesLoading } = useTeacherClasses(
     schoolId || null,
-    false
+    false,
   );
 
   const selectedClass = classes.find((c) => c.id === classId);
@@ -88,7 +88,7 @@ export function Step1ClassAndType() {
                   selected.name,
                   selected.subjectId,
                   selected.gradeId,
-                  selected.curriculumId
+                  selected.curriculumId,
                 );
             }}
             className="w-full max-w-sm border border-brand-border rounded-lg px-3 py-2.5 text-sm font-sans text-brand-ink bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-1"
