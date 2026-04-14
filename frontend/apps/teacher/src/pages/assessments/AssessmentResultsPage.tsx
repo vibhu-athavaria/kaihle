@@ -62,11 +62,15 @@ function AssessmentResultsContent({ assessmentId }: { assessmentId: string }) {
 
   const attempts = data?.attempts ?? [];
 
+  const backHref = data?.classId
+    ? `/teacher/classes/${data.classId}/assessments`
+    : "/teacher/assessments";
+
   return (
     <div className="p-6 space-y-6">
       {/* Back nav */}
       <Link
-        to="/teacher/assessments"
+        to={backHref}
         className="inline-flex items-center gap-1 text-sm text-brand-muted hover:text-brand-ink transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded"
       >
         <ChevronLeft className="w-4 h-4" aria-hidden="true" />

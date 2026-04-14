@@ -12,6 +12,7 @@ import {
   Video,
   BarChart3,
   BadgeDollarSign,
+  BookOpen,
 } from "lucide-react";
 import { NavItem } from "./NavItem";
 
@@ -29,13 +30,24 @@ const teacherSections: NavSection[] = [
   {
     section: "MY WORKSPACE",
     items: [
-      { label: "Dashboard", href: "/teacher/dashboard", icon: LayoutDashboard },
+      { label: "Home", href: "/teacher/dashboard", icon: LayoutDashboard },
       { label: "Classes", href: "/teacher/classes", icon: Building2 },
       { label: "Students", href: "/teacher/students", icon: Users },
       {
         label: "Assessments",
         href: "/teacher/assessments",
         icon: ClipboardList,
+      },
+    ],
+  },
+  {
+    section: "TOOLS",
+    items: [
+      { label: "Lesson Plans", href: "/teacher/lesson-plans", icon: BookOpen },
+      {
+        label: "Content Review",
+        href: "/teacher/content-review",
+        icon: FileText,
       },
     ],
   },

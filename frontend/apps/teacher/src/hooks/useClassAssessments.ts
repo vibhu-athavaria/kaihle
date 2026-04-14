@@ -15,7 +15,7 @@ export interface Assessment {
 
 async function fetchClassAssessments(classId: string): Promise<Assessment[]> {
   const res = await apiClient.get(`/api/v1/classes/${classId}/assessments`);
-  return res.data || [];
+  return res.data?.data || [];
 }
 
 async function publishAssessment(assessmentId: string): Promise<void> {

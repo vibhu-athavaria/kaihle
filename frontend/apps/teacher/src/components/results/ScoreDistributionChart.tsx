@@ -80,7 +80,7 @@ export function ScoreDistributionChart({
       label: "Not submitted",
       count: notSubmittedCount,
       color: "#d1d5db",
-      textColor: "text-gray-400",
+      textColor: "text-brand-muted",
       fillClass: "bg-gray-300",
       pct: total > 0 ? (notSubmittedCount / total) * 100 : 0,
     },

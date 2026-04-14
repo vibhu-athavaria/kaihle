@@ -22,6 +22,8 @@ from app.models.user import UserRole
 from app.schemas.assessments import (
     AssessmentCreateRequest,
     AssessmentResponse,
+    AssessmentResultsSummary,
+    AssessmentWithClassResponse,
 )
 from app.schemas.common import Page
 from app.services.assessment_service import (
@@ -105,6 +107,49 @@ async def list_class_assessments(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/teachers/me/assessments", response_model=list[AssessmentWithClassResponse])
+async def list_teacher_assessments(
+    status_filter: str | None = Query(None, alias="status"),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> list[AssessmentWithClassResponse]:
+    """List all assessments across all classes owned by the current teacher.
+
+    More efficient than fetching assessments per-class. Returns assessments
+    with class name included for display.
+    """
+    if not current_user.school_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has no school associated",
+        )
+
+    service = AssessmentService(db)
+    assessments = await service.list_teacher_assessments(
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+        status_filter=status_filter,
+    )
+
+    return [
+        AssessmentWithClassResponse(
+            id=a["id"],
+            class_id=a["class_id"],
+            class_name=a["class_name"],
+            title=a["title"],
+            assessment_type=a["assessment_type"],
+            is_system_generated=a["is_system_generated"],
+            status=a["status"],
+            topic_ids=[],
+            question_count=a["question_count"] or 0,
+            created_at=a["created_at"],
+            published_at=a["published_at"],
+            deadline=a["deadline"],
+        )
+        for a in assessments
+    ]
 
 
 @router.post(
@@ -218,6 +263,31 @@ async def publish_assessment(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
 
     return _assessment_to_response(assessment)
+
+
+@router.get("/assessments/{assessment_id}/results", response_model=AssessmentResultsSummary)
+async def get_assessment_results(
+    assessment_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> AssessmentResultsSummary:
+    """Return all student attempt summaries for an assessment (class overview).
+
+    Distinct from GET /attempts/{id}/results which returns per-question breakdown
+    for a single student attempt.
+    """
+    service = AssessmentService(db)
+    try:
+        return await service.get_assessment_results(
+            assessment_id=assessment_id,
+            school_id=current_user.school_id,
+            requesting_user_id=current_user.id,
+            requesting_user_role=current_user.role,
+        )
+    except AssessmentAccessDeniedError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
 @router.post("/assessments/{assessment_id}/close", response_model=AssessmentResponse)

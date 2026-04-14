@@ -28,14 +28,16 @@ from app.schemas.teacher_content import (
     TeacherExplanationReviewDetailResponse,
     TeacherExplanationReviewItem,
     TeacherExplanationReviewListResponse,
+    TeacherExplanationReviewWithClass,
     TeacherExplanationUpdateRequest,
     TeacherExplanationUpdateResponse,
 )
-from app.services.teacher_content_service import list_explanation_content
+from app.services.teacher_content_service import list_all_explanation_content, list_explanation_content
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/teacher/classes", tags=["teacher-content-review"])
+teacher_router = APIRouter(prefix="/teachers", tags=["teacher-content-review"])
 
 
 # --- Helpers ---
@@ -206,3 +208,39 @@ async def update_explanation_review(
         teacher_explanation=sc.teacher_explanation,
         has_teacher_override=sc.teacher_explanation is not None,
     )
+
+
+# --- Teacher-wide endpoints (no class_id) ---
+
+
+@teacher_router.get(
+    "/me/explanation-review",
+    response_model=list[TeacherExplanationReviewWithClass],
+)
+async def list_all_teacher_explanation_review(
+    status_filter: str | None = Query(
+        default=None,
+        alias="status",
+        description="Filter by status: pending, approved, rejected, or all (default)",
+    ),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> list[TeacherExplanationReviewWithClass]:
+    """List explanation content for review across all classes owned by the teacher.
+
+    More efficient than fetching per-class. Returns items with class info included.
+    """
+    if not current_user.school_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has no school associated",
+        )
+
+    items = await list_all_explanation_content(
+        db=db,
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+        status_filter=status_filter,
+    )
+
+    return [TeacherExplanationReviewWithClass(**item) for item in items]

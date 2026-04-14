@@ -1,14 +1,13 @@
 import { useState, useMemo } from "react";
-import { useQueries } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { useAuth } from "@kaihle/auth";
-import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
-import { apiClient } from "@kaihle/auth";
+import {
+  useTeacherAssessments,
+  type AssessmentStatus,
+} from "../../hooks/useTeacherAssessments";
 import {
   statusBadge,
   typeBadge,
   type Assessment,
-  type AssessmentStatus,
 } from "../../utils/assessment";
 import { BarChart2 } from "lucide-react";
 import { Button, EmptyState, SkeletonCard } from "@kaihle/ui";
@@ -19,51 +18,29 @@ interface AssessmentWithClass extends Assessment {
 }
 
 export function AllAssessmentsPage() {
-  const { user } = useAuth();
-  const schoolId = user?.school_id ?? null;
-  const { data: dashboardData, isLoading: dashboardLoading } =
-    useTeacherDashboard(schoolId);
-
-  const classes = dashboardData?.classes ?? [];
-
-  const classAssessments = useQueries({
-    queries: classes.map((cls) => ({
-      queryKey: ["assessments", "class", cls.id],
-      queryFn: async () => {
-        const res = await apiClient.get(
-          `/api/v1/classes/${cls.id}/assessments`,
-        );
-        return res.data.data || [];
-      },
-      enabled: classes.length > 0,
-    })),
-  });
-
   const [filter, setFilter] = useState<"all" | AssessmentStatus>("all");
 
-  const allAssessments = useMemo(() => {
-    const result: AssessmentWithClass[] = [];
-    classAssessments.forEach((query, i) => {
-      if (query.data) {
-        for (const a of query.data) {
-          result.push({
-            ...a,
-            className: classes[i].name,
-            classId: classes[i].id,
-          });
-        }
-      }
-    });
-    return result;
-  }, [classAssessments, classes]);
+  const { data: assessments = [], isLoading } = useTeacherAssessments(
+    filter === "all" ? undefined : filter,
+  );
 
-  const filtered = useMemo(() => {
-    if (filter === "all") return allAssessments;
-    return allAssessments.filter((a) => a.status === filter);
-  }, [allAssessments, filter]);
-
-  const isLoading =
-    dashboardLoading || classAssessments.some((q) => q.isLoading);
+  const allAssessments = useMemo((): AssessmentWithClass[] => {
+    return assessments.map((a) => ({
+      id: a.id,
+      class_id: a.classId,
+      class_name: a.className,
+      title: a.title,
+      assessment_type: a.assessment_type,
+      is_system_generated: a.is_system_generated,
+      status: a.status,
+      question_count: a.question_count,
+      created_at: a.created_at,
+      published_at: a.published_at,
+      deadline: a.deadline,
+      className: a.className,
+      classId: a.classId,
+    }));
+  }, [assessments]);
 
   const filters: { key: "all" | AssessmentStatus; label: string }[] = [
     { key: "all", label: "All" },
@@ -130,7 +107,7 @@ export function AllAssessmentsPage() {
         ))}
       </div>
 
-      {filtered.length === 0 ? (
+      {allAssessments.length === 0 ? (
         <EmptyState
           emoji="📋"
           title="No assessments found"
@@ -152,7 +129,7 @@ export function AllAssessmentsPage() {
         />
       ) : (
         <div className="space-y-3">
-          {filtered.map((assessment) => (
+          {allAssessments.map((assessment) => (
             <div
               key={assessment.id}
               className="bg-white rounded-xl border border-brand-border p-4 flex items-center justify-between"

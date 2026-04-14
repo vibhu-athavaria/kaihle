@@ -1,5 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
 import { useAuth } from "@kaihle/auth";
 import { ClipboardList, BookOpen, TrendingUp, Award } from "lucide-react";
 import { Button } from "@kaihle/ui";
@@ -7,11 +5,7 @@ import {
   useAssessmentWizard,
   type AssessmentType,
 } from "../../../hooks/useAssessmentWizard";
-
-interface TeacherClass {
-  id: string;
-  name: string;
-}
+import { useTeacherClasses } from "../../../hooks/useTeacherClasses";
 
 interface AssessmentTypeCard {
   type: AssessmentType;
@@ -47,14 +41,6 @@ const ASSESSMENT_TYPES: AssessmentTypeCard[] = [
   },
 ];
 
-async function fetchTeacherClasses(schoolId: string): Promise<TeacherClass[]> {
-  const res = await apiClient.get(`/api/v1/schools/${schoolId}/classes`);
-  return (res.data || []).map((c: { id: string; name: string }) => ({
-    id: c.id,
-    name: c.name,
-  }));
-}
-
 export function Step1ClassAndType() {
   const { user } = useAuth();
   const schoolId = user?.school_id ?? "";
@@ -62,11 +48,10 @@ export function Step1ClassAndType() {
   const { classId, assessmentType, setClassId, setAssessmentType, setStep } =
     useAssessmentWizard();
 
-  const { data: classes = [], isLoading: classesLoading } = useQuery({
-    queryKey: ["teacher", "classes", schoolId],
-    queryFn: () => fetchTeacherClasses(schoolId),
-    enabled: !!schoolId,
-  });
+  const { data: classes = [], isLoading: classesLoading } = useTeacherClasses(
+    schoolId || null,
+    false,
+  );
 
   const selectedClass = classes.find((c) => c.id === classId);
 
@@ -97,7 +82,14 @@ export function Step1ClassAndType() {
             value={classId ?? ""}
             onChange={(e) => {
               const selected = classes.find((c) => c.id === e.target.value);
-              if (selected) setClassId(selected.id, selected.name);
+              if (selected)
+                setClassId(
+                  selected.id,
+                  selected.name,
+                  selected.subjectId,
+                  selected.gradeId,
+                  selected.curriculumId,
+                );
             }}
             className="w-full max-w-sm border border-brand-border rounded-lg px-3 py-2.5 text-sm font-sans text-brand-ink bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-1"
           >

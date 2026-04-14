@@ -1,9 +1,10 @@
 """Assessment schemas. Note: correct_answer is NEVER in student-facing responses."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class QuestionOption(BaseModel):
@@ -39,6 +40,25 @@ class AssessmentResponse(BaseModel):
     published_at: datetime | None
     deadline: datetime | None
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AssessmentWithClassResponse(BaseModel):
+    """Assessment response with class info for teacher's all-assessments list."""
+
+    id: UUID
+    class_id: UUID
+    class_name: str
+    title: str
+    assessment_type: str
+    is_system_generated: bool
+    status: str
+    topic_ids: list[UUID]
+    question_count: int
+    created_at: datetime
+    published_at: datetime | None
+    deadline: datetime | None
+
 
 class AssessmentCreateRequest(BaseModel):
     title: str | None = None  # Auto-generated from type+class+subject when omitted
@@ -48,3 +68,23 @@ class AssessmentCreateRequest(BaseModel):
     difficulty_min: float = 1.0
     difficulty_max: float = 5.0
     deadline: datetime | None = None
+
+
+class StudentAttemptSummary(BaseModel):
+    attempt_id: UUID | None = None  # None when NOT_STARTED — student has not begun
+    student_id: UUID
+    student_name: str
+    score: float | None
+    submitted_at: datetime | None
+    status: Literal["SUBMITTED", "IN_PROGRESS", "NOT_STARTED"]
+
+
+class AssessmentResultsSummary(BaseModel):
+    assessment_id: UUID
+    assessment_title: str
+    assessment_type: str
+    class_id: UUID
+    class_name: str
+    total_students: int
+    submitted_count: int
+    attempts: list[StudentAttemptSummary]

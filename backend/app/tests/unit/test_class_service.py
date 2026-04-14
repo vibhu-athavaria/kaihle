@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.school import Class
+from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
 from app.schemas.class_enrollment import ClassCreate
 from app.services.class_service import ClassService
@@ -313,3 +313,305 @@ class TestEnrollStudents:
         # Assert
         assert result.enrolled == 0
         assert "not found in this school" in result.errors[0]
+
+
+class TestGetClass:
+    """Tests for ClassService.get_class method."""
+
+    @pytest.mark.asyncio
+    async def test_get_class_when_class_exists_then_returns_class(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that get_class returns the class when it exists."""
+        class_id = uuid.uuid4()
+        class_ = Class(
+            id=class_id,
+            school_id=uuid.uuid4(),
+            name="Test Class",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            teacher_id=uuid.uuid4(),
+            academic_year="2026",
+        )
+        mock_db.get = AsyncMock(return_value=class_)
+
+        result = await class_service.get_class(class_id)
+
+        assert result.id == class_id
+        assert result.name == "Test Class"
+        mock_db.get.assert_called_once_with(Class, class_id)
+
+    @pytest.mark.asyncio
+    async def test_get_class_when_class_not_found_then_raises_value_error(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that get_class raises ValueError when class doesn't exist."""
+        class_id = uuid.uuid4()
+        mock_db.get = AsyncMock(return_value=None)
+
+        with pytest.raises(ValueError, match="Class not found"):
+            await class_service.get_class(class_id)
+
+
+class TestVerifyClassSchool:
+    """Tests for ClassService.verify_class_school method."""
+
+    @pytest.mark.asyncio
+    async def test_verify_class_school_when_valid_then_returns_class(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that verify_class_school returns class when school matches."""
+        class_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+        class_ = Class(
+            id=class_id,
+            school_id=school_id,
+            name="Test Class",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            teacher_id=uuid.uuid4(),
+            academic_year="2026",
+        )
+        mock_db.get = AsyncMock(return_value=class_)
+
+        result = await class_service.verify_class_school(class_id, school_id)
+
+        assert result.id == class_id
+
+    @pytest.mark.asyncio
+    async def test_verify_class_school_when_wrong_school_then_raises_value_error(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that verify_class_school raises ValueError when school doesn't match."""
+        class_id = uuid.uuid4()
+        correct_school_id = uuid.uuid4()
+        wrong_school_id = uuid.uuid4()
+        class_ = Class(
+            id=class_id,
+            school_id=correct_school_id,
+            name="Test Class",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            teacher_id=uuid.uuid4(),
+            academic_year="2026",
+        )
+        mock_db.get = AsyncMock(return_value=class_)
+
+        with pytest.raises(ValueError, match="Class not found"):
+            await class_service.verify_class_school(class_id, wrong_school_id)
+
+
+class TestGetClassStudents:
+    """Tests for ClassService.get_class_students method."""
+
+    @pytest.mark.asyncio
+    async def test_get_class_students_when_students_enrolled_then_returns_list(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that get_class_students returns enrolled students ordered by name."""
+        class_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+        class_ = Class(
+            id=class_id,
+            school_id=school_id,
+            name="Test",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            teacher_id=uuid.uuid4(),
+            academic_year="2026",
+        )
+
+        student1 = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            email="alice@test.com",
+            first_name="Alice",
+            last_name="Smith",
+            role=UserRole.STUDENT,
+        )
+        student2 = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            email="bob@test.com",
+            first_name="Bob",
+            last_name="Jones",
+            role=UserRole.STUDENT,
+        )
+
+        mock_db.get = AsyncMock(return_value=class_)
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [student2, student1]
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        result = await class_service.get_class_students(class_id)
+
+        assert len(result) == 2
+        assert result[0].first_name == "Bob"
+        assert result[1].first_name == "Alice"
+
+    @pytest.mark.asyncio
+    async def test_get_class_students_when_no_students_then_returns_empty_list(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that get_class_students returns empty list when no students enrolled."""
+        class_id = uuid.uuid4()
+        class_ = Class(
+            id=class_id,
+            school_id=uuid.uuid4(),
+            name="Test",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            teacher_id=uuid.uuid4(),
+            academic_year="2026",
+        )
+        mock_db.get = AsyncMock(return_value=class_)
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        result = await class_service.get_class_students(class_id)
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_class_students_when_class_not_found_then_raises(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that get_class_students raises ValueError when class doesn't exist."""
+        class_id = uuid.uuid4()
+        mock_db.get = AsyncMock(return_value=None)
+
+        with pytest.raises(ValueError, match="Class not found"):
+            await class_service.get_class_students(class_id)
+
+
+class TestGetTeacherStudents:
+    """Tests for ClassService.get_teacher_students method."""
+
+    @pytest.mark.asyncio
+    async def test_get_teacher_students_when_multiple_classes_with_students(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test aggregating students across multiple classes."""
+        teacher_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+
+        class1 = Class(
+            id=uuid.uuid4(),
+            teacher_id=teacher_id,
+            school_id=school_id,
+            name="Math 8A",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            academic_year="2026",
+        )
+        class2 = Class(
+            id=uuid.uuid4(),
+            teacher_id=teacher_id,
+            school_id=school_id,
+            name="Science 8B",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            academic_year="2026",
+        )
+
+        student1 = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            first_name="Alice",
+            last_name="A",
+            email="alice@test.com",
+            role=UserRole.STUDENT,
+        )
+
+        enrollment1 = ClassEnrollment(class_id=class1.id, student_id=student1.id, is_active=True)
+        enrollment2 = ClassEnrollment(class_id=class2.id, student_id=student1.id, is_active=True)
+
+        mock_classes_result = MagicMock()
+        mock_classes_result.scalars.return_value.all.return_value = [class1, class2]
+        mock_enrollments_result = MagicMock()
+        mock_enrollments_result.scalars.return_value.all.return_value = [enrollment1, enrollment2]
+        mock_students_result = MagicMock()
+        mock_students_result.scalars.return_value.all.return_value = [student1]
+
+        call_count = [0]
+
+        async def mock_execute(q: Any) -> Any:
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return mock_classes_result
+            elif call_count[0] == 2:
+                return mock_enrollments_result
+            else:
+                return mock_students_result
+
+        mock_db.execute = AsyncMock(side_effect=mock_execute)
+
+        result = await class_service.get_teacher_students(teacher_id, school_id)
+
+        assert len(result) == 1
+        assert result[0].id == student1.id
+        assert len(result[0].class_ids) == 2
+        assert "Math 8A" in result[0].class_names
+        assert "Science 8B" in result[0].class_names
+
+    @pytest.mark.asyncio
+    async def test_get_teacher_students_when_no_classes_then_returns_empty(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that get_teacher_students returns empty when teacher has no classes."""
+        teacher_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        result = await class_service.get_teacher_students(teacher_id, school_id)
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_teacher_students_when_classes_have_no_enrollments_then_returns_empty(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that get_teacher_students returns empty when classes have no enrollments."""
+        teacher_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+        class1 = Class(
+            id=uuid.uuid4(),
+            teacher_id=teacher_id,
+            school_id=school_id,
+            name="Math 8A",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            academic_year="2026",
+        )
+
+        mock_classes_result = MagicMock()
+        mock_classes_result.scalars.return_value.all.return_value = [class1]
+        mock_enrollments_result = MagicMock()
+        mock_enrollments_result.scalars.return_value.all.return_value = []
+
+        call_count = [0]
+
+        async def mock_execute(q: Any) -> Any:
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return mock_classes_result
+            else:
+                return mock_enrollments_result
+
+        mock_db.execute = AsyncMock(side_effect=mock_execute)
+
+        result = await class_service.get_teacher_students(teacher_id, school_id)
+
+        assert result == []

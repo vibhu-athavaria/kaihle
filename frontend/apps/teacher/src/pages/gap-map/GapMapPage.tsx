@@ -154,12 +154,20 @@ export function GapMapPage() {
           <span className="text-4xl mb-3" role="img" aria-label="chart">
             📊
           </span>
-          <h3 className="font-display font-semibold text-brand-ink mb-1">
-            No assessment data yet
-          </h3>
-          <p className="text-sm text-brand-muted">
-            Students will appear here after completing their first diagnostic.
+          <p className="font-display font-semibold text-brand-ink mb-2">
+            No gap data yet
           </p>
+          <p className="text-sm text-brand-muted mb-4">
+            Run a Diagnostic assessment first — the Gap Map builds automatically
+            from results. It shows exactly where each student has gaps against
+            their curriculum topics.
+          </p>
+          <Link
+            to="/teacher/assessments/new"
+            className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark focus-visible:ring-2 focus-visible:ring-brand-gold rounded transition-colors"
+          >
+            Create a Diagnostic →
+          </Link>
         </div>
       )}
 
@@ -249,6 +257,13 @@ export function GapMapPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {data && students.length > 0 && (
+        <p className="text-sm text-brand-muted mt-4">
+          Click any cell to view that student's learning profile and assign a
+          targeted study plan directly.
+        </p>
       )}
 
       <LearningProfileSidePanel

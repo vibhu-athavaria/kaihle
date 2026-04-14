@@ -11,20 +11,25 @@ the attempt lifecycle, not with class management.
 import uuid as _uuid
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_full_access, require_role
+from app.models.assessment import Assessment, StudentAttempt
 from app.models.curriculum import QuestionBank
-from app.models.user import UserRole
+from app.models.school import Class, ClassEnrollment
+from app.models.user import ParentStudent, User, UserRole
 from app.schemas.assessments import AssessmentQuestion, QuestionOption
 from app.schemas.attempts import (
     AnswerSubmitRequest,
     AttemptResponse,
     AttemptResultResponse,
     AttemptSubmitRequest,
+    StudentAttemptHistoryItem,
 )
+from app.schemas.common import Page
 from app.services.attempt_service import (
     AttemptAccessDeniedError,
     AttemptAlreadyCompletedError,
@@ -244,3 +249,99 @@ async def get_attempt_results(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied") from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/students/{student_id}/attempts", response_model=Page[StudentAttemptHistoryItem])
+async def get_student_attempts(
+    student_id: UUID,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    current_user: CurrentUser = Depends(require_full_access),
+    db: AsyncSession = Depends(get_db),
+) -> Page[StudentAttemptHistoryItem]:
+    """Paginated attempt history for a student. Used by Student Profile → Assessments tab.
+
+    Ordered newest first. Role-based access:
+    - STUDENT: own attempts only.
+    - TEACHER: student must be enrolled in one of their classes.
+    - SCHOOL_ADMIN: student must belong to their school.
+    - PARENT: student must be linked to this parent.
+    - KAIHLE_ADMIN: unrestricted.
+    """
+    if current_user.role == UserRole.STUDENT:
+        if current_user.id != student_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Students can only view their own attempts.",
+            )
+
+    elif current_user.role == UserRole.TEACHER:
+        result = await db.execute(
+            select(ClassEnrollment.student_id)
+            .join(Class, Class.id == ClassEnrollment.class_id)
+            .where(
+                ClassEnrollment.student_id == student_id,
+                Class.teacher_id == current_user.id,
+                ClassEnrollment.is_active.is_(True),
+            )
+            .limit(1)
+        )
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Student is not enrolled in any of your classes.",
+            )
+
+    elif current_user.role == UserRole.SCHOOL_ADMIN:
+        student = await db.get(User, student_id)
+        if student is None or student.school_id != current_user.school_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
+    elif current_user.role == UserRole.PARENT:
+        link = await db.execute(
+            select(ParentStudent).where(
+                ParentStudent.parent_id == current_user.id,
+                ParentStudent.student_id == student_id,
+            )
+        )
+        if link.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view attempts for linked students.",
+            )
+
+    base_query = (
+        select(
+            StudentAttempt,
+            Assessment.title.label("assessment_title"),
+            Assessment.assessment_type,
+            Assessment.class_id,
+            Class.name.label("class_name"),
+        )
+        .join(Assessment, Assessment.id == StudentAttempt.assessment_id)
+        .join(Class, Class.id == Assessment.class_id)
+        .where(StudentAttempt.student_id == student_id)
+        .order_by(StudentAttempt.created_at.desc())
+    )
+
+    total = (await db.execute(select(func.count()).select_from(base_query.subquery()))).scalar_one()
+
+    rows = (await db.execute(base_query.offset((page - 1) * page_size).limit(page_size))).all()
+
+    items = [
+        StudentAttemptHistoryItem(
+            attempt_id=row.StudentAttempt.id,
+            assessment_id=row.StudentAttempt.assessment_id,
+            assessment_title=row.assessment_title,
+            assessment_type=row.assessment_type,
+            class_id=row.class_id,
+            class_name=row.class_name,
+            score=float(row.StudentAttempt.overall_score) if row.StudentAttempt.overall_score is not None else None,
+            status=row.StudentAttempt.status,
+            submitted_at=row.StudentAttempt.completed_at,
+            created_at=row.StudentAttempt.created_at,
+        )
+        for row in rows
+    ]
+
+    return Page(data=items, total=total, page=page, page_size=page_size)

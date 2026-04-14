@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
+import { useAuth } from "@kaihle/auth";
+import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
 import { Button, Badge, EmptyState, SkeletonCard, Skeleton } from "@kaihle/ui";
 import { toast } from "@kaihle/ui";
 import {
@@ -308,6 +310,10 @@ function DetailPanel({
 
 export function ExplanationReviewPage() {
   const { classId } = useParams<{ classId: string }>();
+  const { user } = useAuth();
+  const schoolId = user?.school_id ?? null;
+  const { data: dashboardData } = useTeacherDashboard(schoolId);
+  const currentClass = dashboardData?.classes.find((c) => c.id === classId);
   const [statusFilter, setStatusFilter] = useState<string | null>("pending");
   const [selectedSubtopicId, setSelectedSubtopicId] = useState<string | null>(
     null,
@@ -361,10 +367,36 @@ export function ExplanationReviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumb */}
+      <nav
+        className="flex items-center gap-2 text-sm text-brand-muted"
+        aria-label="Breadcrumb"
+      >
+        <Link
+          to="/teacher/classes"
+          className="hover:text-brand-ink transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
+        >
+          Classes
+        </Link>
+        <span className="text-brand-border" aria-hidden="true">
+          /
+        </span>
+        <Link
+          to={`/teacher/classes/${classId}`}
+          className="hover:text-brand-ink transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
+        >
+          {currentClass?.name ?? "Class"}
+        </Link>
+        <span className="text-brand-border" aria-hidden="true">
+          /
+        </span>
+        <span className="text-brand-ink font-medium">Content Review</span>
+      </nav>
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-brand-ink">
-            Explanation Review
+          <h1 className="font-display font-bold text-2xl text-brand-ink">
+            Content Review
           </h1>
           <p className="text-sm text-brand-muted mt-0.5">
             Review and approve AI-generated explanations for your class

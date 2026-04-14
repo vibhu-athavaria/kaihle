@@ -8,26 +8,35 @@ interface Topic {
   name: string;
 }
 
-async function fetchTopicsForClass(classId: string): Promise<Topic[]> {
+async function fetchTopicsForClass(
+  subjectId: string,
+  gradeId: string,
+  curriculumId: string,
+): Promise<Topic[]> {
   try {
-    const res = await apiClient.get(`/api/v1/classes/${classId}/topics`);
+    const res = await apiClient.get(`/api/v1/subjects/${subjectId}/topics`, {
+      params: {
+        curriculum_id: curriculumId,
+        grade_id: gradeId,
+      },
+    });
     return (res.data || []).map((t: { id: string; name: string }) => ({
       id: t.id,
       name: t.name,
     }));
   } catch {
-    // Endpoint may not be available yet — return empty
     return [];
   }
 }
 
 export function Step2Topics() {
-  const { classId, topicIds, setTopicIds, setStep } = useAssessmentWizard();
+  const { subjectId, gradeId, curriculumId, topicIds, setTopicIds, setStep } =
+    useAssessmentWizard();
 
   const { data: topics = [], isLoading } = useQuery({
-    queryKey: ["topics", "class", classId],
-    queryFn: () => fetchTopicsForClass(classId!),
-    enabled: !!classId,
+    queryKey: ["topics", subjectId, gradeId, curriculumId],
+    queryFn: () => fetchTopicsForClass(subjectId!, gradeId!, curriculumId!),
+    enabled: !!subjectId && !!gradeId && !!curriculumId,
   });
 
   const canProceed = topicIds.length > 0;

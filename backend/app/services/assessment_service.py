@@ -14,9 +14,10 @@ import random
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import (
@@ -28,9 +29,9 @@ from app.models.assessment import (
     StudentAttempt,
 )
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subject, Subtopic
-from app.models.school import Class
+from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
-from app.schemas.assessments import AssessmentCreateRequest
+from app.schemas.assessments import AssessmentCreateRequest, AssessmentResultsSummary, StudentAttemptSummary
 
 logger = structlog.get_logger()
 
@@ -776,6 +777,59 @@ class AssessmentService:
 
         return items, total
 
+    async def list_teacher_assessments(
+        self,
+        teacher_id: uuid.UUID,
+        school_id: uuid.UUID,
+        status_filter: str | None,
+    ) -> list[dict[str, Any]]:
+        """List all assessments across all classes owned by a teacher.
+
+        More efficient than calling list_class_assessments for each class - uses a single
+        query with JOIN to filter by teacher's classes.
+
+        Args:
+            teacher_id: The teacher's ID.
+            school_id: The school to scope to.
+            status_filter: Optional status filter.
+
+        Returns:
+            List of dicts with assessment and class_name.
+        """
+        base_q = (
+            select(Assessment, Class.name.label("class_name"))
+            .join(Class, Class.id == Assessment.class_id)
+            .where(
+                Class.teacher_id == teacher_id,
+                Class.school_id == school_id,
+                Class.is_active.is_(True),
+                Assessment.school_id == school_id,
+            )
+        )
+
+        if status_filter:
+            base_q = base_q.where(Assessment.status == status_filter)
+
+        results = await self.db.execute(base_q.order_by(Assessment.created_at.desc()))
+        rows = results.all()
+
+        return [
+            {
+                "id": row[0].id,
+                "class_id": row[0].class_id,
+                "class_name": row[1],
+                "title": row[0].title,
+                "assessment_type": row[0].assessment_type,
+                "is_system_generated": row[0].is_system_generated,
+                "status": row[0].status,
+                "question_count": row[0].question_count,
+                "created_at": row[0].created_at,
+                "published_at": row[0].published_at,
+                "deadline": row[0].deadline,
+            }
+            for row in rows
+        ]
+
     async def close_assessment(
         self,
         assessment_id: uuid.UUID,
@@ -820,3 +874,110 @@ class AssessmentService:
             teacher_id=str(teacher_id),
         )
         return assessment
+
+    async def get_assessment_results(
+        self,
+        assessment_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        requesting_user_id: uuid.UUID,
+        requesting_user_role: str,
+    ) -> AssessmentResultsSummary:
+        """Return all student attempt summaries for an assessment (class overview).
+
+        Distinct from get_attempt_results (per-student question breakdown). This
+        returns one row per enrolled student, including NOT_STARTED students with
+        null attempt_id and score.
+
+        Multi-tenancy: KAIHLE_ADMIN bypasses school check; all others verified.
+        TEACHER must own the class.
+
+        Args:
+            assessment_id: The assessment to fetch results for.
+            school_id: Requesting user's school_id (None for KAIHLE_ADMIN).
+            requesting_user_id: The requesting user's ID (for teacher ownership check).
+            requesting_user_role: Role string.
+
+        Returns:
+            AssessmentResultsSummary with one StudentAttemptSummary per enrolled student.
+
+        Raises:
+            ValueError: If assessment or class not found.
+            AssessmentAccessDeniedError: If cross-school access or teacher doesn't own class.
+        """
+        # Step 1 — Load assessment
+        assessment = await self.db.get(Assessment, assessment_id)
+        if assessment is None:
+            raise ValueError(f"Assessment {assessment_id} not found")
+
+        # Step 2 — School access guard (CONSTITUTION Rule 3)
+        if requesting_user_role != UserRole.KAIHLE_ADMIN:
+            if assessment.school_id != school_id:
+                raise AssessmentAccessDeniedError()
+
+        # Step 3 — Always fetch class
+        class_ = await self.db.get(Class, assessment.class_id)
+        if class_ is None:
+            raise ValueError(f"Class not found for assessment {assessment_id}")
+
+        # Step 4 — TEACHER must own the class
+        if requesting_user_role == UserRole.TEACHER:
+            if class_.teacher_id != requesting_user_id:
+                raise AssessmentAccessDeniedError()
+
+        # Step 5 — One query: all enrolled students left-joined to their attempt
+        rows = (
+            await self.db.execute(
+                select(
+                    ClassEnrollment.student_id,
+                    User.first_name,
+                    User.last_name,
+                    StudentAttempt.id.label("attempt_id"),
+                    StudentAttempt.overall_score,
+                    StudentAttempt.status,
+                    StudentAttempt.completed_at,
+                )
+                .join(User, User.id == ClassEnrollment.student_id)
+                .outerjoin(
+                    StudentAttempt,
+                    and_(
+                        StudentAttempt.student_id == ClassEnrollment.student_id,
+                        StudentAttempt.assessment_id == assessment_id,
+                    ),
+                )
+                .where(
+                    ClassEnrollment.class_id == assessment.class_id,
+                    ClassEnrollment.is_active.is_(True),
+                )
+                .order_by(StudentAttempt.overall_score.asc().nullsfirst())
+            )
+        ).all()
+
+        attempts = [
+            StudentAttemptSummary(
+                attempt_id=row.attempt_id,
+                student_id=row.student_id,
+                student_name=f"{row.first_name or ''} {row.last_name or ''}".strip() or "Unknown",
+                score=float(row.overall_score) if row.overall_score is not None else None,
+                submitted_at=row.completed_at,
+                status=row.status or "NOT_STARTED",
+            )
+            for row in rows
+        ]
+
+        logger.info(
+            "assessment_results_fetched",
+            assessment_id=str(assessment_id),
+            total_students=len(attempts),
+            submitted_count=sum(1 for a in attempts if a.status == "SUBMITTED"),
+        )
+
+        return AssessmentResultsSummary(
+            assessment_id=assessment.id,
+            assessment_title=assessment.title,
+            assessment_type=assessment.assessment_type,
+            class_id=assessment.class_id,
+            class_name=class_.name,
+            total_students=len(attempts),
+            submitted_count=sum(1 for a in attempts if a.status == "SUBMITTED"),
+            attempts=attempts,
+        )

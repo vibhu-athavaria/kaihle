@@ -32,6 +32,27 @@ class ClassResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ClassWithSummary(BaseModel):
+    """Extended class response with summary data for teacher dashboard."""
+
+    id: uuid.UUID
+    school_id: uuid.UUID
+    grade_id: uuid.UUID
+    subject_id: uuid.UUID
+    curriculum_id: uuid.UUID
+    teacher_id: uuid.UUID
+    name: str
+    academic_year: str
+    is_active: bool
+    grade_name: str = ""
+    subject_name: str = ""
+    avg_mastery: float | None = None
+    student_count: int = 0
+    students_below_threshold: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class EnrollRequest(BaseModel):
     """Schema for enrolling students in a class."""
 
