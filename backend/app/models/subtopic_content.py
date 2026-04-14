@@ -27,7 +27,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, UUIDMixin
+from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
 class ContentType(str):
@@ -43,7 +43,7 @@ class ReviewStatus(str):
     REJECTED = "rejected"
 
 
-class SubtopicContent(Base, UUIDMixin):
+class SubtopicContent(Base, UUIDMixin, TimestampMixin):
     """One row per (subtopic, content_type) — stores video, explanation, practice, or quiz content.
 
     review_status: 'pending' | 'approved' | 'rejected'
