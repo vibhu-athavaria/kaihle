@@ -82,6 +82,7 @@ async def _create_full_setup(
         curriculum_topic_id=curriculum_topic.id,
         name="Algebra Basics",
         canonical_code="ALG-001",
+        learning_objective="Understand basic algebraic concepts and operations",
         sequence_order=1,
         is_active=True,
     )
