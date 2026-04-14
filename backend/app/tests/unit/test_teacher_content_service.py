@@ -1,12 +1,10 @@
 """Unit tests for teacher_content_service."""
 
 import uuid
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from app.services.teacher_content_service import list_all_explanation_content
 
@@ -68,7 +66,6 @@ class TestListAllExplanationContent:
         )
 
         # Assert - verify the class query was called with correct filters
-        call_args = mock_db.execute.call_args_list[0]
         # The select query should have teacher_id and school_id filters
         assert mock_db.execute.called
 
@@ -187,6 +184,5 @@ class TestListAllExplanationContent:
         )
 
         # Assert - verify second query includes status filter
-        second_call = mock_db.execute.call_args_list[1]
         # The where clause should include review_status filter
         assert mock_db.execute.call_count == 2
