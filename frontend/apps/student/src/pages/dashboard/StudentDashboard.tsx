@@ -23,7 +23,7 @@ export function StudentDashboard() {
     isError: isInfoError,
   } = useStudentInfo();
   const { data: classesData, isLoading: isClassesLoading } = useMyClasses();
-  const { data: dashboardData, isLoading: isDashboardLoading } =
+  const { data: dashboardData, isPending: isDashboardLoading } =
     useStudentDashboard();
 
   // Extract student info

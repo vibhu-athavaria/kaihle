@@ -96,7 +96,7 @@ async function fetchStudentInfo(): Promise<StudentInfo> {
 
 interface UseStudentDashboardResult {
   data: DashboardData | undefined;
-  isLoading: boolean;
+  isPending: boolean;
   isError: boolean;
   errMessage: string | undefined;
   refetch: () => Promise<void>;
@@ -143,11 +143,11 @@ export function useStudentDashboard(): UseStudentDashboardResult {
     enabled: !!studentInfoQuery.data?.classId,
   });
 
-  const isLoading =
-    gapMapQuery.isLoading ||
-    studyPlansQuery.isLoading ||
-    assessmentsQuery.isLoading ||
-    studentInfoQuery.isLoading;
+  const isPending =
+    gapMapQuery.isPending ||
+    studyPlansQuery.isPending ||
+    assessmentsQuery.isPending ||
+    studentInfoQuery.isPending;
 
   const isError =
     gapMapQuery.isError ||
@@ -172,7 +172,7 @@ export function useStudentDashboard(): UseStudentDashboardResult {
 
   return {
     data,
-    isLoading,
+    isPending,
     isError,
     errMessage,
     refetch: async () => {
