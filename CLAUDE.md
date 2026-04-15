@@ -14,7 +14,7 @@ Kaihle is an AI-powered learning diagnostics platform for international schools 
 
 @docs/CONSTITUTION.md
 @docs/design/DESIGN_SYSTEM.md
-
+@CLAUDE.local.md
 ---
 
 ## Commands

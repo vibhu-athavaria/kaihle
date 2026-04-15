@@ -78,7 +78,7 @@ export function ClassCard({
       </div>
 
       {/* Meta info */}
-      <div className="ffont-sans text-card-meta text-brand-body mb-">
+      <div className="font-sans text-card-meta text-brand-body mb-2">
         {teacherName}
         {studentCount !== undefined && ` · ${studentCount} students`}
       </div>

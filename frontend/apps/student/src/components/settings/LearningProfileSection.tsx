@@ -81,7 +81,7 @@ export function LearningProfileSection() {
                   </span>
                   <div className="h-2 rounded-full flex-1 bg-gray-100">
                     <div
-                      className={`h-full rounded-full transition-all duration-600 ease-out ${
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${
                         isDominant ? "bg-brand-primary" : "bg-gray-300"
                       }`}
                       style={{ width: `${modality.score * 100}%` }}

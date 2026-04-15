@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { apiClient } from "@kaihle/auth";
-import { useAuth } from "@kaihle/auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { InlineEditName } from "./InlineEditName";
 import { InlineChangePassword } from "./InlineChangePassword";
 import { useStudentInfo } from "../../hooks/useStudentInfo";
 
 export function AccountSection() {
-  useAuth();
   const queryClient = useQueryClient();
   const { data: studentInfo } = useStudentInfo();
   const schoolId = studentInfo?.schoolId;

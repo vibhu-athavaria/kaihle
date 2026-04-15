@@ -46,6 +46,7 @@ export function NextStepCard({
         </div>
       </div>
       <button
+        type="button"
         onClick={onAction}
         className="font-sans font-bold text-step-action text-brand-primary whitespace-nowrap hover:underline min-h-[44px] flex items-center ml-3 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
       >
