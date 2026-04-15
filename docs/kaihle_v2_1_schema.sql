@@ -879,6 +879,161 @@ CREATE INDEX idx_gap_states_student_class ON gap_states (student_id, class_id);
 CREATE INDEX idx_gap_states_mastery       ON gap_states (mastery_score);
 
 -- =============================================================================
+
+-- =============================================================================
+-- SECTION: CONTENT LAYER (subtopic_content, interest_categories)
+-- Replaces deprecated curriculum_chunks PDF RAG approach.
+-- No pgvector, no embeddings — structured SQL retrieval only.
+-- =============================================================================
+
+CREATE TABLE interest_categories (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name            TEXT        NOT NULL UNIQUE,
+    description     TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_interest_categories_name ON interest_categories (name);
+
+COMMENT ON TABLE interest_categories IS
+    'Lookup table for content personalisation tags.
+     Seeded by KaihleAdmin. Referenced by subtopic_content.interest_category_id.
+     Values are human-readable labels e.g. "sport", "technology", "arts".
+     Distinct from student_learning_profiles.interests TEXT[] which are student free-text tags.';
+
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE subtopic_content (
+    id                              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    subtopic_id                     UUID        NOT NULL REFERENCES subtopics (id) ON DELETE CASCADE,
+    content_type                    VARCHAR(20) NOT NULL,
+    -- 'video' | 'explanation' | 'practice' | 'quiz'
+
+    -- Video fields (content_type = 'video')
+    video_url                       TEXT,
+    video_provider                  TEXT,
+    video_duration_seconds          INT,
+    video_thumbnail_url             TEXT,
+    videos                          JSONB,
+    -- Array of video candidates: [{url, title, channel, view_count, status, last_checked_at}]
+
+    -- Explanation fields (content_type = 'explanation')
+    explanation_text                TEXT,
+
+    -- Practice / quiz fields (content_type = 'practice' | 'quiz')
+    quiz_questions                  JSONB,
+    -- [{question_id, question_text, options, correct_answer, explanation}]
+    quiz_questions_count            INT,
+
+    -- Teacher-authored explanation (overrides explanation_text when present)
+    teacher_explanation             TEXT,
+    teacher_explanation_author_id   UUID REFERENCES users (id) ON DELETE SET NULL,
+
+    -- Personalisation
+    interest_category_id            UUID REFERENCES interest_categories (id) ON DELETE SET NULL,
+    applicable_tiers                INT[] NOT NULL DEFAULT '{1,2,3}',
+
+    -- Review workflow (KaihleAdmin approves videos; teacher approves explanations)
+    review_status                   VARCHAR(20) NOT NULL DEFAULT 'pending',
+    -- 'pending' | 'approved' | 'rejected'
+    reviewed_at                     TIMESTAMPTZ,
+    reviewed_by_id                  UUID REFERENCES users (id) ON DELETE SET NULL,
+    rejection_reason                TEXT,
+
+    -- Status flags
+    is_active                       BOOLEAN NOT NULL DEFAULT TRUE,
+    is_stale                        BOOLEAN NOT NULL DEFAULT FALSE,
+    is_archived                     BOOLEAN NOT NULL DEFAULT FALSE,
+
+    created_at                      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                      TIMESTAMPTZ
+);
+
+CREATE INDEX idx_subtopic_content_subtopic    ON subtopic_content (subtopic_id);
+CREATE INDEX idx_subtopic_content_type        ON subtopic_content (content_type);
+CREATE INDEX idx_subtopic_content_review      ON subtopic_content (review_status);
+CREATE INDEX idx_subtopic_content_active      ON subtopic_content (is_active);
+CREATE INDEX idx_subtopic_content_interest    ON subtopic_content (interest_category_id);
+
+COMMENT ON TABLE subtopic_content IS
+    'One row per (subtopic, content_type) combination — curriculum layer, no school_id.
+     Replaces curriculum_chunks PDF/RAG approach.
+     content_type values: video | explanation | practice | quiz.
+     review_status workflow: pending → approved | rejected.
+     KaihleAdmin reviews video content. Teachers review explanation content.
+     applicable_tiers: [1,2,3] means content applies to all student tiers.';
+
+-- =============================================================================
+-- SECTION: STUDENT LESSON PACKS
+-- Generated collections of content for individual students.
+-- school_id present (tenant-scoped).
+-- =============================================================================
+
+CREATE TYPE pack_type_enum    AS ENUM ('quiz', 'video', 'explanation', 'mixed');
+CREATE TYPE pack_status_enum  AS ENUM ('generated', 'sent', 'in_progress', 'completed', 'expired');
+
+CREATE TABLE student_lesson_packs (
+    id                          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id                  UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    school_id                   UUID        NOT NULL REFERENCES schools (id) ON DELETE CASCADE,
+    content_ids                 UUID[]      NOT NULL,
+    -- Array of subtopic_content.id references
+    subtopic_ids                UUID[]      NOT NULL,
+    -- Denormalised for fast lookup
+    title                       TEXT        NOT NULL,
+    pack_type                   pack_type_enum NOT NULL DEFAULT 'mixed',
+    target_tier                 INT         NOT NULL,
+    mastery_score               NUMERIC(5,4),
+    status                      pack_status_enum NOT NULL DEFAULT 'generated',
+    generated_by_teacher_id     UUID,
+    expires_at                  TIMESTAMPTZ,
+    sent_at                     TIMESTAMPTZ,
+    started_at                  TIMESTAMPTZ,
+    completed_at                TIMESTAMPTZ,
+    is_archived                 BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_slp_student    ON student_lesson_packs (student_id);
+CREATE INDEX idx_slp_school     ON student_lesson_packs (school_id);
+CREATE INDEX idx_slp_status     ON student_lesson_packs (status);
+CREATE INDEX idx_slp_expires    ON student_lesson_packs (expires_at);
+CREATE INDEX idx_slp_archived   ON student_lesson_packs (is_archived);
+
+COMMENT ON TABLE student_lesson_packs IS
+    'Generated content packs for individual students.
+     content_ids: array of subtopic_content.id — the actual content to deliver.
+     subtopic_ids: denormalised for fast gap-map correlation.
+     pack_type: quiz | video | explanation | mixed.
+     target_tier: 1 | 2 | 3 — determines which subtopic_content rows are eligible.
+     status lifecycle: generated → sent → in_progress → completed | expired.';
+
+-- =============================================================================
+-- SECTION: ASSESSMENT SCORING DETAIL
+-- Per-attempt, per-subtopic scores for recency-weighted mastery calculation.
+-- =============================================================================
+
+CREATE TABLE student_attempt_subtopic_scores (
+    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id      UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    subtopic_id     UUID        NOT NULL REFERENCES subtopics (id) ON DELETE CASCADE,
+    attempt_id      UUID        NOT NULL REFERENCES student_attempts (id) ON DELETE CASCADE,
+    score           FLOAT       NOT NULL,
+    -- Per-subtopic fraction correct for this attempt: correct / total for subtopic
+    attempted_at    TIMESTAMPTZ NOT NULL,
+    CONSTRAINT uq_sats_student_subtopic_attempt UNIQUE (student_id, subtopic_id, attempt_id),
+    CONSTRAINT chk_sats_score CHECK (score BETWEEN 0.0 AND 1.0)
+);
+
+CREATE INDEX idx_subtopic_scores_student_sub ON student_attempt_subtopic_scores (student_id, subtopic_id);
+
+COMMENT ON TABLE student_attempt_subtopic_scores IS
+    'Inserted by calculate_gap_states Celery task after each COMPLETED attempt.
+     Stores per-subtopic score for that attempt (correct / total for that subtopic).
+     Used to compute recency-weighted mastery in subsequent gap state calculations.
+     Distinct from gap_states which holds the rolling aggregate.';
+
 -- SECTION 6: STUDY PLANS
 -- =============================================================================
 
