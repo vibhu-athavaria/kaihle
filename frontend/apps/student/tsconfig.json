@@ -18,6 +18,7 @@
     "src/hooks/__tests__",
     "src/pages/__tests__",
     "src/pages/**/__tests__",
-    "src/components/__tests__"
+    "src/components/__tests__",
+    "src/store/__tests__"
   ]
 }

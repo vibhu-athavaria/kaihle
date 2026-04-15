@@ -27,11 +27,8 @@ export const QUESTION_KEYS: QuestionKey[] = [
 
 interface QuestionnaireState {
   answers: QuestionnaireAnswers;
-  currentStep: number;
   setAnswer: (question: QuestionKey, value: string) => void;
   toggleInterest: (interest: string) => void;
-  nextStep: () => void;
-  prevStep: () => void;
   reset: () => void;
 }
 
@@ -46,7 +43,6 @@ const initialAnswers: QuestionnaireAnswers = {
 
 export const useQuestionnaireStore = create<QuestionnaireState>((set) => ({
   answers: { ...initialAnswers },
-  currentStep: 1,
   setAnswer: (question, value) =>
     set((state) => ({
       answers: { ...state.answers, [question]: value },
@@ -59,9 +55,5 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set) => ({
         : [...current, interest];
       return { answers: { ...state.answers, interests: updated } };
     }),
-  nextStep: () =>
-    set((state) => ({ currentStep: Math.min(state.currentStep + 1, 6) })),
-  prevStep: () =>
-    set((state) => ({ currentStep: Math.max(state.currentStep - 1, 1) })),
-  reset: () => set({ answers: { ...initialAnswers }, currentStep: 1 }),
+  reset: () => set({ answers: { ...initialAnswers } }),
 }));
