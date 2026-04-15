@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import {
-  useSubjectGapMap,
-  aggregateSubjectMastery,
-} from "../../hooks/useSubjectScores";
+import { useStudentGapMap } from "../../hooks/useStudentGapMap";
+import { aggregateSubjectMastery } from "../../hooks/useSubjectScores";
 import { SubjectScoreCard } from "./SubjectScoreCard";
 
 export interface SubjectEntry {
@@ -34,7 +32,7 @@ function SingleSubjectCardWithCallback({
   subject,
   onResolved,
 }: SingleSubjectCardWithCallbackProps) {
-  const { data, isLoading } = useSubjectGapMap(subject.subjectId);
+  const { data, isLoading } = useStudentGapMap(subject.subjectId);
   const avgMastery = aggregateSubjectMastery(data);
 
   // Report score when loading completes
