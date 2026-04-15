@@ -147,10 +147,10 @@ export function MyProgress() {
                 ))}
               </div>
             ) : topics.length === 0 ? (
-              <div className="bg-white rounded-xl border border-brand-border p-8 text-center">
-                <p className="text-brand-muted">
-                  Complete more assessments to see your progress in{" "}
-                  {selectedSubject?.subjectName}.
+              <div className="bg-brand-amber-light border border-brand-amber/30 rounded-xl p-4 mt-6">
+                <p className="font-sans text-sm text-brand-amber">
+                  Take your first assessment to start seeing topic-by-topic
+                  progress here.
                 </p>
               </div>
             ) : (
@@ -167,16 +167,6 @@ export function MyProgress() {
                       defaultExpanded={false}
                     />
                   ))}
-                </div>
-
-                <div className="bg-brand-amber-light border border-brand-amber/30 rounded-xl p-4 mt-6">
-                  <h3 className="font-sans font-semibold text-brand-amber mb-1">
-                    Suggested next steps
-                  </h3>
-                  <p className="font-sans text-sm text-brand-amber/80">
-                    Complete more assessments to see personalized
-                    recommendations
-                  </p>
                 </div>
               </div>
             )}
