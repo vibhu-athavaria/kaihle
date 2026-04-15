@@ -29,6 +29,7 @@ TASK_MODEL_MAP: dict[str, str] = {
     "question_generation": settings.llm_question_generation_model,
     "student_pack": settings.llm_student_pack_model,
     "embeddings": settings.llm_embeddings_model,
+    "concept_guide": settings.llm_concept_guide_model,
 }
 
 TASK_API_BASE_MAP: dict[str, str | None] = {
@@ -38,6 +39,7 @@ TASK_API_BASE_MAP: dict[str, str | None] = {
     "question_generation": settings.llm_question_generation_api_base,
     "student_pack": settings.llm_student_pack_api_base,
     "embeddings": settings.llm_embeddings_api_base,
+    "concept_guide": settings.llm_concept_guide_api_base,
 }
 
 

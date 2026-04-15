@@ -80,6 +80,7 @@ export function TopicSection({
           {subtopics.map((subtopic) => (
             <SubtopicScoreRow
               key={subtopic.subtopicId}
+              subtopicId={subtopic.subtopicId}
               subtopicName={subtopic.subtopicName}
               masteryScore={subtopic.masteryScore}
               lastAssessedAt={subtopic.lastAssessedAt}
