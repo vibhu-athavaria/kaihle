@@ -6,7 +6,7 @@ import {
   BarChart2,
   BookOpen,
   ClipboardList,
-  Lock,
+  ChevronRight,
   LogOut,
 } from "lucide-react";
 
@@ -175,16 +175,15 @@ export function StudentLayout({
                   <Link
                     key={cls.id}
                     to={route}
-                    className={[
+                    aria-label={isLocked ? `${cls.name} — tap to begin your diagnostic` : cls.name}
+                  className={[
                       "flex items-center gap-2 mx-1.5 px-3 py-7px rounded-nav",
                       "font-sans text-sidebar-nav transition-colors",
-                      isLocked
-                        ? "text-brand-gold hover:bg-role-student-nav-locked-hover"
-                        : "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
+                      "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
                     ].join(" ")}
                   >
                     {isLocked ? (
-                      <Lock
+                      <ChevronRight
                         className="w-[11px] h-[11px] flex-shrink-0"
                         aria-hidden="true"
                       />

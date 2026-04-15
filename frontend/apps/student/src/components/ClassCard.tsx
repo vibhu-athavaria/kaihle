@@ -1,5 +1,4 @@
 import { useNavigate } from "react-router-dom";
-import { Lock } from "lucide-react";
 
 export type DiagnosticStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED";
 
@@ -62,9 +61,8 @@ export function ClassCard({
     <button
       type="button"
       onClick={handleClick}
-      className={`w-full text-left bg-white rounded-card border border-role-student-border p-3 shadow-card transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[44px] ${
-        isLocked ? "opacity-60" : ""
-      }`}
+      className="w-full text-left bg-white rounded-card border border-role-student-border p-3 shadow-card transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[44px]"
+      aria-label={isLocked ? `${subjectName} — tap to begin your diagnostic` : `${subjectName} — open class`}
     >
       {/* Header with dot and class/subject name */}
       <div className="flex items-center gap-1.5 mb-1">
@@ -90,10 +88,7 @@ export function ClassCard({
         }`}
       >
         {isLocked ? (
-          <span className="flex items-center gap-1">
-            <Lock className="w-3 h-3" aria-hidden="true" />
-            Start diagnostic →
-          </span>
+          <span>Begin {subjectName} →</span>
         ) : (
           <span>View class →</span>
         )}
