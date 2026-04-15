@@ -29,6 +29,10 @@ export function Assessments() {
     }),
   );
 
+  // Assessments are per-class; without a selected class we show an informational empty state.
+  // Full multi-class assessment list is a future milestone feature.
+  const hasClasses = sidebarClasses.length > 0;
+
   return (
     <StudentLayout
       activeNav="assessments"
@@ -42,9 +46,29 @@ export function Assessments() {
         <h1 className="font-display font-bold text-2xl text-brand-ink">
           Assessments
         </h1>
-        <p className="text-brand-muted">
-          Your assessments will appear here once your teacher assigns them.
-        </p>
+
+        {!hasClasses ? (
+          <div className="bg-white rounded-xl border border-brand-border p-12 text-center">
+            <div className="text-4xl mb-4">📝</div>
+            <h3 className="font-display font-bold text-xl text-brand-ink mb-2">
+              No classes yet
+            </h3>
+            <p className="font-sans text-sm text-brand-body max-w-sm mx-auto">
+              You will see your assessments once you are enrolled in a class.
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-brand-border p-12 text-center">
+            <div className="text-4xl mb-4">✅</div>
+            <h3 className="font-display font-bold text-xl text-brand-ink mb-2">
+              No active assessments
+            </h3>
+            <p className="font-sans text-sm text-brand-body max-w-sm mx-auto">
+              Your teacher will assign assessments here. Complete your class
+              diagnostics first to unlock class content.
+            </p>
+          </div>
+        )}
       </div>
     </StudentLayout>
   );
