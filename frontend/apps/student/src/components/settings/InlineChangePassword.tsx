@@ -85,7 +85,7 @@ export function InlineChangePassword({
   return (
     <form
       onSubmit={handleSubmit}
-      className="px-6 pb-4 pt-1 bg-gray-50/50 border-b border-gray-100"
+      className="px-6 pb-4 pt-1 bg-brand-border-soft/50 border-b border-brand-border-soft"
     >
       <div className="space-y-3">
         {/* Current Password */}
@@ -96,14 +96,14 @@ export function InlineChangePassword({
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               placeholder="Current password"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+              className="w-full rounded-lg border border-brand-border px-3 py-2 pr-10 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
               disabled={isLoading}
               aria-label="Current password"
             />
             <button
               type="button"
               onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-body"
               aria-label={
                 showCurrentPassword
                   ? "Hide current password"
@@ -165,14 +165,14 @@ export function InlineChangePassword({
                 validateNewPassword(e.target.value);
               }}
               placeholder="New password"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+              className="w-full rounded-lg border border-brand-border px-3 py-2 pr-10 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
               disabled={isLoading}
               aria-label="New password"
             />
             <button
               type="button"
               onClick={() => setShowNewPassword(!showNewPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-body"
               aria-label={
                 showNewPassword ? "Hide new password" : "Show new password"
               }
@@ -231,14 +231,14 @@ export function InlineChangePassword({
               }}
               onBlur={() => validateConfirmPassword(confirmPassword)}
               placeholder="Confirm new password"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+              className="w-full rounded-lg border border-brand-border px-3 py-2 pr-10 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
               disabled={isLoading}
               aria-label="Confirm new password"
             />
             <button
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-body"
               aria-label={
                 showConfirmPassword
                   ? "Hide confirm password"
@@ -307,7 +307,7 @@ export function InlineChangePassword({
           type="button"
           onClick={onCancel}
           disabled={isLoading}
-          className="border border-gray-200 text-gray-600 rounded-lg px-4 py-2 text-sm disabled:opacity-60 min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+          className="border border-brand-border text-brand-body rounded-lg px-4 py-2 text-sm disabled:opacity-60 min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
         >
           Cancel
         </button>

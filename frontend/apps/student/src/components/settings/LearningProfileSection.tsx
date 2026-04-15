@@ -50,18 +50,18 @@ export function LearningProfileSection() {
   const dominantModality = getDominantModality();
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
-      <h2 className="font-fraunces text-base text-brand-ink px-6 pt-5 pb-3 border-b border-gray-50">
+    <div className="bg-white rounded-2xl border border-brand-border-soft shadow-sm">
+      <h2 className="font-display text-base text-brand-ink px-6 pt-5 pb-3 border-b border-brand-border-soft">
         Learning profile
       </h2>
 
       {isLoading ? (
         <div className="px-6 py-4 space-y-3">
           <div className="animate-pulse space-y-2">
-            <div className="h-4 bg-gray-200 rounded w-3/4" />
-            <div className="h-4 bg-gray-200 rounded w-1/2" />
-            <div className="h-4 bg-gray-200 rounded w-2/3" />
-            <div className="h-4 bg-gray-200 rounded w-1/3" />
+            <div className="h-4 bg-brand-border rounded w-3/4" />
+            <div className="h-4 bg-brand-border rounded w-1/2" />
+            <div className="h-4 bg-brand-border rounded w-2/3" />
+            <div className="h-4 bg-brand-border rounded w-1/3" />
           </div>
         </div>
       ) : (
@@ -76,13 +76,13 @@ export function LearningProfileSection() {
                   key={modality.modality}
                   className="flex items-center gap-3 py-2"
                 >
-                  <span className="text-sm text-gray-700 w-36 font-nunito">
+                  <span className="font-sans text-sm text-brand-ink w-36">
                     {modality.modality}
                   </span>
-                  <div className="h-2 rounded-full flex-1 bg-gray-100">
+                  <div className="h-2 rounded-full flex-1 bg-brand-border-soft">
                     <div
-                      className={`h-full rounded-full transition-all duration-600 ease-out ${
-                        isDominant ? "bg-brand-primary" : "bg-gray-300"
+                      className={`h-full rounded-full transition-all duration-500 ease-out ${
+                        isDominant ? "bg-brand-primary" : "bg-brand-border"
                       }`}
                       style={{ width: `${modality.score * 100}%` }}
                       role="progressbar"
@@ -92,7 +92,7 @@ export function LearningProfileSection() {
                       aria-label={`${modality.modality} score`}
                     />
                   </div>
-                  <span className="text-sm text-gray-500 w-10 text-right">
+                  <span className="font-sans text-sm text-brand-body w-10 text-right">
                     {Math.round(modality.score * 100)}%
                   </span>
                 </div>
@@ -119,7 +119,7 @@ export function LearningProfileSection() {
           {/* Completed date */}
           {profile?.completed_at && (
             <div className="px-6 pb-4">
-              <span className="text-xs text-gray-400">
+              <span className="font-sans text-xs text-brand-muted">
                 Completed {formatDate(profile.completed_at)}
               </span>
             </div>
@@ -134,7 +134,7 @@ export function LearningProfileSection() {
             >
               Retake questionnaire
             </button>
-            <p className="text-xs text-gray-400 mt-2 text-center">
+            <p className="font-sans text-xs text-brand-muted mt-2 text-center">
               Retaking updates how your study plans and lesson activities are
               personalised for you. Takes about 5 minutes.
             </p>
