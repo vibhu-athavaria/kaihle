@@ -33,10 +33,10 @@ test.describe("Per-Class Diagnostic Gate", () => {
     // Look for class cards section
     const myClassesHeading = page.getByText(/My Classes/i);
     if (await myClassesHeading.isVisible()) {
-      // Should see locked indicator on class cards with incomplete diagnostics
-      const lockIcon = page.locator('[aria-label="Locked"]');
-      const lockedCards = await lockIcon.count();
-      expect(lockedCards).toBeGreaterThan(0);
+      // Should see locked class cards (aria-label contains "diagnostic required to unlock")
+      const lockedCards = page.locator('[aria-label*="diagnostic required to unlock"]');
+      const lockedCount = await lockedCards.count();
+      expect(lockedCount).toBeGreaterThan(0);
     }
   });
 
@@ -50,9 +50,8 @@ test.describe("Per-Class Diagnostic Gate", () => {
     await page.waitForLoadState("networkidle");
 
     // Look for a locked class card and click it
-    const lockedCard = page.getByText(/Complete diagnostic to unlock/i);
+    const lockedCard = page.locator('[aria-label*="diagnostic required to unlock"]').first();
     if (await lockedCard.isVisible()) {
-      // Click the parent card that contains this text
       await lockedCard.click();
 
       // Should navigate to diagnostic page, not topics
@@ -70,10 +69,7 @@ test.describe("Per-Class Diagnostic Gate", () => {
     await expect(page).toHaveURL(/\/student\/dashboard/);
     await page.waitForLoadState("networkidle");
 
-    // Look for unlocked class cards (no lock icon)
-    // This test assumes some diagnostics may already be complete
-    const lockIcon = page.locator('[aria-label="Locked"]');
-    // We just verify the page loaded with class cards
+    // Verify the page loaded with class cards section
     const myClassesHeading = page.getByText(/My Classes/i);
     await expect(myClassesHeading).toBeVisible();
   });
