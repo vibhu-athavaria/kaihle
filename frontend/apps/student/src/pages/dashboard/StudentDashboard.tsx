@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { StudentLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
 import { ClassCard, ClassCardSkeleton } from "../../components/ClassCard";
@@ -39,10 +39,13 @@ export function StudentDashboard() {
     ResolvedSubjectScore[]
   >([]);
 
-  // Handler for subject scores resolved from SubjectScoresSection
-  const handleScoresResolved = (scores: ResolvedSubjectScore[]) => {
+  // Handler for subject scores resolved from SubjectScoresSection.
+  // Wrapped in useCallback for stable reference — without this, every render
+  // creates a new function → triggers the useEffect in SubjectScoresSection
+  // on every render → sets state → re-render → repeat (ST-007).
+  const handleScoresResolved = useCallback((scores: ResolvedSubjectScore[]) => {
     setResolvedSubjectScores(scores);
-  };
+  }, []);
 
   if (isInfoError) {
     return (
