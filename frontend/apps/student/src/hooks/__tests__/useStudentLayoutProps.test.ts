@@ -1,0 +1,135 @@
+/**
+ * @jest-environment jsdom
+ */
+import { renderHook } from "@testing-library/react";
+import { useStudentLayoutProps } from "../useStudentLayoutProps";
+
+// Mock dependencies
+jest.mock("@kaihle/auth", () => ({
+  useAuth: jest.fn(() => ({ logout: jest.fn() })),
+  apiClient: {
+    get: jest.fn(),
+  },
+}));
+
+jest.mock("../useStudentInfo", () => ({
+  useStudentInfo: jest.fn(),
+}));
+
+jest.mock("../useMyClasses", () => ({
+  useMyClasses: jest.fn(),
+}));
+
+import { useAuth } from "@kaihle/auth";
+import { useStudentInfo } from "../useStudentInfo";
+import { useMyClasses } from "../useMyClasses";
+
+const mockUseAuth = useAuth as jest.Mock;
+const mockUseStudentInfo = useStudentInfo as jest.Mock;
+const mockUseMyClasses = useMyClasses as jest.Mock;
+
+describe("useStudentLayoutProps", () => {
+  const mockLogout = jest.fn();
+
+  beforeEach(() => {
+    mockUseAuth.mockReturnValue({ logout: mockLogout });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("test_useStudentLayoutProps_when_data_loaded_then_returns_formatted_student_name", () => {
+    mockUseStudentInfo.mockReturnValue({
+      data: {
+        firstName: "Jane",
+        lastName: "Doe",
+        gradeName: "Grade 9",
+        curriculumName: "Cambridge IGCSE",
+      },
+      isLoading: false,
+    });
+    mockUseMyClasses.mockReturnValue({ data: [], isLoading: false });
+
+    const { result } = renderHook(() => useStudentLayoutProps());
+
+    expect(result.current.studentName).toBe("Jane Doe");
+  });
+
+  it("test_useStudentLayoutProps_when_no_student_data_then_falls_back_to_student_string", () => {
+    mockUseStudentInfo.mockReturnValue({ data: undefined, isLoading: false });
+    mockUseMyClasses.mockReturnValue({ data: [], isLoading: false });
+
+    const { result } = renderHook(() => useStudentLayoutProps());
+
+    expect(result.current.studentName).toBe("Student");
+  });
+
+  it("test_useStudentLayoutProps_when_classes_loaded_then_maps_to_sidebar_shape", () => {
+    mockUseStudentInfo.mockReturnValue({
+      data: {
+        firstName: "Jane",
+        lastName: "Doe",
+        gradeName: "Grade 9",
+        curriculumName: "Cambridge IGCSE",
+      },
+      isLoading: false,
+    });
+    mockUseMyClasses.mockReturnValue({
+      data: [
+        {
+          id: "cls-1",
+          name: "Mathematics 9B",
+          subjectName: "Mathematics",
+          subjectId: "subj-1",
+          onboardingDiagnosticStatus: "COMPLETED",
+          diagnosticAttemptId: "attempt-1",
+          gradeName: "Grade 9",
+          teacherName: "Ms. Smith",
+          curriculumId: "curr-1",
+          academicYear: "2026",
+          isActive: true,
+        },
+      ],
+      isLoading: false,
+    });
+
+    const { result } = renderHook(() => useStudentLayoutProps());
+
+    expect(result.current.sidebarClasses).toHaveLength(1);
+    expect(result.current.sidebarClasses[0]).toEqual({
+      id: "cls-1",
+      name: "Mathematics 9B",
+      subjectName: "Mathematics",
+      subjectId: "subj-1",
+      diagnosticStatus: "COMPLETED",
+      diagnosticAttemptId: "attempt-1",
+    });
+  });
+
+  it("test_useStudentLayoutProps_when_either_loading_then_isLoading_is_true", () => {
+    mockUseStudentInfo.mockReturnValue({ data: undefined, isLoading: true });
+    mockUseMyClasses.mockReturnValue({ data: undefined, isLoading: false });
+
+    const { result } = renderHook(() => useStudentLayoutProps());
+
+    expect(result.current.isLoading).toBe(true);
+  });
+
+  it("test_useStudentLayoutProps_when_both_loaded_then_isLoading_is_false", () => {
+    mockUseStudentInfo.mockReturnValue({
+      data: {
+        firstName: "Jane",
+        lastName: "Doe",
+        gradeName: "Grade 9",
+        curriculumName: "Cambridge IGCSE",
+      },
+      isLoading: false,
+    });
+    mockUseMyClasses.mockReturnValue({ data: [], isLoading: false });
+
+    const { result } = renderHook(() => useStudentLayoutProps());
+
+    expect(result.current.isLoading).toBe(false);
+  });
+});
