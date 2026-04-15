@@ -42,7 +42,7 @@ export function StudentSettings() {
       onLogout={logout}
     >
       <div className="max-w-xl mx-auto px-4 py-8">
-        <h1 className="font-display text-2xl text-brand-ink mb-6">Settings</h1>
+        <h1 className="font-display font-bold text-2xl text-brand-ink mb-6">Settings</h1>
         <div className="space-y-4">
           <AccountSection />
           <LearningProfileSection />

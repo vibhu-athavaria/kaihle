@@ -30,7 +30,7 @@ export function InlineEditName({
   return (
     <form
       onSubmit={handleSubmit}
-      className="px-6 pb-4 pt-1 bg-gray-50/50 border-b border-gray-100"
+      className="px-6 pb-4 pt-1 bg-brand-border-soft/50 border-b border-brand-border-soft"
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
@@ -39,7 +39,7 @@ export function InlineEditName({
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
             placeholder="First name"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+            className="w-full rounded-lg border border-brand-border px-3 py-2 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
             disabled={isLoading}
             aria-label="First name"
           />
@@ -50,7 +50,7 @@ export function InlineEditName({
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
             placeholder="Last name"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+            className="w-full rounded-lg border border-brand-border px-3 py-2 text-sm transition-colors focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
             disabled={isLoading}
             aria-label="Last name"
           />
@@ -76,7 +76,7 @@ export function InlineEditName({
           type="button"
           onClick={onCancel}
           disabled={isLoading}
-          className="border border-gray-200 text-gray-600 rounded-lg px-4 py-2 text-sm disabled:opacity-60 min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+          className="border border-brand-border text-brand-body rounded-lg px-4 py-2 text-sm disabled:opacity-60 min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
         >
           Cancel
         </button>
