@@ -1,5 +1,5 @@
 /**
- * Mock for @kaihle/auth apiClient for testing.
+ * Mock for @kaihle/auth apiClient and useAuth for testing.
  */
 
 export const apiClient = {
@@ -9,5 +9,10 @@ export const apiClient = {
   delete: jest.fn(),
   patch: jest.fn(),
 };
+
+export const useAuth = jest.fn(() => ({
+  user: { id: "test-user-id", role: "STUDENT" },
+  logout: jest.fn(),
+}));
 
 export default apiClient;

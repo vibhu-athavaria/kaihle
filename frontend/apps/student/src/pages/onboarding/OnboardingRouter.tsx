@@ -16,9 +16,9 @@ import { useOnboardingStatus } from "../../hooks/useOnboardingStatus";
  * They will see locked class cards for classes where diagnostic is not yet complete.
  */
 export function OnboardingRouter() {
-  const { status, isLoading } = useOnboardingStatus();
+  const { data: status, isPending } = useOnboardingStatus();
 
-  if (isLoading || !status) {
+  if (isPending || !status) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary" />
