@@ -37,8 +37,7 @@ export function ProfileQuestionnaire() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { answers, setAnswer, toggleInterest, nextStep, prevStep } =
-    useQuestionnaireStore();
+  const { answers, setAnswer, toggleInterest } = useQuestionnaireStore();
 
   // Fetch questionnaire from API
   useEffect(() => {
@@ -58,7 +57,7 @@ export function ProfileQuestionnaire() {
     fetchQuestionnaire();
   }, []);
 
-  const totalQuestions = questionnaire?.questions.length ?? 6;
+  const totalQuestions = questionnaire?.questions.length ?? 0;
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -230,7 +229,6 @@ export function ProfileQuestionnaire() {
           <Button
             variant="secondary"
             onClick={() => {
-              prevStep();
               setCurrentStep((s) => Math.max(1, s - 1));
             }}
             disabled={currentStep === 1}
@@ -250,7 +248,6 @@ export function ProfileQuestionnaire() {
           ) : (
             <Button
               onClick={() => {
-                nextStep();
                 setCurrentStep((s) => Math.min(totalQuestions, s + 1));
               }}
               disabled={!canProceed()}
