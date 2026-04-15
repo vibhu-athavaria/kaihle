@@ -218,15 +218,7 @@ export function TakeAssessmentPage() {
   }, []);
 
   // ── Submit flow ──────────────────────────────────────────────
-  const handleSubmitRequest = useCallback(() => {
-    const unanswered = totalQuestions - answeredCount;
-    if (unanswered > 0) {
-      setShowSubmitModal(true);
-    } else {
-      void doSubmit();
-    }
-  }, [answeredCount, totalQuestions]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  // doSubmit is declared FIRST so handleSubmitRequest can list it as a dep
   const doSubmit = useCallback(async () => {
     setShowSubmitModal(false);
     setIsSubmitting(true);
@@ -247,6 +239,15 @@ export function TakeAssessmentPage() {
       // Let user try again — don't crash the page
     }
   }, [answers, attemptId, navigate, submitAttemptMutation]);
+
+  const handleSubmitRequest = useCallback(() => {
+    const unanswered = totalQuestions - answeredCount;
+    if (unanswered > 0) {
+      setShowSubmitModal(true);
+    } else {
+      void doSubmit();
+    }
+  }, [answeredCount, totalQuestions, doSubmit]);
 
   // ── Back button ──────────────────────────────────────────────
   const handleBackArrow = useCallback(() => {
