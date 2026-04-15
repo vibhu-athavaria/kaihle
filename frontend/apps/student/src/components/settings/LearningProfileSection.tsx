@@ -100,6 +100,14 @@ export function LearningProfileSection() {
             })}
           </div>
 
+          {/* Profile impact explainer */}
+          <div className="px-6 pb-4">
+            <p className="font-sans text-xs text-brand-muted">
+              Kaihle uses your learning profile to personalise how the AI
+              Concept Guide explains topics to you.
+            </p>
+          </div>
+
           {/* Interests */}
           {profile?.interests && profile.interests.length > 0 && (
             <div className="px-6 pb-4">
