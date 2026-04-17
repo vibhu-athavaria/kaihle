@@ -37,7 +37,9 @@ export function SubtopicScoreRow({
       <div className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-brand-surface transition-colors">
         <div className="flex items-center gap-3">
           <div className={`w-2.5 h-2.5 rounded-full ${dotClass}`} />
-          <span className="font-sans text-sm text-brand-ink">{subtopicName}</span>
+          <span className="font-sans text-sm text-brand-ink">
+            {subtopicName}
+          </span>
         </div>
         <div className="flex items-center gap-4">
           {showExplainButton && (

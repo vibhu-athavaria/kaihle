@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+cd frontend
+
+# Run Prettier check
+pnpm exec prettier --check "**/*.{ts,tsx,json,css}" --ignore-path=".prettierignore"
+
+# Run TypeScript type checks for all apps
+pnpm --filter parent exec tsc --noEmit
+pnpm --filter student exec tsc --noEmit
+pnpm --filter teacher exec tsc --noEmit
+pnpm --filter @kaihle/school-admin exec tsc --noEmit
+pnpm --filter @kaihle/kaihle-admin exec tsc --noEmit

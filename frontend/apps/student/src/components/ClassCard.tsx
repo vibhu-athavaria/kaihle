@@ -49,7 +49,7 @@ export function ClassCard({
 
   // Determine dot color class based on status
   const getDotColorClass = () => {
-    if (isLocked) return "bg-brand-gold"; // amber for locked
+    if (isLocked) return "bg-brand-muted"; // amber for locked
     if (isCompleted) return "bg-brand-primary"; // green for completed
     return "bg-brand-primary"; // default
   };
@@ -62,7 +62,11 @@ export function ClassCard({
       type="button"
       onClick={handleClick}
       className="w-full text-left bg-white rounded-card border border-role-student-border p-3 shadow-card transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[44px]"
-      aria-label={isLocked ? `${subjectName} — tap to begin your diagnostic` : `${subjectName} — open class`}
+      aria-label={
+        isLocked
+          ? `${subjectName} — tap to begin your diagnostic`
+          : `${subjectName} — open class`
+      }
     >
       {/* Header with dot and class/subject name */}
       <div className="flex items-center gap-1.5 mb-1">

@@ -74,7 +74,9 @@ export function AccountSection() {
           <div className="font-sans text-sm font-medium text-brand-ink">
             Name
           </div>
-          <div className="font-sans text-sm text-brand-muted">{displayName}</div>
+          <div className="font-sans text-sm text-brand-muted">
+            {displayName}
+          </div>
         </div>
         {!editingName && (
           <button

@@ -94,8 +94,11 @@ export function StudentLayout({
         aria-label="Sidebar"
       >
         {/* Logo row — h-[50px] must match topnav height */}
-        <div className="h-[50px] flex items-center px-4 border-b border-role-student-border flex-shrink-0">
-          <span className="font-display italic font-semibold text-sidebar-logo text-brand-ink">
+        <div className="h-14 flex items-center px-4 border-b border-role-student-border flex-shrink-0">
+          <span className="bg-brand-primary italic font-display font-bold text-lg text-white px-2 py-1 rounded-lg">
+            K
+          </span>
+          <span className="ml-2 font-display font-bold text-sm text-brand-ink">
             Kaihle
           </span>
         </div>
@@ -135,7 +138,7 @@ export function StudentLayout({
                 to={NAV_ROUTES[key]}
                 aria-current={isActive ? "page" : undefined}
                 className={[
-                  "flex items-center gap-2 mx-1.5 px-3 py-7px rounded-nav",
+                  "flex items-center gap-2 mx-1.5 px-3 py-[7px] rounded-nav",
                   "font-sans text-sidebar-nav transition-colors",
                   isActive
                     ? "bg-role-student-nav-active text-brand-primary font-semibold"
@@ -175,9 +178,13 @@ export function StudentLayout({
                   <Link
                     key={cls.id}
                     to={route}
-                    aria-label={isLocked ? `${cls.name} — tap to begin your diagnostic` : cls.name}
-                  className={[
-                      "flex items-center gap-2 mx-1.5 px-3 py-7px rounded-nav",
+                    aria-label={
+                      isLocked
+                        ? `${cls.name} — tap to begin your diagnostic`
+                        : cls.name
+                    }
+                    className={[
+                      "flex items-center gap-2 mx-1.5 px-3 py-[7px] rounded-nav",
                       "font-sans text-sidebar-nav transition-colors",
                       "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
                     ].join(" ")}
@@ -251,11 +258,11 @@ export function StudentLayout({
         {/* Top nav — greeting lives HERE per DESIGN_SYSTEM.md §5.4 Top nav spec */}
         <header
           className="h-[50px] bg-white border-b border-role-student-border
-                     flex items-center justify-between px-18px flex-shrink-0"
+                     flex items-center justify-between px-[18px] flex-shrink-0"
         >
           {/* Left: greeting + grade/curriculum */}
           <div>
-            <div className="font-sans font-medium text-topnav-sub text-brand-ink leading-tight">
+            <div className="font-sans font-medium text-topnav-greeting text-brand-ink leading-tight">
               {getGreeting()}, {firstName} 👋
             </div>
             {gradeName && curriculumName && (
@@ -279,7 +286,7 @@ export function StudentLayout({
         </header>
 
         {/* Page content — children render here */}
-        <main className="flex-1 overflow-y-auto p-[18px]">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>
   );

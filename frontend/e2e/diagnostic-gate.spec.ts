@@ -34,7 +34,9 @@ test.describe("Per-Class Diagnostic Gate", () => {
     const myClassesHeading = page.getByText(/My Classes/i);
     if (await myClassesHeading.isVisible()) {
       // Should see locked class cards (aria-label contains "tap to begin your diagnostic")
-      const lockedCards = page.locator('[aria-label*="tap to begin your diagnostic"]');
+      const lockedCards = page.locator(
+        '[aria-label*="tap to begin your diagnostic"]',
+      );
       const lockedCount = await lockedCards.count();
       expect(lockedCount).toBeGreaterThan(0);
     }
@@ -50,7 +52,9 @@ test.describe("Per-Class Diagnostic Gate", () => {
     await page.waitForLoadState("networkidle");
 
     // Look for a locked class card and click it
-    const lockedCard = page.locator('[aria-label*="tap to begin your diagnostic"]').first();
+    const lockedCard = page
+      .locator('[aria-label*="tap to begin your diagnostic"]')
+      .first();
     if (await lockedCard.isVisible()) {
       await lockedCard.click();
 

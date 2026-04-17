@@ -134,7 +134,8 @@ async def test_get_teacher_students_when_multiple_classes(
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, dict)
-    assert len(data) == 6
+    assert "students" in data
+    assert len(data["students"]) == 6
 
 
 @pytest.mark.asyncio
@@ -162,7 +163,7 @@ async def test_get_teacher_students_when_no_classes_then_empty(
     )
 
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json() == {"students": []}
 
 
 @pytest.mark.asyncio

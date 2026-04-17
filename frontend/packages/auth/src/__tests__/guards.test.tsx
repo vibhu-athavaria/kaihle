@@ -217,7 +217,11 @@ describe("OnboardingRoute", () => {
       data: {
         learning_profile_complete: true,
         diagnostics_by_class: [
-          { class_id: "cls-maths", class_name: "Maths 9A", status: "COMPLETED" },
+          {
+            class_id: "cls-maths",
+            class_name: "Maths 9A",
+            status: "COMPLETED",
+          },
           { class_id: "cls-sci", class_name: "Science 9A", status: "PENDING" },
         ],
       },
