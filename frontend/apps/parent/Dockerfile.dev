@@ -1,12 +1,24 @@
+# ============================================================================
+# LOCAL DEVELOPMENT ONLY
+# 
+# This Dockerfile expects node_modules to be mounted from the host.
+# Run `pnpm install` in the frontend directory on your host machine first.
+# 
+# Usage:
+#   cd frontend && pnpm install
+#   docker compose up frontend-parent
+# ============================================================================
 FROM node:20-alpine
 
 WORKDIR /app
 
+# Install pnpm globally
 RUN npm install -g pnpm
 
-# Store lives outside the bind-mounted volume — avoids VirtioFS hard-link failures
-ENV PNPM_HOME=/app/.pnpm-store
+# NOTE: No RUN pnpm install here!
+# Dependencies are expected to be mounted from host via volume
 
 EXPOSE 3003
 
-CMD ["sh", "-c", "rm -rf /app/apps/parent/node_modules/.vite && pnpm install --config.confirmModulesPurge=false && pnpm dev:parent"]
+# Run the dev server directly (no install step)
+CMD ["pnpm", "dev:parent"]

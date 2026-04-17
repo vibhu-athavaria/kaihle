@@ -5,6 +5,8 @@ Endpoints for student-specific data that doesn't fit in other categories.
 Routes:
 - GET /api/v1/students/me/info - Get current student's info (name, grade, curriculum, etc.)
 - GET /api/v1/students/{student_id}/info - Get student info (name, grade, curriculum, etc.)
+- GET /api/v1/students/me/classes - Get current student's enrolled classes
+- POST /api/v1/students/me/concept-guide - Get an AI-generated concept explanation
 """
 
 from uuid import UUID
@@ -375,4 +377,188 @@ async def get_my_classes(
     return await _get_student_classes(
         student=current_user,
         db=db,
+    )
+
+
+# =============================================================================
+# AI Concept Guide endpoint
+# =============================================================================
+
+
+class ConceptGuideRequest(BaseModel):
+    """Request body for POST /students/me/concept-guide."""
+
+    subtopic_id: UUID = Field(..., description="UUID of the subtopic to explain")
+    question: str | None = Field(
+        None,
+        max_length=500,
+        description="Optional specific question from the student",
+    )
+
+
+class CheckQuestion(BaseModel):
+    """MCQ check question returned alongside the explanation."""
+
+    question: str
+    options: list[str]
+    correct: str
+
+
+class ConceptGuideResponse(BaseModel):
+    """Response for POST /students/me/concept-guide."""
+
+    explanation: str
+    subtopic_name: str
+    check_question: CheckQuestion | None = None
+
+
+class McqAnswerRequest(BaseModel):
+    """Request body for POST /students/me/concept-guide/answer."""
+
+    subtopic_name: str
+    question: str
+    options: list[str]
+    correct: str
+    student_answer: str = Field(..., max_length=10)
+
+
+class McqAnswerResponse(BaseModel):
+    """Response for POST /students/me/concept-guide/answer."""
+
+    is_correct: bool
+    response: str
+
+
+@router.post(
+    "/me/concept-guide",
+    response_model=ConceptGuideResponse,
+)
+async def get_concept_guide(
+    body: ConceptGuideRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ConceptGuideResponse:
+    """Generate a personalised AI explanation for a subtopic the student is struggling with.
+
+    Uses the student's learning profile (modality scores, interests) to personalise
+    the explanation. Falls back to generic explanation if profile is not complete.
+
+    Args:
+        body: subtopic_id (required) and optional question string.
+
+    Returns:
+        ConceptGuideResponse with explanation text and subtopic_name.
+
+    Raises:
+        403: If user is not a student.
+        404: If subtopic not found.
+        502: If LLM call fails.
+    """
+    from app.services.concept_guide_service import generate_concept_explanation
+
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint",
+        )
+
+    logger.info(
+        "concept_guide_requested",
+        student_id=str(current_user.id),
+        subtopic_id=str(body.subtopic_id),
+        has_question=body.question is not None,
+    )
+
+    try:
+        result = await generate_concept_explanation(
+            student=current_user,
+            subtopic_id=body.subtopic_id,
+            question=body.question,
+            db=db,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error(
+            "concept_guide_generation_failed",
+            student_id=str(current_user.id),
+            subtopic_id=str(body.subtopic_id),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to generate explanation. Please try again.",
+        ) from exc
+
+    check_question_data = result.get("check_question")
+    check_question = (
+        CheckQuestion(
+            question=check_question_data.get("question"),
+            options=check_question_data.get("options"),
+            correct=check_question_data.get("correct"),
+        )
+        if isinstance(check_question_data, dict)
+        else None
+    )
+
+    return ConceptGuideResponse(
+        explanation=result["explanation"],
+        subtopic_name=result["subtopic_name"],
+        check_question=check_question,
+    )
+
+
+@router.post(
+    "/me/concept-guide/answer",
+    response_model=McqAnswerResponse,
+)
+async def submit_concept_guide_answer(
+    body: McqAnswerRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> McqAnswerResponse:
+    """Submit a student's MCQ answer and get a follow-up response.
+
+    Correct answer → warm acknowledgement + suggestion to try assessment.
+    Incorrect answer → re-explanation from a different angle (never says "wrong").
+
+    Args:
+        body: MCQ context (question, options, correct) + student_answer.
+
+    Returns:
+        McqAnswerResponse with is_correct flag and follow-up text.
+    """
+    from app.services.concept_guide_service import evaluate_mcq_answer
+
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint",
+        )
+
+    try:
+        result = await evaluate_mcq_answer(
+            subtopic_name=body.subtopic_name,
+            question=body.question,
+            options=body.options,
+            correct=body.correct,
+            student_answer=body.student_answer,
+        )
+    except Exception as exc:
+        logger.error(
+            "concept_guide_answer_failed",
+            student_id=str(current_user.id),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to evaluate answer. Please try again.",
+        ) from exc
+
+    return McqAnswerResponse(
+        is_correct=result["is_correct"] == "true",
+        response=result["response"],
     )

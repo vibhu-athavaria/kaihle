@@ -1,5 +1,4 @@
 import { useNavigate } from "react-router-dom";
-import { Lock } from "lucide-react";
 
 export type DiagnosticStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED";
 
@@ -50,7 +49,7 @@ export function ClassCard({
 
   // Determine dot color class based on status
   const getDotColorClass = () => {
-    if (isLocked) return "bg-brand-gold"; // amber for locked
+    if (isLocked) return "bg-brand-muted"; // amber for locked
     if (isCompleted) return "bg-brand-primary"; // green for completed
     return "bg-brand-primary"; // default
   };
@@ -62,9 +61,12 @@ export function ClassCard({
     <button
       type="button"
       onClick={handleClick}
-      className={`w-full text-left bg-white rounded-card border border-role-student-border p-3 shadow-card transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[44px] ${
-        isLocked ? "opacity-60" : ""
-      }`}
+      className="w-full text-left bg-white rounded-card border border-role-student-border p-3 shadow-card transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[44px]"
+      aria-label={
+        isLocked
+          ? `${subjectName} — tap to begin your diagnostic`
+          : `${subjectName} — open class`
+      }
     >
       {/* Header with dot and class/subject name */}
       <div className="flex items-center gap-1.5 mb-1">
@@ -78,7 +80,7 @@ export function ClassCard({
       </div>
 
       {/* Meta info */}
-      <div className="ffont-sans text-card-meta text-brand-body mb-">
+      <div className="font-sans text-card-meta text-brand-body mb-2">
         {teacherName}
         {studentCount !== undefined && ` · ${studentCount} students`}
       </div>
@@ -90,10 +92,7 @@ export function ClassCard({
         }`}
       >
         {isLocked ? (
-          <span className="flex items-center gap-1">
-            <Lock className="w-3 h-3" aria-hidden="true" />
-            Start diagnostic →
-          </span>
+          <span>Begin {subjectName} →</span>
         ) : (
           <span>View class →</span>
         )}

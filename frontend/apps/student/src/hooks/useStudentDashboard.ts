@@ -1,16 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 
-interface Subject {
-  subjectCode: string;
-  subjectName: string;
-  score: number | null;
-}
-
-interface GapMap {
-  subjects: Subject[];
-}
-
 interface StudyPlan {
   id: string;
   title: string;
@@ -45,21 +35,9 @@ interface StudyPlansResponse {
 }
 
 interface DashboardData {
-  gapMap: GapMap;
   studyPlans: StudyPlan[];
   assessments: Assessment[];
   studentInfo: StudentInfo;
-}
-
-/**
- * Fetches gap map data for the current student using /me endpoint.
- * Per STUDENT_SCREENS.md §4: Never construct student ID in URLs - always use /me shortcut.
- */
-async function fetchGapMap(subjectId: string): Promise<GapMap> {
-  const response = await apiClient.get<GapMap>(`/api/v1/students/me/gap-map`, {
-    params: { subject_id: subjectId },
-  });
-  return response.data;
 }
 
 /**
@@ -96,30 +74,24 @@ async function fetchStudentInfo(): Promise<StudentInfo> {
 
 interface UseStudentDashboardResult {
   data: DashboardData | undefined;
-  isLoading: boolean;
+  isPending: boolean;
   isError: boolean;
   errMessage: string | undefined;
   refetch: () => Promise<void>;
 }
 
+/**
+ * Fetches all data needed for the student dashboard.
+ *
+ * Per-subject gap maps are NOT fetched here — SubjectScoresSection fetches
+ * them independently via useStudentGapMap per subject. Fetching a single
+ * subject's gap map here (hardcoded to [0]) was redundant and only worked
+ * for single-subject students.
+ */
 export function useStudentDashboard(): UseStudentDashboardResult {
   const studentInfoQuery = useQuery({
     queryKey: ["student", "info"] as const,
     queryFn: fetchStudentInfo,
-  });
-
-  // Get first enrolled class's subjectId for gap-map query
-  const primarySubjectId =
-    studentInfoQuery.data?.enrolledClasses?.[0]?.subjectId;
-
-  const gapMapQuery = useQuery({
-    queryKey: ["student", "gap-map", primarySubjectId] as const,
-    queryFn: () => {
-      if (!primarySubjectId) throw new Error("Subject ID not available");
-      return fetchGapMap(primarySubjectId);
-    },
-    // Only fetch gap-map if student has a subject
-    enabled: !!primarySubjectId,
   });
 
   const studyPlansQuery = useQuery({
@@ -143,27 +115,23 @@ export function useStudentDashboard(): UseStudentDashboardResult {
     enabled: !!studentInfoQuery.data?.classId,
   });
 
-  const isLoading =
-    gapMapQuery.isLoading ||
-    studyPlansQuery.isLoading ||
-    assessmentsQuery.isLoading ||
-    studentInfoQuery.isLoading;
+  const isPending =
+    studyPlansQuery.isPending ||
+    assessmentsQuery.isPending ||
+    studentInfoQuery.isPending;
 
   const isError =
-    gapMapQuery.isError ||
     studyPlansQuery.isError ||
     assessmentsQuery.isError ||
     studentInfoQuery.isError;
 
   const errMessage =
-    gapMapQuery.error?.message ||
     studyPlansQuery.error?.message ||
     assessmentsQuery.error?.message ||
     studentInfoQuery.error?.message;
 
   const data = studentInfoQuery.data
     ? {
-        gapMap: gapMapQuery.data || { subjects: [] },
         studyPlans: studyPlansQuery.data || [],
         assessments: assessmentsQuery.data || [],
         studentInfo: studentInfoQuery.data,
@@ -172,14 +140,16 @@ export function useStudentDashboard(): UseStudentDashboardResult {
 
   return {
     data,
-    isLoading,
+    isPending,
     isError,
     errMessage,
     refetch: async () => {
-      await gapMapQuery.refetch();
-      await studyPlansQuery.refetch();
-      await assessmentsQuery.refetch();
-      await studentInfoQuery.refetch();
+      // Parallel refetch — was serial before (ST-005), took 4–8s on mobile
+      await Promise.all([
+        studyPlansQuery.refetch(),
+        assessmentsQuery.refetch(),
+        studentInfoQuery.refetch(),
+      ]);
     },
   };
 }

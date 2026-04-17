@@ -132,15 +132,15 @@ describe("OnboardingRoute", () => {
     jest.clearAllMocks();
   });
 
-  test("OnboardingRoute redirects STUDENT with incomplete onboarding to /student/onboarding", async () => {
+  test("test_onboarding_route_when_learning_profile_incomplete_then_redirects_to_onboarding", async () => {
+    // Arrange: profile NOT complete
     useAuthStore
       .getState()
       .setTokens("access", "refresh", mockUser({ role: "STUDENT" }));
     (apiClient.get as jest.Mock).mockResolvedValue({
       data: {
-        learning_profile_complete: true,
-        diagnostics_complete: false,
-        overall: "IN_PROGRESS",
+        learning_profile_complete: false,
+        diagnostics_by_class: [],
       },
     });
 
@@ -167,17 +167,18 @@ describe("OnboardingRoute", () => {
     await waitFor(() => {
       expect(screen.getByText("Onboarding Page")).toBeInTheDocument();
     });
+    expect(screen.queryByText("Dashboard Content")).not.toBeInTheDocument();
   });
 
-  test("OnboardingRoute passes STUDENT with COMPLETED onboarding through", async () => {
+  test("test_onboarding_route_when_learning_profile_complete_then_passes_through", async () => {
+    // Arrange: profile complete (Gate 1 satisfied — diagnostics irrelevant to this gate)
     useAuthStore
       .getState()
       .setTokens("access", "refresh", mockUser({ role: "STUDENT" }));
     (apiClient.get as jest.Mock).mockResolvedValue({
       data: {
         learning_profile_complete: true,
-        diagnostics_complete: true,
-        overall: "COMPLETED",
+        diagnostics_by_class: [],
       },
     });
 
@@ -207,7 +208,53 @@ describe("OnboardingRoute", () => {
     expect(screen.queryByText("Onboarding Page")).not.toBeInTheDocument();
   });
 
-  test("OnboardingRoute passes TEACHER through without checking onboarding status", async () => {
+  test("test_onboarding_route_when_profile_complete_and_diagnostics_pending_then_still_passes_through", async () => {
+    // ST-008: students with Maths (COMPLETED) + Science (PENDING) must NOT be blocked
+    useAuthStore
+      .getState()
+      .setTokens("access", "refresh", mockUser({ role: "STUDENT" }));
+    (apiClient.get as jest.Mock).mockResolvedValue({
+      data: {
+        learning_profile_complete: true,
+        diagnostics_by_class: [
+          {
+            class_id: "cls-maths",
+            class_name: "Maths 9A",
+            status: "COMPLETED",
+          },
+          { class_id: "cls-sci", class_name: "Science 9A", status: "PENDING" },
+        ],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <Routes>
+          <Route path="/login" element={<div>Login Page</div>} />
+          <Route
+            path="/student/onboarding"
+            element={<div>Onboarding Page</div>}
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <OnboardingRoute>
+                <div>Dashboard Content</div>
+              </OnboardingRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Profile is complete → student MUST reach dashboard even with PENDING diagnostics
+    await waitFor(() => {
+      expect(screen.getByText("Dashboard Content")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Onboarding Page")).not.toBeInTheDocument();
+  });
+
+  test("test_onboarding_route_when_teacher_role_then_passes_through_without_api_call", async () => {
     useAuthStore
       .getState()
       .setTokens("access", "refresh", mockUser({ role: "TEACHER" }));
@@ -232,7 +279,7 @@ describe("OnboardingRoute", () => {
       </MemoryRouter>,
     );
 
-    // Should render immediately without API call
+    // Non-STUDENT roles skip the check entirely
     expect(screen.getByText("Dashboard Content")).toBeInTheDocument();
     expect(apiClient.get).not.toHaveBeenCalled();
   });

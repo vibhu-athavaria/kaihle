@@ -47,20 +47,17 @@ type OnboardingStatus = {
 };
 
 /**
- * Check if onboarding is complete:
- * - learning_profile_complete must be true
- * - ALL diagnostics_by_class must have status COMPLETED
+ * Check if onboarding (Gate 1) is complete.
+ *
+ * Gate 1 (global): learning profile must be complete.
+ * Gate 2 (per-class): diagnostic lock is handled by ClassCard — NOT here.
+ *
+ * Previously this also required all diagnostics to be COMPLETED, which blocked
+ * students from accessing their results if ANY class diagnostic was incomplete.
+ * That was a product error: each class unlocks independently.
  */
 function isOnboardingComplete(status: OnboardingStatus): boolean {
-  if (!status.learning_profile_complete) return false;
-  if (
-    !status.diagnostics_by_class ||
-    status.diagnostics_by_class.length === 0
-  ) {
-    // No classes enrolled yet - onboarding not complete
-    return false;
-  }
-  return status.diagnostics_by_class.every((d) => d.status === "COMPLETED");
+  return status.learning_profile_complete === true;
 }
 
 /**

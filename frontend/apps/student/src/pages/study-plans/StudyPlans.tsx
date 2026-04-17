@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { StudentLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
 import { useStudentInfo } from "../../hooks/useStudentInfo";
@@ -29,6 +30,11 @@ export function StudyPlans() {
     }),
   );
 
+  // Determine which empty state to show based on diagnostic completion
+  const hasDiagnosticComplete = sidebarClasses.some(
+    (cls) => cls.diagnosticStatus === "COMPLETED",
+  );
+
   return (
     <StudentLayout
       activeNav="study-plans"
@@ -42,9 +48,42 @@ export function StudyPlans() {
         <h1 className="font-display font-bold text-2xl text-brand-ink">
           Study Plans
         </h1>
-        <p className="text-brand-muted">
-          Your study plans will appear here once your teacher assigns them.
-        </p>
+
+        {hasDiagnosticComplete ? (
+          <div className="bg-white rounded-xl border border-brand-border p-12 text-center">
+            <h3 className="font-display font-bold text-xl text-brand-ink mb-2">
+              Plans are being generated
+            </h3>
+            <p className="font-sans text-sm text-brand-muted max-w-sm mx-auto mb-4">
+              Your study plans are being built from your assessment results.
+              They'll appear here soon — in the meantime, explore your progress
+              to see where to focus.
+            </p>
+            <Link
+              to="/student/my-progress"
+              className="font-sans text-sm font-semibold text-brand-primary hover:text-brand-dark focus-visible:ring-2 focus-visible:ring-brand-primary rounded"
+            >
+              View my progress →
+            </Link>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-brand-border p-12 text-center">
+            <h3 className="font-display font-bold text-xl text-brand-ink mb-2">
+              No study plans yet
+            </h3>
+            <p className="font-sans text-sm text-brand-muted max-w-sm mx-auto mb-4">
+              Study plans are built automatically from your assessment results —
+              personalised to the specific topics where you have gaps. Complete
+              your first assessment to unlock them.
+            </p>
+            <Link
+              to="/student/assessments"
+              className="font-sans text-sm font-semibold text-brand-primary hover:text-brand-dark focus-visible:ring-2 focus-visible:ring-brand-primary rounded"
+            >
+              View your assessments →
+            </Link>
+          </div>
+        )}
       </div>
     </StudentLayout>
   );

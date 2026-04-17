@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { apiClient } from "@kaihle/auth";
-import { useAuth } from "@kaihle/auth";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { InlineEditName } from "./InlineEditName";
 import { InlineChangePassword } from "./InlineChangePassword";
 import { useStudentInfo } from "../../hooks/useStudentInfo";
 
 export function AccountSection() {
-  useAuth();
   const queryClient = useQueryClient();
   const { data: studentInfo } = useStudentInfo();
   const schoolId = studentInfo?.schoolId;
@@ -65,18 +63,20 @@ export function AccountSection() {
     : "—";
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
-      <h2 className="font-fraunces text-base text-brand-ink px-6 pt-5 pb-3 border-b border-gray-50">
+    <div className="bg-white rounded-2xl border border-brand-border shadow-sm">
+      <h2 className="font-display text-base text-brand-ink px-6 pt-5 pb-3 border-b border-brand-border-soft">
         Account
       </h2>
 
       {/* Name row */}
       <div className="px-6 py-4 flex items-center justify-between">
         <div>
-          <div className="font-nunito text-sm font-medium text-brand-ink">
+          <div className="font-sans text-sm font-medium text-brand-ink">
             Name
           </div>
-          <div className="font-nunito text-sm text-gray-400">{displayName}</div>
+          <div className="font-sans text-sm text-brand-muted">
+            {displayName}
+          </div>
         </div>
         {!editingName && (
           <button
@@ -100,32 +100,32 @@ export function AccountSection() {
         />
       )}
 
-      <div className="h-px bg-gray-100 mx-6" />
+      <div className="h-px bg-brand-border-soft mx-6" />
 
       {/* Email row */}
       <div className="px-6 py-4 flex items-center justify-between">
         <div>
-          <div className="font-nunito text-sm font-medium text-brand-ink">
+          <div className="font-sans text-sm font-medium text-brand-ink">
             Email
           </div>
-          <div className="font-nunito text-sm text-gray-400">
+          <div className="font-sans text-sm text-brand-muted">
             {studentInfo?.email || "—"}
           </div>
         </div>
-        <span className="bg-gray-100 text-gray-400 text-xs rounded-full px-2 py-0.5">
+        <span className="bg-brand-border-soft text-brand-muted text-xs rounded-full px-2 py-0.5">
           Managed by school
         </span>
       </div>
 
-      <div className="h-px bg-gray-100 mx-6" />
+      <div className="h-px bg-brand-border-soft mx-6" />
 
       {/* Password row */}
       <div className="px-6 py-4 flex items-center justify-between">
         <div>
-          <div className="font-nunito text-sm font-medium text-brand-ink">
+          <div className="font-sans text-sm font-medium text-brand-ink">
             Password
           </div>
-          <div className="font-nunito text-sm text-gray-400">
+          <div className="font-sans text-sm text-brand-muted">
             Last changed —
           </div>
         </div>
