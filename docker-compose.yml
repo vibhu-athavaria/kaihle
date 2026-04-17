@@ -8,9 +8,7 @@ services:
       POSTGRES_PASSWORD: kaihle
       POSTGRES_DB: kaihle
     ports:
-      - "5433:5432"  # Host port 5433 to avoid conflicts with local PostgreSQL on 5432.
-                     # CI uses port 5432 (GitHub Actions service containers use standard ports).
-                     # Tests run locally should use: DATABASE_URL=...@localhost:5433/...
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
@@ -77,75 +75,85 @@ services:
       redis:
         condition: service_healthy
 
+  # ============================================================================
+  # LOCAL DEVELOPMENT
+  # 
+  # For frontend development, run directly on host to avoid Docker/macOS issues:
+  #
+  #   cd frontend
+  #   pnpm install          # Install dependencies
+  #   pnpm dev:teacher      # Run specific app (ports 3001-3005)
+  #
+  # This uses the SAME pnpm-lock.yaml ensuring identical versions as production.
+  # ============================================================================
+
+  # ============================================================================
+  # PRODUCTION / CI
+  # - Uses Dockerfile which installs dependencies during build
+  # - No volumes (everything included in image)
+  # - Uses same lock file versions as local
+  # ============================================================================
   frontend-teacher:
     build:
       context: ./frontend
-      dockerfile: apps/teacher/Dockerfile.dev
+      dockerfile: apps/teacher/Dockerfile
     container_name: kaihle_teacher
     ports:
       - "3001:3001"
-    volumes:
-      - ./frontend:/app
     environment:
       VITE_API_URL: http://localhost:8000
-      CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "1000"
+    depends_on:
+      - backend
+      - postgres
+      - redis
 
   frontend-student:
     build:
       context: ./frontend
-      dockerfile: apps/student/Dockerfile.dev
+      dockerfile: apps/student/Dockerfile
     container_name: kaihle_student
     ports:
       - "3002:3002"
-    volumes:
-      - ./frontend:/app
     environment:
       VITE_API_URL: http://localhost:8000
-      CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "1000"
+    depends_on:
+      - backend
 
   frontend-parent:
     build:
       context: ./frontend
-      dockerfile: apps/parent/Dockerfile.dev
+      dockerfile: apps/parent/Dockerfile
     container_name: kaihle_parent
     ports:
       - "3003:3003"
-    volumes:
-      - ./frontend:/app
     environment:
       VITE_API_URL: http://localhost:8000
-      CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "1000"
+    depends_on:
+      - backend
 
   frontend-school-admin:
     build:
       context: ./frontend
-      dockerfile: apps/school-admin/Dockerfile.dev
+      dockerfile: apps/school-admin/Dockerfile
     container_name: kaihle_school_admin
     ports:
       - "3004:3004"
-    volumes:
-      - ./frontend:/app
     environment:
       VITE_API_URL: http://localhost:8000
-      CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "1000"
+    depends_on:
+      - backend
 
   frontend-kaihle-admin:
     build:
       context: ./frontend
-      dockerfile: apps/kaihle-admin/Dockerfile.dev
+      dockerfile: apps/kaihle-admin/Dockerfile
     container_name: kaihle_admin
     ports:
       - "3005:3005"
-    volumes:
-      - ./frontend:/app
     environment:
       VITE_API_URL: http://localhost:8000
-      CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "1000"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:

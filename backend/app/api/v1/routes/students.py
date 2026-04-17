@@ -496,9 +496,9 @@ async def get_concept_guide(
     check_question_data = result.get("check_question")
     check_question = (
         CheckQuestion(
-            question=check_question_data["question"],
-            options=check_question_data["options"],
-            correct=check_question_data["correct"],
+            question=check_question_data.get("question"),
+            options=check_question_data.get("options"),
+            correct=check_question_data.get("correct"),
         )
         if isinstance(check_question_data, dict)
         else None

@@ -49,7 +49,9 @@ def _get_dominant_modality(modality_scores: dict[str, float]) -> str:
         "reading_writing": "reading/writing",
         "kinesthetic": "kinesthetic",
     }
-    best = max(modality_scores, key=lambda k: modality_scores.get(k, 0.0))
+    # Sort by score descending, then by key ascending for deterministic tie-breaking
+    sorted_modalities = sorted(modality_scores.keys(), key=lambda k: (-modality_scores.get(k, 0.0), k))
+    best = sorted_modalities[0]
     return label_map.get(best, best.replace("_", " "))
 
 
@@ -68,8 +70,10 @@ def _parse_mcq(raw: str) -> tuple[str, dict[str, object] | None]:
     explanation = raw[: match.start()].strip()
     try:
         mcq = json.loads(json_str)
-        # Validate required keys
+        # Validate required keys and options length
         if not all(k in mcq for k in ("question", "options", "correct")):
+            return raw.strip(), None
+        if not isinstance(mcq["options"], list) or len(mcq["options"]) != 4:
             return raw.strip(), None
         return explanation, mcq
     except json.JSONDecodeError:
@@ -182,6 +186,8 @@ async def evaluate_mcq_answer(
     This is a stateless call — the MCQ context is passed in from the frontend
     so no DB lookup is needed.
     """
+    if not student_answer.strip():
+        raise ValueError("Student answer cannot be empty")
     is_correct = student_answer.strip().upper() == correct.strip().upper()
 
     if is_correct:

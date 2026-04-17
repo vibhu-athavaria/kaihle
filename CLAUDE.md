@@ -92,3 +92,6 @@ All LLM calls go through `backend/app/ai/providers/router.py`. See `docs/CONSTIT
 | `study_plan` | `gpt-4.1-mini` |
 | `lesson_plan` | `openrouter/anthropic/claude-sonnet-4-6` |
 | `student_pack` | `gemini/gemini-2.5-pro` |
+
+NEVER run docker compose down -v, docker volume rm, or any variant 
+that removes postgres_data without explicit written confirmation from Vibhu.
