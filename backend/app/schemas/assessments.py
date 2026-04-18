@@ -43,6 +43,12 @@ class AssessmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AssessmentCreateResponse(AssessmentResponse):
+    """Response for assessment creation — includes sampled questions for preview."""
+
+    questions: list[AssessmentQuestion] = []
+
+
 class AssessmentWithClassResponse(BaseModel):
     """Assessment response with class info for teacher's all-assessments list."""
 

@@ -21,9 +21,12 @@ from app.models.assessment import Assessment
 from app.models.user import UserRole
 from app.schemas.assessments import (
     AssessmentCreateRequest,
+    AssessmentCreateResponse,
+    AssessmentQuestion,
     AssessmentResponse,
     AssessmentResultsSummary,
     AssessmentWithClassResponse,
+    QuestionOption,
 )
 from app.schemas.common import Page
 from app.services.assessment_service import (
@@ -154,7 +157,7 @@ async def list_teacher_assessments(
 
 @router.post(
     "/classes/{class_id}/assessments",
-    response_model=AssessmentResponse,
+    response_model=AssessmentCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_assessment(
@@ -162,7 +165,7 @@ async def create_assessment(
     body: AssessmentCreateRequest,
     current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
-) -> AssessmentResponse:
+) -> AssessmentCreateResponse:
     service = AssessmentService(db)
     try:
         assessment = await service.create_assessment(
@@ -172,6 +175,12 @@ async def create_assessment(
             body=body,
         )
         await db.commit()
+        _, question_bank_rows = await service.get_assessment(
+            assessment_id=assessment.id,
+            school_id=current_user.school_id,
+            requesting_user_id=current_user.id,
+            requesting_user_role=current_user.role,
+        )
     except TeacherNotClassOwnerError:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -192,7 +201,17 @@ async def create_assessment(
             detail=str(exc),
         )
 
-    return _assessment_to_response(assessment)
+    questions = [
+        AssessmentQuestion(
+            question_id=q.id,
+            question_text=q.question_text,
+            options=[QuestionOption(key=o["key"], text=o["text"]) for o in (q.options or [])],
+        )
+        for q in question_bank_rows
+    ]
+
+    base = _assessment_to_response(assessment)
+    return AssessmentCreateResponse(**base.model_dump(), questions=questions)
 
 
 # ── Assessment-scoped operations ──────────────────────────────────────────────
@@ -263,6 +282,32 @@ async def publish_assessment(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
 
     return _assessment_to_response(assessment)
+
+
+@router.delete("/assessments/{assessment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_assessment(
+    assessment_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    service = AssessmentService(db)
+    try:
+        await service.delete_assessment(
+            assessment_id=assessment_id,
+            school_id=current_user.school_id,
+            teacher_id=current_user.id,
+        )
+        await db.commit()
+    except TeacherNotClassOwnerError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to delete this assessment.",
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
 
 
 @router.get("/assessments/{assessment_id}/results", response_model=AssessmentResultsSummary)

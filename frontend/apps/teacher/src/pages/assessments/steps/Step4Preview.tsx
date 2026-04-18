@@ -34,6 +34,8 @@ export function Step4Preview() {
 
     if (!classId) return;
 
+    const abortController = new AbortController();
+
     async function createDraft() {
       setIsLoading(true);
       setInsufficientError(false);
@@ -53,7 +55,10 @@ export function Step4Preview() {
         const res = await apiClient.post(
           `/api/v1/classes/${classId}/assessments`,
           payload,
+          { signal: abortController.signal },
         );
+
+        if (abortController.signal.aborted) return;
 
         const questions: PreviewQuestion[] = (res.data.questions ?? []).map(
           (q: {
@@ -71,6 +76,7 @@ export function Step4Preview() {
         setDraftAssessment(res.data.id, questions);
         setLocalQuestions(questions);
       } catch (err: unknown) {
+        if (abortController.signal.aborted) return;
         const axiosErr = err as {
           response?: { status?: number; data?: { detail?: string } };
         };
@@ -83,11 +89,17 @@ export function Step4Preview() {
           );
         }
       } finally {
-        setIsLoading(false);
+        if (!abortController.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     }
 
     void createDraft();
+
+    return () => {
+      abortController.abort();
+    };
     // We intentionally only run this on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

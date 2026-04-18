@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 
 export type AssessmentStatus = "DRAFT" | "ACTIVE" | "CLOSED";
@@ -63,5 +63,31 @@ export function useTeacherAssessments(status?: AssessmentStatus) {
     queryKey: ["teacher", "assessments", status],
     queryFn: () => fetchTeacherAssessments(status),
     staleTime: 30 * 1000,
+  });
+}
+
+export function useCloseTeacherAssessment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (assessmentId: string) =>
+      apiClient.post(`/api/v1/assessments/${assessmentId}/close`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["teacher", "assessments"],
+      });
+    },
+  });
+}
+
+export function useDeleteTeacherAssessment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (assessmentId: string) =>
+      apiClient.delete(`/api/v1/assessments/${assessmentId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["teacher", "assessments"],
+      });
+    },
   });
 }
