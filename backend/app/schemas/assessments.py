@@ -18,8 +18,8 @@ class AssessmentQuestion(BaseModel):
     question_id: UUID
     question_text: str
     options: list[QuestionOption]
-    difficulty_level: int
-    subtopic_name: str
+    difficulty_level: int = 0
+    subtopic_name: str = ""
 
 
 class AssessmentQuestionWithAnswer(AssessmentQuestion):
