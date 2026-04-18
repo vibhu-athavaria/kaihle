@@ -14,8 +14,9 @@ repos:
     hooks:
       - id: mypy
         name: mypy (backend type check)
-        entry: bash -c "cd backend && mypy app/"
+        entry: bash -c "git diff --cached --name-only | grep -q '^backend/' || exit 0; cd backend && mypy app/"
         language: system
+        files: ^backend/
         types: [python]
         pass_filenames: false
         require_serial: true
@@ -25,8 +26,9 @@ repos:
     hooks:
       - id: pytest-unit
         name: pytest unit tests
-        entry: bash -c "cd backend && pytest app/tests/unit/ -v --tb=short --cov=app/services --cov-fail-under=80"
+        entry: bash -c "git diff --cached --name-only | grep -q '^backend/' || exit 0; cd backend && pytest app/tests/unit/ -v --tb=short --cov=app/services --cov-fail-under=80"
         language: system
+        files: ^backend/
         types: [python]
         pass_filenames: false
         require_serial: true
@@ -39,8 +41,9 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (via pnpm)
-        entry: bash -c "cd frontend && pnpm exec prettier --check"
+        entry: bash -c "git diff --cached --name-only | grep -q '^frontend/' || exit 0; cd frontend && pnpm exec prettier --check"
         language: system
+        files: ^frontend/
         types_or: [ts, tsx, json, css]
         pass_filenames: false
         exclude: "^frontend/dist/"
@@ -50,9 +53,9 @@ repos:
     hooks:
       - id: tsc-check
         name: TypeScript type check (frontend)
-        entry: bash -c "cd frontend && pnpm --filter parent exec tsc --noEmit && pnpm --filter student exec tsc --noEmit && pnpm --filter teacher exec tsc --noEmit"
+        entry: bash -c "git diff --cached --name-only | grep -qE '^frontend/.*\.(ts|tsx)$' || exit 0; cd frontend && pnpm --filter parent exec tsc --noEmit && pnpm --filter student exec tsc --noEmit && pnpm --filter teacher exec tsc --noEmit"
         language: system
-        files: \.(ts|tsx)$
+        files: ^frontend/.*\.(ts|tsx)$
         pass_filenames: false
         require_serial: true
 
@@ -61,13 +64,9 @@ repos:
     hooks:
       - id: jest-unit
         name: jest unit tests (frontend)
-        entry: bash -c "
-          cd frontend &&
-          pnpm --filter parent exec jest --passWithNoTests &&
-          pnpm --filter student exec jest --passWithNoTests &&
-          pnpm --filter teacher exec jest --passWithNoTests"
+        entry: bash -c "git diff --cached --name-only | grep -qE '^frontend/.*\.(ts|tsx)$' || exit 0; cd frontend && pnpm --filter parent exec jest --passWithNoTests && pnpm --filter student exec jest --passWithNoTests && pnpm --filter teacher exec jest --passWithNoTests"
         language: system
-        files: \.(ts|tsx)$
+        files: ^frontend/.*\.(ts|tsx)$
         pass_filenames: false
         require_serial: true
 
