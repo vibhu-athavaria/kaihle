@@ -10,7 +10,6 @@ All LLM calls route through app.ai.providers.router (Rule 4 compliance).
 """
 
 import json
-import re
 from pathlib import Path
 from uuid import UUID
 
@@ -29,11 +28,23 @@ logger = structlog.get_logger()
 _PROMPTS_DIR = Path(__file__).parent.parent / "ai" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)), autoescape=False)
 
-# Matches the JSON block the LLM is instructed to append after the explanation.
-_MCQ_PATTERN = re.compile(
-    r'\{[^{}]*"question"[^{}]*"options"[^{}]*"correct"[^{}]*\}',
-    re.DOTALL,
-)
+_VALID_MCQ_ANSWERS = {"A", "B", "C", "D"}
+
+
+def _extract_json_block(text: str) -> tuple[int, int] | None:
+    """Return (start, end) indices of the first top-level {...} block, or None."""
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for i, ch in enumerate(text[start:], start):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return start, i + 1
+    return None
 
 
 def _get_dominant_modality(modality_scores: dict[str, float]) -> str:
@@ -62,12 +73,12 @@ def _parse_mcq(raw: str) -> tuple[str, dict[str, object] | None]:
     If parsing fails for any reason we return the full text as explanation and
     None for the MCQ — the frontend degrades gracefully to explanation-only.
     """
-    match = _MCQ_PATTERN.search(raw)
-    if not match:
+    span = _extract_json_block(raw)
+    if not span:
         return raw.strip(), None
 
-    json_str = match.group(0)
-    explanation = raw[: match.start()].strip()
+    json_str = raw[span[0] : span[1]]
+    explanation = raw[: span[0]].strip()
     try:
         mcq = json.loads(json_str)
         # Validate required keys and options length
@@ -186,9 +197,10 @@ async def evaluate_mcq_answer(
     This is a stateless call — the MCQ context is passed in from the frontend
     so no DB lookup is needed.
     """
-    if not student_answer.strip():
-        raise ValueError("Student answer cannot be empty")
-    is_correct = student_answer.strip().upper() == correct.strip().upper()
+    normalised = student_answer.strip().upper()
+    if normalised not in _VALID_MCQ_ANSWERS:
+        raise ValueError(f"Invalid answer '{student_answer}' — must be one of A, B, C, D")
+    is_correct = normalised == correct.strip().upper()
 
     if is_correct:
         prompt = (

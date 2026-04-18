@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
@@ -115,14 +115,13 @@ export function AdminQuestionReview() {
   const curriculumTopics = curriculumTopicsData ?? [];
 
   const [data, setData] = useState<QuestionListResponse | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [editingQuestion, setEditingQuestion] = useState<QuestionRow | null>(
     null,
   );
 
   // Load question list
   useEffect(() => {
-    setLoading(true);
     const params: Record<string, string | number> = { page, page_size: 20 };
     if (curriculumId) params.curriculum_id = curriculumId;
     if (gradeId) params.grade_id = gradeId;
@@ -505,8 +504,10 @@ function EditModal({
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("");
   const [selectedSubtopic, setSelectedSubtopic] = useState("");
-  const [filteredSubtopics, setFilteredSubtopics] = useState<FilterOption[]>(
-    [],
+  const [fetchedSubtopics, setFilteredSubtopics] = useState<FilterOption[]>([]);
+  const filteredSubtopics = useMemo(
+    () => (selectedTopic ? fetchedSubtopics : subtopics),
+    [selectedTopic, fetchedSubtopics, subtopics],
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -526,8 +527,6 @@ function EditModal({
             setFilteredSubtopics([]);
           }
         });
-    } else {
-      setFilteredSubtopics(subtopics);
     }
     return () => controller.abort();
   }, [selectedTopic, subtopics]);

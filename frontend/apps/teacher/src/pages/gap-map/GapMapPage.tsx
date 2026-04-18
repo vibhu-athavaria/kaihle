@@ -261,8 +261,8 @@ export function GapMapPage() {
 
       {data && students.length > 0 && (
         <p className="text-sm text-brand-muted mt-4">
-          Click any cell to view that student's learning profile and assign a
-          targeted study plan directly.
+          Click any cell to view that student&apos;s learning profile and assign
+          a targeted study plan directly.
         </p>
       )}
 

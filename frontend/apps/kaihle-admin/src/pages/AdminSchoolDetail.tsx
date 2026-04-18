@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Calendar,
 } from "lucide-react";
+import type { School, SchoolAnalytics } from "../hooks/useKaihleAdmin";
 
 function getDaysRemaining(trialEndDate: string | null): number | null {
   if (!trialEndDate) return null;
@@ -25,7 +26,13 @@ function getDaysRemaining(trialEndDate: string | null): number | null {
   return diff > 0 ? diff : 0;
 }
 
-function InfoSection({ school, onEdit }: { school: any; onEdit: () => void }) {
+function InfoSection({
+  school,
+  onEdit,
+}: {
+  school: School;
+  onEdit: () => void;
+}) {
   const statusVariant =
     school.subscription_status === "ACTIVE"
       ? "success"
@@ -106,7 +113,7 @@ function TrialSection({
   school,
   onExtend,
 }: {
-  school: any;
+  school: School;
   onExtend: () => void;
 }) {
   const daysRemaining = getDaysRemaining(school.trial_end_date);
@@ -142,7 +149,7 @@ function StatsSection({
   analytics,
   loading,
 }: {
-  analytics: any;
+  analytics: SchoolAnalytics | undefined;
   loading?: boolean;
 }) {
   if (loading) {

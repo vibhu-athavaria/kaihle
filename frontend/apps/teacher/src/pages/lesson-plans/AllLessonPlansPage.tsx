@@ -17,8 +17,9 @@ export function AllLessonPlansPage() {
           Lesson plans are generated every Monday at 6am.
         </h3>
         <p className="text-sm text-brand-muted max-w-sm mx-auto mb-4">
-          They're built around your students' topic gaps — personalised to
-          whichever subtopics your class is struggling with that week.
+          They&apos;re built around your students&apos; topic gaps —
+          personalised to whichever subtopics your class is struggling with that
+          week.
         </p>
         <p className="text-sm text-brand-muted max-w-sm mx-auto mb-6">
           Create assessments first to unlock personalised plans.

@@ -11,7 +11,7 @@ export function AccountActionsSection({
         <div>
           <p className="text-sm font-medium text-gray-700">Sign out</p>
           <p className="text-xs text-gray-400 mt-0.5">
-            You'll need to sign in again to access Kaihle.
+            You&apos;ll need to sign in again to access Kaihle.
           </p>
         </div>
         <button

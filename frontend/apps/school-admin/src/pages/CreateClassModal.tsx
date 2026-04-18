@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@kaihle/ui";
 import { Input } from "@kaihle/ui";
 import { UserRole } from "@kaihle/types";
@@ -34,7 +34,6 @@ export function CreateClassModal({
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [grade, setGrade] = useState("");
-  const [curriculumId, setCurriculumId] = useState("");
   const [teacherId, setTeacherId] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -43,39 +42,30 @@ export function CreateClassModal({
   const { data: teachers } = useSchoolUsers(UserRole.TEACHER);
   const createClass = useCreateClass();
 
-  useEffect(() => {
-    if (grade && curricula && grades) {
-      const gradeData = grades.find((g) => g.level === parseInt(grade));
-      if (gradeData) {
-        if (gradeData.level <= 8) {
-          const lowerCurriculum = curricula.find((c) =>
-            c.name.toLowerCase().includes("lower"),
-          );
-          if (lowerCurriculum) {
-            setCurriculumId(lowerCurriculum.id);
-          }
-        } else if (gradeData.level <= 10) {
-          const igcseCurriculum = curricula.find((c) =>
-            c.name.toLowerCase().includes("igcse"),
-          );
-          if (igcseCurriculum) {
-            setCurriculumId(igcseCurriculum.id);
-          }
-        }
-      }
+  const curriculumId = useMemo(() => {
+    if (!grade || !curricula || !grades) return "";
+    const gradeData = grades.find((g) => g.level === parseInt(grade));
+    if (!gradeData) return "";
+    if (gradeData.level <= 8) {
+      return (
+        curricula.find((c) => c.name.toLowerCase().includes("lower"))?.id ?? ""
+      );
     }
+    if (gradeData.level <= 10) {
+      return (
+        curricula.find((c) => c.name.toLowerCase().includes("igcse"))?.id ?? ""
+      );
+    }
+    return "";
   }, [grade, curricula, grades]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      setName("");
-      setSubject("");
-      setGrade("");
-      setCurriculumId("");
-      setTeacherId("");
-      setErrors({});
-    }
-  }, [isOpen]);
+  function resetForm() {
+    setName("");
+    setSubject("");
+    setGrade("");
+    setTeacherId("");
+    setErrors({});
+  }
 
   if (!isOpen) return null;
 
@@ -121,6 +111,7 @@ export function CreateClassModal({
         curriculum_id: curriculumId,
         teacher_id: teacherId || undefined,
       });
+      resetForm();
       onCreated();
       onClose();
     } catch {
@@ -128,11 +119,16 @@ export function CreateClassModal({
     }
   };
 
+  function handleClose() {
+    resetForm();
+    onClose();
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/40"
-        onClick={onClose}
+        onClick={handleClose}
         aria-hidden="true"
       />
       <div
@@ -142,7 +138,7 @@ export function CreateClassModal({
         aria-labelledby="modal-title"
       >
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="absolute top-4 right-4 p-1 text-brand-muted hover:text-brand-ink rounded-full hover:bg-gray-100"
           aria-label="Close"
         >
@@ -229,8 +225,8 @@ export function CreateClassModal({
             <select
               id="curriculum"
               value={curriculumId}
-              onChange={(e) => setCurriculumId(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+              disabled
+              className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-gray-50 text-brand-ink font-sans text-sm cursor-not-allowed"
             >
               <option value="">Select curriculum</option>
               {curricula?.map((c) => (
@@ -275,7 +271,7 @@ export function CreateClassModal({
             <Button
               type="button"
               variant="secondary"
-              onClick={onClose}
+              onClick={handleClose}
               className="flex-1"
             >
               Cancel

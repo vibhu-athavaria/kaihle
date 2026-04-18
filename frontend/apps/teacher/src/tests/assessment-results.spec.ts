@@ -51,9 +51,6 @@ test.describe("Assessment Results Page", () => {
       `${BASE_URL}/teacher/assessments/test-assessment-id/results`,
     );
     // Assessment type badge must be visible — one of the four known types
-    const badge = page.locator(
-      "text=Diagnostic, text=Topic Specific, text=Progress Check, text=Final",
-    );
     // At minimum, verify badge element with border class exists
     await expect(
       page
@@ -112,9 +109,6 @@ test.describe("Assessment Results Page", () => {
     );
     await page.waitForLoadState("networkidle");
 
-    const chart = page.locator('[role="img"]').filter({
-      hasText: /Score distribution/,
-    });
     // Chart wrapper must have role="img" and aria-label
     const ariaLabel = await page
       .locator('[role="img"][aria-label*="Score distribution"]')

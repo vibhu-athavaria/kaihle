@@ -56,8 +56,8 @@ export function StudyPlans() {
             </h3>
             <p className="font-sans text-sm text-brand-muted max-w-sm mx-auto mb-4">
               Your study plans are being built from your assessment results.
-              They'll appear here soon — in the meantime, explore your progress
-              to see where to focus.
+              They&apos;ll appear here soon — in the meantime, explore your
+              progress to see where to focus.
             </p>
             <Link
               to="/student/my-progress"

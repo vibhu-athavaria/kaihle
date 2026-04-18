@@ -142,7 +142,7 @@ export function StudentProfilePage() {
         )}
         {activeTab === "learning-profile" && !data.learningProfile && (
           <p className="text-sm text-brand-muted italic text-center py-12">
-            This student hasn't completed their learning profile yet.
+            This student hasn&apos;t completed their learning profile yet.
           </p>
         )}
         {activeTab === "study-plans" && <StudyPlanHistoryTab />}

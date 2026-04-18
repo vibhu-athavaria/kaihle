@@ -45,7 +45,7 @@ export function AccountActionsSection() {
           )}
         </button>
         <p className="text-xs text-brand-muted mt-2 text-center">
-          You'll need to sign in again on this device
+          You&apos;ll need to sign in again on this device
         </p>
       </div>
     </div>

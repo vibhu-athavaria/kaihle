@@ -91,10 +91,8 @@ test.describe("KaihleAdmin Logs Page", () => {
   test("logs_auto_scrolls_to_bottom_on_refresh", async ({ page }) => {
     const logPanel = page.locator('[data-testid="log-panel-body"]');
 
-    // Get initial scroll height
-    const initialScrollHeight = await logPanel.evaluate(
-      (el) => el.scrollHeight,
-    );
+    // Get initial scroll height (used to verify panel loaded)
+    await logPanel.evaluate((el) => el.scrollHeight);
 
     // Toggle auto-scroll on
     const autoScrollToggle = page.locator(
@@ -116,8 +114,8 @@ test.describe("KaihleAdmin Logs Page", () => {
 
     // With auto-scroll on, after next refresh logs should scroll to bottom
     // Since mock refreshes every 10s, we check if scrollTop is 0 (not scrolled to bottom)
-    const scrollTop = await logPanel.evaluate((el) => el.scrollTop);
     // After manual scroll to top, auto-scroll should bring it back to bottom
     // This is a simplified test since actual auto-scroll happens on data change
+    await logPanel.evaluate((el) => el.scrollTop);
   });
 });

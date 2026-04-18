@@ -3,8 +3,15 @@
 
 cd frontend
 
-# Run Prettier check
-pnpm exec prettier --check "**/*.{ts,tsx,json,css}" --ignore-path=".prettierignore"
+# Run Prettier auto-fix and stage changes
+pnpm exec prettier --write "**/*.{ts,tsx,json,css}" --ignore-path=".prettierignore"
+git add .
+
+# Run linting (auto-fixes where possible)
+pnpm lint
+
+# Run tests
+pnpm test
 
 # Run TypeScript type checks for all apps
 pnpm --filter parent exec tsc --noEmit
