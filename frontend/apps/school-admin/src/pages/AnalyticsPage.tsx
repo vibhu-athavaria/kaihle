@@ -34,7 +34,7 @@ export function AnalyticsPage() {
             Analytics
           </h1>
           <p className="text-gray-600 mt-1">
-            Track your school's performance metrics
+            Track your school&apos;s performance metrics
           </p>
         </div>
 

@@ -35,12 +35,6 @@ export function ParentSettings() {
   useEffect(() => {
     let cancelled = false;
 
-    if (!schoolId) {
-      setError("School information not available.");
-      setLoading(false);
-      return;
-    }
-
     Promise.all([
       apiClient.get<ParentUser>(`/api/v1/schools/${schoolId}/users/me`),
       apiClient.get<Child[]>("/api/v1/parent/children"),
@@ -179,7 +173,7 @@ export function ParentSettings() {
           onPasswordCancel={() => setPasswordEditOpen(false)}
         />
 
-        <ChildrenSection children={children} />
+        <ChildrenSection items={children} />
 
         <AccountActionsSection onSignOut={handleSignOut} />
       </div>

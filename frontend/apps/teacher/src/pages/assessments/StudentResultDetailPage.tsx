@@ -140,7 +140,7 @@ function StudentDetailContent({
 }
 
 export function StudentResultDetailPage() {
-  const { assessmentId, studentId: _studentId } = useParams<{
+  const { assessmentId } = useParams<{
     assessmentId: string;
     studentId: string;
   }>();

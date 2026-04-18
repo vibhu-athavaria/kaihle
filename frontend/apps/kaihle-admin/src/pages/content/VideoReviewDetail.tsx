@@ -240,7 +240,7 @@ export function VideoReviewDetail() {
                 {data.curriculum_code}
               </p>
               <p className="text-xs text-gray-600 mt-2 italic">
-                "{data.learning_objective}"
+                &quot;{data.learning_objective}&quot;
               </p>
             </div>
             <div className="text-right flex-shrink-0">

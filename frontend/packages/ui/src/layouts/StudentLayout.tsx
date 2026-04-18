@@ -8,6 +8,7 @@ import {
   ClipboardList,
   ChevronRight,
   LogOut,
+  Settings,
 } from "lucide-react";
 
 export type StudentNavItem =
@@ -87,13 +88,13 @@ export function StudentLayout({
   const firstName = studentName.split(" ")[0] ?? studentName;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-role-student-bg">
+    <div className="flex h-screen overflow-hidden bg-brand-bg">
       {/* ── SIDEBAR ──────────────────────────────────────────── */}
       <aside
-        className="w-[200px] flex-shrink-0 bg-white border-r border-role-student-border flex flex-col"
+        className="w-56 flex-shrink-0 bg-white border-r border-role-student-border flex flex-col"
         aria-label="Sidebar"
       >
-        {/* Logo row — h-[50px] must match topnav height */}
+        {/* Logo row — h-14 must match topnav height */}
         <div className="h-14 flex items-center px-4 border-b border-role-student-border flex-shrink-0">
           <span className="bg-brand-primary italic font-display font-bold text-lg text-white px-2 py-1 rounded-lg">
             K
@@ -105,11 +106,11 @@ export function StudentLayout({
 
         {/* Nav */}
         <nav
-          className="flex-1 overflow-y-auto py-2"
+          className="flex-1 overflow-y-auto py-4"
           aria-label="Main navigation"
         >
           {/* LEARN section */}
-          <div className="px-3.5 pt-4 pb-1 font-sans font-bold text-sidebar-label uppercase tracking-[0.8px] text-brand-muted">
+          <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-muted">
             Learn
           </div>
 
@@ -138,8 +139,8 @@ export function StudentLayout({
                 to={NAV_ROUTES[key]}
                 aria-current={isActive ? "page" : undefined}
                 className={[
-                  "flex items-center gap-2 mx-1.5 px-3 py-[7px] rounded-nav",
-                  "font-sans text-sidebar-nav transition-colors",
+                  "flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
+                  "text-sm font-semibold transition-colors",
                   isActive
                     ? "bg-role-student-nav-active text-brand-primary font-semibold"
                     : "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
@@ -151,10 +152,7 @@ export function StudentLayout({
                     aria-hidden="true"
                   />
                 ) : (
-                  <Icon
-                    className="w-[13px] h-[13px] flex-shrink-0"
-                    aria-hidden="true"
-                  />
+                  <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                 )}
                 {label}
               </Link>
@@ -164,7 +162,7 @@ export function StudentLayout({
           {/* CLASSES section — dynamic */}
           {classes.length > 0 && (
             <>
-              <div className="px-3.5 pt-4 pb-1 font-sans font-bold text-sidebar-label uppercase tracking-[0.8px] text-brand-muted">
+              <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-muted">
                 Classes
               </div>
               {classes.map((cls) => {
@@ -184,14 +182,14 @@ export function StudentLayout({
                         : cls.name
                     }
                     className={[
-                      "flex items-center gap-2 mx-1.5 px-3 py-[7px] rounded-nav",
-                      "font-sans text-sidebar-nav transition-colors",
+                      "flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
+                      "text-sm font-semibold transition-colors",
                       "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
                     ].join(" ")}
                   >
                     {isLocked ? (
                       <ChevronRight
-                        className="w-[11px] h-[11px] flex-shrink-0"
+                        className="w-5 h-5 flex-shrink-0"
                         aria-hidden="true"
                       />
                     ) : (
@@ -210,45 +208,25 @@ export function StudentLayout({
           )}
         </nav>
 
-        {/* ── PROFILE CARD — pinned at sidebar bottom ──────────── */}
-        <div className="border-t border-role-student-border flex-shrink-0">
-          {/* Profile row → /student/settings on click */}
+        {/* ── SIDEBAR BOTTOM ──────────────────────────────────── */}
+        <div className="border-t border-brand-border p-3">
           <button
             type="button"
             onClick={() => navigate("/student/settings")}
-            className="w-full flex items-center gap-2 px-3.5 py-3 hover:bg-gray-50 transition-colors text-left"
-            aria-label={`${studentName} — open settings`}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors"
+            aria-label="Settings"
           >
-            <div
-              className="w-[28px] h-[28px] rounded-full bg-brand-green-light flex items-center
-                         justify-center font-sans font-bold text-topnav-sub text-brand-primary flex-shrink-0"
-              aria-hidden="true"
-            >
-              {initials}
-            </div>
-            <div className="overflow-hidden min-w-0">
-              <div className="font-sans font-semibold text-sidebar-profile text-brand-ink truncate leading-tight">
-                {studentName}
-              </div>
-              <div className="font-sans text-sidebar-label text-brand-muted truncate leading-tight">
-                {gradeName} · {curriculumName}
-              </div>
-            </div>
+            <Settings className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            Settings
           </button>
-
-          {/* Logout — separate button below profile row */}
           <button
             type="button"
             onClick={onLogout}
-            className="w-full flex items-center gap-2 px-3.5 py-2.5
-                       font-sans text-sidebar-profile text-brand-muted hover:text-brand-ink hover:bg-gray-50 transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors"
             aria-label="Log out"
           >
-            <LogOut
-              className="w-[13px] h-[13px] flex-shrink-0"
-              aria-hidden="true"
-            />
-            Logout
+            <LogOut className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            Log out
           </button>
         </div>
       </aside>
@@ -257,16 +235,16 @@ export function StudentLayout({
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Top nav — greeting lives HERE per DESIGN_SYSTEM.md §5.4 Top nav spec */}
         <header
-          className="h-[50px] bg-white border-b border-role-student-border
-                     flex items-center justify-between px-[18px] flex-shrink-0"
+          className="h-14 bg-white border-b border-role-student-border
+           flex items-center justify-between px-6 flex-shrink-0"
         >
           {/* Left: greeting + grade/curriculum */}
           <div>
-            <div className="font-sans font-medium text-topnav-greeting text-brand-ink leading-tight">
+            <div className="ffont-display font-bold text-xl text-brand-ink leading-tight">
               {getGreeting()}, {firstName} 👋
             </div>
             {gradeName && curriculumName && (
-              <div className="font-sans text-topnav-sub text-brand-muted leading-tight">
+              <div className="font-sans text-xs text-brand-body leading-tight">
                 {gradeName} · {curriculumName}
               </div>
             )}
@@ -277,7 +255,7 @@ export function StudentLayout({
             type="button"
             onClick={() => navigate("/student/settings")}
             className="w-[28px] h-[28px] rounded-full bg-brand-green-light flex items-center
-                       justify-center font-sans font-bold text-topnav-sub text-brand-primary
+                       justify-center font-sans font-bold text-xs text-brand-primary
                        hover:opacity-80 transition-opacity flex-shrink-0"
             aria-label={`${studentName} — open settings`}
           >

@@ -7,10 +7,10 @@ interface Child {
 }
 
 interface ChildrenSectionProps {
-  children: Child[];
+  items: Child[];
 }
 
-export function ChildrenSection({ children }: ChildrenSectionProps) {
+export function ChildrenSection({ items: children }: ChildrenSectionProps) {
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-100">
@@ -25,7 +25,7 @@ export function ChildrenSection({ children }: ChildrenSectionProps) {
             No children linked to your account.
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            Contact your school admin to link your child's account.
+            Contact your school admin to link your child&apos;s account.
           </p>
         </div>
       ) : (

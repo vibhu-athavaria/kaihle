@@ -65,14 +65,16 @@ function mockAttemptRoutes(
   );
 }
 
-function mockAttemptSubmit(page: import("@playwright/test").Page) {
-  return page.route("**/api/v1/attempts/attempt-123/submit", (route) =>
+function mockAttemptResults(
+  page: import("@playwright/test").Page,
+  score = 0.5,
+) {
+  return page.route("**/api/v1/attempts/attempt-123/results", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        attempt_id: "attempt-123",
-        score: 0.5,
+        score: score,
         correct_count: 1,
         total_questions: 2,
         status: "COMPLETED",

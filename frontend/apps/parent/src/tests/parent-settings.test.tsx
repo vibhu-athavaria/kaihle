@@ -79,13 +79,13 @@ describe("ChildrenSection", () => {
         school_name: "Bali IS",
       },
     ];
-    render(<ChildrenSection children={children} />);
+    render(<ChildrenSection items={children} />);
     expect(screen.getByText("Emma Chen")).toBeInTheDocument();
     expect(screen.getByText(/Grade 8/)).toBeInTheDocument();
   });
 
   it("test_empty_state_when_no_children", () => {
-    render(<ChildrenSection children={[]} />);
+    render(<ChildrenSection items={[]} />);
     expect(screen.getByText(/no children linked/i)).toBeInTheDocument();
   });
 
@@ -99,7 +99,7 @@ describe("ChildrenSection", () => {
         school_name: "Bali IS",
       },
     ];
-    const { container } = render(<ChildrenSection children={children} />);
+    const { container } = render(<ChildrenSection items={children} />);
     // Avatar shows "EC" for Emma Chen
     expect(container.querySelector('[aria-hidden="true"]')?.textContent).toBe(
       "EC",
@@ -116,19 +116,19 @@ describe("ChildrenSection", () => {
         school_name: "Bali International School",
       },
     ];
-    render(<ChildrenSection children={children} />);
+    render(<ChildrenSection items={children} />);
     expect(screen.getByText(/Bali International School/)).toBeInTheDocument();
   });
 
   it("test_renders_section_heading", () => {
-    render(<ChildrenSection children={[]} />);
+    render(<ChildrenSection items={[]} />);
     expect(
       screen.getByRole("heading", { name: /my children/i }),
     ).toBeInTheDocument();
   });
 
   it("test_renders_contact_school_admin_note", () => {
-    render(<ChildrenSection children={[]} />);
+    render(<ChildrenSection items={[]} />);
     expect(screen.getByText(/contact your school admin/i)).toBeInTheDocument();
   });
 
@@ -149,7 +149,7 @@ describe("ChildrenSection", () => {
         school_name: "Bali IS",
       },
     ];
-    render(<ChildrenSection children={children} />);
+    render(<ChildrenSection items={children} />);
     expect(screen.getByText("Emma Chen")).toBeInTheDocument();
     expect(screen.getByText("Lucas Chen")).toBeInTheDocument();
   });

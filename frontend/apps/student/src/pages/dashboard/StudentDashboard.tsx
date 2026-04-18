@@ -47,25 +47,6 @@ export function StudentDashboard() {
     setResolvedSubjectScores(scores);
   }, []);
 
-  if (isInfoError) {
-    return (
-      <StudentLayout
-        activeNav="home"
-        studentName={studentName}
-        gradeName={gradeName}
-        curriculumName={curriculumName}
-        onLogout={logout}
-      >
-        <div className="text-center py-8">
-          <p className="text-brand-red">
-            Failed to load dashboard data. Please try again or contact support
-            if the problem persists.
-          </p>
-        </div>
-      </StudentLayout>
-    );
-  }
-
   // For now, default empty arrays - these would come from other API calls
   const studyPlans = dashboardData?.studyPlans ?? [];
   const assessments = dashboardData?.assessments ?? [];
@@ -96,6 +77,25 @@ export function StudentDashboard() {
     }
     return result;
   }, [classesData]);
+
+  if (isInfoError) {
+    return (
+      <StudentLayout
+        activeNav="home"
+        studentName={studentName}
+        gradeName={gradeName}
+        curriculumName={curriculumName}
+        onLogout={logout}
+      >
+        <div className="text-center py-8">
+          <p className="text-brand-red">
+            Failed to load dashboard data. Please try again or contact support
+            if the problem persists.
+          </p>
+        </div>
+      </StudentLayout>
+    );
+  }
 
   // Build class items for sidebar - safely handle potentially non-array data
   const sidebarClasses = Array.isArray(classesData)
@@ -133,7 +133,7 @@ export function StudentDashboard() {
           if (safeClasses.length === 0) return null;
           return (
             <div>
-              <h2 className="font-sans text-section-label font-bold uppercase tracking-[0.8px] text-brand-body mb-2.5">
+              <h2 className="font-sans text-xs font-bold uppercase tracking-[0.8px] text-brand-body mb-2.5">
                 My classes
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -162,7 +162,7 @@ export function StudentDashboard() {
         {/* What's waiting for you - Always render, show EmptyNextSteps if no steps */}
         <div>
           <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-body mb-3">
-            What's waiting for you
+            What&apos;s waiting for you
           </h2>
           <div className="space-y-3">
             {isInfoLoading || isClassesLoading || isDashboardLoading ? (

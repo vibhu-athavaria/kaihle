@@ -74,20 +74,20 @@ export function ClassCard({
           className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${getDotColorClass()}`}
           aria-label={`Status indicator: ${isLocked ? "locked" : "unlocked"}`}
         />
-        <span className="font-sans font-semibold text-card-title text-brand-ink truncate">
+        <span className="font-sans font-semibold text-base text-brand-ink truncate">
           {displayName}
         </span>
       </div>
 
       {/* Meta info */}
-      <div className="font-sans text-card-meta text-brand-body mb-2">
+      <div className="font-sans text-xs text-brand-body mb-2">
         {teacherName}
         {studentCount !== undefined && ` · ${studentCount} students`}
       </div>
 
       {/* CTA Footer */}
       <div
-        className={`font-sans font-semibold text-card-action ${
+        className={`font-sans font-semibold text-xs ${
           isLocked ? "text-brand-gold" : "text-brand-primary"
         }`}
       >

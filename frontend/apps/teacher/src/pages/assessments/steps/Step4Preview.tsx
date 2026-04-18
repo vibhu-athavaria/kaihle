@@ -22,17 +22,15 @@ export function Step4Preview() {
     setStep,
   } = useAssessmentWizard();
 
-  const [localQuestions, setLocalQuestions] = useState<PreviewQuestion[]>([]);
+  const [localQuestions, setLocalQuestions] = useState<PreviewQuestion[]>(
+    draftAssessmentId && previewQuestions.length > 0 ? previewQuestions : [],
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [insufficientError, setInsufficientError] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
   useEffect(() => {
-    // If we already have a draft from a previous visit to this step, use it
-    if (draftAssessmentId && previewQuestions.length > 0) {
-      setLocalQuestions(previewQuestions);
-      return;
-    }
+    if (draftAssessmentId && previewQuestions.length > 0) return;
 
     if (!classId) return;
 

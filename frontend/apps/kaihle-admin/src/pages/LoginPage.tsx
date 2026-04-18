@@ -16,7 +16,7 @@ export function LoginPage() {
       navigate("/kaihle-admin/dashboard");
       // PasswordSetupRoute guard will intercept and redirect to setup-password
       // if the JWT has scope: "password_setup"
-    } catch (err) {
+    } catch {
       setError("Invalid email or password. Please try again.");
     }
   };

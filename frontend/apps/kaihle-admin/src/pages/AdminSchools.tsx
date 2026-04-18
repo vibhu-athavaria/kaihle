@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AdminLayout } from "@kaihle/ui";
 import { Card, Badge, Button, Skeleton } from "@kaihle/ui";
@@ -127,15 +127,22 @@ export function AdminSchools() {
   const { logout } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState<FilterTab>("ALL");
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
-  useEffect(() => {
-    if (searchParams.get("action") === "create") {
-      setShowCreateModal(true);
-      searchParams.delete("action");
-      setSearchParams(searchParams);
-    }
-  }, [searchParams, setSearchParams]);
+  const showCreateModal = searchParams.get("action") === "create";
+
+  function openCreateModal() {
+    setSearchParams((p) => {
+      p.set("action", "create");
+      return p;
+    });
+  }
+
+  function closeCreateModal() {
+    setSearchParams((p) => {
+      p.delete("action");
+      return p;
+    });
+  }
 
   const { data: schoolsData, isLoading } = useAdminSchools({
     page_size: 50,
@@ -149,10 +156,7 @@ export function AdminSchools() {
       pageTitle="Schools"
       onLogout={logout}
       topNavAction={
-        <Button
-          onClick={() => setShowCreateModal(true)}
-          icon={<Plus className="w-4 h-4" />}
-        >
+        <Button onClick={openCreateModal} icon={<Plus className="w-4 h-4" />}>
           Add school
         </Button>
       }
@@ -183,9 +187,7 @@ export function AdminSchools() {
         </Card>
       </div>
 
-      {showCreateModal && (
-        <AdminCreateSchoolModal onClose={() => setShowCreateModal(false)} />
-      )}
+      {showCreateModal && <AdminCreateSchoolModal onClose={closeCreateModal} />}
     </AdminLayout>
   );
 }

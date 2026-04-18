@@ -147,7 +147,8 @@ export function Step5Publish() {
       {/* Student access note */}
       <div className="bg-brand-bg rounded-xl p-4 text-sm text-brand-body border border-brand-border">
         Once published, students can access this assessment from their Kaihle
-        dashboard. They won't receive an email — they need to log in to see it.
+        dashboard. They won&apos;t receive an email — they need to log in to see
+        it.
       </div>
 
       {/* Footer */}

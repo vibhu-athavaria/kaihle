@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useStudentGapMap } from "../../hooks/useStudentGapMap";
 import { aggregateSubjectMastery } from "../../hooks/useSubjectScores";
 import { SubjectScoreCard } from "./SubjectScoreCard";
@@ -67,17 +67,11 @@ export function SubjectScoresSection({
   const [resolvedScores, setResolvedScores] = useState<ResolvedSubjectScore[]>(
     [],
   );
-  const [hasCalledCallback, setHasCalledCallback] = useState(false);
-
-  // Reset resolved scores when subjects change
-  useEffect(() => {
-    setResolvedScores([]);
-    setHasCalledCallback(false);
-  }, [subjects]);
+  const hasCalledCallbackRef = useRef(false);
 
   // Call onScoresResolved when all subjects have resolved - only once
   useEffect(() => {
-    if (!onScoresResolved || hasCalledCallback) return;
+    if (!onScoresResolved || hasCalledCallbackRef.current) return;
 
     // Check if all subjects have resolved
     const allResolved =
@@ -88,11 +82,9 @@ export function SubjectScoresSection({
 
     if (allResolved && resolvedScores.length > 0) {
       onScoresResolved(resolvedScores);
-      setHasCalledCallback(true);
+      hasCalledCallbackRef.current = true;
     }
-  }, [resolvedScores, subjects, onScoresResolved, hasCalledCallback]);
-
-  if (!subjects.length) return null;
+  }, [resolvedScores, subjects, onScoresResolved]);
 
   const handleResolved = useCallback(
     (subjectName: string, score: number | null) => {
@@ -107,9 +99,11 @@ export function SubjectScoresSection({
     [],
   );
 
+  if (!subjects.length) return null;
+
   return (
     <div className="mb-6">
-      <h2 className="font-sans text-section-label font-bold uppercase tracking-[0.8px] text-brand-body mb-2.5">
+      <h2 className="font-sans text-xs font-bold uppercase tracking-[0.8px] text-brand-body mb-2.5">
         Your subjects
       </h2>
       <div className="grid grid-cols-3 gap-3">

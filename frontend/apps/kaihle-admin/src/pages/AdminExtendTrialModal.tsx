@@ -39,7 +39,7 @@ export function AdminExtendTrialModal({
         data: { days: selectedDays, reason },
       });
       onClose();
-    } catch (err) {
+    } catch {
       setError("Failed to extend trial. Please try again.");
     }
   };

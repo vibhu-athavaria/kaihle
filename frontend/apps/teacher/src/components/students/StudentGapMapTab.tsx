@@ -28,8 +28,8 @@ export function StudentGapMapTab({ scores, classId }: StudentGapMapTabProps) {
     <div className="space-y-4">
       <div className="bg-blue-50 border border-blue-100 text-blue-700 text-xs p-3 rounded-xl flex items-center justify-between">
         <span>
-          This view shows this student's gaps. To assign a study plan, use the
-          class Gap Map and select this student's cell.
+          This view shows this student&apos;s gaps. To assign a study plan, use
+          the class Gap Map and select this student&apos;s cell.
         </span>
         {classId && (
           <Link

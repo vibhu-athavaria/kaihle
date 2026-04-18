@@ -22,17 +22,17 @@ export function SubjectScoreCard({
 
   return (
     <div
-      className={`bg-white rounded-card border-[1.5px] ${borderClass} py-3 px-2.5 text-center shadow-card`}
+      className={`bg-white rounded-card border-[1.5px] ${borderClass} p-4 text-center shadow-card`}
     >
       <div
-        className={`font-sans font-bold text-score-value leading-none ${textClass} mb-0.5`}
+        className={`font-display font-extrabold text-2xl leading-none ${textClass} mb-1`}
       >
         {displayPct}
       </div>
-      <div className="font-sans font-bold text-score-subject uppercase tracking-[0.5px] text-brand-muted mb-0.5">
+      <div className="font-sans font-bold text-xs uppercase tracking-[0.5px] text-brand-muted mb-0.5">
         {subjectName}
       </div>
-      <div className={`font-sans font-semibold text-score-band ${textClass}`}>
+      <div className={`font-sans font-semibold text-xs ${textClass}`}>
         {label}
       </div>
     </div>
