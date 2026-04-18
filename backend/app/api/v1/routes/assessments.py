@@ -13,11 +13,13 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models.assessment import Assessment
+from app.models.curriculum import Subtopic
 from app.models.user import UserRole
 from app.schemas.assessments import (
     AssessmentCreateRequest,
@@ -201,11 +203,20 @@ async def create_assessment(
             detail=str(exc),
         )
 
+    # Batch-fetch subtopic names to avoid N+1
+    subtopic_ids = [q.subtopic_id for q in question_bank_rows]
+    subtopic_result = await db.execute(
+        select(Subtopic.id, Subtopic.name).where(Subtopic.id.in_(subtopic_ids))
+    )
+    subtopic_name_map: dict[str, str] = {str(row[0]): row[1] for row in subtopic_result.all()}
+
     questions = [
         AssessmentQuestion(
             question_id=q.id,
             question_text=q.question_text,
             options=[QuestionOption(key=o["key"], text=o["text"]) for o in (q.options or [])],
+            difficulty_level=int(q.difficulty_level) if q.difficulty_level is not None else 0,
+            subtopic_name=subtopic_name_map.get(str(q.subtopic_id), "Unknown"),
         )
         for q in question_bank_rows
     ]
