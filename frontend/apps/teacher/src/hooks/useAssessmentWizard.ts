@@ -4,6 +4,8 @@ export interface PreviewQuestion {
   question_id: string;
   question_text: string;
   options: Array<{ key: string; text: string }>;
+  difficulty_level: number;
+  subtopic_name: string;
 }
 
 export type AssessmentType =
