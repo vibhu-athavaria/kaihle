@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "@kaihle/auth";
-import { Button, Badge, Skeleton } from "@kaihle/ui";
-import { X } from "lucide-react";
+import { Button, Badge, Skeleton, Modal } from "@kaihle/ui";
+import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   useAssessmentWizard,
   type PreviewQuestion,
 } from "../../../hooks/useAssessmentWizard";
+
+const PAGE_SIZE = 3;
 
 export function Step4Preview() {
   const {
@@ -28,10 +30,13 @@ export function Step4Preview() {
   const [isLoading, setIsLoading] = useState(false);
   const [insufficientError, setInsufficientError] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [previewQuestion, setPreviewQuestion] =
+    useState<PreviewQuestion | null>(null);
+  const [studentViewOpen, setStudentViewOpen] = useState(false);
 
   useEffect(() => {
     if (draftAssessmentId && previewQuestions.length > 0) return;
-
     if (!classId) return;
 
     const abortController = new AbortController();
@@ -66,10 +71,14 @@ export function Step4Preview() {
             question_id?: string;
             question_text: string;
             options: Array<{ key: string; text: string }>;
+            difficulty_level: number;
+            subtopic_name: string;
           }) => ({
             question_id: q.id ?? q.question_id ?? "",
             question_text: q.question_text,
             options: q.options ?? [],
+            difficulty_level: q.difficulty_level ?? 1,
+            subtopic_name: q.subtopic_name ?? "Unknown",
           }),
         );
 
@@ -96,7 +105,6 @@ export function Step4Preview() {
     }
 
     void createDraft();
-
     return () => {
       abortController.abort();
     };
@@ -108,8 +116,10 @@ export function Step4Preview() {
     setLocalQuestions((prev) =>
       prev.filter((q) => q.question_id !== questionId),
     );
+    setCurrentPage(1);
   }
 
+  // ── Loading state ────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -123,12 +133,13 @@ export function Step4Preview() {
           </p>
         </div>
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          <Skeleton key={i} className="h-16 w-full rounded-xl" />
         ))}
       </div>
     );
   }
 
+  // ── Error states ─────────────────────────────────────────────────────────
   if (insufficientError) {
     return (
       <div className="space-y-6">
@@ -164,58 +175,221 @@ export function Step4Preview() {
     );
   }
 
+  // ── Computed values ───────────────────────────────────────────────────────
+  const difficultyMap = localQuestions.reduce<Record<number, number>>(
+    (acc, q) => {
+      acc[q.difficulty_level] = (acc[q.difficulty_level] ?? 0) + 1;
+      return acc;
+    },
+    {},
+  );
+  const difficultyLevels = Object.keys(difficultyMap)
+    .map(Number)
+    .sort((a, b) => a - b);
+  const maxCount =
+    difficultyLevels.length > 0 ? Math.max(...Object.values(difficultyMap)) : 1;
+  const topicCount = new Set(localQuestions.map((q) => q.subtopic_name)).size;
+  const diffMin =
+    difficultyLevels.length > 0 ? Math.min(...difficultyLevels) : difficultyMin;
+  const diffMax =
+    difficultyLevels.length > 0 ? Math.max(...difficultyLevels) : difficultyMax;
+
+  const totalPages = Math.max(1, Math.ceil(localQuestions.length / PAGE_SIZE));
+  const pageQuestions = localQuestions.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
+  const sampleQuestion = localQuestions[2] ?? localQuestions[0];
+
+  // ── Main render ───────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-sans text-brand-muted">
-          {localQuestions.length} question
-          {localQuestions.length !== 1 ? "s" : ""} selected
-        </p>
-        <Badge variant="info">Preview</Badge>
+    <div className="space-y-5">
+      {/* Stats bar */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-brand-light border border-brand-border rounded-xl p-3 text-center">
+          <p className="font-sans font-extrabold text-2xl text-brand-primary leading-none">
+            {localQuestions.length}
+          </p>
+          <p className="text-xs font-sans text-brand-muted mt-1">in pool</p>
+        </div>
+        <div className="bg-[#fffbeb] border border-brand-border rounded-xl p-3 text-center">
+          <p className="font-sans font-extrabold text-2xl text-brand-gold leading-none">
+            {questionCount}
+          </p>
+          <p className="text-xs font-sans text-brand-muted mt-1">per attempt</p>
+        </div>
+        <div className="bg-white border border-brand-border rounded-xl p-3 text-center">
+          <p className="font-sans font-extrabold text-2xl text-brand-ink leading-none">
+            {topicCount}
+          </p>
+          <p className="text-xs font-sans text-brand-muted mt-1">subtopics</p>
+        </div>
+        <div className="bg-white border border-brand-border rounded-xl p-3 text-center">
+          <p className="font-sans font-extrabold text-2xl text-brand-ink leading-none">
+            {diffMin}–{diffMax}
+          </p>
+          <p className="text-xs font-sans text-brand-muted mt-1">difficulty</p>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        {localQuestions.map((q, idx) => (
-          <div
-            key={q.question_id}
-            className="bg-white border border-brand-border rounded-xl p-4 flex gap-3"
-          >
-            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-light text-brand-primary text-xs font-bold font-sans flex items-center justify-center">
-              {idx + 1}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-sans text-brand-ink leading-relaxed">
+      {/* Difficulty distribution chart */}
+      {difficultyLevels.length > 0 && (
+        <div className="bg-white border border-brand-border rounded-xl p-4">
+          <p className="text-xs font-sans font-bold uppercase tracking-widest text-brand-muted mb-3">
+            Difficulty distribution
+          </p>
+          <div className="flex items-end gap-2 h-10">
+            {difficultyLevels.map((level) => {
+              const count = difficultyMap[level] ?? 0;
+              const heightPct = Math.round((count / maxCount) * 100);
+              const isHigher = level > 3;
+              return (
+                <div
+                  key={level}
+                  className="flex-1 flex flex-col items-center gap-1"
+                >
+                  <div
+                    className="w-full rounded-t"
+                    style={{
+                      height: `${heightPct}%`,
+                      minHeight: "4px",
+                      background: isHigher ? "#c9932a" : "#1a5c38",
+                      opacity: 0.5 + level * 0.08,
+                    }}
+                    aria-label={`Level ${level}: ${count} questions`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-2 mt-2">
+            {difficultyLevels.map((level) => (
+              <div key={level} className="flex-1 text-center">
+                <p className="text-[10px] font-sans text-brand-muted">
+                  Lvl {level}
+                </p>
+                <p className="text-[10px] font-sans font-bold text-brand-ink">
+                  {difficultyMap[level] ?? 0}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Question list header */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-sans font-bold uppercase tracking-widest text-brand-muted">
+          Questions in pool
+        </p>
+        <p className="text-xs font-sans text-brand-muted">
+          {localQuestions.length} total
+        </p>
+      </div>
+
+      {/* Question rows */}
+      <div className="space-y-2">
+        {pageQuestions.map((q, idx) => {
+          const globalIdx = (currentPage - 1) * PAGE_SIZE + idx + 1;
+          return (
+            <div
+              key={q.question_id}
+              className="bg-white border border-brand-border rounded-xl p-3 flex items-center gap-3"
+            >
+              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-light text-brand-primary text-xs font-bold font-sans flex items-center justify-center">
+                {globalIdx}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-sans text-brand-ink truncate font-medium">
                   {q.question_text}
                 </p>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <Badge variant="neutral">
+                    {"⭐".repeat(Math.min(q.difficulty_level, 5))} Lvl{" "}
+                    {q.difficulty_level}
+                  </Badge>
+                  <Badge variant="info">{q.subtopic_name}</Badge>
+                  <span className="text-xs font-sans text-brand-muted">
+                    {q.options.length} options
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setPreviewQuestion(q)}
+                  className="text-xs font-sans font-bold text-brand-gold bg-[#fffbeb] border border-[#fde68a] rounded-md px-2 py-1 hover:bg-[#fef3c7] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
+                >
+                  Preview
+                </button>
                 <button
                   type="button"
                   onClick={() => removeQuestion(q.question_id)}
-                  className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-brand-muted hover:text-brand-red hover:bg-brand-red-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
-                  aria-label={`Remove question ${idx + 1}`}
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-brand-muted hover:text-brand-red hover:bg-brand-red-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
+                  aria-label={`Remove question ${globalIdx}`}
                 >
                   <X className="w-3 h-3" aria-hidden="true" />
                 </button>
               </div>
-              <div className="mt-2 flex items-center gap-2">
-                <Badge variant="neutral">MCQ</Badge>
-                {q.options.length > 0 && (
-                  <span className="text-xs font-sans text-brand-muted">
-                    {q.options.length} options
-                  </span>
-                )}
-              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {localQuestions.length === 0 && !isLoading && !insufficientError && (
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="border border-brand-border rounded-lg p-1.5 text-brand-body hover:text-brand-ink disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+          </button>
+          <span className="text-xs font-sans text-brand-body">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="border border-brand-border rounded-lg p-1.5 text-brand-body hover:text-brand-ink disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
+            aria-label="Next page"
+          >
+            <ChevronRight className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {localQuestions.length === 0 && (
         <p className="text-sm font-sans text-brand-muted text-center py-8">
           All questions have been removed. Go back to select a different
           configuration.
         </p>
       )}
+
+      {/* Student view banner */}
+      <div className="bg-brand-light border border-brand-border rounded-xl p-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-sans font-bold text-brand-primary">
+            👁 Student view
+          </p>
+          <p className="text-xs font-sans text-brand-body mt-0.5">
+            See exactly how a student experiences this assessment
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          onClick={() => setStudentViewOpen(true)}
+          disabled={localQuestions.length === 0}
+        >
+          Open preview →
+        </Button>
+      </div>
 
       {/* Footer */}
       <div className="flex justify-between pt-2">
@@ -228,9 +402,94 @@ export function Step4Preview() {
           disabled={localQuestions.length === 0}
           onClick={() => setStep(5)}
         >
-          Review & Publish
+          Review &amp; Publish
         </Button>
       </div>
+
+      {/* Single-question preview modal */}
+      <Modal
+        open={previewQuestion !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewQuestion(null);
+        }}
+        title="Question preview"
+        description="This is how the student will see this question."
+      >
+        {previewQuestion && (
+          <div className="space-y-4">
+            <p className="text-sm font-sans text-brand-ink leading-relaxed font-semibold">
+              {previewQuestion.question_text}
+            </p>
+            <div className="space-y-2">
+              {previewQuestion.options.map((opt) => (
+                <div
+                  key={opt.key}
+                  className="border border-brand-border rounded-lg p-3 flex items-center gap-3 text-sm font-sans text-brand-body"
+                >
+                  <span className="w-6 h-6 rounded flex items-center justify-center bg-brand-border-soft text-brand-muted text-xs font-bold flex-shrink-0">
+                    {opt.key.toUpperCase()}
+                  </span>
+                  {opt.text}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Badge variant="neutral">
+                {"⭐".repeat(Math.min(previewQuestion.difficulty_level, 5))} Lvl{" "}
+                {previewQuestion.difficulty_level}
+              </Badge>
+              <Badge variant="info">{previewQuestion.subtopic_name}</Badge>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Student view modal */}
+      <Modal
+        open={studentViewOpen}
+        onOpenChange={setStudentViewOpen}
+        title="Student view — adaptive assessment"
+        description={`Students answer ${questionCount} questions. Each next question is chosen based on their previous answer.`}
+      >
+        {sampleQuestion && (
+          <div className="space-y-4">
+            <div>
+              <div className="w-full bg-brand-border rounded-full h-1.5 overflow-hidden mb-1">
+                <div
+                  className="bg-brand-primary h-1.5 rounded-full"
+                  style={{ width: "30%" }}
+                  role="progressbar"
+                  aria-valuenow={30}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                />
+              </div>
+              <p className="text-xs font-sans text-brand-muted">
+                Question 3 of {questionCount}
+              </p>
+            </div>
+            <p className="text-sm font-sans font-semibold text-brand-ink leading-relaxed">
+              {sampleQuestion.question_text}
+            </p>
+            <div className="space-y-2">
+              {sampleQuestion.options.map((opt) => (
+                <div
+                  key={opt.key}
+                  className="border border-brand-border rounded-lg p-3 flex items-center gap-3 text-sm font-sans text-brand-body hover:border-brand-primary hover:bg-brand-light transition-colors cursor-pointer"
+                >
+                  <span className="w-6 h-6 rounded flex items-center justify-center bg-brand-border-soft text-brand-muted text-xs font-bold flex-shrink-0">
+                    {opt.key.toUpperCase()}
+                  </span>
+                  {opt.text}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs font-sans text-brand-muted text-center italic">
+              Next question adapts based on the student&apos;s answer
+            </p>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
