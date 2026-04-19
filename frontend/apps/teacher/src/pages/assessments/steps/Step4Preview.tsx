@@ -31,9 +31,12 @@ export function Step4Preview() {
   const [insufficientError, setInsufficientError] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [previewQuestion, setPreviewQuestion] =
-    useState<PreviewQuestion | null>(null);
-  const [studentViewOpen, setStudentViewOpen] = useState(false);
+  const [attemptOpen, setAttemptOpen] = useState(false);
+  const [attemptIndex, setAttemptIndex] = useState(0);
+  const [attemptAnswers, setAttemptAnswers] = useState<Record<string, string>>(
+    {},
+  );
+  const [attemptDone, setAttemptDone] = useState(false);
 
   useEffect(() => {
     if (draftAssessmentId && previewQuestions.length > 0) return;
@@ -111,6 +114,13 @@ export function Step4Preview() {
     // We intentionally only run this on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function openAttempt(startIndex = 0) {
+    setAttemptIndex(startIndex);
+    setAttemptAnswers({});
+    setAttemptDone(false);
+    setAttemptOpen(true);
+  }
 
   function removeQuestion(questionId: string) {
     setLocalQuestions((prev) =>
@@ -200,36 +210,50 @@ export function Step4Preview() {
     currentPage * PAGE_SIZE,
   );
 
-  const sampleQuestion = localQuestions[2] ?? localQuestions[0];
-
   // ── Main render ───────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
       {/* Stats bar */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className="bg-brand-light border border-brand-border rounded-xl p-3 text-center">
-          <p className="font-sans font-extrabold text-2xl text-brand-primary leading-none">
-            {localQuestions.length}
-          </p>
-          <p className="text-xs font-sans text-brand-muted mt-1">in pool</p>
+      <div className="space-y-2">
+        <div className="grid grid-cols-4 gap-3">
+          <div className="bg-brand-light border border-brand-border rounded-xl p-3 text-center">
+            <p className="font-sans font-extrabold text-2xl text-brand-primary leading-none">
+              {localQuestions.length}
+            </p>
+            <p className="text-xs font-sans text-brand-muted mt-1">in pool</p>
+          </div>
+          <div className="bg-[#fffbeb] border border-brand-border rounded-xl p-3 text-center">
+            <p className="font-sans font-extrabold text-2xl text-brand-gold leading-none">
+              {questionCount}
+            </p>
+            <p className="text-xs font-sans text-brand-muted mt-1">
+              per attempt
+            </p>
+          </div>
+          <div className="bg-white border border-brand-border rounded-xl p-3 text-center">
+            <p className="font-sans font-extrabold text-2xl text-brand-ink leading-none">
+              {topicCount}
+            </p>
+            <p className="text-xs font-sans text-brand-muted mt-1">subtopics</p>
+          </div>
+          <div className="bg-white border border-brand-border rounded-xl p-3 text-center">
+            <p className="font-sans font-extrabold text-2xl text-brand-ink leading-none">
+              {diffMin}–{diffMax}
+            </p>
+            <p className="text-xs font-sans text-brand-muted mt-1">
+              difficulty
+            </p>
+          </div>
         </div>
-        <div className="bg-[#fffbeb] border border-brand-border rounded-xl p-3 text-center">
-          <p className="font-sans font-extrabold text-2xl text-brand-gold leading-none">
-            {questionCount}
-          </p>
-          <p className="text-xs font-sans text-brand-muted mt-1">per attempt</p>
-        </div>
-        <div className="bg-white border border-brand-border rounded-xl p-3 text-center">
-          <p className="font-sans font-extrabold text-2xl text-brand-ink leading-none">
-            {topicCount}
-          </p>
-          <p className="text-xs font-sans text-brand-muted mt-1">subtopics</p>
-        </div>
-        <div className="bg-white border border-brand-border rounded-xl p-3 text-center">
-          <p className="font-sans font-extrabold text-2xl text-brand-ink leading-none">
-            {diffMin}–{diffMax}
-          </p>
-          <p className="text-xs font-sans text-brand-muted mt-1">difficulty</p>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => openAttempt(0)}
+            disabled={localQuestions.length === 0}
+            className="text-xs font-sans font-bold text-brand-gold border border-[#fde68a] bg-[#fffbeb] rounded-full px-4 py-1.5 hover:bg-[#fef3c7] transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
+          >
+            Try assessment →
+          </button>
         </div>
       </div>
 
@@ -318,10 +342,12 @@ export function Step4Preview() {
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"
-                  onClick={() => setPreviewQuestion(q)}
+                  onClick={() =>
+                    openAttempt((currentPage - 1) * PAGE_SIZE + idx)
+                  }
                   className="text-xs font-sans font-bold text-brand-gold bg-[#fffbeb] border border-[#fde68a] rounded-md px-2 py-1 hover:bg-[#fef3c7] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
                 >
-                  Preview
+                  Try
                 </button>
                 <button
                   type="button"
@@ -372,25 +398,6 @@ export function Step4Preview() {
         </p>
       )}
 
-      {/* Student view banner */}
-      <div className="bg-brand-light border border-brand-border rounded-xl p-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-sans font-bold text-brand-primary">
-            👁 Student view
-          </p>
-          <p className="text-xs font-sans text-brand-body mt-0.5">
-            See exactly how a student experiences this assessment
-          </p>
-        </div>
-        <Button
-          variant="secondary"
-          onClick={() => setStudentViewOpen(true)}
-          disabled={localQuestions.length === 0}
-        >
-          Open preview →
-        </Button>
-      </div>
-
       {/* Footer */}
       <div className="flex justify-between pt-2">
         <Button variant="secondary" onClick={() => setStep(3)}>
@@ -406,89 +413,162 @@ export function Step4Preview() {
         </Button>
       </div>
 
-      {/* Single-question preview modal */}
+      {/* Attempt-mode modal */}
       <Modal
-        open={previewQuestion !== null}
+        open={attemptOpen}
         onOpenChange={(open) => {
-          if (!open) setPreviewQuestion(null);
+          if (!open) setAttemptOpen(false);
         }}
-        title="Question preview"
-        description="This is how the student will see this question."
+        title="Try assessment"
+        description="Preview only — no answers are stored."
       >
-        {previewQuestion && (
-          <div className="space-y-4">
-            <p className="text-sm font-sans text-brand-ink leading-relaxed font-semibold">
-              {previewQuestion.question_text}
-            </p>
-            <div className="space-y-2">
-              {previewQuestion.options.map((opt) => (
-                <div
-                  key={opt.key}
-                  className="border border-brand-border rounded-lg p-3 flex items-center gap-3 text-sm font-sans text-brand-body"
-                >
-                  <span className="w-6 h-6 rounded flex items-center justify-center bg-brand-border-soft text-brand-muted text-xs font-bold flex-shrink-0">
-                    {opt.key.toUpperCase()}
-                  </span>
-                  {opt.text}
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Badge variant="neutral">
-                {"⭐".repeat(Math.min(previewQuestion.difficulty_level, 5))} Lvl{" "}
-                {previewQuestion.difficulty_level}
-              </Badge>
-              <Badge variant="info">{previewQuestion.subtopic_name}</Badge>
-            </div>
-          </div>
-        )}
-      </Modal>
+        {(() => {
+          const currentQ = localQuestions[attemptIndex];
+          const totalQ = localQuestions.length;
+          const progressPct =
+            totalQ > 0 ? Math.round((attemptIndex / totalQ) * 100) : 0;
+          const selectedKey = currentQ
+            ? attemptAnswers[currentQ.question_id]
+            : undefined;
+          const answered = selectedKey !== undefined;
 
-      {/* Student view modal */}
-      <Modal
-        open={studentViewOpen}
-        onOpenChange={setStudentViewOpen}
-        title="Student view — adaptive assessment"
-        description={`Students answer ${questionCount} questions. Each next question is chosen based on their previous answer.`}
-      >
-        {sampleQuestion && (
-          <div className="space-y-4">
-            <div>
-              <div className="w-full bg-brand-border rounded-full h-1.5 overflow-hidden mb-1">
-                <div
-                  className="bg-brand-primary h-1.5 rounded-full"
-                  style={{ width: "30%" }}
-                  role="progressbar"
-                  aria-valuenow={30}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                />
-              </div>
-              <p className="text-xs font-sans text-brand-muted">
-                Question 3 of {questionCount}
-              </p>
-            </div>
-            <p className="text-sm font-sans font-semibold text-brand-ink leading-relaxed">
-              {sampleQuestion.question_text}
-            </p>
-            <div className="space-y-2">
-              {sampleQuestion.options.map((opt) => (
-                <div
-                  key={opt.key}
-                  className="border border-brand-border rounded-lg p-3 flex items-center gap-3 text-sm font-sans text-brand-body hover:border-brand-primary hover:bg-brand-light transition-colors cursor-pointer"
+          if (attemptDone) {
+            return (
+              <div className="space-y-6 text-center py-4">
+                <p className="font-display font-bold text-2xl text-brand-ink">
+                  You attempted all {totalQ} questions
+                </p>
+                <p className="text-sm font-sans text-brand-body">
+                  This was a preview — no answers were stored.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setAttemptOpen(false)}
+                  className="px-6 py-2 bg-brand-primary text-white rounded-full text-sm font-sans font-bold hover:bg-brand-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
                 >
-                  <span className="w-6 h-6 rounded flex items-center justify-center bg-brand-border-soft text-brand-muted text-xs font-bold flex-shrink-0">
-                    {opt.key.toUpperCase()}
+                  Close
+                </button>
+              </div>
+            );
+          }
+
+          if (!currentQ) return null;
+
+          return (
+            <div className="space-y-5">
+              {/* Progress */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-sans font-bold uppercase tracking-wide text-brand-muted">
+                    Question {attemptIndex + 1} of {totalQ}
                   </span>
-                  {opt.text}
+                  <span className="text-xs font-sans text-brand-muted">
+                    {"●".repeat(Math.min(currentQ.difficulty_level, 5))}
+                    {"○".repeat(
+                      Math.max(0, 5 - currentQ.difficulty_level),
+                    )} Lvl {currentQ.difficulty_level}
+                  </span>
                 </div>
-              ))}
+                <div className="w-full bg-brand-border rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-brand-primary h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${progressPct}%` }}
+                    role="progressbar"
+                    aria-valuenow={progressPct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                </div>
+              </div>
+
+              {/* Question text */}
+              <p className="text-sm font-sans font-semibold text-brand-ink leading-relaxed">
+                {currentQ.question_text}
+              </p>
+
+              {/* Options */}
+              <div className="space-y-2">
+                {currentQ.options.map((opt) => {
+                  const isSelected = selectedKey === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      disabled={answered}
+                      onClick={() =>
+                        setAttemptAnswers((prev) => ({
+                          ...prev,
+                          [currentQ.question_id]: opt.key,
+                        }))
+                      }
+                      className={[
+                        "w-full text-left flex items-center gap-3 px-4 py-2.5 rounded-xl border-[1.5px] transition-colors text-sm font-sans",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1",
+                        answered && !isSelected
+                          ? "border-brand-border text-brand-muted cursor-default opacity-60"
+                          : isSelected
+                            ? "border-brand-primary bg-brand-light text-brand-primary font-semibold"
+                            : "border-brand-border text-brand-ink hover:border-brand-primary hover:bg-brand-light cursor-pointer",
+                      ].join(" ")}
+                    >
+                      <span
+                        className={[
+                          "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
+                          isSelected
+                            ? "bg-brand-primary text-white"
+                            : "bg-brand-border-soft text-brand-muted",
+                        ].join(" ")}
+                      >
+                        {opt.key.toUpperCase()}
+                      </span>
+                      <span>{opt.text}</span>
+                      {isSelected && (
+                        <span className="ml-auto text-xs font-bold text-brand-primary">
+                          ✓ Selected
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Footer note */}
+              <p className="text-xs font-sans text-brand-muted text-center italic">
+                Preview only — no answers stored
+              </p>
+
+              {/* Navigation */}
+              <div className="flex justify-between pt-1">
+                <button
+                  type="button"
+                  disabled={attemptIndex === 0}
+                  onClick={() => setAttemptIndex((i) => i - 1)}
+                  className="px-4 py-2 border border-brand-border rounded-full text-xs font-sans font-semibold text-brand-body hover:text-brand-ink disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary"
+                >
+                  ← Previous
+                </button>
+                {answered &&
+                  (attemptIndex < totalQ - 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => setAttemptIndex((i) => i + 1)}
+                      className="px-4 py-2 bg-brand-primary text-white rounded-full text-xs font-sans font-bold hover:bg-brand-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1"
+                    >
+                      Next →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAttemptDone(true)}
+                      className="px-4 py-2 bg-brand-primary text-white rounded-full text-xs font-sans font-bold hover:bg-brand-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1"
+                    >
+                      See results →
+                    </button>
+                  ))}
+              </div>
             </div>
-            <p className="text-xs font-sans text-brand-muted text-center italic">
-              Next question adapts based on the student&apos;s answer
-            </p>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
     </div>
   );
