@@ -13,27 +13,28 @@ async function fetchTopicsForClass(
   gradeId: string,
   curriculumId: string,
 ): Promise<Topic[]> {
-  try {
-    const res = await apiClient.get(`/api/v1/subjects/${subjectId}/topics`, {
-      params: {
-        curriculum_id: curriculumId,
-        grade_id: gradeId,
-      },
-    });
-    return (res.data || []).map((t: { id: string; name: string }) => ({
-      id: t.id,
-      name: t.name,
-    }));
-  } catch {
-    return [];
-  }
+  const res = await apiClient.get(`/api/v1/subjects/${subjectId}/topics`, {
+    params: {
+      curriculum_id: curriculumId,
+      grade_id: gradeId,
+    },
+  });
+  return (res.data || []).map((t: { id: string; name: string }) => ({
+    id: t.id,
+    name: t.name,
+  }));
 }
 
 export function Step2Topics() {
   const { subjectId, gradeId, curriculumId, topicIds, setTopicIds, setStep } =
     useAssessmentWizard();
 
-  const { data: topics = [], isLoading } = useQuery({
+  const {
+    data: topics = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["topics", subjectId, gradeId, curriculumId],
     queryFn: () => fetchTopicsForClass(subjectId!, gradeId!, curriculumId!),
     enabled: !!subjectId && !!gradeId && !!curriculumId,
@@ -83,19 +84,27 @@ export function Step2Topics() {
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
-        ) : topics.length === 0 ? (
-          <div className="border border-brand-border rounded-xl p-6 text-center">
-            <p className="text-sm font-sans text-brand-muted">
-              No topics found for this class. You can continue — all available
-              questions will be included.
+        ) : isError ? (
+          <div className="border border-red-200 bg-red-50 rounded-xl p-6 text-center">
+            <p className="text-sm font-sans font-semibold text-red-700 mb-1">
+              Failed to load topics
+            </p>
+            <p className="text-xs font-sans text-brand-muted mb-3">
+              Could not connect to the curriculum service. Please try again.
             </p>
             <button
               type="button"
-              onClick={() => setStep(3)}
-              className="mt-3 text-xs font-sans font-bold text-brand-gold hover:text-brand-gold-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
+              onClick={() => void refetch()}
+              className="text-xs font-sans font-bold text-brand-gold hover:text-brand-gold-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
             >
-              Skip to configuration →
+              Try again →
             </button>
+          </div>
+        ) : topics.length === 0 ? (
+          <div className="border border-brand-border rounded-xl p-6 text-center">
+            <p className="text-sm font-sans text-brand-muted">
+              No topics defined for this subject and grade yet.
+            </p>
           </div>
         ) : (
           <div className="border border-brand-border rounded-xl divide-y divide-brand-border-soft overflow-hidden">
@@ -147,7 +156,7 @@ export function Step2Topics() {
         <Button
           variant="primary"
           className="bg-brand-gold hover:bg-brand-gold-dark"
-          disabled={topics.length > 0 && !canProceed}
+          disabled={isError || (topics.length > 0 && !canProceed)}
           onClick={() => setStep(3)}
         >
           Next
