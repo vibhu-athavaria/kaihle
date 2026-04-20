@@ -19,7 +19,10 @@ from app.models.user import User, UserRole
 # ruff: noqa: E402
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://kaihle:kaihle@localhost:5433/kaihle_test",
+    os.environ.get(
+        "DATABASE_URL",
+        "postgresql+asyncpg://kaihle:kaihle@localhost:5433/kaihle_test",
+    ),
 )
 os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-integration-tests")
