@@ -10,6 +10,7 @@ Design:
   via adaptive selection at the attempt/UI layer.
 """
 
+import hashlib
 import random
 import uuid
 from collections import defaultdict
@@ -546,10 +547,13 @@ class AssessmentService:
 
         # Deterministic seed: same class + same config always yields the same pool.
         topic_ids_key = ",".join(sorted(str(t) for t in body.topic_ids))
-        seed = (
-            int(class_id)
-            ^ hash(f"{body.assessment_type}:{body.difficulty_min}:{body.difficulty_max}:{topic_ids_key}")
+        config_hash = int(
+            hashlib.sha256(
+                f"{body.assessment_type}:{body.difficulty_min}:{body.difficulty_max}:{topic_ids_key}".encode()
+            ).hexdigest(),
+            16,
         )
+        seed = int(class_id) ^ config_hash
         rng = random.Random(seed)  # noqa: S311 — not used for cryptography
 
         selected_ids = _sample_pool_with_difficulty_distribution(
