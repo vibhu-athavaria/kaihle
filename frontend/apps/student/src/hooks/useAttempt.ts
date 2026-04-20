@@ -61,6 +61,7 @@ export interface AttemptResultResponse {
   correct_count: number;
   total_questions: number;
   status: AttemptStatus;
+  assessment_type: "DIAGNOSTIC" | "PROGRESS_CHECK";
 }
 
 // ─────────────────────────────────────────────────────────────
