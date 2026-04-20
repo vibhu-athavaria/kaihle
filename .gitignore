@@ -10,7 +10,8 @@ venv
 .mypy_cache/
 .ruff_cache/
 CLAUDE.local.md
-
+.superpowers/
+docs/superpowers/*
 # Node
 node_modules/
 dist/
