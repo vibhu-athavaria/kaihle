@@ -8,6 +8,8 @@ import {
 } from "../../hooks/useMyClasses";
 import { useStudentGapMap } from "../../hooks/useStudentGapMap";
 import { TopicSection } from "../../components/my-progress/TopicSection";
+import { ConceptGuideProvider } from "../../context/ConceptGuideContext";
+import { ConceptGuideDrawer } from "../../components/ai/ConceptGuideDrawer";
 
 interface SubjectEntry {
   subjectId: string;
@@ -99,6 +101,7 @@ export function MyProgress() {
   );
 
   return (
+    <ConceptGuideProvider>
     <StudentLayout
       activeNav="progress"
       studentName={studentName}
@@ -174,5 +177,7 @@ export function MyProgress() {
         )}
       </div>
     </StudentLayout>
+    <ConceptGuideDrawer />
+    </ConceptGuideProvider>
   );
 }
