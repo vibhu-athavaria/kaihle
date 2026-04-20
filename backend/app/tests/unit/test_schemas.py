@@ -148,6 +148,7 @@ class TestSchemaInstantiation:
         q = AssessmentQuestion(
             question_id=uuid.uuid4(),
             question_text="What is 2+2?",
+            question_type="MCQ",
             options=[
                 QuestionOption(key="a", text="3"),
                 QuestionOption(key="b", text="4"),
@@ -162,6 +163,7 @@ class TestSchemaInstantiation:
         q = AssessmentQuestionWithAnswer(
             question_id=uuid.uuid4(),
             question_text="What is 2+2?",
+            question_type="MCQ",
             options=[QuestionOption(key="a", text="3")],
             correct_answer_key="b",
             explanation="2+2=4",

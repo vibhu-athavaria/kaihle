@@ -295,9 +295,9 @@ class TestSelectQuestionsForDiagnostic:
         topic = _make_topic(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
         question_ids = [uuid.uuid4() for _ in range(5)]
 
-        # New consolidated query: single call returning (topic_id, question_id) pairs
+        # New consolidated query: single call returning (question_id, topic_id, difficulty) tuples
         mock_result = MagicMock()
-        mock_result.all.return_value = [(topic.id, qid) for qid in question_ids]
+        mock_result.all.return_value = [(qid, topic.id, 3.0) for qid in question_ids]
         service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
 
         result = await service._select_questions_for_diagnostic(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
@@ -330,9 +330,11 @@ class TestSelectQuestionsForDiagnostic:
         qids_a = [uuid.uuid4() for _ in range(3)]
         qids_b = [uuid.uuid4() for _ in range(3)]
 
-        # New consolidated query: single call returning (topic_id, question_id) pairs
+        # New consolidated query: single call returning (question_id, topic_id, difficulty) tuples
         mock_result = MagicMock()
-        mock_result.all.return_value = [(topic_a.id, qid) for qid in qids_a] + [(topic_b.id, qid) for qid in qids_b]
+        mock_result.all.return_value = [(qid, topic_a.id, 3.0) for qid in qids_a] + [
+            (qid, topic_b.id, 3.0) for qid in qids_b
+        ]
         service.db.execute = AsyncMock(return_value=mock_result)  # type: ignore[method-assign]
 
         result = await service._select_questions_for_diagnostic(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())

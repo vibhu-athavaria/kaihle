@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import (
@@ -130,7 +130,7 @@ def _sample_by_topic(
 
 
 def _sample_pool_with_difficulty_distribution(
-    rows: list[tuple[uuid.UUID, uuid.UUID, int]],
+    rows: list[tuple[uuid.UUID, uuid.UUID, float | None]],
     pool_size: int,
     rng: random.Random,
 ) -> list[uuid.UUID]:
@@ -154,7 +154,8 @@ def _sample_pool_with_difficulty_distribution(
 
     by_difficulty: dict[int, list[tuple[uuid.UUID, uuid.UUID]]] = defaultdict(list)
     for qid, tid, diff in rows:
-        by_difficulty[diff].append((qid, tid))
+        level = int(diff) if diff is not None else 3
+        by_difficulty[level].append((qid, tid))
 
     levels = sorted(by_difficulty.keys())
     num_levels = len(levels)
@@ -452,7 +453,7 @@ class AssessmentService:
             )
         )
 
-        all_rows: list[tuple[uuid.UUID, uuid.UUID, int]] = rows.all()
+        all_rows: list[tuple[uuid.UUID, uuid.UUID, float | None]] = [tuple(row) for row in rows.all()]
 
         if not all_rows:
             logger.warning(
@@ -947,7 +948,7 @@ class AssessmentService:
 
         # Delete bridge rows first — no ORM cascade defined on Assessment.
         await self.db.execute(
-            AssessmentSelectedQuestion.__table__.delete().where(
+            delete(AssessmentSelectedQuestion.__table__).where(  # type: ignore
                 AssessmentSelectedQuestion.assessment_id == assessment_id
             )
         )
@@ -1065,3 +1066,44 @@ class AssessmentService:
             submitted_count=sum(1 for a in attempts if a.status == "SUBMITTED"),
             attempts=attempts,
         )
+
+
+def _sample_with_topic_distribution(rows: list[tuple[uuid.UUID, str]], n: int) -> list[uuid.UUID]:
+    """Sample up to n question IDs distributed evenly across topics.
+
+    Groups rows by topic, allocates n // num_topics slots per topic
+    (remainder distributed to earlier topics), then samples within each topic.
+    Shuffles the final selection.
+
+    Args:
+        rows: List of (question_id, topic) tuples.
+        n: Target sample size.
+
+    Returns:
+        List of selected question UUIDs (len <= n).
+    """
+    if not rows:
+        return []
+
+    from collections import defaultdict
+
+    by_topic: dict[str, list[uuid.UUID]] = defaultdict(list)
+    for qid, topic in rows:
+        by_topic[topic].append(qid)
+
+    topics = list(by_topic.keys())
+    num_topics = len(topics)
+    per_topic = n // num_topics
+    remainder = n % num_topics
+
+    selected: list[uuid.UUID] = []
+    for i, topic in enumerate(topics):
+        target = per_topic + (1 if i < remainder else 0)
+        topic_qids = by_topic[topic]
+        if len(topic_qids) <= target:
+            selected.extend(topic_qids)
+        else:
+            selected.extend(random.sample(topic_qids, target))
+
+    random.shuffle(selected)
+    return selected[:n]

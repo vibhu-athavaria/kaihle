@@ -8,6 +8,7 @@ Two logical sections:
 """
 
 from datetime import datetime
+from typing import cast
 from uuid import UUID
 
 import structlog
@@ -213,7 +214,7 @@ async def create_assessment(
             question_id=q.id,
             question_text=q.question_text,
             question_type=q.question_type,
-            options=[QuestionOption(key=o["key"], text=o["text"]) for o in (q.options or [])],
+            options=[QuestionOption(key=o["key"], text=o["text"]) for o in cast(list[dict[str, str]], q.options or [])],
             difficulty_level=int(q.difficulty_level) if q.difficulty_level is not None else 0,
             subtopic_name=subtopic_name_map.get(str(q.subtopic_id), "Unknown"),
             correct_answer_key=q.correct_answer,

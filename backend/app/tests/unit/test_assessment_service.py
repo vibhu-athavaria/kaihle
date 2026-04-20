@@ -77,10 +77,10 @@ def _make_request(
 def _make_question_rows(
     count: int,
     curriculum_topic_id: uuid.UUID | None = None,
-) -> list[tuple[uuid.UUID, uuid.UUID]]:
-    """Make fake (question_id, curriculum_topic_id) rows."""
+) -> list[tuple[uuid.UUID, uuid.UUID, float | None]]:
+    """Make fake (question_id, curriculum_topic_id, difficulty_level) rows."""
     topic_id = curriculum_topic_id or uuid.uuid4()
-    return [(uuid.uuid4(), topic_id) for _ in range(count)]
+    return [(uuid.uuid4(), topic_id, 3.0) for _ in range(count)]
 
 
 # ---------------------------------------------------------------------------
@@ -232,19 +232,19 @@ class TestCreateAssessment:
         mock_questions_result.all.return_value = rows
         mock_db.execute = AsyncMock(side_effect=[mock_class_result, mock_questions_result])
 
-        # Capture the rows passed to _sample_with_topic_distribution
+        # Capture the rows passed to _sample_pool_with_difficulty_distribution
         captured_rows: list = []
-        original_sample = svc_module._sample_with_topic_distribution
+        original_sample = svc_module._sample_pool_with_difficulty_distribution
 
-        def capturing_sample(r: list, n: int) -> list:
+        def capturing_sample(r: list, n: int, rng) -> list:
             captured_rows.extend(r)
-            return original_sample(r, n)
+            return original_sample(r, n, rng)  # type: ignore
 
-        with patch.object(svc_module, "_sample_with_topic_distribution", side_effect=capturing_sample):
+        with patch.object(svc_module, "_sample_pool_with_difficulty_distribution", side_effect=capturing_sample):
             await service.create_assessment(school_id, teacher_id, class_id, body)
 
         # All 3 topics must be present in the rows the sampler received
-        topic_ids_sampled = {tid for _, tid in captured_rows}
+        topic_ids_sampled = {tid for _, tid, _ in captured_rows}
         assert {topic1, topic2, topic3}.issubset(topic_ids_sampled)
 
     @pytest.mark.asyncio
