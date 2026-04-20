@@ -3,7 +3,11 @@ import { create } from "zustand";
 export interface PreviewQuestion {
   question_id: string;
   question_text: string;
+  question_type: string; // "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER"
   options: Array<{ key: string; text: string }>;
+  correct_answer: string;
+  difficulty_level: number;
+  subtopic_name: string;
 }
 
 export type AssessmentType =

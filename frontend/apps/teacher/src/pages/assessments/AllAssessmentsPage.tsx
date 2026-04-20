@@ -2,6 +2,8 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   useTeacherAssessments,
+  useCloseTeacherAssessment,
+  useDeleteTeacherAssessment,
   type AssessmentStatus,
 } from "../../hooks/useTeacherAssessments";
 import {
@@ -9,8 +11,8 @@ import {
   typeBadge,
   type Assessment,
 } from "../../utils/assessment";
-import { BarChart2 } from "lucide-react";
-import { Button, EmptyState, SkeletonCard } from "@kaihle/ui";
+import { BarChart2, X } from "lucide-react";
+import { Button, EmptyState, SkeletonCard, toast } from "@kaihle/ui";
 
 interface AssessmentWithClass extends Assessment {
   className: string;
@@ -19,6 +21,22 @@ interface AssessmentWithClass extends Assessment {
 
 export function AllAssessmentsPage() {
   const [filter, setFilter] = useState<"all" | AssessmentStatus>("all");
+  const closeAssessment = useCloseTeacherAssessment();
+  const deleteAssessment = useDeleteTeacherAssessment();
+
+  function handleClose(assessmentId: string) {
+    closeAssessment.mutate(assessmentId, {
+      onSuccess: () => toast.success("Assessment closed."),
+      onError: () => toast.error("Failed to close assessment."),
+    });
+  }
+
+  function handleDelete(assessmentId: string) {
+    deleteAssessment.mutate(assessmentId, {
+      onSuccess: () => toast.success("Assessment deleted."),
+      onError: () => toast.error("Failed to delete assessment."),
+    });
+  }
 
   const { data: assessments = [], isLoading } = useTeacherAssessments(
     filter === "all" ? undefined : filter,
@@ -158,6 +176,27 @@ export function AllAssessmentsPage() {
                     <BarChart2 className="w-3.5 h-3.5" aria-hidden="true" />
                     Results
                   </Link>
+                )}
+                {assessment.status === "ACTIVE" && (
+                  <button
+                    type="button"
+                    onClick={() => handleClose(assessment.id)}
+                    disabled={closeAssessment.isPending}
+                    className="flex items-center gap-1 text-xs font-medium text-brand-body hover:text-brand-ink disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded px-2 py-1"
+                  >
+                    <X className="w-3.5 h-3.5" aria-hidden="true" />
+                    Close
+                  </button>
+                )}
+                {assessment.status === "DRAFT" && (
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(assessment.id)}
+                    disabled={deleteAssessment.isPending}
+                    className="text-xs font-medium text-brand-red hover:text-red-700 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded px-2 py-1"
+                  >
+                    Delete
+                  </button>
                 )}
                 <Link
                   to={`/teacher/classes/${assessment.classId}`}

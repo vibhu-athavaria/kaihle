@@ -17,7 +17,10 @@ class AssessmentQuestion(BaseModel):
 
     question_id: UUID
     question_text: str
+    question_type: str  # "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER"
     options: list[QuestionOption]
+    difficulty_level: int = 0
+    subtopic_name: str = ""
 
 
 class AssessmentQuestionWithAnswer(AssessmentQuestion):
@@ -41,6 +44,12 @@ class AssessmentResponse(BaseModel):
     deadline: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AssessmentCreateResponse(AssessmentResponse):
+    """Response for assessment creation — includes sampled questions for teacher preview."""
+
+    questions: list[AssessmentQuestionWithAnswer] = []
 
 
 class AssessmentWithClassResponse(BaseModel):

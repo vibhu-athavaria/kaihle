@@ -64,6 +64,7 @@ def _questions_to_schema(questions: list[QuestionBank]) -> list[AssessmentQuesti
             AssessmentQuestion(
                 question_id=q.id,
                 question_text=q.question_text,
+                question_type=q.question_type,
                 options=options,
             )
         )

@@ -5,7 +5,9 @@ Guidance for Claude Code when working in this repository.
 @docs/CONSTITUTION.md
 @docs/design/DESIGN_SYSTEM.md
 @CLAUDE.local.md
-
+@.claude/rules/kramer.md
+@.claude/rules/pixel.md
+@.claude/rules/vidhya.md
 ---
 
 ## What Is Kaihle?

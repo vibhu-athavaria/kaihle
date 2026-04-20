@@ -19,7 +19,7 @@ const ASSESSMENT_TYPES: AssessmentTypeCard[] = [
     type: "DIAGNOSTIC",
     icon: <ClipboardList className="w-5 h-5" aria-hidden="true" />,
     title: "Diagnostic",
-    description: "Assess baseline knowledge across all topics",
+    description: "Assess baseline knowledge across selected topics",
   },
   {
     type: "TOPIC_SPECIFIC",
@@ -37,7 +37,7 @@ const ASSESSMENT_TYPES: AssessmentTypeCard[] = [
     type: "FINAL",
     icon: <Award className="w-5 h-5" aria-hidden="true" />,
     title: "Final",
-    description: "End-of-term comprehensive assessment",
+    description: "End-of-term assessment across selected topics",
   },
 ];
 
@@ -59,9 +59,7 @@ export function Step1ClassAndType() {
 
   function handleNext() {
     if (!canProceed) return;
-    const skipsTopics =
-      assessmentType === "DIAGNOSTIC" || assessmentType === "FINAL";
-    setStep(skipsTopics ? 3 : 2);
+    setStep(2);
   }
 
   return (

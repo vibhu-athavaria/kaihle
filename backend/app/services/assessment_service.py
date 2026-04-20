@@ -10,6 +10,7 @@ Design:
   via adaptive selection at the attempt/UI layer.
 """
 
+import hashlib
 import random
 import uuid
 from collections import defaultdict
@@ -17,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import (
@@ -84,22 +85,23 @@ MAX_DIAGNOSTIC_POOL = 60
 MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT = 20
 
 
-def _sample_with_topic_distribution(
+def _sample_by_topic(
     rows: list[tuple[uuid.UUID, uuid.UUID]],
     n: int,
+    rng: random.Random,
 ) -> list[uuid.UUID]:
-    """Sample n question IDs with balanced topic distribution.
+    """Sample up to n question IDs with balanced topic distribution.
 
-    Groups by curriculum_topic_id (index 1), then round-robins through groups.
-    Within each group, selection is random (random.shuffle).
-    Returns a flat list of up to n question UUIDs.
+    Groups by curriculum_topic_id, shuffles within each group using rng,
+    then round-robins across groups until n questions are collected.
 
     Args:
         rows: List of (question_id, curriculum_topic_id) tuples.
         n: Number of questions to select.
+        rng: Seeded Random instance for deterministic selection.
 
     Returns:
-        Ordered list of selected question UUIDs (len <= n).
+        List of selected question UUIDs (len <= n).
     """
     if not rows:
         return []
@@ -108,16 +110,13 @@ def _sample_with_topic_distribution(
     for qid, tid in rows:
         by_topic[tid].append(qid)
 
-    # Shuffle within each topic for random selection
     for topic_questions in by_topic.values():
-        random.shuffle(topic_questions)  # noqa: S311 — not cryptographic
+        rng.shuffle(topic_questions)  # noqa: S311 — not cryptographic
 
-    # Round-robin across topics until n collected or exhausted
     topic_lists = list(by_topic.values())
     selected: list[uuid.UUID] = []
     idx = 0
     while len(selected) < n:
-        # One full pass through topics
         made_progress = False
         for tlist in topic_lists:
             if idx < len(tlist) and len(selected) < n:
@@ -128,6 +127,49 @@ def _sample_with_topic_distribution(
         idx += 1
 
     return selected[:n]
+
+
+def _sample_pool_with_difficulty_distribution(
+    rows: list[tuple[uuid.UUID, uuid.UUID, float | None]],
+    pool_size: int,
+    rng: random.Random,
+) -> list[uuid.UUID]:
+    """Sample up to pool_size question IDs distributed evenly across difficulty levels.
+
+    Groups rows by difficulty integer, allocates pool_size // num_levels slots per
+    level (remainder distributed to lower levels), then within each level samples
+    with topic balance via _sample_by_topic. The final pool is shuffled so questions
+    are not ordered by difficulty — the adaptive engine handles ordering at attempt time.
+
+    Args:
+        rows: List of (question_id, curriculum_topic_id, difficulty_level) tuples.
+        pool_size: Target pool size (e.g. MAX_DIAGNOSTIC_POOL).
+        rng: Seeded Random instance for deterministic selection.
+
+    Returns:
+        Shuffled list of selected question UUIDs (len <= pool_size).
+    """
+    if not rows:
+        return []
+
+    by_difficulty: dict[int, list[tuple[uuid.UUID, uuid.UUID]]] = defaultdict(list)
+    for qid, tid, diff in rows:
+        level = int(diff) if diff is not None else 3
+        by_difficulty[level].append((qid, tid))
+
+    levels = sorted(by_difficulty.keys())
+    num_levels = len(levels)
+    per_level = pool_size // num_levels
+    remainder = pool_size % num_levels
+
+    selected: list[uuid.UUID] = []
+    for i, level in enumerate(levels):
+        target = per_level + (1 if i < remainder else 0)
+        level_selected = _sample_by_topic(by_difficulty[level], target, rng)
+        selected.extend(level_selected)
+
+    rng.shuffle(selected)  # noqa: S311 — not cryptographic
+    return selected[:pool_size]
 
 
 def _generate_title(body: AssessmentCreateRequest, class_name: str, subject_name: str) -> str:
@@ -395,10 +437,11 @@ class AssessmentService:
         Returns:
             Ordered list of question UUIDs to include in the assessment pool.
         """
-        # Single query: fetch all active questions with their topic, for this
-        # curriculum+subject+grade combination. Eliminates N+1 per topic.
+        # Single query: fetch all active questions with their topic and difficulty,
+        # for this curriculum+subject+grade combination.
         rows = await self.db.execute(
-            select(CurriculumTopic.id, QuestionBank.id)
+            select(QuestionBank.id, Subtopic.curriculum_topic_id, QuestionBank.difficulty_level)
+            .select_from(CurriculumTopic)
             .join(Subtopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
             .join(QuestionBank, QuestionBank.subtopic_id == Subtopic.id)
             .where(
@@ -411,12 +454,9 @@ class AssessmentService:
             )
         )
 
-        # Group question IDs by topic ID
-        questions_by_topic: dict[uuid.UUID, list[uuid.UUID]] = {}
-        for topic_id, question_id in rows.all():
-            questions_by_topic.setdefault(topic_id, []).append(question_id)
+        all_rows: list[tuple[uuid.UUID, uuid.UUID, float | None]] = [tuple(row) for row in rows.all()]
 
-        if not questions_by_topic:
+        if not all_rows:
             logger.warning(
                 "no_questions_found_for_diagnostic",
                 curriculum_id=str(curriculum_id),
@@ -426,29 +466,11 @@ class AssessmentService:
             return []
 
         # Deterministic seed derived from curriculum+subject+grade so the same
-        # class always produces the same question pool order.
+        # class always produces the same question pool.
         seed = int(curriculum_id) ^ int(subject_id) ^ int(grade_id)
         rng = random.Random(seed)  # noqa: S311 — not used for cryptography
 
-        # Distribute pool budget evenly across topics
-        topics = list(questions_by_topic.keys())
-        per_topic = max(1, MAX_DIAGNOSTIC_POOL // len(topics))
-        remainder = MAX_DIAGNOSTIC_POOL - (per_topic * len(topics))
-
-        selected: list[uuid.UUID] = []
-        for topic_id in topics:
-            n = per_topic + (1 if remainder > 0 else 0)
-            if remainder > 0:
-                remainder -= 1
-
-            pool = questions_by_topic[topic_id]
-            sample_size = min(n, len(pool))
-            selected.extend(rng.sample(pool, sample_size))
-
-            if len(selected) >= MAX_DIAGNOSTIC_POOL:
-                break
-
-        return selected[:MAX_DIAGNOSTIC_POOL]
+        return _sample_pool_with_difficulty_distribution(all_rows, MAX_DIAGNOSTIC_POOL, rng)
 
     # ── Tier 2: teacher-created assessments ─────────────────────────────────
 
@@ -495,7 +517,7 @@ class AssessmentService:
 
         # Step 2 — Build question filter via Subtopic join (QuestionBank has no direct topic FK)
         q = (
-            select(QuestionBank.id, Subtopic.curriculum_topic_id)
+            select(QuestionBank.id, Subtopic.curriculum_topic_id, QuestionBank.difficulty_level)
             .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
             .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
             .where(
@@ -506,9 +528,10 @@ class AssessmentService:
             )
         )
         if body.topic_ids:
-            q = q.where(Subtopic.curriculum_topic_id.in_(body.topic_ids))
+            q = q.where(CurriculumTopic.id.in_(body.topic_ids))
 
-        # Step 3 — Sample questions
+        # Step 3 — Sample a pool of body.question_count questions distributed across
+        # difficulty levels. Error only when the bank has fewer than question_count.
         rows = (await self.db.execute(q)).all()
         if len(rows) < body.question_count:
             raise InsufficientQuestionsError(
@@ -522,9 +545,22 @@ class AssessmentService:
                     "difficulty_max": body.difficulty_max,
                 },
             )
-        selected_ids = _sample_with_topic_distribution(
-            [(row[0], row[1]) for row in rows],
+
+        # Deterministic seed: same class + same config always yields the same pool.
+        topic_ids_key = ",".join(sorted(str(t) for t in body.topic_ids))
+        config_hash = int(
+            hashlib.sha256(
+                f"{body.assessment_type}:{body.difficulty_min}:{body.difficulty_max}:{topic_ids_key}".encode()
+            ).hexdigest(),
+            16,
+        )
+        seed = int(class_id) ^ config_hash
+        rng = random.Random(seed)  # noqa: S311 — not used for cryptography
+
+        selected_ids = _sample_pool_with_difficulty_distribution(
+            [(row[0], row[1], row[2]) for row in rows],
             body.question_count,
+            rng,
         )
 
         # Step 4 — Resolve title (auto-generate when not provided)
@@ -875,6 +911,55 @@ class AssessmentService:
         )
         return assessment
 
+    async def delete_assessment(
+        self,
+        assessment_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        teacher_id: uuid.UUID,
+    ) -> None:
+        """Permanently delete a DRAFT assessment and its selected-question bridge rows.
+
+        Only DRAFT assessments can be deleted — ACTIVE or CLOSED assessments have
+        student attempt records and must not be removed.
+
+        Args:
+            assessment_id: The assessment UUID.
+            school_id: For multi-tenancy guard.
+            teacher_id: Must match assessment.created_by.
+
+        Raises:
+            ValueError: If not found, wrong school, or status is not DRAFT.
+            TeacherNotClassOwnerError: If teacher does not own the assessment.
+        """
+        assessment = (
+            await self.db.execute(
+                select(Assessment).where(
+                    Assessment.id == assessment_id,
+                    Assessment.school_id == school_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if assessment is None:
+            raise ValueError(f"Assessment not found: {assessment_id}")
+        if assessment.created_by != teacher_id:
+            raise TeacherNotClassOwnerError(f"Only the creating teacher can delete assessment {assessment_id}")
+        if assessment.status != AssessmentStatus.DRAFT:
+            raise ValueError(f"Cannot delete: status is {assessment.status}. Only DRAFT assessments can be deleted.")
+
+        # Delete bridge rows first — no ORM cascade defined on Assessment.
+        await self.db.execute(
+            delete(AssessmentSelectedQuestion.__table__).where(  # type: ignore
+                AssessmentSelectedQuestion.assessment_id == assessment_id
+            )
+        )
+        await self.db.delete(assessment)
+
+        logger.info(
+            "assessment_deleted",
+            assessment_id=str(assessment_id),
+            teacher_id=str(teacher_id),
+        )
+
     async def get_assessment_results(
         self,
         assessment_id: uuid.UUID,
@@ -981,3 +1066,44 @@ class AssessmentService:
             submitted_count=sum(1 for a in attempts if a.status == "SUBMITTED"),
             attempts=attempts,
         )
+
+
+def _sample_with_topic_distribution(rows: list[tuple[uuid.UUID, str]], n: int) -> list[uuid.UUID]:
+    """Sample up to n question IDs distributed evenly across topics.
+
+    Groups rows by topic, allocates n // num_topics slots per topic
+    (remainder distributed to earlier topics), then samples within each topic.
+    Shuffles the final selection.
+
+    Args:
+        rows: List of (question_id, topic) tuples.
+        n: Target sample size.
+
+    Returns:
+        List of selected question UUIDs (len <= n).
+    """
+    if not rows:
+        return []
+
+    from collections import defaultdict
+
+    by_topic: dict[str, list[uuid.UUID]] = defaultdict(list)
+    for qid, topic in rows:
+        by_topic[topic].append(qid)
+
+    topics = list(by_topic.keys())
+    num_topics = len(topics)
+    per_topic = n // num_topics
+    remainder = n % num_topics
+
+    selected: list[uuid.UUID] = []
+    for i, topic in enumerate(topics):
+        target = per_topic + (1 if i < remainder else 0)
+        topic_qids = by_topic[topic]
+        if len(topic_qids) <= target:
+            selected.extend(topic_qids)
+        else:
+            selected.extend(random.sample(topic_qids, target))
+
+    random.shuffle(selected)
+    return selected[:n]
