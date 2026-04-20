@@ -73,13 +73,17 @@ export function Step4Preview() {
             id?: string;
             question_id?: string;
             question_text: string;
+            question_type: string;
             options: Array<{ key: string; text: string }>;
+            correct_answer_key: string;
             difficulty_level: number;
             subtopic_name: string;
           }) => ({
             question_id: q.id ?? q.question_id ?? "",
             question_text: q.question_text,
+            question_type: q.question_type ?? "MCQ",
             options: q.options ?? [],
+            correct_answer: q.correct_answer_key ?? "",
             difficulty_level: q.difficulty_level ?? 1,
             subtopic_name: q.subtopic_name ?? "Unknown",
           }),
@@ -487,50 +491,80 @@ export function Step4Preview() {
               </p>
 
               {/* Options */}
-              <div className="space-y-2">
-                {currentQ.options.map((opt) => {
-                  const isSelected = selectedKey === opt.key;
-                  return (
-                    <button
-                      key={opt.key}
-                      type="button"
-                      disabled={answered}
-                      onClick={() =>
-                        setAttemptAnswers((prev) => ({
-                          ...prev,
-                          [currentQ.question_id]: opt.key,
-                        }))
-                      }
-                      className={[
-                        "w-full text-left flex items-center gap-3 px-4 py-2.5 rounded-xl border-[1.5px] transition-colors text-sm font-sans",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1",
-                        answered && !isSelected
-                          ? "border-brand-border text-brand-muted cursor-default opacity-60"
-                          : isSelected
-                            ? "border-brand-primary bg-brand-light text-brand-primary font-semibold"
-                            : "border-brand-border text-brand-ink hover:border-brand-primary hover:bg-brand-light cursor-pointer",
-                      ].join(" ")}
-                    >
-                      <span
-                        className={[
-                          "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
-                          isSelected
-                            ? "bg-brand-primary text-white"
-                            : "bg-brand-border-soft text-brand-muted",
-                        ].join(" ")}
-                      >
-                        {opt.key.toUpperCase()}
-                      </span>
-                      <span>{opt.text}</span>
-                      {isSelected && (
-                        <span className="ml-auto text-xs font-bold text-brand-primary">
-                          ✓ Selected
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+              {(() => {
+                const isTrueFalse = currentQ.question_type === "TRUE_FALSE";
+                const displayOptions = isTrueFalse
+                  ? [
+                      { key: "true", text: "True" },
+                      { key: "false", text: "False" },
+                    ]
+                  : currentQ.options;
+                const correctKey = currentQ.correct_answer.toLowerCase();
+
+                return (
+                  <div className={isTrueFalse ? "flex gap-3" : "space-y-2"}>
+                    {displayOptions.map((opt) => {
+                      const isSelected = selectedKey === opt.key;
+                      const isCorrect =
+                        answered && opt.key.toLowerCase() === correctKey;
+                      const isWrong = answered && isSelected && !isCorrect;
+
+                      return (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          disabled={answered}
+                          onClick={() =>
+                            setAttemptAnswers((prev) => ({
+                              ...prev,
+                              [currentQ.question_id]: opt.key,
+                            }))
+                          }
+                          className={[
+                            isTrueFalse
+                              ? "flex-1 justify-center py-3 rounded-xl border-[1.5px] font-semibold text-sm font-sans transition-colors"
+                              : "w-full text-left flex items-center gap-3 px-4 py-2.5 rounded-xl border-[1.5px] transition-colors text-sm font-sans",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1",
+                            !answered
+                              ? "border-brand-border text-brand-ink hover:border-brand-primary hover:bg-brand-light cursor-pointer"
+                              : isCorrect
+                                ? "border-brand-green bg-brand-green-light text-brand-green cursor-default"
+                                : isWrong
+                                  ? "border-brand-red bg-brand-red-light text-brand-red cursor-default"
+                                  : "border-brand-border text-brand-muted cursor-default opacity-50",
+                          ].join(" ")}
+                        >
+                          {!isTrueFalse && (
+                            <span
+                              className={[
+                                "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
+                                answered && isCorrect
+                                  ? "bg-brand-green text-white"
+                                  : answered && isWrong
+                                    ? "bg-brand-red text-white"
+                                    : "bg-brand-border-soft text-brand-muted",
+                              ].join(" ")}
+                            >
+                              {opt.key.toUpperCase()}
+                            </span>
+                          )}
+                          <span>{opt.text}</span>
+                          {answered && isCorrect && (
+                            <span className="ml-auto text-xs font-bold text-brand-green">
+                              ✓ Correct
+                            </span>
+                          )}
+                          {answered && isWrong && (
+                            <span className="ml-auto text-xs font-bold text-brand-red">
+                              ✗ Wrong
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* Footer note */}
               <p className="text-xs font-sans text-brand-muted text-center italic">

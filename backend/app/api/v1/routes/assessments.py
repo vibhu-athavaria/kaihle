@@ -24,7 +24,7 @@ from app.models.user import UserRole
 from app.schemas.assessments import (
     AssessmentCreateRequest,
     AssessmentCreateResponse,
-    AssessmentQuestion,
+    AssessmentQuestionWithAnswer,
     AssessmentResponse,
     AssessmentResultsSummary,
     AssessmentWithClassResponse,
@@ -211,12 +211,15 @@ async def create_assessment(
     subtopic_name_map: dict[str, str] = {str(row[0]): row[1] for row in subtopic_result.all()}
 
     questions = [
-        AssessmentQuestion(
+        AssessmentQuestionWithAnswer(
             question_id=q.id,
             question_text=q.question_text,
+            question_type=q.question_type,
             options=[QuestionOption(key=o["key"], text=o["text"]) for o in (q.options or [])],
             difficulty_level=int(q.difficulty_level) if q.difficulty_level is not None else 0,
             subtopic_name=subtopic_name_map.get(str(q.subtopic_id), "Unknown"),
+            correct_answer_key=q.correct_answer,
+            explanation=None,
         )
         for q in question_bank_rows
     ]
