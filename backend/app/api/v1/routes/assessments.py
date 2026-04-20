@@ -205,9 +205,7 @@ async def create_assessment(
 
     # Batch-fetch subtopic names to avoid N+1
     subtopic_ids = [q.subtopic_id for q in question_bank_rows]
-    subtopic_result = await db.execute(
-        select(Subtopic.id, Subtopic.name).where(Subtopic.id.in_(subtopic_ids))
-    )
+    subtopic_result = await db.execute(select(Subtopic.id, Subtopic.name).where(Subtopic.id.in_(subtopic_ids)))
     subtopic_name_map: dict[str, str] = {str(row[0]): row[1] for row in subtopic_result.all()}
 
     questions = [
