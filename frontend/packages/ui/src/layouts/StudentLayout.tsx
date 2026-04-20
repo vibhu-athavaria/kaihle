@@ -34,6 +34,7 @@ export interface StudentLayoutProps {
   gradeName: string; // "Grade 9" — sidebar profile card + top nav subtitle
   curriculumName: string; // "Cambridge IGCSE" — sidebar profile card + top nav subtitle
   onLogout: () => void; // sidebar logout button
+  studyPlanBadge?: number; // count of ACTIVE + IN_PROGRESS plans shown on sidebar
 }
 
 // Subject dot color map — per DESIGN_SYSTEM.md §8 Subject Colors
@@ -74,6 +75,7 @@ export function StudentLayout({
   gradeName,
   curriculumName,
   onLogout,
+  studyPlanBadge,
 }: StudentLayoutProps) {
   const navigate = useNavigate();
 
@@ -133,6 +135,7 @@ export function StudentLayout({
             },
           ].map(({ key, label, Icon }) => {
             const isActive = activeNav === key;
+            const showBadge = key === "study-plans" && studyPlanBadge && studyPlanBadge > 0;
             return (
               <Link
                 key={key}
@@ -155,6 +158,11 @@ export function StudentLayout({
                   <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                 )}
                 {label}
+                {showBadge && (
+                  <span className="ml-auto bg-brand-primary text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    {studyPlanBadge}
+                  </span>
+                )}
               </Link>
             );
           })}
