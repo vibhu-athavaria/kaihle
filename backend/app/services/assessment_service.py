@@ -441,6 +441,7 @@ class AssessmentService:
         # for this curriculum+subject+grade combination.
         rows = await self.db.execute(
             select(QuestionBank.id, Subtopic.curriculum_topic_id, QuestionBank.difficulty_level)
+            .select_from(CurriculumTopic)
             .join(Subtopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
             .join(QuestionBank, QuestionBank.subtopic_id == Subtopic.id)
             .where(
@@ -527,11 +528,10 @@ class AssessmentService:
             )
         )
         if body.topic_ids:
-            q = q.where(CurriculumTopic.topic_id.in_(body.topic_ids))
+            q = q.where(CurriculumTopic.id.in_(body.topic_ids))
 
-        # Step 3 — Sample a pool of MAX_DIAGNOSTIC_POOL questions distributed across
-        # difficulty levels. Error only when the bank has fewer than question_count
-        # (the per-attempt minimum) — a smaller-than-target pool is acceptable.
+        # Step 3 — Sample a pool of body.question_count questions distributed across
+        # difficulty levels. Error only when the bank has fewer than question_count.
         rows = (await self.db.execute(q)).all()
         if len(rows) < body.question_count:
             raise InsufficientQuestionsError(
@@ -559,7 +559,7 @@ class AssessmentService:
 
         selected_ids = _sample_pool_with_difficulty_distribution(
             [(row[0], row[1], row[2]) for row in rows],
-            MAX_DIAGNOSTIC_POOL,
+            body.question_count,
             rng,
         )
 
