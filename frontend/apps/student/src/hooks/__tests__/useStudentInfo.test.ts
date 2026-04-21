@@ -43,4 +43,27 @@ describe("StudentInfo interface", () => {
     expect(anyInfo.curriculum_name).toBeUndefined();
     expect(anyInfo.school_id).toBeUndefined();
   });
+
+  it("test_useStudentInfo_when_api_returns_enrolledClasses_then_types_include_them", () => {
+    // This is a type-level test — if it compiles, it passes.
+    const info: import("../useStudentInfo").StudentInfo = {
+      id: "abc",
+      firstName: "Jane",
+      email: "jane@test.com",
+      gradeName: "Grade 9",
+      curriculumName: "Cambridge IGCSE",
+      schoolId: "school-1",
+      enrolledClasses: [
+        {
+          classId: "cls-1",
+          className: "Math 9B",
+          subjectId: "sub-1",
+          subjectName: "Mathematics",
+          gradeName: "Grade 9",
+        },
+      ],
+    };
+    expect(info.id).toBe("abc");
+    expect(info.enrolledClasses).toHaveLength(1);
+  });
 });
