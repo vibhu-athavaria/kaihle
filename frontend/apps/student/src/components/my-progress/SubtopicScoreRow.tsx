@@ -28,7 +28,7 @@ export function SubtopicScoreRow({
   const { dotClass, textClass } = getMasteryStyle(masteryScore);
   const displayPct = scoreToPercent(masteryScore);
 
-  const showExplainButton = masteryScore === null || masteryScore < 0.7;
+  const showExplainButton = masteryScore === null || masteryScore <= 0.7;
 
   return (
     <div className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-brand-surface transition-colors">
