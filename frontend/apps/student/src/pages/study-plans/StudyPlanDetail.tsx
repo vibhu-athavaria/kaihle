@@ -2,12 +2,7 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, ExternalLink, CheckCircle } from "lucide-react";
 import { StudentLayout } from "@kaihle/ui";
-import { useAuth } from "@kaihle/auth";
-import { useStudentInfo } from "../../hooks/useStudentInfo";
-import {
-  useMyClasses,
-  type StudentClassResponse,
-} from "../../hooks/useMyClasses";
+import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import { useStudyPlan } from "../../hooks/useStudyPlan";
 import { useMarkResourceWatched } from "../../hooks/useMarkResourceWatched";
 import {
@@ -22,10 +17,7 @@ import type {
 export function StudyPlanDetail() {
   const { planId = "" } = useParams<{ planId: string }>();
   const navigate = useNavigate();
-  const { logout } = useAuth();
-
-  const { data: studentInfo } = useStudentInfo();
-  const { data: classesData } = useMyClasses();
+  const layout = useStudentLayoutProps();
   const { data: plan, isLoading, isError } = useStudyPlan(planId);
 
   const markWatched = useMarkResourceWatched();
@@ -34,24 +26,6 @@ export function StudyPlanDetail() {
   const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
   const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
   const [isSubmittingQuiz, setIsSubmittingQuiz] = useState(false);
-
-  const firstName = studentInfo?.firstName ?? "";
-  const lastName = studentInfo?.lastName ?? "";
-  const studentName =
-    [firstName, lastName].filter(Boolean).join(" ") || "Student";
-  const gradeName = studentInfo?.gradeName ?? "";
-  const curriculumName = studentInfo?.curriculumName ?? "";
-
-  const sidebarClasses = (Array.isArray(classesData) ? classesData : []).map(
-    (cls: StudentClassResponse) => ({
-      id: cls.id,
-      name: cls.name,
-      subjectName: cls.subjectName,
-      subjectId: cls.subjectId,
-      diagnosticStatus: cls.onboardingDiagnosticStatus,
-      diagnosticAttemptId: cls.diagnosticAttemptId,
-    }),
-  );
 
   const handleMarkWatched = (resourceId: string) => {
     if (!plan) return;
@@ -88,11 +62,11 @@ export function StudyPlanDetail() {
   return (
     <StudentLayout
       activeNav="study-plans"
-      studentName={studentName}
-      gradeName={gradeName}
-      curriculumName={curriculumName}
-      classes={sidebarClasses}
-      onLogout={logout}
+      studentName={layout.studentName}
+      gradeName={layout.gradeName}
+      curriculumName={layout.curriculumName}
+      classes={layout.sidebarClasses}
+      onLogout={layout.onLogout}
     >
       <div className="max-w-2xl mx-auto space-y-6">
         <button

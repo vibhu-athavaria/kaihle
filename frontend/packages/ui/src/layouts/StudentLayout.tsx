@@ -22,6 +22,7 @@ export interface StudentClass {
   name: string; // "Mathematics 9B"
   subjectName: string; // "Mathematics"
   subjectId: string; // UUID
+  teacherName: string;
   diagnosticStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   diagnosticAttemptId: string | null;
 }

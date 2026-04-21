@@ -12,14 +12,9 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
-import { useAuth } from "@kaihle/auth";
 import { StudentLayout, ScoreRing, Skeleton } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
-import { useStudentInfo } from "../../hooks/useStudentInfo";
-import {
-  useMyClasses,
-  type StudentClassResponse,
-} from "../../hooks/useMyClasses";
+import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import type { AttemptResultResponse } from "../../hooks/useAttempt";
 
 // ─────────────────────────────────────────────────────────────
@@ -81,29 +76,7 @@ export function AssessmentResultsPage() {
   const { attemptId = "" } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
-
-  // ── Student layout data ─────────────────────────────────────
-  const { data: studentInfo } = useStudentInfo();
-  const { data: classesData } = useMyClasses();
-
-  const firstName = studentInfo?.firstName ?? "";
-  const lastName = studentInfo?.lastName ?? "";
-  const studentName =
-    [firstName, lastName].filter(Boolean).join(" ") || "Student";
-  const gradeName = studentInfo?.gradeName ?? "";
-  const curriculumName = studentInfo?.curriculumName ?? "";
-
-  const sidebarClasses = (Array.isArray(classesData) ? classesData : []).map(
-    (cls: StudentClassResponse) => ({
-      id: cls.id,
-      name: cls.name,
-      subjectName: cls.subjectName,
-      subjectId: cls.subjectId,
-      diagnosticStatus: cls.onboardingDiagnosticStatus,
-      diagnosticAttemptId: cls.diagnosticAttemptId,
-    }),
-  );
+  const layout = useStudentLayoutProps();
 
   // ── Result data ─────────────────────────────────────────────
   // Prefer router state (freshly submitted); fall back to API fetch
@@ -139,11 +112,12 @@ export function AssessmentResultsPage() {
   return (
     <StudentLayout
       activeNav="assessments"
-      studentName={studentName}
-      gradeName={gradeName}
-      curriculumName={curriculumName}
-      classes={sidebarClasses}
-      onLogout={logout}
+      studentName={layout.studentName}
+      gradeName={layout.gradeName}
+      curriculumName={layout.curriculumName}
+      classes={layout.sidebarClasses}
+      assessmentBadge={layout.assessmentBadge}
+      onLogout={layout.onLogout}
     >
       {isLoading && !routerResult ? (
         <ResultsSkeleton />

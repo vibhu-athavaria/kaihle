@@ -20,6 +20,7 @@ export interface StudentLayoutProps {
   sidebarClasses: SidebarClass[];
   onLogout: () => void;
   isLoading: boolean;
+  isError: boolean;
   assessmentBadge: number;
   studentId: string | undefined;
 }
@@ -34,8 +35,16 @@ export interface StudentLayoutProps {
  */
 export function useStudentLayoutProps(): StudentLayoutProps {
   const { logout } = useAuth();
-  const { data: studentInfo, isLoading: isInfoLoading } = useStudentInfo();
-  const { data: classesData, isLoading: isClassesLoading } = useMyClasses();
+  const {
+    data: studentInfo,
+    isLoading: isInfoLoading,
+    isError: isInfoError,
+  } = useStudentInfo();
+  const {
+    data: classesData,
+    isLoading: isClassesLoading,
+    isError: isClassesError,
+  } = useMyClasses();
 
   const classes = Array.isArray(classesData) ? classesData : [];
 
@@ -69,6 +78,7 @@ export function useStudentLayoutProps(): StudentLayoutProps {
     sidebarClasses,
     onLogout: logout,
     isLoading: isInfoLoading || isClassesLoading,
+    isError: isInfoError || isClassesError,
     assessmentBadge: newCount,
     studentId: studentInfo?.id,
   };

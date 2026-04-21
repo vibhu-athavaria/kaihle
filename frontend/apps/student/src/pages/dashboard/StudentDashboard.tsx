@@ -63,6 +63,26 @@ export function StudentDashboard() {
     return result;
   }, [layout.sidebarClasses]);
 
+  if (layout.isError) {
+    return (
+      <StudentLayout
+        activeNav="home"
+        studentName={layout.studentName}
+        gradeName={layout.gradeName}
+        curriculumName={layout.curriculumName}
+        classes={layout.sidebarClasses}
+        onLogout={layout.onLogout}
+      >
+        <div className="text-center py-16">
+          <p className="font-sans text-sm text-brand-body">
+            Something went wrong loading your dashboard. Please refresh the
+            page.
+          </p>
+        </div>
+      </StudentLayout>
+    );
+  }
+
   return (
     <StudentLayout
       activeNav="home"
