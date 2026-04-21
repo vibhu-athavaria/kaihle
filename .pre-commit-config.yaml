@@ -16,7 +16,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy (backend type check)
-        entry: bash -c "cd backend && mypy app/"
+        entry: bash -c "cd backend && mypy app/ --pretty --show-error-codes --show-column-numbers"
         language: system
         files: ^backend/
         types: [python]
@@ -28,7 +28,7 @@ repos:
     hooks:
       - id: pytest-unit
         name: pytest unit tests
-        entry: bash -c "cd backend && pytest app/tests/unit/ -v --tb=short --cov=app/services --cov-fail-under=80"
+        entry: bash -c "cd backend && pytest app/tests/unit/ -v --tb=long --cov=app/services --cov-fail-under=80 --cov-report=term-missing"
         language: system
         files: ^backend/
         types: [python]
@@ -51,22 +51,41 @@ repos:
         exclude: "^frontend/dist/"
 
   # TypeScript: type check (matches CI's per-app tsc --noEmit)
+  # Runs all apps unconditionally — && would stop at first failure and hide others
   - repo: local
     hooks:
       - id: tsc-check
         name: TypeScript type check (frontend)
-        entry: bash -c "cd frontend && pnpm --filter parent exec tsc --noEmit && pnpm --filter student exec tsc --noEmit && pnpm --filter teacher exec tsc --noEmit && pnpm --filter @kaihle/school-admin exec tsc --noEmit && pnpm --filter @kaihle/kaihle-admin exec tsc --noEmit"
+        entry: >-
+          bash -c "
+            cd frontend
+            failed=0
+            for app in parent student teacher @kaihle/school-admin @kaihle/kaihle-admin; do
+              echo \"\\n=== tsc: $app ===\"
+              pnpm --filter \"$app\" exec tsc --noEmit || { echo \"FAILED: $app\"; failed=1; }
+            done
+            exit $failed
+          "
         language: system
         files: ^frontend/.*\.(ts|tsx)$
         pass_filenames: false
         require_serial: true
 
-  # Frontend unit tests (Jest) — no || true, real failures surface here
+  # Frontend unit tests (Jest) — all apps run regardless of individual failures
   - repo: local
     hooks:
       - id: jest-unit
         name: jest unit tests (frontend)
-        entry: bash -c "cd frontend && pnpm --filter parent exec jest --passWithNoTests && pnpm --filter student exec jest --passWithNoTests && pnpm --filter teacher exec jest --passWithNoTests && pnpm --filter @kaihle/school-admin exec jest --passWithNoTests && pnpm --filter @kaihle/kaihle-admin exec jest --passWithNoTests"
+        entry: >-
+          bash -c "
+            cd frontend
+            failed=0
+            for app in parent student teacher @kaihle/school-admin @kaihle/kaihle-admin; do
+              echo \"\\n=== jest: $app ===\"
+              pnpm --filter \"$app\" exec jest --passWithNoTests --verbose || { echo \"FAILED: $app\"; failed=1; }
+            done
+            exit $failed
+          "
         language: system
         files: ^frontend/.*\.(ts|tsx)$
         pass_filenames: false
