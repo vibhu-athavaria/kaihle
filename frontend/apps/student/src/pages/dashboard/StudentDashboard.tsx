@@ -10,6 +10,7 @@ import {
 } from "./SubjectScoresSection";
 import { useStudentInfo } from "../../hooks/useStudentInfo";
 import { useStudentDashboard } from "../../hooks/useStudentDashboard";
+import { type AssessmentItem } from "../../hooks/useStudentAssessments";
 import {
   useMyClasses,
   type StudentClassResponse,
@@ -48,7 +49,7 @@ export function StudentDashboard() {
   }, []);
 
   const studyPlans = dashboardData?.studyPlans ?? [];
-  const activeAssessmentCount = dashboardData?.activeAssessmentCount ?? 0;
+  const activeAssessments = dashboardData?.activeAssessments ?? [];
 
   const studyPlanBadgeCount =
     studyPlans.filter(
@@ -62,7 +63,7 @@ export function StudentDashboard() {
 
   // Build next steps including subject scores for weakest-area logic
   const nextSteps = buildNextSteps(
-    activeAssessmentCount,
+    activeAssessments,
     activeStudyPlans,
     inProgressStudyPlans,
     resolvedSubjectScores,
@@ -227,7 +228,7 @@ interface NextStep {
 }
 
 function buildNextSteps(
-  activeAssessmentCount: number,
+  activeAssessments: AssessmentItem[],
   activeStudyPlans: Array<{ id: string; title: string; status: string }>,
   inProgressStudyPlans: Array<{ id: string; title: string; status: string }>,
   subjectScores: ResolvedSubjectScore[],
@@ -235,15 +236,23 @@ function buildNextSteps(
   const nextSteps: NextStep[] = [];
 
   // Priority 1: Active assessments
-  if (activeAssessmentCount > 0) {
+  // urgent = any active assessment has a deadline within 48 hours
+  if (activeAssessments.length > 0) {
+    const now = Date.now();
+    const fortyEightHours = 48 * 60 * 60 * 1000;
+    const urgent = activeAssessments.some(
+      (a) =>
+        a.deadline !== null &&
+        new Date(a.deadline).getTime() - now <= fortyEightHours,
+    );
     nextSteps.push({
       type: "assessment",
       id: "assessment-active",
-      title: `${activeAssessmentCount} assessment${activeAssessmentCount !== 1 ? "s" : ""} active`,
+      title: `${activeAssessments.length} assessment${activeAssessments.length !== 1 ? "s" : ""} active`,
       subtitle: "Complete your pending assessments",
       actionLabel: "Start now →",
       route: "/student/assessments",
-      urgent: false,
+      urgent,
     });
   }
 

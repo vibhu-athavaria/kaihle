@@ -1,7 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 import { useStudentInfo } from "./useStudentInfo";
-import { useStudentAssessments } from "./useStudentAssessments";
+import {
+  useStudentAssessments,
+  type AssessmentItem,
+} from "./useStudentAssessments";
 
 interface StudyPlan {
   id: string;
@@ -16,6 +19,8 @@ interface StudyPlansResponse {
 export interface DashboardData {
   studyPlans: StudyPlan[];
   activeAssessmentCount: number;
+  /** Active teacher assessments with deadline data — used for urgency computation in buildNextSteps */
+  activeAssessments: AssessmentItem[];
 }
 
 interface UseStudentDashboardResult {
@@ -27,6 +32,7 @@ interface UseStudentDashboardResult {
 }
 
 export function useStudentDashboard(): UseStudentDashboardResult {
+  const queryClient = useQueryClient();
   const studentInfoQuery = useStudentInfo();
 
   const classIds = (studentInfoQuery.data?.enrolledClasses ?? []).map(
@@ -59,14 +65,19 @@ export function useStudentDashboard(): UseStudentDashboardResult {
     studentInfoQuery.isError || studyPlansQuery.isError || assessmentsError;
 
   const errMessage =
-    studentInfoQuery.error?.message ?? studyPlansQuery.error?.message;
+    studentInfoQuery.error?.message ??
+    studyPlansQuery.error?.message ??
+    (assessmentsError ? "Failed to load assessments" : undefined);
+
+  const activeAssessments = teacherAssessments.filter(
+    (a) => a.status === "ACTIVE",
+  );
 
   const data = studentInfoQuery.data
     ? {
         studyPlans: studyPlansQuery.data ?? [],
-        activeAssessmentCount: teacherAssessments.filter(
-          (a) => a.status === "ACTIVE",
-        ).length,
+        activeAssessmentCount: activeAssessments.length,
+        activeAssessments,
       }
     : undefined;
 
@@ -76,6 +87,12 @@ export function useStudentDashboard(): UseStudentDashboardResult {
     isError,
     errMessage,
     refetch: async () => {
+      // Invalidate all assessment cache keys (keyed per class) so useStudentAssessments
+      // re-fetches on next render. The queryKey prefix ["student", "assessments"] covers
+      // both ["student", "assessments", "class", classId] and ["student", "attempts", ...].
+      await queryClient.invalidateQueries({
+        queryKey: ["student", "assessments"],
+      });
       await Promise.all([
         studentInfoQuery.refetch(),
         studyPlansQuery.refetch(),
