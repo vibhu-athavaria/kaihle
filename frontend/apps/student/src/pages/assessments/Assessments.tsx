@@ -13,9 +13,6 @@ import {
   type AssessmentItem,
   type AttemptStatus,
 } from "../../hooks/useStudentAssessments";
-import { useStudentInfo } from "../../hooks/useStudentInfo";
-import { useMyClasses } from "../../hooks/useMyClasses";
-
 // ── Helpers ──────────────────────────────────────────────────
 
 function formatDeadline(deadline: string | null): string {
@@ -122,7 +119,7 @@ function DiagnosticCard({
     ? isCompleted
       ? `/student/assessments/${assessment.attemptId}/results`
       : `/student/assessments/${assessment.attemptId}/take`
-    : null;
+    : `/student/classes/${assessment.classId}/diagnostic`;
 
   const buttonLabel =
     assessment.attemptStatus === "IN_PROGRESS"
@@ -169,17 +166,17 @@ function DiagnosticCard({
 
 export function Assessments() {
   const layout = useStudentLayoutProps();
-  const { data: studentInfo } = useStudentInfo();
-  const { data: classesData } = useMyClasses();
 
   const classMap = new Map<string, string>(
-    (Array.isArray(classesData) ? classesData : []).map((c) => [c.id, c.name]),
+    layout.sidebarClasses.map((c) => [c.id, c.name]),
   );
 
   const { diagnostics, teacherAssessments, isPending } = useStudentAssessments(
     layout.sidebarClasses.map((c) => c.id),
-    studentInfo?.id,
+    layout.studentId,
   );
+
+  const isPageLoading = layout.isLoading || isPending;
 
   const pendingDiagnostics = diagnostics.filter(
     (d) => d.attemptStatus !== "COMPLETED",
@@ -201,7 +198,7 @@ export function Assessments() {
         </h1>
 
         {/* Loading skeleton */}
-        {isPending && (
+        {isPageLoading && (
           <div
             className="animate-pulse space-y-3"
             aria-label="Loading assessments"
@@ -211,7 +208,7 @@ export function Assessments() {
           </div>
         )}
 
-        {!isPending && (
+        {!isPageLoading && (
           <>
             {/* Get Started — pending diagnostics */}
             {pendingDiagnostics.length > 0 && (

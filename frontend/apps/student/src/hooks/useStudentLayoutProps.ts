@@ -20,6 +20,7 @@ export interface StudentLayoutProps {
   onLogout: () => void;
   isLoading: boolean;
   assessmentBadge: number;
+  studentId: string | undefined;
 }
 
 /**
@@ -67,5 +68,6 @@ export function useStudentLayoutProps(): StudentLayoutProps {
     onLogout: logout,
     isLoading: isInfoLoading || isClassesLoading,
     assessmentBadge: newCount,
+    studentId: studentInfo?.id,
   };
 }

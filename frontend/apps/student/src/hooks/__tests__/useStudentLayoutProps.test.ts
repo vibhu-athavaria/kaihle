@@ -143,6 +143,29 @@ describe("useStudentLayoutProps", () => {
     expect(result.current.isLoading).toBe(false);
   });
 
+  it("test_useStudentLayoutProps_when_student_data_loaded_then_returns_studentId", () => {
+    mockUseStudentInfo.mockReturnValue({
+      data: {
+        id: "stu-123",
+        firstName: "Jane",
+        lastName: "Doe",
+        gradeName: "Grade 9",
+        curriculumName: "Cambridge IGCSE",
+        enrolledClasses: [],
+      },
+      isLoading: false,
+    });
+    mockUseMyClasses.mockReturnValue({ data: [], isLoading: false });
+    mockUseStudentAssessments.mockReturnValue({
+      newCount: 0,
+      isPending: false,
+      isError: false,
+    });
+
+    const { result } = renderHook(() => useStudentLayoutProps());
+    expect(result.current.studentId).toBe("stu-123");
+  });
+
   it("test_useStudentLayoutProps_when_student_has_new_assessments_then_returns_assessmentBadge", () => {
     mockUseStudentInfo.mockReturnValue({
       data: {
