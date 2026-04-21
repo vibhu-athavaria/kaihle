@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
+import { type StudentInfo } from "./useStudentInfo";
 
 interface StudyPlan {
   id: string;
@@ -11,23 +12,6 @@ interface Assessment {
   id: string;
   subjectName: string;
   dueDate: string;
-}
-
-interface EnrolledClass {
-  classId: string;
-  className: string;
-  subjectId: string;
-  subjectName: string;
-  gradeName: string;
-}
-
-interface StudentInfo {
-  firstName: string;
-  gradeName: string;
-  curriculumName: string;
-  classId?: string;
-  isEnrolled: boolean;
-  enrolledClasses: EnrolledClass[];
 }
 
 interface StudyPlansResponse {
