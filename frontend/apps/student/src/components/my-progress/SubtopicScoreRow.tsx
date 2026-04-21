@@ -40,7 +40,9 @@ export function SubtopicScoreRow({
         {showExplainButton && (
           <button
             type="button"
-            onClick={() => openGuide({ subtopicId, subtopicName, masteryScore })}
+            onClick={() =>
+              openGuide({ subtopicId, subtopicName, masteryScore })
+            }
             className="font-sans text-xs text-brand-primary hover:text-brand-dark underline focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded min-h-[44px] px-1"
           >
             Explain this →

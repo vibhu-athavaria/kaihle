@@ -43,7 +43,7 @@ repos:
     hooks:
       - id: prettier
         name: Prettier (via pnpm)
-        entry: bash -c "cd frontend && pnpm exec prettier --check"
+        entry: bash -c "cd frontend && pnpm exec prettier --check \"**/*.{ts,tsx,json,css}\" --ignore-path=.prettierignore"
         language: system
         files: ^frontend/
         types_or: [ts, tsx, json, css]

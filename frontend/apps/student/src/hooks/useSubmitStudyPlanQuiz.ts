@@ -29,7 +29,9 @@ export function useSubmitStudyPlanQuiz(planId: string) {
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["student", "study-plan", planId] });
+      queryClient.invalidateQueries({
+        queryKey: ["student", "study-plan", planId],
+      });
       queryClient.invalidateQueries({ queryKey: ["student", "study-plans"] });
     },
   });

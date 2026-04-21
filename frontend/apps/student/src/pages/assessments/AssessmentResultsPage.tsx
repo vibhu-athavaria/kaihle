@@ -163,7 +163,8 @@ export function AssessmentResultsPage() {
       ) : result ? (
         <div className="max-w-md mx-auto flex flex-col items-center gap-6 py-8">
           {/* ── Result banner — branches on assessment type ── */}
-          {!result.assessment_type || result.assessment_type === "DIAGNOSTIC" ? (
+          {!result.assessment_type ||
+          result.assessment_type === "DIAGNOSTIC" ? (
             <DiagnosticBanner />
           ) : (
             <FormativeBanner />
@@ -199,7 +200,8 @@ export function AssessmentResultsPage() {
             type="button"
             onClick={() =>
               navigate(
-                !result.assessment_type || result.assessment_type === "DIAGNOSTIC"
+                !result.assessment_type ||
+                  result.assessment_type === "DIAGNOSTIC"
                   ? "/student/dashboard"
                   : "/student/my-progress",
               )

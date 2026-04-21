@@ -135,7 +135,8 @@ export function StudentLayout({
             },
           ].map(({ key, label, Icon }) => {
             const isActive = activeNav === key;
-            const showBadge = key === "study-plans" && studyPlanBadge && studyPlanBadge > 0;
+            const showBadge =
+              key === "study-plans" && studyPlanBadge && studyPlanBadge > 0;
             return (
               <Link
                 key={key}

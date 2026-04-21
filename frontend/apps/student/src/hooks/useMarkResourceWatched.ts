@@ -16,7 +16,9 @@ export function useMarkResourceWatched() {
       );
     },
     onSuccess: (_, { planId }) => {
-      queryClient.invalidateQueries({ queryKey: ["student", "study-plan", planId] });
+      queryClient.invalidateQueries({
+        queryKey: ["student", "study-plan", planId],
+      });
       queryClient.invalidateQueries({ queryKey: ["student", "study-plans"] });
     },
   });

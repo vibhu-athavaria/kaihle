@@ -6,7 +6,10 @@ import {
   useMyClasses,
   type StudentClassResponse,
 } from "../../hooks/useMyClasses";
-import { useMyStudyPlans, type StudyPlanSummary } from "../../hooks/useMyStudyPlans";
+import {
+  useMyStudyPlans,
+  type StudyPlanSummary,
+} from "../../hooks/useMyStudyPlans";
 
 export function StudyPlans() {
   const { logout } = useAuth();
@@ -118,14 +121,23 @@ function StudyPlanCard({ plan }: { plan: StudyPlanSummary }) {
 
   const statusBadge = (
     {
-      ACTIVE: { label: "Ready", class: "bg-brand-green-light text-brand-green" },
+      ACTIVE: {
+        label: "Ready",
+        class: "bg-brand-green-light text-brand-green",
+      },
       IN_PROGRESS: {
         label: "In progress",
         class: "bg-brand-amber-light text-brand-gold-dark",
       },
-      COMPLETED: { label: "Completed", class: "bg-brand-light text-brand-body" },
+      COMPLETED: {
+        label: "Completed",
+        class: "bg-brand-light text-brand-body",
+      },
     } as Record<string, { label: string; class: string }>
-  )[plan.status] ?? { label: plan.status, class: "bg-brand-light text-brand-body" };
+  )[plan.status] ?? {
+    label: plan.status,
+    class: "bg-brand-light text-brand-body",
+  };
 
   return (
     <Link
@@ -233,7 +245,11 @@ function EmptyStudyPlans({
           : "Study plans are built automatically from your assessment results — personalised to the specific topics where you have gaps. Complete your first assessment to unlock them."}
       </p>
       <Link
-        to={hasDiagnosticComplete ? "/student/my-progress" : "/student/assessments"}
+        to={
+          hasDiagnosticComplete
+            ? "/student/my-progress"
+            : "/student/assessments"
+        }
         className="font-sans text-sm font-semibold text-brand-primary hover:text-brand-dark focus-visible:ring-2 focus-visible:ring-brand-primary rounded"
       >
         {hasDiagnosticComplete
