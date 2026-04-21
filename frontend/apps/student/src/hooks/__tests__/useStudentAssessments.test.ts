@@ -160,4 +160,54 @@ describe("useStudentAssessments", () => {
     );
     expect(result.current.newCount).toBe(0);
   });
+
+  it("test_useStudentAssessments_when_studentId_undefined_then_attempts_not_fetched", async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/students/")) {
+        throw new Error("Should not call attempts endpoint");
+      }
+      return Promise.resolve({ data: { data: [TEACHER_ASSESSMENT] } });
+    });
+    const { result } = renderHook(
+      () => useStudentAssessments(["cls-1"], undefined),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.newCount).toBe(1);
+    expect(result.current.teacherAssessments[0].attemptStatus).toBe(
+      "NOT_STARTED",
+    );
+  });
+
+  it("test_useStudentAssessments_when_multiple_classIds_then_merges_results_from_all_classes", async () => {
+    const ASSESSMENT_CLASS_2 = {
+      id: "assess-3",
+      class_id: "cls-2",
+      title: "Physics Quiz",
+      assessment_type: "PROGRESS_CHECK",
+      is_system_generated: false,
+      status: "ACTIVE",
+      question_count: 5,
+      deadline: null,
+      published_at: "2026-04-02T00:00:00Z",
+    };
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/classes/cls-1/")) {
+        return Promise.resolve({ data: { data: [TEACHER_ASSESSMENT] } });
+      }
+      if (url.includes("/classes/cls-2/")) {
+        return Promise.resolve({ data: { data: [ASSESSMENT_CLASS_2] } });
+      }
+      return Promise.resolve({ data: { data: [] } });
+    });
+
+    const { result } = renderHook(
+      () => useStudentAssessments(["cls-1", "cls-2"], "student-1"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.teacherAssessments).toHaveLength(2);
+    expect(result.current.newCount).toBe(2);
+  });
 });

@@ -53,6 +53,16 @@ export interface UseStudentAssessmentsResult {
   isError: boolean;
 }
 
+function toAssessmentType(raw: string): AssessmentItem["assessmentType"] {
+  if (raw === "DIAGNOSTIC" || raw === "PROGRESS_CHECK") return raw;
+  return "PROGRESS_CHECK";
+}
+
+function toAssessmentStatus(raw: string): AssessmentItem["status"] {
+  if (raw === "DRAFT" || raw === "ACTIVE" || raw === "CLOSED") return raw;
+  return "DRAFT";
+}
+
 export function useStudentAssessments(
   classIds: string[],
   studentId: string | undefined,
@@ -68,16 +78,18 @@ export function useStudentAssessments(
         return res.data.data;
       },
       staleTime: 2 * 60 * 1000,
-      enabled: classIds.length > 0,
+      // enabled omitted: when classIds is empty, useQueries receives [] and fires no queries
     })),
   });
 
   const attemptsQuery = useQuery({
     queryKey: ["student", "attempts", studentId] as const,
     queryFn: async (): Promise<AttemptHistoryItem[]> => {
+      // No /me shortcut exists for this endpoint — students access their own attempts
+      // via their JWT-verified student_id. See attempts.py:272 for the STUDENT role guard.
       const res = await apiClient.get<AttemptsPage>(
         `/api/v1/students/${studentId}/attempts`,
-        { params: { page: 1, page_size: 100 } },
+        { params: { page: 1, page_size: 50 } },
       );
       return res.data.data;
     },
@@ -91,6 +103,10 @@ export function useStudentAssessments(
   const isError =
     assessmentQueries.some((q) => q.isError) || attemptsQuery.isError;
 
+  // Build attempt lookup keyed by assessment_id.
+  // The attempts endpoint returns newest-first (see attempts.py order_by desc).
+  // If a student has retaken an assessment, the first entry encountered wins,
+  // which is the most recent attempt — the intended behaviour.
   const attemptMap = new Map<string, AttemptHistoryItem>();
   for (const a of attemptsQuery.data ?? []) {
     attemptMap.set(a.assessment_id, a);
@@ -112,9 +128,9 @@ export function useStudentAssessments(
         id: a.id,
         classId: a.class_id,
         title: a.title,
-        assessmentType: a.assessment_type as AssessmentItem["assessmentType"],
+        assessmentType: toAssessmentType(a.assessment_type),
         isSystemGenerated: a.is_system_generated,
-        status: a.status as AssessmentItem["status"],
+        status: toAssessmentStatus(a.status),
         questionCount: a.question_count,
         deadline: a.deadline,
         publishedAt: a.published_at,
