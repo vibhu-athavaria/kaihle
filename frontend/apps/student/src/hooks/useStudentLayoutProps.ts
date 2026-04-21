@@ -8,6 +8,7 @@ export interface SidebarClass {
   name: string;
   subjectName: string;
   subjectId: string;
+  teacherName: string;
   diagnosticStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   diagnosticAttemptId: string | null;
 }
@@ -55,6 +56,7 @@ export function useStudentLayoutProps(): StudentLayoutProps {
       name: cls.name,
       subjectName: cls.subjectName,
       subjectId: cls.subjectId,
+      teacherName: cls.teacherName,
       diagnosticStatus: cls.onboardingDiagnosticStatus,
       diagnosticAttemptId: cls.diagnosticAttemptId,
     }),

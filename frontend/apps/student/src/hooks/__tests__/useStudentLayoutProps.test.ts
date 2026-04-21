@@ -112,6 +112,7 @@ describe("useStudentLayoutProps", () => {
       name: "Mathematics 9B",
       subjectName: "Mathematics",
       subjectId: "subj-1",
+      teacherName: "Ms. Smith",
       diagnosticStatus: "COMPLETED",
       diagnosticAttemptId: "attempt-1",
     });
