@@ -12,6 +12,7 @@ import { Assessments } from "./pages/assessments/Assessments";
 import { StudentSettings } from "./pages/settings/StudentSettings";
 import { TakeAssessmentPage } from "./pages/assessments/TakeAssessmentPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
+import { StudyPlanDetail } from "./pages/study-plans/StudyPlanDetail";
 
 export default function App() {
   return (
@@ -61,6 +62,18 @@ export default function App() {
               <ErrorBoundary role="student">
                 <StudyPlans />
               </ErrorBoundary>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/study-plans/:planId"
+          element={
+            <PrivateRoute>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <StudyPlanDetail />
+                </ErrorBoundary>
+              </OnboardingRoute>
             </PrivateRoute>
           }
         />

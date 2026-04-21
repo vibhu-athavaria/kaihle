@@ -34,6 +34,7 @@ export interface StudentLayoutProps {
   gradeName: string; // "Grade 9" — sidebar profile card + top nav subtitle
   curriculumName: string; // "Cambridge IGCSE" — sidebar profile card + top nav subtitle
   onLogout: () => void; // sidebar logout button
+  studyPlanBadge?: number; // count of ACTIVE + IN_PROGRESS plans shown on sidebar
 }
 
 // Subject dot color map — per DESIGN_SYSTEM.md §8 Subject Colors
@@ -74,6 +75,7 @@ export function StudentLayout({
   gradeName,
   curriculumName,
   onLogout,
+  studyPlanBadge,
 }: StudentLayoutProps) {
   const navigate = useNavigate();
 
@@ -133,6 +135,8 @@ export function StudentLayout({
             },
           ].map(({ key, label, Icon }) => {
             const isActive = activeNav === key;
+            const showBadge =
+              key === "study-plans" && studyPlanBadge && studyPlanBadge > 0;
             return (
               <Link
                 key={key}
@@ -143,7 +147,7 @@ export function StudentLayout({
                   "text-sm font-semibold transition-colors",
                   isActive
                     ? "bg-role-student-nav-active text-brand-primary font-semibold"
-                    : "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
+                    : "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
                 ].join(" ")}
               >
                 {isActive ? (
@@ -155,6 +159,11 @@ export function StudentLayout({
                   <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                 )}
                 {label}
+                {showBadge && (
+                  <span className="ml-auto bg-brand-primary text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    {studyPlanBadge}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -162,7 +171,7 @@ export function StudentLayout({
           {/* CLASSES section — dynamic */}
           {classes.length > 0 && (
             <>
-              <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-muted">
+              <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-body">
                 Classes
               </div>
               {classes.map((cls) => {
@@ -184,7 +193,7 @@ export function StudentLayout({
                     className={[
                       "flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
                       "text-sm font-semibold transition-colors",
-                      "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
+                      "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
                     ].join(" ")}
                   >
                     {isLocked ? (

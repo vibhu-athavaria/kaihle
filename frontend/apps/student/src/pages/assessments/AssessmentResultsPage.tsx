@@ -23,6 +23,42 @@ import {
 import type { AttemptResultResponse } from "../../hooks/useAttempt";
 
 // ─────────────────────────────────────────────────────────────
+//  Result banners
+// ─────────────────────────────────────────────────────────────
+
+function DiagnosticBanner() {
+  return (
+    <div
+      className="w-full bg-brand-green-light border border-brand-mid rounded-xl px-4 py-3 text-center"
+      role="status"
+      aria-live="polite"
+    >
+      <p className="font-sans font-semibold text-sm text-brand-green">
+        Diagnostic complete!{" "}
+        <span className="font-normal">
+          Head back to see what&apos;s now unlocked.
+        </span>
+      </p>
+    </div>
+  );
+}
+
+function FormativeBanner() {
+  return (
+    <div
+      className="w-full bg-brand-green-light border border-brand-mid rounded-xl px-4 py-3 text-center"
+      role="status"
+      aria-live="polite"
+    >
+      <p className="font-sans font-semibold text-sm text-brand-green">
+        Assessment submitted.{" "}
+        <span className="font-normal">Your progress has been updated.</span>
+      </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 //  Results skeleton
 // ─────────────────────────────────────────────────────────────
 
@@ -126,19 +162,13 @@ export function AssessmentResultsPage() {
         </div>
       ) : result ? (
         <div className="max-w-md mx-auto flex flex-col items-center gap-6 py-8">
-          {/* ── Diagnostic complete banner ─────────────────── */}
-          <div
-            className="w-full bg-brand-green-light border border-brand-mid rounded-xl px-4 py-3 text-center"
-            role="status"
-            aria-live="polite"
-          >
-            <p className="font-sans font-semibold text-sm text-brand-green">
-              Diagnostic complete!{" "}
-              <span className="font-normal">
-                Head back to see what&apos;s now unlocked.
-              </span>
-            </p>
-          </div>
+          {/* ── Result banner — branches on assessment type ── */}
+          {!result.assessment_type ||
+          result.assessment_type === "DIAGNOSTIC" ? (
+            <DiagnosticBanner />
+          ) : (
+            <FormativeBanner />
+          )}
 
           {/* ── Score ring ─────────────────────────────────── */}
           <div className="flex flex-col items-center gap-3">
@@ -168,10 +198,19 @@ export function AssessmentResultsPage() {
           {/* ── CTA ──────────────────────────────────────────── */}
           <button
             type="button"
-            onClick={() => navigate("/student/dashboard")}
+            onClick={() =>
+              navigate(
+                !result.assessment_type ||
+                  result.assessment_type === "DIAGNOSTIC"
+                  ? "/student/dashboard"
+                  : "/student/my-progress",
+              )
+            }
             className="w-full bg-brand-primary text-white px-6 py-3 rounded-full font-sans font-semibold text-sm hover:bg-brand-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
           >
-            Back to Dashboard
+            {!result.assessment_type || result.assessment_type === "DIAGNOSTIC"
+              ? "Back to Dashboard"
+              : "View my progress →"}
           </button>
         </div>
       ) : null}

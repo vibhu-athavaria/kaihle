@@ -8,6 +8,8 @@ import {
 } from "../../hooks/useMyClasses";
 import { useStudentGapMap } from "../../hooks/useStudentGapMap";
 import { TopicSection } from "../../components/my-progress/TopicSection";
+import { ConceptGuideProvider } from "../../context/ConceptGuideContext";
+import { ConceptGuideDrawer } from "../../components/ai/ConceptGuideDrawer";
 
 interface SubjectEntry {
   subjectId: string;
@@ -99,80 +101,83 @@ export function MyProgress() {
   );
 
   return (
-    <StudentLayout
-      activeNav="progress"
-      studentName={studentName}
-      gradeName={gradeName}
-      curriculumName={curriculumName}
-      classes={sidebarClasses}
-      onLogout={logout}
-    >
-      <div className="space-y-6">
-        <h1 className="font-display font-bold text-2xl text-brand-ink">
-          My Progress
-        </h1>
+    <ConceptGuideProvider>
+      <StudentLayout
+        activeNav="progress"
+        studentName={studentName}
+        gradeName={gradeName}
+        curriculumName={curriculumName}
+        classes={sidebarClasses}
+        onLogout={logout}
+      >
+        <div className="space-y-6">
+          <h1 className="font-display font-bold text-2xl text-brand-ink">
+            My Progress
+          </h1>
 
-        {uniqueSubjects.length === 0 ? (
-          <div className="bg-white rounded-xl border border-brand-border p-8 text-center">
-            <p className="text-brand-muted">
-              You are not enrolled in any subjects yet.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="flex gap-2 flex-wrap">
-              {uniqueSubjects.map((subject) => (
-                <button
-                  key={subject.subjectId}
-                  type="button"
-                  onClick={() => setSelectedSubjectId(subject.subjectId)}
-                  className={`px-4 py-2 rounded-lg font-sans text-sm font-medium transition-colors ${
-                    selectedSubjectId === subject.subjectId
-                      ? "bg-brand-primary text-white"
-                      : "bg-white border border-brand-border text-brand-ink hover:bg-brand-bg"
-                  }`}
-                >
-                  {subject.subjectName}
-                </button>
-              ))}
+          {uniqueSubjects.length === 0 ? (
+            <div className="bg-white rounded-xl border border-brand-border p-8 text-center">
+              <p className="text-brand-muted">
+                You are not enrolled in any subjects yet.
+              </p>
             </div>
-
-            {isGapMapLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="h-16 bg-brand-border/50 rounded-xl animate-pulse"
-                  />
+          ) : (
+            <>
+              <div className="flex gap-2 flex-wrap">
+                {uniqueSubjects.map((subject) => (
+                  <button
+                    key={subject.subjectId}
+                    type="button"
+                    onClick={() => setSelectedSubjectId(subject.subjectId)}
+                    className={`px-4 py-2 rounded-lg font-sans text-sm font-medium transition-colors ${
+                      selectedSubjectId === subject.subjectId
+                        ? "bg-brand-primary text-white"
+                        : "bg-white border border-brand-border text-brand-ink hover:bg-brand-bg"
+                    }`}
+                  >
+                    {subject.subjectName}
+                  </button>
                 ))}
               </div>
-            ) : topics.length === 0 ? (
-              <div className="bg-brand-amber-light border border-brand-amber/30 rounded-xl p-4 mt-6">
-                <p className="font-sans text-sm text-brand-amber">
-                  Take your first assessment to start seeing topic-by-topic
-                  progress here.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <h2 className="font-sans text-section-label font-bold uppercase tracking-[0.8px] text-brand-body">
-                  {selectedSubject?.subjectName} — Topic Breakdown
-                </h2>
+
+              {isGapMapLoading ? (
                 <div className="space-y-3">
-                  {topics.map((topic) => (
-                    <TopicSection
-                      key={topic.topicId}
-                      topicName={topic.topicName}
-                      subtopics={topic.subtopics}
-                      defaultExpanded={false}
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="h-16 bg-brand-border/50 rounded-xl animate-pulse"
                     />
                   ))}
                 </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </StudentLayout>
+              ) : topics.length === 0 ? (
+                <div className="bg-brand-amber-light border border-brand-amber/30 rounded-xl p-4 mt-6">
+                  <p className="font-sans text-sm text-brand-amber">
+                    Take your first assessment to start seeing topic-by-topic
+                    progress here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <h2 className="font-sans text-section-label font-bold uppercase tracking-[0.8px] text-brand-body">
+                    {selectedSubject?.subjectName} — Topic Breakdown
+                  </h2>
+                  <div className="space-y-3">
+                    {topics.map((topic) => (
+                      <TopicSection
+                        key={topic.topicId}
+                        topicName={topic.topicName}
+                        subtopics={topic.subtopics}
+                        defaultExpanded={false}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </StudentLayout>
+      <ConceptGuideDrawer />
+    </ConceptGuideProvider>
   );
 }

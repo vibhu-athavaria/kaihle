@@ -51,6 +51,11 @@ export function StudentDashboard() {
   const studyPlans = dashboardData?.studyPlans ?? [];
   const assessments = dashboardData?.assessments ?? [];
 
+  const studyPlanBadgeCount =
+    studyPlans.filter(
+      (sp) => sp.status === "ACTIVE" || sp.status === "IN_PROGRESS",
+    ).length || undefined;
+
   const activeStudyPlans =
     studyPlans?.filter((sp) => sp.status === "ACTIVE") || [];
   const inProgressStudyPlans =
@@ -116,6 +121,7 @@ export function StudentDashboard() {
       gradeName={gradeName}
       curriculumName={curriculumName}
       classes={sidebarClasses}
+      studyPlanBadge={studyPlanBadgeCount}
       onLogout={logout}
     >
       <div className="space-y-6">
@@ -126,6 +132,19 @@ export function StudentDashboard() {
             onScoresResolved={handleScoresResolved}
           />
         )}
+
+        {/* Streak placeholder — backend streakDays always null until implemented */}
+        <div className="bg-white border border-brand-border rounded-card px-4 py-3 flex items-center gap-3">
+          <span className="text-brand-muted text-lg">🔥</span>
+          <div>
+            <div className="font-sans font-semibold text-sm text-brand-muted">
+              Daily streak — coming soon
+            </div>
+            <div className="font-sans text-xs text-brand-muted">
+              Keep checking in daily to build your streak
+            </div>
+          </div>
+        </div>
 
         {/* Class Cards - Per-class diagnostic locked/unlocked state */}
         {(() => {
@@ -180,6 +199,8 @@ export function StudentDashboard() {
                     title={step.title}
                     subtitle={step.subtitle}
                     actionLabel={step.actionLabel}
+                    route={step.route}
+                    urgent={step.urgent}
                   />
                 ))
             ) : (
@@ -202,6 +223,8 @@ interface NextStep {
   title: string;
   subtitle: string;
   actionLabel: string;
+  route: string;
+  urgent?: boolean;
 }
 
 function buildNextSteps(
@@ -214,6 +237,10 @@ function buildNextSteps(
 
   // Priority 1: Active assessments due within 7 days
   if (assessments.length > 0) {
+    const daysUntilDue = Math.ceil(
+      (new Date(assessments[0].dueDate).getTime() - Date.now()) /
+        (1000 * 60 * 60 * 24),
+    );
     nextSteps.push({
       type: "assessment",
       id: `assessment-${assessments[0].id}`,
@@ -227,6 +254,8 @@ function buildNextSteps(
         month: "short",
       })}`,
       actionLabel: "Start now →",
+      route: "/student/assessments",
+      urgent: daysUntilDue <= 3,
     });
   }
 
@@ -239,7 +268,8 @@ function buildNextSteps(
         activeStudyPlans.length > 1 ? "s" : ""
       } ready`,
       subtitle: "Start learning where it counts",
-      actionLabel: "View plans →",
+      actionLabel: "Begin →",
+      route: "/student/study-plans",
     });
   }
 
@@ -251,6 +281,7 @@ function buildNextSteps(
       title: "Continue your study plan",
       subtitle: inProgressStudyPlans[0].title,
       actionLabel: "Continue →",
+      route: `/student/study-plans/${inProgressStudyPlans[0].id}`,
     });
   }
 
@@ -269,6 +300,7 @@ function buildNextSteps(
           (weakest.avgMastery ?? 0) * 100,
         )}% — keep going`,
         actionLabel: "View progress →",
+        route: "/student/my-progress",
       });
     }
   }
