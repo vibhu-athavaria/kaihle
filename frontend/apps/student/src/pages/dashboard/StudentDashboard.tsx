@@ -47,9 +47,8 @@ export function StudentDashboard() {
     setResolvedSubjectScores(scores);
   }, []);
 
-  // For now, default empty arrays - these would come from other API calls
   const studyPlans = dashboardData?.studyPlans ?? [];
-  const assessments = dashboardData?.assessments ?? [];
+  const activeAssessmentCount = dashboardData?.activeAssessmentCount ?? 0;
 
   const studyPlanBadgeCount =
     studyPlans.filter(
@@ -63,7 +62,7 @@ export function StudentDashboard() {
 
   // Build next steps including subject scores for weakest-area logic
   const nextSteps = buildNextSteps(
-    assessments,
+    activeAssessmentCount,
     activeStudyPlans,
     inProgressStudyPlans,
     resolvedSubjectScores,
@@ -228,34 +227,23 @@ interface NextStep {
 }
 
 function buildNextSteps(
-  assessments: Array<{ id: string; subjectName: string; dueDate: string }>,
+  activeAssessmentCount: number,
   activeStudyPlans: Array<{ id: string; title: string; status: string }>,
   inProgressStudyPlans: Array<{ id: string; title: string; status: string }>,
   subjectScores: ResolvedSubjectScore[],
 ): NextStep[] {
   const nextSteps: NextStep[] = [];
 
-  // Priority 1: Active assessments due within 7 days
-  if (assessments.length > 0) {
-    const daysUntilDue = Math.ceil(
-      (new Date(assessments[0].dueDate).getTime() - Date.now()) /
-        (1000 * 60 * 60 * 24),
-    );
+  // Priority 1: Active assessments
+  if (activeAssessmentCount > 0) {
     nextSteps.push({
       type: "assessment",
-      id: `assessment-${assessments[0].id}`,
-      title: `${assessments.length} assessment${
-        assessments.length > 1 ? "s" : ""
-      } due`,
-      subtitle: `${assessments[0].subjectName} · Due ${new Date(
-        assessments[0].dueDate,
-      ).toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "short",
-      })}`,
+      id: "assessment-active",
+      title: `${activeAssessmentCount} assessment${activeAssessmentCount !== 1 ? "s" : ""} active`,
+      subtitle: "Complete your pending assessments",
       actionLabel: "Start now →",
       route: "/student/assessments",
-      urgent: daysUntilDue <= 3,
+      urgent: false,
     });
   }
 
