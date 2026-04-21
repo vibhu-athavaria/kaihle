@@ -157,7 +157,7 @@ export function StudyPlanDetail() {
                         handleMarkWatched(resource.resource_id)
                       }
                       isMarkingWatched={markWatched.isPending}
-                      isCompleted={isCompleted ?? false}
+                      isCompleted={isCompleted}
                     />
                   ))}
                 </div>
