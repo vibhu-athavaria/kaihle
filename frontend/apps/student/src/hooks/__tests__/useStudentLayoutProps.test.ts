@@ -20,13 +20,23 @@ jest.mock("../useMyClasses", () => ({
   useMyClasses: jest.fn(),
 }));
 
+jest.mock("../useStudentAssessments", () => ({
+  useStudentAssessments: jest.fn(() => ({
+    newCount: 0,
+    isPending: false,
+    isError: false,
+  })),
+}));
+
 import { useAuth } from "@kaihle/auth";
 import { useStudentInfo } from "../useStudentInfo";
 import { useMyClasses } from "../useMyClasses";
+import { useStudentAssessments } from "../useStudentAssessments";
 
 const mockUseAuth = useAuth as jest.Mock;
 const mockUseStudentInfo = useStudentInfo as jest.Mock;
 const mockUseMyClasses = useMyClasses as jest.Mock;
+const mockUseStudentAssessments = useStudentAssessments as jest.Mock;
 
 describe("useStudentLayoutProps", () => {
   const mockLogout = jest.fn();
@@ -131,5 +141,31 @@ describe("useStudentLayoutProps", () => {
     const { result } = renderHook(() => useStudentLayoutProps());
 
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it("test_useStudentLayoutProps_when_student_has_new_assessments_then_returns_assessmentBadgeCount", () => {
+    mockUseStudentInfo.mockReturnValue({
+      data: {
+        id: "stu-1",
+        firstName: "Jane",
+        lastName: "Doe",
+        gradeName: "Grade 9",
+        curriculumName: "Cambridge IGCSE",
+        enrolledClasses: [],
+      },
+      isLoading: false,
+    });
+    mockUseMyClasses.mockReturnValue({
+      data: [],
+      isLoading: false,
+    });
+    mockUseStudentAssessments.mockReturnValue({
+      newCount: 3,
+      isPending: false,
+      isError: false,
+    });
+
+    const { result } = renderHook(() => useStudentLayoutProps());
+    expect(result.current.assessmentBadgeCount).toBe(3);
   });
 });

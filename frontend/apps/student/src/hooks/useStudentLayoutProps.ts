@@ -1,6 +1,7 @@
 import { useAuth } from "@kaihle/auth";
 import { useStudentInfo } from "./useStudentInfo";
 import { useMyClasses, type StudentClassResponse } from "./useMyClasses";
+import { useStudentAssessments } from "./useStudentAssessments";
 
 export interface SidebarClass {
   id: string;
@@ -18,16 +19,19 @@ export interface StudentLayoutProps {
   sidebarClasses: SidebarClass[];
   onLogout: () => void;
   isLoading: boolean;
+  assessmentBadgeCount: number;
 }
 
-/**
- * Consolidates the repeated boilerplate across student pages:
- * student info + classes + auth → StudentLayout props.
- */
 export function useStudentLayoutProps(): StudentLayoutProps {
   const { logout } = useAuth();
   const { data: studentInfo, isLoading: isInfoLoading } = useStudentInfo();
   const { data: classesData, isLoading: isClassesLoading } = useMyClasses();
+
+  const classIds = (Array.isArray(classesData) ? classesData : []).map(
+    (cls: StudentClassResponse) => cls.id,
+  );
+
+  const { newCount } = useStudentAssessments(classIds, studentInfo?.id);
 
   const firstName = studentInfo?.firstName ?? "";
   const lastName = studentInfo?.lastName ?? "";
@@ -54,5 +58,6 @@ export function useStudentLayoutProps(): StudentLayoutProps {
     sidebarClasses,
     onLogout: logout,
     isLoading: isInfoLoading || isClassesLoading,
+    assessmentBadgeCount: newCount,
   };
 }
