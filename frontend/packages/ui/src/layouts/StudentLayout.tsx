@@ -147,7 +147,7 @@ export function StudentLayout({
                   "text-sm font-semibold transition-colors",
                   isActive
                     ? "bg-role-student-nav-active text-brand-primary font-semibold"
-                    : "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
+                    : "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
                 ].join(" ")}
               >
                 {isActive ? (
@@ -171,7 +171,7 @@ export function StudentLayout({
           {/* CLASSES section — dynamic */}
           {classes.length > 0 && (
             <>
-              <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-muted">
+              <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-body">
                 Classes
               </div>
               {classes.map((cls) => {
@@ -193,7 +193,7 @@ export function StudentLayout({
                     className={[
                       "flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
                       "text-sm font-semibold transition-colors",
-                      "text-brand-muted hover:bg-gray-50 hover:text-brand-ink",
+                      "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
                     ].join(" ")}
                   >
                     {isLocked ? (

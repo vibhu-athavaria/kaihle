@@ -29,7 +29,7 @@ export function SubjectScoreCard({
       >
         {displayPct}
       </div>
-      <div className="font-sans font-bold text-xs uppercase tracking-[0.5px] text-brand-muted mb-0.5">
+      <div className="font-sans font-bold text-xs uppercase tracking-[0.5px] text-brand-body mb-0.5">
         {subjectName}
       </div>
       <div className={`font-sans font-semibold text-xs ${textClass}`}>
