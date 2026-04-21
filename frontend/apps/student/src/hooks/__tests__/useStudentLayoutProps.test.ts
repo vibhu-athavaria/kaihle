@@ -143,7 +143,7 @@ describe("useStudentLayoutProps", () => {
     expect(result.current.isLoading).toBe(false);
   });
 
-  it("test_useStudentLayoutProps_when_student_has_new_assessments_then_returns_assessmentBadgeCount", () => {
+  it("test_useStudentLayoutProps_when_student_has_new_assessments_then_returns_assessmentBadge", () => {
     mockUseStudentInfo.mockReturnValue({
       data: {
         id: "stu-1",
@@ -166,6 +166,6 @@ describe("useStudentLayoutProps", () => {
     });
 
     const { result } = renderHook(() => useStudentLayoutProps());
-    expect(result.current.assessmentBadgeCount).toBe(3);
+    expect(result.current.assessmentBadge).toBe(3);
   });
 });

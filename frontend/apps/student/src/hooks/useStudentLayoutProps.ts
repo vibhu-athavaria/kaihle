@@ -19,17 +19,25 @@ export interface StudentLayoutProps {
   sidebarClasses: SidebarClass[];
   onLogout: () => void;
   isLoading: boolean;
-  assessmentBadgeCount: number;
+  assessmentBadge: number;
 }
 
+/**
+ * Consolidates repeated boilerplate across student pages:
+ * student info + classes + auth + assessment badge count → StudentLayout props.
+ *
+ * Assessment badge count is derived here so every page automatically gets
+ * the sidebar badge without additional API calls — React Query deduplicates
+ * by query key, so the assessment queries are shared with the Assessments page cache.
+ */
 export function useStudentLayoutProps(): StudentLayoutProps {
   const { logout } = useAuth();
   const { data: studentInfo, isLoading: isInfoLoading } = useStudentInfo();
   const { data: classesData, isLoading: isClassesLoading } = useMyClasses();
 
-  const classIds = (Array.isArray(classesData) ? classesData : []).map(
-    (cls: StudentClassResponse) => cls.id,
-  );
+  const classes = Array.isArray(classesData) ? classesData : [];
+
+  const classIds = classes.map((cls: StudentClassResponse) => cls.id);
 
   const { newCount } = useStudentAssessments(classIds, studentInfo?.id);
 
@@ -40,7 +48,7 @@ export function useStudentLayoutProps(): StudentLayoutProps {
   const gradeName = studentInfo?.gradeName ?? "";
   const curriculumName = studentInfo?.curriculumName ?? "";
 
-  const sidebarClasses = (Array.isArray(classesData) ? classesData : []).map(
+  const sidebarClasses = classes.map(
     (cls: StudentClassResponse): SidebarClass => ({
       id: cls.id,
       name: cls.name,
@@ -58,6 +66,6 @@ export function useStudentLayoutProps(): StudentLayoutProps {
     sidebarClasses,
     onLogout: logout,
     isLoading: isInfoLoading || isClassesLoading,
-    assessmentBadgeCount: newCount,
+    assessmentBadge: newCount,
   };
 }
