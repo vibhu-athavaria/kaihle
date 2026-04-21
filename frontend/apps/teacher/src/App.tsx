@@ -27,17 +27,19 @@ import { AllLessonPlansPage } from "./pages/lesson-plans/AllLessonPlansPage";
 import { ContentReviewPage } from "./pages/content-review/ContentReviewPage";
 
 // Plain function — no state, no effects, no React APIs
-function getTeacherGreeting(email: string | undefined): { pageTitle: string } {
+function getTeacherGreeting(firstName: string | undefined): {
+  pageTitle: string;
+} {
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const name = email?.split("@")[0] || "Teacher";
+  const name = firstName || "Teacher";
   return { pageTitle: `${greeting}, ${name}` };
 }
 
 function TeacherShell() {
   const { user, logout } = useAuth();
-  const { pageTitle } = getTeacherGreeting(user?.email);
+  const { pageTitle } = getTeacherGreeting(user?.first_name);
 
   const routes = useMemo(
     () => [
@@ -66,7 +68,7 @@ function TeacherShell() {
 
 function TeacherContentShell() {
   const { user, logout } = useAuth();
-  const { pageTitle } = getTeacherGreeting(user?.email);
+  const { pageTitle } = getTeacherGreeting(user?.first_name);
 
   const contentRoutes = useMemo(
     () => [
@@ -92,10 +94,11 @@ function TeacherContentShell() {
 }
 
 function TeacherSettingsApp() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+  const { pageTitle } = getTeacherGreeting(user?.first_name);
 
   return (
-    <DashboardLayout variant="teacher" pageTitle="Settings" onLogout={logout}>
+    <DashboardLayout variant="teacher" pageTitle={pageTitle} onLogout={logout}>
       <TeacherSettingsPage />
     </DashboardLayout>
   );
@@ -103,7 +106,7 @@ function TeacherSettingsApp() {
 
 function NewAssessmentApp() {
   const { user, logout } = useAuth();
-  const { pageTitle } = getTeacherGreeting(user?.email);
+  const { pageTitle } = getTeacherGreeting(user?.first_name);
 
   return (
     <DashboardLayout variant="teacher" pageTitle={pageTitle} onLogout={logout}>

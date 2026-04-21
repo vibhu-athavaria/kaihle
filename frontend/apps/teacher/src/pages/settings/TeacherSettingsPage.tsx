@@ -190,7 +190,7 @@ export function TeacherSettingsPage() {
     currentPassword && newPassword.length >= 8 && passwordMismatch === false;
 
   return (
-    <div className="p-6 max-w-lg">
+    <div className="p-6 max-w-lg mx-auto">
       <h1 className="font-display font-bold text-2xl text-brand-ink mb-6">
         Settings
       </h1>
