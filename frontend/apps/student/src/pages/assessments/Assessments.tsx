@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ClipboardList,
   Clock,
@@ -13,6 +13,7 @@ import {
   type AssessmentItem,
   type AttemptStatus,
 } from "../../hooks/useStudentAssessments";
+import { useStartAssessment } from "../../hooks/useAttempt";
 // ── Helpers ──────────────────────────────────────────────────
 
 function formatDeadline(deadline: string | null): string {
@@ -73,18 +74,19 @@ function TeacherAssessmentCard({
   assessment,
   className: classLabel,
 }: TeacherAssessmentCardProps) {
-  const route = assessment.attemptId
+  const navigate = useNavigate();
+  const startAssessment = useStartAssessment();
+
+  const existingRoute = assessment.attemptId
     ? assessment.attemptStatus === "COMPLETED"
       ? `/student/assessments/${assessment.attemptId}/results`
       : `/student/assessments/${assessment.attemptId}/take`
     : null;
 
-  const actionLabel =
-    assessment.attemptStatus === "IN_PROGRESS"
-      ? "Continue"
-      : assessment.attemptStatus === "COMPLETED"
-        ? "View results"
-        : "Start";
+  const handleStart = async () => {
+    const attempt = await startAssessment.mutateAsync(assessment.id);
+    navigate(`/student/assessments/${attempt.id}/take`);
+  };
 
   return (
     <div className="bg-white rounded-xl border border-role-student-border p-5 flex flex-col gap-3">
@@ -116,13 +118,24 @@ function TeacherAssessmentCard({
             )}
         </div>
 
-        {route && (
+        {existingRoute ? (
           <Link
-            to={route}
+            to={existingRoute}
             className="flex-shrink-0 bg-brand-primary text-white font-sans text-sm font-semibold px-4 py-2 rounded-full hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
           >
-            {actionLabel}
+            {assessment.attemptStatus === "COMPLETED"
+              ? "View results"
+              : "Continue"}
           </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={handleStart}
+            disabled={startAssessment.isPending}
+            className="flex-shrink-0 bg-brand-primary text-white font-sans text-sm font-semibold px-4 py-2 rounded-full hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 disabled:opacity-60"
+          >
+            {startAssessment.isPending ? "Starting…" : "Start"}
+          </button>
         )}
       </div>
     </div>
