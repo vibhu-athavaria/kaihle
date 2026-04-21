@@ -73,6 +73,19 @@ function TeacherAssessmentCard({
   assessment,
   className: classLabel,
 }: TeacherAssessmentCardProps) {
+  const route = assessment.attemptId
+    ? assessment.attemptStatus === "COMPLETED"
+      ? `/student/assessments/${assessment.attemptId}/results`
+      : `/student/assessments/${assessment.attemptId}/take`
+    : null;
+
+  const actionLabel =
+    assessment.attemptStatus === "IN_PROGRESS"
+      ? "Continue"
+      : assessment.attemptStatus === "COMPLETED"
+        ? "View results"
+        : "Start";
+
   return (
     <div className="bg-white rounded-xl border border-role-student-border p-5 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
@@ -87,18 +100,31 @@ function TeacherAssessmentCard({
         <StatusBadge status={assessment.attemptStatus} />
       </div>
 
-      <div className="flex items-center gap-4 font-sans text-sm text-brand-body">
-        <span>{assessment.questionCount} questions</span>
-        <span aria-hidden="true">·</span>
-        <span>{formatDeadline(assessment.deadline)}</span>
-      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4 font-sans text-sm text-brand-body">
+          <span>{assessment.questionCount} questions</span>
+          <span aria-hidden="true">·</span>
+          <span>{formatDeadline(assessment.deadline)}</span>
+          {assessment.attemptStatus === "COMPLETED" &&
+            assessment.score !== null && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="font-semibold text-brand-green">
+                  {Math.round(assessment.score * 100)}%
+                </span>
+              </>
+            )}
+        </div>
 
-      {assessment.attemptStatus === "COMPLETED" &&
-        assessment.score !== null && (
-          <p className="font-sans text-sm font-semibold text-brand-green">
-            Score: {Math.round(assessment.score * 100)}%
-          </p>
+        {route && (
+          <Link
+            to={route}
+            className="flex-shrink-0 bg-brand-primary text-white font-sans text-sm font-semibold px-4 py-2 rounded-full hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+          >
+            {actionLabel}
+          </Link>
         )}
+      </div>
     </div>
   );
 }
