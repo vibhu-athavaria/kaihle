@@ -23,7 +23,7 @@ export function GapMapCell({
   studentName,
   subtopicName,
   studentId,
-  display = "percent",
+  display = "label",
   readOnly = false,
   onClick,
 }: GapMapCellProps) {

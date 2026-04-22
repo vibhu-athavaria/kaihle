@@ -44,6 +44,8 @@ export interface OnboardingFunnel {
 export interface ClassBreakdown {
   class_id: string;
   class_name: string;
+  subject_name?: string;
+  teacher_name?: string;
   student_count: number;
   avg_mastery: number | null;
   assessments_completed: number;
@@ -61,6 +63,7 @@ export interface SchoolAnalytics {
   school_id: string;
   generated_at: string;
   total_students: number;
+  total_teachers?: number;
   active_students: number;
   assessments_completed: number;
   study_plans_active: number;

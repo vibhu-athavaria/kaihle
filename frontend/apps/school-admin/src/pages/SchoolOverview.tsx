@@ -22,12 +22,9 @@ export function SchoolOverview() {
   const kpis = analytics
     ? [
         { label: "Total students", value: analytics.total_students },
-        { label: "Active this month", value: analytics.active_students },
-        {
-          label: "Assessments completed",
-          value: analytics.assessments_completed,
-        },
+        { label: "Total teachers", value: analytics.total_teachers ?? "—" },
         { label: "Onboarding rate", value: `${onboardingPct}%` },
+        { label: "Active this week", value: analytics.active_students },
       ]
     : [];
 

@@ -152,26 +152,24 @@ export function ClassManagement() {
 
       <div className="flex gap-5 mt-3 px-1">
         {[
-          { color: "#ef4444", label: "Needs Work" },
-          { color: "#f59e0b", label: "Developing" },
-          { color: "#16a34a", label: "Strong" },
-          { color: null, label: "Diagnostic pending", hollow: true },
-          { color: "#fef9c3", label: "Setup needed", border: "#f59e0b" },
-        ].map(({ color, label, hollow, border }) => (
+          { dotClass: "bg-brand-red", label: "Needs Work" },
+          { dotClass: "bg-brand-amber", label: "Developing" },
+          { dotClass: "bg-brand-green", label: "Strong" },
+          {
+            dotClass: "border-[1.5px] border-gray-300 bg-transparent",
+            label: "Diagnostic pending",
+          },
+          {
+            dotClass: "bg-[#fffbeb] border-[1.5px] border-brand-amber",
+            label: "Setup needed",
+          },
+        ].map(({ dotClass, label }) => (
           <div
             key={label}
             className="flex items-center gap-1.5 text-[10px] text-brand-body font-semibold"
           >
             <span
-              className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-              style={{
-                background: hollow ? "transparent" : (color ?? undefined),
-                border: hollow
-                  ? "1.5px solid #d1d5db"
-                  : border
-                    ? `1.5px solid ${border}`
-                    : undefined,
-              }}
+              className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotClass}`}
             />
             {label}
           </div>

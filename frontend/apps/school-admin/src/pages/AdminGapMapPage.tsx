@@ -103,19 +103,16 @@ export function AdminGapMapPage() {
 
       <div className="flex gap-5 mt-4">
         {[
-          { color: "#ef4444", label: "Needs Work" },
-          { color: "#f59e0b", label: "Developing" },
-          { color: "#16a34a", label: "Strong" },
-          { color: "#9ca3af", label: "Not assessed" },
-        ].map(({ color, label }) => (
+          { dotClass: "bg-brand-red", label: "Needs Work" },
+          { dotClass: "bg-brand-amber", label: "Developing" },
+          { dotClass: "bg-brand-green", label: "Strong" },
+          { dotClass: "bg-brand-muted", label: "Not assessed" },
+        ].map(({ dotClass, label }) => (
           <div
             key={label}
             className="flex items-center gap-1.5 text-[10px] text-brand-body font-semibold"
           >
-            <span
-              className="w-2.5 h-2.5 rounded-full"
-              style={{ background: color }}
-            />
+            <span className={`w-2.5 h-2.5 rounded-full ${dotClass}`} />
             {label}
           </div>
         ))}

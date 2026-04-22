@@ -15,13 +15,6 @@ function periodDates(p: Period): { from: string; to: string } {
   return { from: from.toISOString().split("T")[0], to };
 }
 
-function masteryColor(score: number | null) {
-  if (score === null) return "#9ca3af";
-  if (score > 0.7) return "#16a34a";
-  if (score >= 0.4) return "#f59e0b";
-  return "#ef4444";
-}
-
 export function AnalyticsPage() {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<Period>("month");
@@ -123,8 +116,7 @@ export function AnalyticsPage() {
                   const avg = scores.length
                     ? scores.reduce((a, b) => a + b, 0) / scores.length
                     : null;
-                  const color = masteryColor(avg);
-                  const { label } = getMasteryStyle(avg);
+                  const { label, dotClass, textClass } = getMasteryStyle(avg);
                   const pct = avg !== null ? Math.round(avg * 100) : 0;
                   return (
                     <div key={subj}>
@@ -132,14 +124,14 @@ export function AnalyticsPage() {
                         <span className="text-xs font-semibold text-brand-ink">
                           {subj}
                         </span>
-                        <span className="text-xs font-bold" style={{ color }}>
+                        <span className={`text-xs font-bold ${textClass}`}>
                           {label}
                         </span>
                       </div>
                       <div className="w-full bg-gray-100 rounded-full h-2">
                         <div
-                          className="h-2 rounded-full"
-                          style={{ width: `${pct}%`, background: color }}
+                          className={`h-2 rounded-full ${dotClass}`}
+                          style={{ width: `${pct}%` }}
                         />
                       </div>
                     </div>
@@ -193,6 +185,8 @@ export function AnalyticsPage() {
                 <tr className="bg-[#fafcfa] border-b border-role-school-border">
                   {[
                     "Class",
+                    "Subject",
+                    "Teacher",
                     "Mastery",
                     "At risk",
                     "Students",
@@ -209,46 +203,62 @@ export function AnalyticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {(data?.classes ?? []).map((c) => {
-                  const { dotClass, label } = getMasteryStyle(c.avg_mastery);
-                  return (
-                    <tr
-                      key={c.class_id}
-                      onClick={() =>
-                        navigate(`/school-admin/classes/${c.class_id}/gap-map`)
-                      }
-                      className="border-b border-[#f0f5ee] last:border-0 cursor-pointer hover:bg-[#fafcfa] transition-colors"
-                    >
-                      <td className="px-4 py-3 font-bold text-[13px] text-brand-ink">
-                        {c.class_name}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`w-2 h-2 rounded-full ${dotClass}`}
-                          />
-                          <span className="text-xs font-semibold">{label}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {c.avg_mastery !== null && c.avg_mastery < 0.4 ? (
-                          <span className="text-[10px] font-bold bg-red-50 text-brand-red rounded-full px-2 py-0.5">
-                            At risk
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-brand-muted">
-                        {c.student_count}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-brand-muted">
-                        {c.assessments_completed}
-                      </td>
-                      <td className="px-4 py-3 text-brand-muted text-base">
-                        ›
-                      </td>
-                    </tr>
-                  );
-                })}
+                {[...(data?.classes ?? [])]
+                  .sort((a, b) => {
+                    if (a.avg_mastery === null) return 1;
+                    if (b.avg_mastery === null) return -1;
+                    return (a.avg_mastery ?? 0) - (b.avg_mastery ?? 0);
+                  })
+                  .map((c) => {
+                    const { dotClass, label } = getMasteryStyle(c.avg_mastery);
+                    return (
+                      <tr
+                        key={c.class_id}
+                        onClick={() =>
+                          navigate(
+                            `/school-admin/classes/${c.class_id}/gap-map`,
+                          )
+                        }
+                        className="border-b border-[#f0f5ee] last:border-0 cursor-pointer hover:bg-[#fafcfa] transition-colors"
+                      >
+                        <td className="px-4 py-3 font-bold text-[13px] text-brand-ink">
+                          {c.class_name}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-brand-muted">
+                          {c.subject_name ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-brand-muted">
+                          {c.teacher_name ?? "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`w-2 h-2 rounded-full ${dotClass}`}
+                            />
+                            <span className="text-xs font-semibold">
+                              {label}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {c.avg_mastery !== null && c.avg_mastery < 0.4 ? (
+                            <span className="text-[10px] font-bold bg-red-50 text-brand-red rounded-full px-2 py-0.5">
+                              At risk
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-brand-muted">
+                          {c.student_count}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-brand-muted">
+                          {c.assessments_completed}
+                        </td>
+                        <td className="px-4 py-3 text-brand-muted text-base">
+                          ›
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>

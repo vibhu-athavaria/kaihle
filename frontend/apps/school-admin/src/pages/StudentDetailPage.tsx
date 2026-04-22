@@ -32,6 +32,7 @@ interface StudentProfile {
   grade_level: number;
   curriculum_name: string;
   enrolled_at: string;
+  last_login_at: string | null;
   class_enrollments: ClassEnrollment[];
 }
 
@@ -119,35 +120,45 @@ export function StudentDetailPage() {
               </div>
             </div>
             <div className="ml-auto flex gap-6">
-              {[
-                {
-                  val: student.class_enrollments.length,
-                  label: "Classes",
-                  color: undefined,
-                },
-                {
-                  val: needsWorkClassCount,
-                  label: "Needs Work",
-                  color: needsWorkClassCount > 0 ? "#ef4444" : undefined,
-                },
-                {
-                  val: (attempts as unknown[]).length,
-                  label: "Assessments",
-                  color: undefined,
-                },
-              ].map(({ val, label, color }) => (
-                <div key={label} className="text-center">
-                  <div
-                    className="font-display font-bold text-[20px] text-brand-ink"
-                    style={{ color }}
-                  >
-                    {val}
-                  </div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.5px] text-brand-muted">
-                    {label}
-                  </div>
+              <div className="text-center">
+                <div className="font-display font-bold text-[20px] text-brand-ink">
+                  {student.class_enrollments.length}
                 </div>
-              ))}
+                <div className="text-[10px] font-black uppercase tracking-[0.5px] text-brand-muted">
+                  Classes
+                </div>
+              </div>
+              <div className="text-center">
+                <div
+                  className={`font-display font-bold text-[20px] ${needsWorkClassCount > 0 ? "text-brand-red" : "text-brand-ink"}`}
+                >
+                  {needsWorkClassCount}
+                </div>
+                <div className="text-[10px] font-black uppercase tracking-[0.5px] text-brand-muted">
+                  Needs Work
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="font-display font-bold text-[20px] text-brand-ink">
+                  {(attempts as unknown[]).length}
+                </div>
+                <div className="text-[10px] font-black uppercase tracking-[0.5px] text-brand-muted">
+                  Assessments
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="font-display font-bold text-[20px] text-brand-ink">
+                  {student.last_login_at
+                    ? new Date(student.last_login_at).toLocaleDateString(
+                        "en-GB",
+                        { day: "numeric", month: "short" },
+                      )
+                    : "Never"}
+                </div>
+                <div className="text-[10px] font-black uppercase tracking-[0.5px] text-brand-muted">
+                  Last active
+                </div>
+              </div>
             </div>
           </div>
 
@@ -187,19 +198,15 @@ export function StudentDetailPage() {
                     </div>
                     <div className="space-y-1.5">
                       {ce.gap_states.map((gs) => {
-                        const { label: gl } = getMasteryStyle(gs.mastery_score);
+                        const {
+                          label: gl,
+                          dotClass,
+                          textClass,
+                        } = getMasteryStyle(gs.mastery_score);
                         const pct =
                           gs.mastery_score !== null
                             ? Math.round(gs.mastery_score * 100)
                             : 0;
-                        const barColor =
-                          gs.mastery_score === null
-                            ? "#9ca3af"
-                            : gs.mastery_score > 0.7
-                              ? "#16a34a"
-                              : gs.mastery_score >= 0.4
-                                ? "#f59e0b"
-                                : "#ef4444";
                         return (
                           <div
                             key={gs.subtopic_name}
@@ -210,16 +217,12 @@ export function StudentDetailPage() {
                             </span>
                             <div className="flex-1 h-[5px] bg-gray-100 rounded-full">
                               <div
-                                className="h-[5px] rounded-full"
-                                style={{
-                                  width: `${pct}%`,
-                                  background: barColor,
-                                }}
+                                className={`h-[5px] rounded-full ${dotClass}`}
+                                style={{ width: `${pct}%` }}
                               />
                             </div>
                             <span
-                              className="text-[9px] font-bold w-16 text-right flex-shrink-0"
-                              style={{ color: barColor }}
+                              className={`text-[9px] font-bold w-16 text-right flex-shrink-0 ${textClass}`}
                             >
                               {gl}
                             </span>

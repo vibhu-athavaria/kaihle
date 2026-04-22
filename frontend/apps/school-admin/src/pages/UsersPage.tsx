@@ -204,10 +204,7 @@ export function UsersPage() {
                         <td className="px-4 py-[10px]">
                           <div className="flex items-center gap-2.5">
                             <div
-                              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0"
-                              style={{
-                                background: isAtRisk ? "#ef4444" : "#1a5c38",
-                              }}
+                              className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 ${isAtRisk ? "bg-brand-red" : "bg-brand-primary"}`}
                             >
                               {initials(s.first_name, s.last_name)}
                             </div>
