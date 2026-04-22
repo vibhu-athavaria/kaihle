@@ -1,6 +1,7 @@
 """Analytics service — school-level aggregations for the school-admin dashboard."""
 
 from datetime import UTC, date, datetime
+from datetime import time as dt_time
 from uuid import UUID
 
 import structlog
@@ -37,21 +38,21 @@ class AnalyticsService:
         from_date: date,
         to_date: date,
     ) -> SchoolAnalyticsData:
-        from_dt = datetime(from_date.year, from_date.month, from_date.day, tzinfo=UTC)
-        to_dt = datetime(to_date.year, to_date.month, to_date.day, 23, 59, 59, tzinfo=UTC)
+        from_dt = datetime.combine(from_date, dt_time.min).replace(tzinfo=UTC)
+        to_dt = datetime.combine(to_date, dt_time.max).replace(tzinfo=UTC)
 
         total_students = await self._count(
             select(func.count(User.id)).where(
                 User.school_id == school_id,
                 User.role == UserRole.STUDENT,
-                User.is_active == True,  # noqa: E712
+                User.is_active.is_(True),
             )
         )
         active_students = await self._count(
             select(func.count(User.id)).where(
                 User.school_id == school_id,
                 User.role == UserRole.STUDENT,
-                User.is_active == True,  # noqa: E712
+                User.is_active.is_(True),
                 User.last_login_at >= from_dt,
             )
         )
@@ -110,7 +111,7 @@ class AnalyticsService:
             )
             .where(
                 Class.school_id == school_id,
-                ClassEnrollment.is_active == True,  # noqa: E712
+                ClassEnrollment.is_active.is_(True),
             )
             .group_by(ClassEnrollment.student_id, Class.id)
         )
@@ -134,21 +135,24 @@ class AnalyticsService:
                     needs_work_class_count=needs_work_count,
                 )
             )
+        logger.info("analytics.student_mastery_summaries.generated", school_id=str(school_id), count=len(summaries))
         return summaries
 
     async def _count(self, stmt: Executable) -> int:
         result = await self._db.execute(stmt)
-        return result.scalar() or 0
+        value = result.scalar()
+        return value if value is not None else 0
 
     async def _get_onboarding_funnel(self, school_id: UUID) -> OnboardingFunnel:
         invited = await self._count(
             select(func.count(User.id)).where(User.school_id == school_id, User.role == UserRole.STUDENT)
         )
+        # is_active is set to True when the user completes password setup via magic link
         password_set = await self._count(
             select(func.count(User.id)).where(
                 User.school_id == school_id,
                 User.role == UserRole.STUDENT,
-                User.is_active == True,  # noqa: E712
+                User.is_active.is_(True),
             )
         )
         profile_complete = await self._count(
@@ -209,7 +213,7 @@ class AnalyticsService:
                 StudentAttempt.assessment_id == Assessment.id,
                 isouter=True,
             )
-            .where(Class.school_id == school_id, Class.is_active == True)  # noqa: E712
+            .where(Class.school_id == school_id, Class.is_active.is_(True))
             .group_by(Class.id)
             .order_by(func.avg(GapState.mastery_score).asc().nulls_first())
         )
@@ -236,10 +240,21 @@ class AnalyticsService:
 
         student_ids = [s.student_id for s in at_risk]
         user_result = await self._db.execute(
-            select(User.id, User.first_name, User.last_name).where(User.id.in_(student_ids))
+            select(User.id, User.first_name, User.last_name).where(
+                User.school_id == school_id,
+                User.id.in_(student_ids),
+            )
         )
         users = user_result.all()
         user_map = {u.id: u for u in users}
+
+        missing = [s.student_id for s in at_risk if s.student_id not in user_map]
+        if missing:
+            logger.warning(
+                "analytics.at_risk.missing_users",
+                school_id=str(school_id),
+                missing_student_ids=[str(sid) for sid in missing],
+            )
 
         return [
             AtRiskStudent(
