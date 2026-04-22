@@ -85,6 +85,31 @@ class UserListResponse(BaseModel):
     page_size: int
 
 
+class StudentListItem(BaseModel):
+    """Schema for a single student in the school admin student list."""
+
+    id: uuid.UUID
+    first_name: str
+    last_name: str
+    email: str
+    is_active: bool
+    last_login_at: datetime | None
+    # NULL = no enrollments yet (or no gap states recorded)
+    worst_mastery: float | None
+    class_count: int
+    needs_work_class_count: int
+    diagnostic_completed: bool
+
+
+class StudentListResponse(BaseModel):
+    """Paginated student list with mastery and diagnostic enrichment."""
+
+    users: list[StudentListItem]
+    total: int
+    page: int
+    page_size: int
+
+
 class UserSelfUpdate(BaseModel):
     """Only first_name and last_name are user-updatable via /users/me."""
 

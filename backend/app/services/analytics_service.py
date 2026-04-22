@@ -141,6 +141,31 @@ class AnalyticsService:
         logger.info("analytics.student_mastery_summaries.generated", school_id=str(school_id), count=len(summaries))
         return summaries
 
+    async def get_diagnostic_completed_student_ids(self, school_id: UUID, student_ids: list[UUID]) -> set[UUID]:
+        """Return the subset of student_ids that have at least one COMPLETED enrollment diagnostic.
+
+        Issues a single query for all given student IDs — no N+1.
+        Returns empty set immediately when student_ids is empty.
+        """
+        if not student_ids:
+            return set()
+        rows = (
+            (
+                await self._db.execute(
+                    select(func.distinct(ClassEnrollment.student_id))
+                    .join(Class, Class.id == ClassEnrollment.class_id)
+                    .where(
+                        Class.school_id == school_id,
+                        ClassEnrollment.student_id.in_(student_ids),
+                        ClassEnrollment.onboarding_diagnostic_status == _DIAGNOSTIC_COMPLETED,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return set(rows)
+
     async def _count(self, stmt: Executable) -> int:
         result = await self._db.execute(stmt)
         value = result.scalar()

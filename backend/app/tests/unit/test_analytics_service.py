@@ -80,3 +80,51 @@ async def test_get_school_analytics_when_no_dates_then_defaults_to_30_day_window
     mock_db.execute.return_value = _make_zero_result()
     result = await service.get_school_analytics(SCHOOL_ID)
     assert result is not None
+
+
+async def test_get_diagnostic_completed_student_ids_when_empty_list_then_returns_empty_set(
+    service: AnalyticsService, mock_db: MagicMock
+) -> None:
+    """Empty input short-circuits before any DB call."""
+    result = await service.get_diagnostic_completed_student_ids(SCHOOL_ID, [])
+    assert result == set()
+    mock_db.execute.assert_not_called()
+
+
+async def test_get_diagnostic_completed_student_ids_when_students_given_then_queries_db(
+    service: AnalyticsService, mock_db: MagicMock
+) -> None:
+    """IDs returned by the DB query are included in the result set."""
+    from uuid import uuid4
+
+    student_id = uuid4()
+    scalars_mock = MagicMock()
+    scalars_mock.all.return_value = [student_id]
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_mock
+    mock_db.execute.return_value = execute_result
+
+    result = await service.get_diagnostic_completed_student_ids(SCHOOL_ID, [student_id])
+
+    assert student_id in result
+    assert isinstance(result, set)
+    mock_db.execute.assert_called_once()
+
+
+async def test_get_diagnostic_completed_student_ids_when_none_completed_then_returns_empty_set(
+    service: AnalyticsService, mock_db: MagicMock
+) -> None:
+    """When DB returns no rows, result is an empty set (not None, not a list)."""
+    from uuid import uuid4
+
+    student_id = uuid4()
+    scalars_mock = MagicMock()
+    scalars_mock.all.return_value = []
+    execute_result = MagicMock()
+    execute_result.scalars.return_value = scalars_mock
+    mock_db.execute.return_value = execute_result
+
+    result = await service.get_diagnostic_completed_student_ids(SCHOOL_ID, [student_id])
+
+    assert result == set()
+    assert student_id not in result
