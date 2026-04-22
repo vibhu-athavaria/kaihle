@@ -1,6 +1,7 @@
 """User-related Pydantic schemas."""
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
@@ -40,6 +41,39 @@ class UserResponse(BaseModel):
     school_id: uuid.UUID | None
 
     model_config = {"from_attributes": True}
+
+
+class StudentListItem(BaseModel):
+    """Extended user response for students in the School Admin user list.
+
+    Includes mastery aggregates from AnalyticsService so the School Admin
+    can see at a glance which students need attention.
+    """
+
+    id: uuid.UUID
+    email: str
+    role: str
+    first_name: str
+    last_name: str
+    is_active: bool
+    school_id: uuid.UUID | None
+    last_login_at: datetime | None = None
+    # Mastery fields — None means no assessments have been taken yet.
+    worst_mastery: float | None = None
+    class_count: int = 0
+    needs_work_class_count: int = 0
+    diagnostic_completed: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StudentListResponse(BaseModel):
+    """Paginated response for STUDENT role listing."""
+
+    users: list[StudentListItem]
+    total: int
+    page: int
+    page_size: int
 
 
 class UserListResponse(BaseModel):

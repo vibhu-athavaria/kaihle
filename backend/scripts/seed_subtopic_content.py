@@ -51,6 +51,7 @@ from sqlalchemy.orm import Session, sessionmaker
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.config import settings
+from app.models.curriculum import QuestionBank
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,7 +75,6 @@ SKIP_EXPLANATIONS = os.environ.get("SKIP_EXPLANATIONS", "false").lower() in (
 )
 SKIP_QUIZZES = os.environ.get("SKIP_QUIZZES", "false").lower() in ("1", "true", "yes")
 
-PRE_GENERATED_QS_PATH = Path(__file__).parent.parent / "data" / "question-bank" / "pre_generated_questions.json"
 CURRICULUM_PATH = Path(__file__).parent.parent / "data" / "curriculum" / "cambridge_v1.json"
 
 # ---------------------------------------------------------------------------
@@ -94,20 +94,39 @@ def get_session() -> Session:
 # ---------------------------------------------------------------------------
 
 
-def load_pre_generated_questions() -> dict[str, Any]:
-    """Load pre-generated questions keyed by subtopic id."""
-    if not PRE_GENERATED_QS_PATH.exists():
-        log.warning("Pre-generated questions file not found at %s", PRE_GENERATED_QS_PATH)
+def load_pre_generated_questions(session: Session) -> dict[str, Any]:
+    """Load pre-generated questions from question_bank keyed by subtopic id."""
+    try:
+        rows = session.query(QuestionBank).filter(QuestionBank.is_active.is_(True)).all()
+    except Exception as e:
+        log.error("Failed to load questions from question_bank: %s", e)
         return {}
-    with open(PRE_GENERATED_QS_PATH) as f:
-        data = json.load(f)
-    # Index by subtopic_id (the file format may vary — adapt to actual structure)
+
     result: dict[str, Any] = {}
-    questions_list = data if isinstance(data, list) else data.get("questions", [])
-    for item in questions_list:
-        subtopic_id = item.get("subtopic_id") or item.get("subtopicId")
-        if subtopic_id:
-            result[str(subtopic_id)] = item
+    for q in rows:
+        subtopic_id = str(q.subtopic_id)
+        if subtopic_id not in result:
+            result[subtopic_id] = {"questions": []}
+
+        # Map QuestionBank schema to the quiz_questions JSONB format expected by build_record
+        options = []
+        if q.options:
+            # options stored as [{"key": "A", "text": "..."}, ...]
+            for opt in q.options:
+                key = opt.get("key", "")
+                text = opt.get("text", "")
+                options.append(f"{key}: {text}")
+
+        question_entry = {
+            "question_id": str(q.id),
+            "question_text": q.question_text,
+            "options": options,
+            "correct_answer": q.correct_answer,
+            "explanation": q.explanation or "",
+        }
+        result[subtopic_id]["questions"].append(question_entry)
+
+    log.info("Loaded %d question sets from question_bank", len(result))
     return result
 
 
@@ -533,8 +552,11 @@ def main() -> None:
         log.error("No subtopics loaded — aborting")
         return
 
-    pre_gen_qs = load_pre_generated_questions()
-    log.info("Loaded %d pre-generated question sets", len(pre_gen_qs))
+    session = get_session()
+    try:
+        pre_gen_qs = load_pre_generated_questions(session)
+    finally:
+        session.close()
 
     total_inserted = 0
     total_skipped = 0
