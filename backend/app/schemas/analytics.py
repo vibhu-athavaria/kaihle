@@ -9,8 +9,8 @@ from pydantic import BaseModel
 class ClassBreakdown(BaseModel):
     class_id: UUID
     class_name: str
-    subject_name: str | None = None
-    teacher_name: str | None = None
+    subject_name: str  # NOT NULL — every class has a subject (inner join on Class.subject_id)
+    teacher_name: str | None = None  # outer join — teacher may be unassigned
     student_count: int
     avg_mastery: float | None  # None if no assessments taken
     assessments_completed: int

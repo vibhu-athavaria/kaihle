@@ -109,9 +109,9 @@ async def list_users(
 
     if role == UserRole.STUDENT:
         analytics = AnalyticsService(db, request.app.state.redis)
-        summaries = await analytics.get_student_mastery_summaries(school_id)
-        summary_map = {s.student_id: s for s in summaries}
         student_ids = [u.id for u in users]
+        summaries = await analytics.get_student_mastery_summaries(school_id, student_ids=student_ids)
+        summary_map = {s.student_id: s for s in summaries}
         completed_ids = await analytics.get_diagnostic_completed_student_ids(school_id, student_ids)
         return StudentListResponse(
             users=[

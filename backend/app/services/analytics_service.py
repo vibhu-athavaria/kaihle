@@ -43,14 +43,16 @@ class AnalyticsService:
         from_date: date | None = None,
         to_date: date | None = None,
     ) -> SchoolAnalyticsData:
-        cache_key = f"analytics:{school_id}:{from_date}:{to_date}"
+        today = date.today()
+        effective_from = from_date or (today - timedelta(days=30))
+        effective_to = to_date or today
+        # Cache key uses effective dates so None-param callers and explicit-date callers
+        # with identical resolved ranges share the same cache entry (Fix 4).
+        cache_key = f"analytics:{school_id}:{effective_from}:{effective_to}"
         cached = await self._redis.get(cache_key)
         if cached:
             return SchoolAnalyticsData.model_validate_json(cached)
 
-        today = date.today()
-        effective_from = from_date or (today - timedelta(days=30))
-        effective_to = to_date or today
         from_dt = datetime.combine(effective_from, dt_time.min).replace(tzinfo=UTC)
         to_dt = datetime.combine(effective_to, dt_time.max).replace(tzinfo=UTC)
 
@@ -119,7 +121,11 @@ class AnalyticsService:
         await self._redis.setex(cache_key, 300, result.model_dump_json())
         return result
 
-    async def get_student_mastery_summaries(self, school_id: UUID) -> list[StudentMasterySummary]:
+    async def get_student_mastery_summaries(
+        self,
+        school_id: UUID,
+        student_ids: list[UUID] | None = None,
+    ) -> list[StudentMasterySummary]:
         result = await self._db.execute(
             select(
                 ClassEnrollment.student_id,
@@ -137,6 +143,7 @@ class AnalyticsService:
                 Class.school_id == school_id,
                 User.school_id == school_id,  # defence-in-depth Rule 3
                 ClassEnrollment.is_active.is_(True),
+                *([ClassEnrollment.student_id.in_(student_ids)] if student_ids else []),
             )
             .group_by(ClassEnrollment.student_id, Class.id)
         )
@@ -243,6 +250,7 @@ class AnalyticsService:
                         Class.school_id == school_id,
                         ClassEnrollment.student_id.in_(student_ids),
                         ClassEnrollment.onboarding_diagnostic_status == _DIAGNOSTIC_COMPLETED,
+                        ClassEnrollment.is_active.is_(True),
                     )
                 )
             )
@@ -285,6 +293,7 @@ class AnalyticsService:
             .where(
                 Class.school_id == school_id,
                 ClassEnrollment.onboarding_diagnostic_status == _DIAGNOSTIC_COMPLETED,
+                ClassEnrollment.is_active.is_(True),
             )
         )
         return OnboardingFunnel(
@@ -296,8 +305,9 @@ class AnalyticsService:
 
     async def _get_class_breakdown(self, school_id: UUID, from_dt: datetime, to_dt: datetime) -> list[ClassBreakdown]:
         # The joins create a Cartesian product across ClassEnrollment × GapState × Assessment × StudentAttempt.
-        # Aggregates are correct because COUNT(DISTINCT) and CASE guards prevent double-counting.
-        # Restructuring to CTEs would be safer but adds significant complexity for no behaviour change.
+        # COUNT(DISTINCT student_id) prevents enrollment double-counting.
+        # COUNT(DISTINCT CASE WHEN ... THEN attempt_id END) prevents assessment double-counting.
+        # avg(mastery_score) is algebraically correct despite fan-out (identical rows average the same).
         result = await self._db.execute(
             select(
                 Class.id,
@@ -308,13 +318,15 @@ class AnalyticsService:
                 func.count(func.distinct(ClassEnrollment.student_id)).label("student_count"),
                 func.avg(GapState.mastery_score).label("avg_mastery"),
                 func.count(
-                    case(
-                        (
-                            (StudentAttempt.status == AttemptStatus.COMPLETED)
-                            & (StudentAttempt.completed_at >= from_dt)
-                            & (StudentAttempt.completed_at <= to_dt),
-                            StudentAttempt.id,
-                        ),
+                    func.distinct(
+                        case(
+                            (
+                                (StudentAttempt.status == AttemptStatus.COMPLETED)
+                                & (StudentAttempt.completed_at >= from_dt)
+                                & (StudentAttempt.completed_at <= to_dt),
+                                StudentAttempt.id,
+                            ),
+                        )
                     )
                 ).label("assessments_completed"),
             )

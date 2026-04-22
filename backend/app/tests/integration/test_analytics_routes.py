@@ -108,6 +108,7 @@ def _stub_analytics_data(school_id: uuid.UUID) -> SchoolAnalyticsData:
             ClassBreakdown(
                 class_id=uuid.uuid4(),
                 class_name="Grade 7 Math",
+                subject_name="Mathematics",
                 student_count=10,
                 avg_mastery=0.65,
                 assessments_completed=5,
