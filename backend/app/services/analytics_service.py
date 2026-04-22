@@ -107,6 +107,7 @@ class AnalyticsService:
                 func.avg(GapState.mastery_score).label("avg_mastery"),
             )
             .join(Class, Class.id == ClassEnrollment.class_id)
+            .join(User, User.id == ClassEnrollment.student_id)
             .join(
                 GapState,
                 (GapState.class_id == ClassEnrollment.class_id) & (GapState.student_id == ClassEnrollment.student_id),
@@ -114,6 +115,7 @@ class AnalyticsService:
             )
             .where(
                 Class.school_id == school_id,
+                User.school_id == school_id,  # defence-in-depth Rule 3
                 ClassEnrollment.is_active.is_(True),
             )
             .group_by(ClassEnrollment.student_id, Class.id)
@@ -164,7 +166,13 @@ class AnalyticsService:
             .scalars()
             .all()
         )
-        return set(rows)
+        completed_ids = set(rows)
+        logger.info(
+            "analytics.diagnostic_completed_ids.fetched",
+            school_id=str(school_id),
+            count=len(completed_ids),
+        )
+        return completed_ids
 
     async def _count(self, stmt: Executable) -> int:
         result = await self._db.execute(stmt)

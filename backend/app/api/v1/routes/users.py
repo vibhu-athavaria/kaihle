@@ -87,7 +87,7 @@ async def invite_user(
 @router.get("", response_model=UserListResponse | StudentListResponse)
 async def list_users(
     school_id: uuid.UUID,
-    role: str | None = Query(None),
+    role: UserRole | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     # require_full_access guards against password_setup-scoped tokens (security gap fix).
@@ -106,7 +106,7 @@ async def list_users(
     service = UserService(db)
     users, total = await service.list_users(school_id, role, page, page_size)
 
-    if role == UserRole.STUDENT.value or role == "STUDENT":
+    if role == UserRole.STUDENT:
         analytics = AnalyticsService(db)
         summaries = await analytics.get_student_mastery_summaries(school_id)
         summary_map = {s.student_id: s for s in summaries}

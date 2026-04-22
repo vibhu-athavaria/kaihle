@@ -301,7 +301,7 @@ class TestListUsers:
         mock_db.scalar = AsyncMock(return_value=1)
 
         # Act
-        result_users, total = await user_service.list_users(school_id, role="TEACHER")
+        result_users, total = await user_service.list_users(school_id, role=UserRole.TEACHER)
 
         # Assert
         assert len(result_users) == 1
