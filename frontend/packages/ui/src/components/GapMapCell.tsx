@@ -11,6 +11,13 @@ export interface GapMapCellProps {
   onClick?: () => void;
 }
 
+const LABEL_SHORT: Record<string, string> = {
+  Strong: "S",
+  Developing: "Dev",
+  "Needs Work": "NW",
+  "Not assessed": "—",
+};
+
 export function GapMapCell({
   masteryScore,
   studentName,
@@ -29,7 +36,7 @@ export function GapMapCell({
       : display === "percent"
         ? pct
         : masteryScore !== null
-          ? `${label.slice(0, 3)} · ${pct}`
+          ? `${LABEL_SHORT[label] ?? label.slice(0, 3)} · ${pct}`
           : "—";
 
   const titleText = `${studentName} — ${subtopicName}: ${label}${
@@ -40,7 +47,7 @@ export function GapMapCell({
     return (
       <div
         className={[
-          "w-12 h-12 rounded flex items-center justify-center text-xs font-semibold",
+          "w-12 h-12 min-h-[44px] min-w-[44px] rounded flex items-center justify-center text-xs font-semibold",
           bgClass,
           textClass,
         ].join(" ")}
@@ -59,12 +66,13 @@ export function GapMapCell({
       data-student-id={studentId}
       data-mastery-score={masteryScore}
       className={[
-        "w-12 h-12 rounded flex items-center justify-center text-xs font-semibold transition-all",
-        "hover:scale-105 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1",
+        "w-12 h-12 min-h-[44px] min-w-[44px] rounded flex items-center justify-center text-xs font-semibold transition-all",
+        "hover:scale-105 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2",
         bgClass,
         textClass,
       ].join(" ")}
       title={titleText}
+      aria-label={titleText}
     >
       {displayValue}
     </button>
