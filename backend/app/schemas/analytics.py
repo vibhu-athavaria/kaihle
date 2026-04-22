@@ -59,20 +59,11 @@ class SchoolAnalyticsData(BaseModel):
     at_risk_students: list[AtRiskStudent]
 
 
-class SchoolAnalytics(BaseModel):
-    school_id: UUID
-    school_name: str
-    generated_at: datetime
-    total_students: int
-    active_students_last_7_days: int
-    onboarding_completion_rate: float  # 0.0–1.0
-    students_pending_onboarding: int
-    assessments_completed: int
-    study_plans_assigned: int
-    study_plans_completed: int
-    lesson_plans_generated: int
-    lesson_plans_used: int
-    classes: list[ClassBreakdown]
+# SchoolAnalytics is the canonical response schema for GET /schools/{id}/analytics.
+# It is an alias for SchoolAnalyticsData — kept as a named class so that the
+# route's response_model and any downstream consumers have a stable name to import.
+class SchoolAnalytics(SchoolAnalyticsData):
+    pass
 
 
 class PlatformStats(BaseModel):

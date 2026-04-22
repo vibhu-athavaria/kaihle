@@ -8,21 +8,20 @@ Three sections:
 Note on the /platform prefix: platform-level endpoints are not nested under
 /schools because they operate across all schools, not within one. This mirrors
 the separation between tenant-scoped and platform-scoped concerns.
-
-Stub implementations. Real implementations: M6-1-T1 (analytics), M6 (impersonate).
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, _check_school_access, require_role
 from app.models.user import UserRole
 from app.schemas.analytics import PlatformStats, SchoolAnalytics
+from app.services.analytics_service import AnalyticsService
 
 router = APIRouter(tags=["analytics"])
 logger = structlog.get_logger()
@@ -31,29 +30,22 @@ logger = structlog.get_logger()
 @router.get("/schools/{school_id}/analytics", response_model=SchoolAnalytics)
 async def get_school_analytics(
     school_id: UUID,
+    from_date: date | None = Query(default=None),
+    to_date: date | None = Query(default=None),
     current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> SchoolAnalytics:
-    # Check school access - KAIHLE_ADMIN bypasses, others must match
+    # Check school access - KAIHLE_ADMIN bypasses, others must match (Rule 12)
     _check_school_access(school_id, current_user)
 
-    # STUB — M0-10-T6 | Real implementation: M6-1-T1
-    # M6 adds: school_id-scoped aggregation queries across all feature tables.
-    return SchoolAnalytics(
-        school_id=school_id,
-        school_name="",
-        generated_at=datetime.now(UTC),
-        total_students=0,
-        active_students_last_7_days=0,
-        onboarding_completion_rate=0.0,
-        students_pending_onboarding=0,
-        assessments_completed=0,
-        study_plans_assigned=0,
-        study_plans_completed=0,
-        lesson_plans_generated=0,
-        lesson_plans_used=0,
-        classes=[],
-    )
+    today = date.today()
+    effective_from = from_date or (today - timedelta(days=30))
+    effective_to = to_date or today
+
+    service = AnalyticsService(db)
+    data = await service.get_school_analytics(school_id, effective_from, effective_to)
+    # SchoolAnalytics is a subclass of SchoolAnalyticsData — model_validate handles the cast
+    return SchoolAnalytics.model_validate(data.model_dump())
 
 
 @router.get("/platform/stats", response_model=PlatformStats)
