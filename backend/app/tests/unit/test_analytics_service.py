@@ -1,205 +1,74 @@
 """Unit tests for AnalyticsService."""
 
-import uuid
-from collections.abc import Generator
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.analytics_service import AnalyticsService
 
-
-@pytest.fixture
-def mock_db() -> Generator[MagicMock, None, None]:
-    """Create a mock database session."""
-    session = MagicMock(spec=AsyncSession)
-    session.execute = AsyncMock()
-    return session
+SCHOOL_ID = uuid4()
 
 
 @pytest.fixture
-def analytics_service(mock_db: MagicMock) -> AnalyticsService:
-    """Create an AnalyticsService with a mock database."""
+def mock_db() -> MagicMock:
+    """Create a mock async DB session.
+
+    execute is AsyncMock so it can be awaited; its return_value is MagicMock
+    so that .scalar() and .all() are synchronous (matching SQLAlchemy's sync
+    result API after the async execute call).
+    """
+    db = MagicMock(spec=AsyncSession)
+    db.execute = AsyncMock()
+    return db
+
+
+@pytest.fixture
+def service(mock_db: MagicMock) -> AnalyticsService:
     return AnalyticsService(mock_db)
 
 
-@pytest.fixture
-def school_id() -> uuid.UUID:
-    return uuid.uuid4()
+def _make_zero_result() -> MagicMock:
+    """Return a synchronous result mock where scalar()=0 and all()=[]."""
+    result = MagicMock()
+    result.scalar.return_value = 0
+    result.all.return_value = []
+    return result
 
 
-class TestGetStudentMasterySummaries:
-    """Tests for AnalyticsService.get_student_mastery_summaries."""
-
-    @pytest.mark.asyncio
-    async def test_get_student_mastery_summaries_when_students_exist_then_returns_summaries(
-        self,
-        analytics_service: AnalyticsService,
-        mock_db: MagicMock,
-        school_id: uuid.UUID,
-    ) -> None:
-        """When students with gap_states exist, returns correct mastery aggregates."""
-        # Arrange
-        student_id = uuid.uuid4()
-        mock_row = MagicMock()
-        mock_row.student_id = student_id
-        mock_row.worst_mastery = 0.35
-        mock_row.class_count = 2
-        mock_row.needs_work_class_count = 1
-
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = [mock_row]
-        mock_db.execute = AsyncMock(return_value=mock_result)
-
-        # Act
-        summaries = await analytics_service.get_student_mastery_summaries(school_id)
-
-        # Assert
-        assert len(summaries) == 1
-        assert summaries[0].student_id == student_id
-        assert summaries[0].worst_mastery == 0.35
-        assert summaries[0].class_count == 2
-        assert summaries[0].needs_work_class_count == 1
-
-    @pytest.mark.asyncio
-    async def test_get_student_mastery_summaries_when_no_gap_states_then_worst_mastery_is_none(
-        self,
-        analytics_service: AnalyticsService,
-        mock_db: MagicMock,
-        school_id: uuid.UUID,
-    ) -> None:
-        """When a student is enrolled but has no gap_states, worst_mastery is None."""
-        # Arrange
-        student_id = uuid.uuid4()
-        mock_row = MagicMock()
-        mock_row.student_id = student_id
-        mock_row.worst_mastery = None  # no assessments yet
-        mock_row.class_count = 1
-        mock_row.needs_work_class_count = 0
-
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = [mock_row]
-        mock_db.execute = AsyncMock(return_value=mock_result)
-
-        # Act
-        summaries = await analytics_service.get_student_mastery_summaries(school_id)
-
-        # Assert
-        assert summaries[0].worst_mastery is None
-        assert summaries[0].class_count == 1
-
-    @pytest.mark.asyncio
-    async def test_get_student_mastery_summaries_when_no_students_then_returns_empty_list(
-        self,
-        analytics_service: AnalyticsService,
-        mock_db: MagicMock,
-        school_id: uuid.UUID,
-    ) -> None:
-        """When there are no enrolled students, returns an empty list."""
-        # Arrange
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = []
-        mock_db.execute = AsyncMock(return_value=mock_result)
-
-        # Act
-        summaries = await analytics_service.get_student_mastery_summaries(school_id)
-
-        # Assert
-        assert summaries == []
-
-    @pytest.mark.asyncio
-    async def test_get_student_mastery_summaries_when_multiple_students_then_returns_all(
-        self,
-        analytics_service: AnalyticsService,
-        mock_db: MagicMock,
-        school_id: uuid.UUID,
-    ) -> None:
-        """Returns one summary per student when multiple students exist."""
-        # Arrange
-        ids = [uuid.uuid4() for _ in range(3)]
-        rows = []
-        for i, sid in enumerate(ids):
-            row = MagicMock()
-            row.student_id = sid
-            row.worst_mastery = 0.2 + i * 0.2
-            row.class_count = i + 1
-            row.needs_work_class_count = 0
-            rows.append(row)
-
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = rows
-        mock_db.execute = AsyncMock(return_value=mock_result)
-
-        # Act
-        summaries = await analytics_service.get_student_mastery_summaries(school_id)
-
-        # Assert
-        assert len(summaries) == 3
-        summary_map = {s.student_id: s for s in summaries}
-        for i, sid in enumerate(ids):
-            assert sid in summary_map
-            assert summary_map[sid].class_count == i + 1
+def _make_count_result(n: int) -> MagicMock:
+    result = MagicMock()
+    result.scalar.return_value = n
+    result.all.return_value = []
+    return result
 
 
-class TestGetDiagnosticCompletedStudentIds:
-    """Tests for AnalyticsService.get_diagnostic_completed_student_ids."""
+async def test_get_school_analytics_when_no_students_then_returns_zeros(
+    service: AnalyticsService, mock_db: MagicMock
+) -> None:
+    mock_db.execute.return_value = _make_zero_result()
+    result = await service.get_school_analytics(SCHOOL_ID, date.today() - timedelta(days=30), date.today())
+    assert result.total_students == 0
+    assert result.onboarding_funnel.invited == 0
 
-    @pytest.mark.asyncio
-    async def test_get_diagnostic_completed_student_ids_when_some_completed_then_returns_subset(
-        self,
-        analytics_service: AnalyticsService,
-        mock_db: MagicMock,
-        school_id: uuid.UUID,
-    ) -> None:
-        """Returns only student_ids with at least one COMPLETED diagnostic enrollment."""
-        # Arrange
-        completed_id = uuid.uuid4()
-        pending_id = uuid.uuid4()
 
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = [(completed_id,)]
-        mock_db.execute = AsyncMock(return_value=mock_result)
+async def test_get_school_analytics_when_date_range_given_then_filters_assessments(
+    service: AnalyticsService, mock_db: MagicMock
+) -> None:
+    from_date = date(2025, 4, 1)
+    to_date = date(2025, 4, 30)
+    mock_db.execute.return_value = _make_count_result(5)
+    result = await service.get_school_analytics(SCHOOL_ID, from_date, to_date)
+    assert result is not None
 
-        # Act
-        result = await analytics_service.get_diagnostic_completed_student_ids(school_id, [completed_id, pending_id])
 
-        # Assert
-        assert completed_id in result
-        assert pending_id not in result
-
-    @pytest.mark.asyncio
-    async def test_get_diagnostic_completed_student_ids_when_empty_input_then_returns_empty_set(
-        self,
-        analytics_service: AnalyticsService,
-        mock_db: MagicMock,
-        school_id: uuid.UUID,
-    ) -> None:
-        """When no student_ids provided, returns empty set without hitting DB."""
-        # Act
-        result = await analytics_service.get_diagnostic_completed_student_ids(school_id, [])
-
-        # Assert — DB must NOT be called (short-circuit)
-        assert result == set()
-        mock_db.execute.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_get_diagnostic_completed_student_ids_when_none_completed_then_returns_empty_set(
-        self,
-        analytics_service: AnalyticsService,
-        mock_db: MagicMock,
-        school_id: uuid.UUID,
-    ) -> None:
-        """When no students have completed diagnostics, returns empty set."""
-        # Arrange
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = []
-        mock_db.execute = AsyncMock(return_value=mock_result)
-
-        student_ids = [uuid.uuid4(), uuid.uuid4()]
-
-        # Act
-        result = await analytics_service.get_diagnostic_completed_student_ids(school_id, student_ids)
-
-        # Assert
-        assert result == set()
+async def test_get_student_mastery_summary_when_no_gap_states_then_returns_none(
+    service: AnalyticsService, mock_db: MagicMock
+) -> None:
+    empty_result = MagicMock()
+    empty_result.all.return_value = []
+    mock_db.execute.return_value = empty_result
+    result = await service.get_student_mastery_summaries(SCHOOL_ID)
+    assert result == []

@@ -1,139 +1,254 @@
-"""Analytics service — aggregated views for School Admin dashboards.
+"""Analytics service — school-level aggregations for the school-admin dashboard."""
 
-Business logic only. Route handlers must not perform aggregation directly.
-"""
-
-import uuid
-from dataclasses import dataclass
+from datetime import UTC, date, datetime
+from uuid import UUID
 
 import structlog
-from sqlalchemy import case, func, select
+from sqlalchemy import Executable, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.assessment import Assessment, AttemptStatus, StudentAttempt
 from app.models.gap import GapState
+from app.models.onboarding import StudentLearningProfile
 from app.models.school import Class, ClassEnrollment
+from app.models.study_plan import StudyPlan, StudyPlanStatus
+from app.models.user import User, UserRole
+from app.schemas.analytics import (
+    AtRiskStudent,
+    ClassBreakdown,
+    OnboardingFunnel,
+    SchoolAnalyticsData,
+    StudentMasterySummary,
+)
 
 logger = structlog.get_logger()
 
-
-@dataclass
-class StudentMasterySummary:
-    """Aggregated mastery data for a single student within a school."""
-
-    student_id: uuid.UUID
-    worst_mastery: float | None  # None if no GapState rows exist for this student
-    class_count: int  # number of active enrollments
-    needs_work_class_count: int  # classes where any subtopic is < 0.4
+# Onboarding diagnostic status — stored as plain strings in the DB
+_DIAGNOSTIC_COMPLETED = "COMPLETED"
 
 
 class AnalyticsService:
-    """Service for school-level analytics aggregations."""
-
     def __init__(self, db: AsyncSession) -> None:
-        self.db = db
+        self._db = db
 
-    async def get_student_mastery_summaries(
+    async def get_school_analytics(
         self,
-        school_id: uuid.UUID,
-    ) -> list[StudentMasterySummary]:
-        """Return one StudentMasterySummary per student enrolled in the given school.
+        school_id: UUID,
+        from_date: date,
+        to_date: date,
+    ) -> SchoolAnalyticsData:
+        from_dt = datetime(from_date.year, from_date.month, from_date.day, tzinfo=UTC)
+        to_dt = datetime(to_date.year, to_date.month, to_date.day, 23, 59, 59, tzinfo=UTC)
 
-        Performs two batch queries — no N+1.
-        """
-        # ── Query 1: enrollment counts per student ────────────────────────────
-        # We need total class count AND the number of classes that have at least
-        # one subtopic with mastery_score < 0.4 (Needs Work).
-        #
-        # "needs_work_class" = a class where MIN(mastery_score) < 0.4 for that
-        # student, i.e., the student has at least one Needs Work subtopic there.
-        #
-        # To avoid a correlated subquery, we calculate both in one pass:
-        #   1) JOIN class_enrollments → classes (school filter on classes)
-        #   2) LEFT JOIN gap_states to pick up mastery data per class
-        #   3) GROUP BY (student_id, class_id) to get min mastery per class
-        #   4) Outer GROUP BY student_id to roll up class-level aggregates
+        total_students = await self._count(
+            select(func.count(User.id)).where(
+                User.school_id == school_id,
+                User.role == UserRole.STUDENT,
+                User.is_active == True,  # noqa: E712
+            )
+        )
+        active_students = await self._count(
+            select(func.count(User.id)).where(
+                User.school_id == school_id,
+                User.role == UserRole.STUDENT,
+                User.is_active == True,  # noqa: E712
+                User.last_login_at >= from_dt,
+            )
+        )
+        assessments_completed = await self._count(
+            select(func.count(StudentAttempt.id))
+            .join(Assessment, Assessment.id == StudentAttempt.assessment_id)
+            .join(Class, Class.id == Assessment.class_id)
+            .where(
+                Class.school_id == school_id,
+                StudentAttempt.status == AttemptStatus.COMPLETED,
+                StudentAttempt.completed_at >= from_dt,
+                StudentAttempt.completed_at <= to_dt,
+            )
+        )
+        study_plans_active = await self._count(
+            select(func.count(StudyPlan.id))
+            .join(User, User.id == StudyPlan.student_id)
+            .where(
+                User.school_id == school_id,
+                StudyPlan.status == StudyPlanStatus.ACTIVE,
+            )
+        )
+        funnel = await self._get_onboarding_funnel(school_id)
+        classes = await self._get_class_breakdown(school_id, from_dt, to_dt)
+        at_risk = await self._get_at_risk_students(school_id)
 
-        # Step A — per-(student, class) min mastery
-        per_class_subq = (
+        logger.info(
+            "analytics.school.generated",
+            school_id=str(school_id),
+            total_students=total_students,
+        )
+        return SchoolAnalyticsData(
+            school_id=school_id,
+            generated_at=datetime.now(UTC),
+            total_students=total_students,
+            active_students=active_students,
+            assessments_completed=assessments_completed,
+            study_plans_active=study_plans_active,
+            onboarding_funnel=funnel,
+            classes=classes,
+            at_risk_students=at_risk,
+        )
+
+    async def get_student_mastery_summaries(self, school_id: UUID) -> list[StudentMasterySummary]:
+        result = await self._db.execute(
             select(
                 ClassEnrollment.student_id,
-                ClassEnrollment.class_id,
-                func.min(GapState.mastery_score).label("min_mastery"),
+                Class.id.label("class_id"),
+                func.avg(GapState.mastery_score).label("avg_mastery"),
             )
             .join(Class, Class.id == ClassEnrollment.class_id)
-            .outerjoin(
+            .join(
                 GapState,
-                (GapState.student_id == ClassEnrollment.student_id) & (GapState.class_id == ClassEnrollment.class_id),
+                (GapState.class_id == ClassEnrollment.class_id) & (GapState.student_id == ClassEnrollment.student_id),
+                isouter=True,
             )
             .where(
                 Class.school_id == school_id,
-                ClassEnrollment.is_active.is_(True),
+                ClassEnrollment.is_active == True,  # noqa: E712
             )
-            .group_by(ClassEnrollment.student_id, ClassEnrollment.class_id)
-            .subquery()
+            .group_by(ClassEnrollment.student_id, Class.id)
+        )
+        rows = result.all()
+
+        student_map: dict[UUID, list[float | None]] = {}
+        for row in rows:
+            student_map.setdefault(row.student_id, []).append(row.avg_mastery)
+
+        summaries: list[StudentMasterySummary] = []
+        for student_id, scores in student_map.items():
+            valid = [s for s in scores if s is not None]
+            worst = min(valid) if valid else None
+            class_count = len(scores)
+            needs_work_count = sum(1 for s in valid if s < 0.4)
+            summaries.append(
+                StudentMasterySummary(
+                    student_id=student_id,
+                    worst_mastery=worst,
+                    class_count=class_count,
+                    needs_work_class_count=needs_work_count,
+                )
+            )
+        return summaries
+
+    async def _count(self, stmt: Executable) -> int:
+        result = await self._db.execute(stmt)
+        return result.scalar() or 0
+
+    async def _get_onboarding_funnel(self, school_id: UUID) -> OnboardingFunnel:
+        invited = await self._count(
+            select(func.count(User.id)).where(User.school_id == school_id, User.role == UserRole.STUDENT)
+        )
+        password_set = await self._count(
+            select(func.count(User.id)).where(
+                User.school_id == school_id,
+                User.role == UserRole.STUDENT,
+                User.is_active == True,  # noqa: E712
+            )
+        )
+        profile_complete = await self._count(
+            select(func.count(StudentLearningProfile.student_id))
+            .join(User, User.id == StudentLearningProfile.student_id)
+            .where(User.school_id == school_id)
+        )
+        diagnostic_done = await self._count(
+            select(func.count(func.distinct(ClassEnrollment.student_id)))
+            .join(Class, Class.id == ClassEnrollment.class_id)
+            .where(
+                Class.school_id == school_id,
+                ClassEnrollment.onboarding_diagnostic_status == _DIAGNOSTIC_COMPLETED,
+            )
+        )
+        return OnboardingFunnel(
+            invited=invited,
+            password_set=password_set,
+            profile_complete=profile_complete,
+            diagnostic_done=diagnostic_done,
         )
 
-        # Step B — roll up to student level
-        student_agg_stmt = select(
-            per_class_subq.c.student_id,
-            func.count().label("class_count"),
-            func.min(per_class_subq.c.min_mastery).label("worst_mastery"),
-            # SUM(CASE WHEN min_mastery IS NOT NULL AND min_mastery < 0.4 THEN 1 ELSE 0 END)
-            # counts the number of Needs Work classes per student.
-            func.sum(
-                case(
-                    (
-                        (per_class_subq.c.min_mastery.isnot(None)) & (per_class_subq.c.min_mastery < 0.4),
-                        1,
-                    ),
-                    else_=0,
-                )
-            ).label("needs_work_class_count"),
-        ).group_by(per_class_subq.c.student_id)
+    async def _get_class_breakdown(self, school_id: UUID, from_dt: datetime, to_dt: datetime) -> list[ClassBreakdown]:
+        result = await self._db.execute(
+            select(
+                Class.id,
+                Class.name,
+                func.count(func.distinct(ClassEnrollment.student_id)).label("student_count"),
+                func.avg(GapState.mastery_score).label("avg_mastery"),
+                func.count(
+                    case(
+                        (
+                            (StudentAttempt.status == AttemptStatus.COMPLETED)
+                            & (StudentAttempt.completed_at >= from_dt)
+                            & (StudentAttempt.completed_at <= to_dt),
+                            StudentAttempt.id,
+                        ),
+                    )
+                ).label("assessments_completed"),
+            )
+            .join(
+                ClassEnrollment,
+                ClassEnrollment.class_id == Class.id,
+                isouter=True,
+            )
+            .join(
+                GapState,
+                GapState.class_id == Class.id,
+                isouter=True,
+            )
+            .join(
+                Assessment,
+                Assessment.class_id == Class.id,
+                isouter=True,
+            )
+            .join(
+                StudentAttempt,
+                StudentAttempt.assessment_id == Assessment.id,
+                isouter=True,
+            )
+            .where(Class.school_id == school_id, Class.is_active == True)  # noqa: E712
+            .group_by(Class.id)
+            .order_by(func.avg(GapState.mastery_score).asc().nulls_first())
+        )
+        rows = result.all()
 
-        result = await self.db.execute(student_agg_stmt)
-        rows = result.fetchall()
-
-        summaries = [
-            StudentMasterySummary(
-                student_id=row.student_id,
-                worst_mastery=float(row.worst_mastery) if row.worst_mastery is not None else None,
-                class_count=row.class_count,
-                needs_work_class_count=row.needs_work_class_count,
+        return [
+            ClassBreakdown(
+                class_id=row.id,
+                class_name=row.name,
+                student_count=row.student_count or 0,
+                avg_mastery=row.avg_mastery,
+                assessments_completed=row.assessments_completed or 0,
             )
             for row in rows
         ]
 
-        logger.info(
-            "student_mastery_summaries_fetched",
-            school_id=str(school_id),
-            student_count=len(summaries),
+    async def _get_at_risk_students(self, school_id: UUID) -> list[AtRiskStudent]:
+        summaries = await self.get_student_mastery_summaries(school_id)
+        at_risk = [s for s in summaries if s.worst_mastery is not None and s.worst_mastery < 0.4]
+        at_risk.sort(key=lambda s: (s.worst_mastery or 1.0))
+
+        if not at_risk:
+            return []
+
+        student_ids = [s.student_id for s in at_risk]
+        user_result = await self._db.execute(
+            select(User.id, User.first_name, User.last_name).where(User.id.in_(student_ids))
         )
+        users = user_result.all()
+        user_map = {u.id: u for u in users}
 
-        return summaries
-
-    async def get_diagnostic_completed_student_ids(
-        self,
-        school_id: uuid.UUID,
-        student_ids: list[uuid.UUID],
-    ) -> set[uuid.UUID]:
-        """Return the subset of student_ids that have at least one COMPLETED diagnostic.
-
-        One batch query — no N+1.
-        """
-        if not student_ids:
-            return set()
-
-        stmt = (
-            select(ClassEnrollment.student_id)
-            .join(Class, Class.id == ClassEnrollment.class_id)
-            .where(
-                Class.school_id == school_id,
-                ClassEnrollment.student_id.in_(student_ids),
-                ClassEnrollment.onboarding_diagnostic_status == "COMPLETED",
+        return [
+            AtRiskStudent(
+                student_id=s.student_id,
+                first_name=user_map[s.student_id].first_name if s.student_id in user_map else "",
+                last_name=user_map[s.student_id].last_name if s.student_id in user_map else "",
+                worst_mastery=s.worst_mastery,
+                needs_work_class_count=s.needs_work_class_count,
             )
-            .distinct()
-        )
-
-        result = await self.db.execute(stmt)
-        return {row[0] for row in result.fetchall()}
+            for s in at_risk
+            if s.student_id in user_map
+        ]
