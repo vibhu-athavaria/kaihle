@@ -20,7 +20,7 @@ get_current_user) so overriding get_current_user is sufficient there.
 import os
 import uuid
 from collections.abc import AsyncGenerator, Generator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Environment must be set before any app import
@@ -30,6 +30,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-integration-tests")
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
+from app.core.database import get_db as real_get_db  # noqa: E402
 from app.core.deps import get_current_user, require_full_access  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.user import UserRole  # noqa: E402
@@ -274,8 +275,6 @@ class TestSchoolAnalyticsResponse:
         _, kwargs = call_args
         # Positional args: school_id, from_date, to_date
         pos_args = call_args.args
-        from datetime import date
-
         assert pos_args[1] == date(2025, 4, 1)
         assert pos_args[2] == date(2025, 4, 30)
 
@@ -465,8 +464,6 @@ class TestImpersonateSchool:
         mock_school.id = target_school_id
         mock_db.scalar = AsyncMock(return_value=mock_school)
 
-        from app.core.database import get_db as real_get_db
-
         async def _fake_db():  # type: ignore[return]
             yield mock_db
 
@@ -492,8 +489,6 @@ class TestImpersonateSchool:
     async def test_impersonate_when_school_not_found_then_404(self, client: AsyncClient) -> None:
         random_school_id = uuid.uuid4()
         app.dependency_overrides[get_current_user] = lambda: _make_kaihle_admin()
-
-        from app.core.database import get_db as real_get_db
 
         mock_db = AsyncMock()
         mock_db.scalar = AsyncMock(return_value=None)  # school not found

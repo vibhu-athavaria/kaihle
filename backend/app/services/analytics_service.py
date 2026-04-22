@@ -295,6 +295,9 @@ class AnalyticsService:
         )
 
     async def _get_class_breakdown(self, school_id: UUID, from_dt: datetime, to_dt: datetime) -> list[ClassBreakdown]:
+        # The joins create a Cartesian product across ClassEnrollment × GapState × Assessment × StudentAttempt.
+        # Aggregates are correct because COUNT(DISTINCT) and CASE guards prevent double-counting.
+        # Restructuring to CTEs would be safer but adds significant complexity for no behaviour change.
         result = await self._db.execute(
             select(
                 Class.id,

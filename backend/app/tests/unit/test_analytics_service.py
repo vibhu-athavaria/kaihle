@@ -1,12 +1,14 @@
 """Unit tests for AnalyticsService."""
 
-from datetime import date, timedelta
+import uuid
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.schemas.analytics import OnboardingFunnel, SchoolAnalyticsData
 from app.services.analytics_service import AnalyticsService
 
 SCHOOL_ID = uuid4()
@@ -137,3 +139,52 @@ async def test_get_diagnostic_completed_student_ids_when_none_completed_then_ret
 
     assert result == set()
     assert student_id not in result
+
+
+async def test_get_school_analytics_when_cache_hit_then_db_not_queried(
+    service: AnalyticsService,
+    mock_redis: MagicMock,
+    mock_db: MagicMock,
+) -> None:
+    """Cache hit must skip all DB queries — verifies the short-circuit path."""
+    school_id = uuid.uuid4()
+    cached_data = SchoolAnalyticsData(
+        school_id=school_id,
+        generated_at=datetime.now(UTC),
+        total_students=5,
+        total_teachers=2,
+        active_students=3,
+        assessments_completed=10,
+        study_plans_active=2,
+        onboarding_funnel=OnboardingFunnel(invited=5, password_set=4, profile_complete=3, diagnostic_done=2),
+        classes=[],
+        at_risk_students=[],
+    )
+    mock_redis.get.return_value = cached_data.model_dump_json()
+
+    result = await service.get_school_analytics(school_id)
+
+    assert result.total_students == 5
+    assert result.total_teachers == 2
+    # DB must NOT have been touched — all data came from the cache
+    mock_db.execute.assert_not_called()
+    mock_redis.get.assert_called_once()
+    mock_redis.setex.assert_not_called()
+
+
+async def test_get_school_analytics_when_cache_miss_then_result_is_cached(
+    service: AnalyticsService,
+    mock_redis: MagicMock,
+    mock_db: MagicMock,
+) -> None:
+    """On a cache miss the result must be stored with 300s TTL."""
+    mock_redis.get.return_value = None
+    school_id = uuid.uuid4()
+    mock_db.execute.return_value = _make_zero_result()
+
+    await service.get_school_analytics(school_id)
+
+    mock_redis.setex.assert_called_once()
+    call_args = mock_redis.setex.call_args
+    # setex(key, ttl, value) — TTL is the second positional argument
+    assert call_args[0][1] == 300
