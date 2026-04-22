@@ -26,8 +26,17 @@ def mock_db() -> MagicMock:
 
 
 @pytest.fixture
-def service(mock_db: MagicMock) -> AnalyticsService:
-    return AnalyticsService(mock_db)
+def mock_redis() -> MagicMock:
+    """Create a mock async Redis client."""
+    redis = AsyncMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.setex = AsyncMock()
+    return redis
+
+
+@pytest.fixture
+def service(mock_db: MagicMock, mock_redis: MagicMock) -> AnalyticsService:
+    return AnalyticsService(mock_db, mock_redis)
 
 
 def _make_zero_result() -> MagicMock:

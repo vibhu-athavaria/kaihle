@@ -9,6 +9,8 @@ from pydantic import BaseModel
 class ClassBreakdown(BaseModel):
     class_id: UUID
     class_name: str
+    subject_name: str | None = None
+    teacher_name: str | None = None
     student_count: int
     avg_mastery: float | None  # None if no assessments taken
     assessments_completed: int
@@ -48,6 +50,7 @@ class SchoolAnalyticsData(BaseModel):
     school_id: UUID
     generated_at: datetime
     total_students: int
+    total_teachers: int = 0
     active_students: int
     assessments_completed: int
     study_plans_active: int

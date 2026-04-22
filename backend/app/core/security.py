@@ -61,6 +61,7 @@ def create_access_token(
     school_id: uuid.UUID | None,
     role: str,
     expires_in: int = settings.access_token_expire_minutes,
+    extra_claims: dict[str, object] | None = None,
 ) -> str:
     """
     Create a short-lived access JWT.
@@ -72,16 +73,24 @@ def create_access_token(
       exp       — expiry timestamp
       iat       — issued-at timestamp
       type      — "access"
+
+    extra_claims: optional dict merged into the payload before signing.
+    Existing keys (sub, role, exp, iat, type) take precedence — extra_claims
+    is applied first so standard claims cannot be overwritten.
     """
     now = datetime.now(UTC)
-    payload: dict[str, Any] = {
-        "sub": str(user_id),
-        "school_id": str(school_id) if school_id else None,
-        "role": role,
-        "iat": now,
-        "exp": now + timedelta(minutes=expires_in),
-        "type": "access",
-    }
+    payload: dict[str, Any] = {}
+    payload.update(extra_claims or {})
+    payload.update(
+        {
+            "sub": str(user_id),
+            "school_id": str(school_id) if school_id else None,
+            "role": role,
+            "iat": now,
+            "exp": now + timedelta(minutes=expires_in),
+            "type": "access",
+        }
+    )
     result: str = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
     return result
 

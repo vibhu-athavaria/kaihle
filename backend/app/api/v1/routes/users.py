@@ -86,6 +86,7 @@ async def invite_user(
 
 @router.get("", response_model=UserListResponse | StudentListResponse)
 async def list_users(
+    request: Request,
     school_id: uuid.UUID,
     role: UserRole | None = Query(None),
     page: int = Query(1, ge=1),
@@ -107,7 +108,7 @@ async def list_users(
     users, total = await service.list_users(school_id, role, page, page_size)
 
     if role == UserRole.STUDENT:
-        analytics = AnalyticsService(db)
+        analytics = AnalyticsService(db, request.app.state.redis)
         summaries = await analytics.get_student_mastery_summaries(school_id)
         summary_map = {s.student_id: s for s in summaries}
         student_ids = [u.id for u in users]

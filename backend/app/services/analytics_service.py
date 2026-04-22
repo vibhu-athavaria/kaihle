@@ -5,19 +5,23 @@ from datetime import time as dt_time
 from uuid import UUID
 
 import structlog
+from redis.asyncio import Redis
 from sqlalchemy import Executable, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import create_access_token
 from app.models.assessment import Assessment, AttemptStatus, StudentAttempt
+from app.models.curriculum import Subject
 from app.models.gap import GapState
 from app.models.onboarding import StudentLearningProfile
-from app.models.school import Class, ClassEnrollment
+from app.models.school import Class, ClassEnrollment, School
 from app.models.study_plan import StudyPlan, StudyPlanStatus
 from app.models.user import User, UserRole
 from app.schemas.analytics import (
     AtRiskStudent,
     ClassBreakdown,
     OnboardingFunnel,
+    PlatformStats,
     SchoolAnalyticsData,
     StudentMasterySummary,
 )
@@ -29,8 +33,9 @@ _DIAGNOSTIC_COMPLETED = "COMPLETED"
 
 
 class AnalyticsService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(self, db: AsyncSession, redis: "Redis[bytes]") -> None:
         self._db = db
+        self._redis = redis
 
     async def get_school_analytics(
         self,
@@ -38,6 +43,11 @@ class AnalyticsService:
         from_date: date | None = None,
         to_date: date | None = None,
     ) -> SchoolAnalyticsData:
+        cache_key = f"analytics:{school_id}:{from_date}:{to_date}"
+        cached = await self._redis.get(cache_key)
+        if cached:
+            return SchoolAnalyticsData.model_validate_json(cached)
+
         today = date.today()
         effective_from = from_date or (today - timedelta(days=30))
         effective_to = to_date or today
@@ -48,6 +58,13 @@ class AnalyticsService:
             select(func.count(User.id)).where(
                 User.school_id == school_id,
                 User.role == UserRole.STUDENT,
+                User.is_active.is_(True),
+            )
+        )
+        total_teachers = await self._count(
+            select(func.count(User.id)).where(
+                User.school_id == school_id,
+                User.role == UserRole.TEACHER,
                 User.is_active.is_(True),
             )
         )
@@ -87,10 +104,11 @@ class AnalyticsService:
             school_id=str(school_id),
             total_students=total_students,
         )
-        return SchoolAnalyticsData(
+        result = SchoolAnalyticsData(
             school_id=school_id,
             generated_at=datetime.now(UTC),
             total_students=total_students,
+            total_teachers=total_teachers,
             active_students=active_students,
             assessments_completed=assessments_completed,
             study_plans_active=study_plans_active,
@@ -98,6 +116,8 @@ class AnalyticsService:
             classes=classes,
             at_risk_students=at_risk,
         )
+        await self._redis.setex(cache_key, 300, result.model_dump_json())
+        return result
 
     async def get_student_mastery_summaries(self, school_id: UUID) -> list[StudentMasterySummary]:
         result = await self._db.execute(
@@ -142,6 +162,69 @@ class AnalyticsService:
             )
         logger.info("analytics.student_mastery_summaries.generated", school_id=str(school_id), count=len(summaries))
         return summaries
+
+    async def get_platform_stats(self) -> PlatformStats:
+        cache_key = "analytics:platform"
+        cached = await self._redis.get(cache_key)
+        if cached:
+            return PlatformStats.model_validate_json(cached)
+
+        total_schools = await self._count(select(func.count(School.id)).where(School.status == "active"))
+        total_active_students = await self._count(
+            select(func.count(User.id)).where(
+                User.role == UserRole.STUDENT,
+                User.is_active.is_(True),
+            )
+        )
+        total_teachers = await self._count(
+            select(func.count(User.id)).where(
+                User.role == UserRole.TEACHER,
+                User.is_active.is_(True),
+            )
+        )
+        cutoff = datetime.now(UTC) - timedelta(days=7)
+        assessments_7d = await self._count(
+            select(func.count(StudentAttempt.id)).where(
+                StudentAttempt.status == AttemptStatus.COMPLETED,
+                StudentAttempt.completed_at >= cutoff,
+            )
+        )
+        result = PlatformStats(
+            total_schools=total_schools,
+            total_active_students=total_active_students,
+            total_teachers=total_teachers,
+            assessments_completed_last_7_days=assessments_7d,
+            generated_at=datetime.now(UTC),
+        )
+        await self._redis.setex(cache_key, 300, result.model_dump_json())
+        return result
+
+    async def issue_impersonation_token(
+        self,
+        school_id: UUID,
+        kaihle_admin_id: UUID,
+    ) -> dict[str, object]:
+        token = create_access_token(
+            user_id=kaihle_admin_id,
+            school_id=school_id,
+            role="KAIHLE_ADMIN",
+            expires_in=120,
+            extra_claims={
+                "scope": "impersonation",
+                "impersonated_school_id": str(school_id),
+            },
+        )
+        logger.info(
+            "analytics.impersonation_token.issued",
+            school_id=str(school_id),
+            kaihle_admin_id=str(kaihle_admin_id),
+        )
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "impersonated_school_id": str(school_id),
+            "expires_in_seconds": 7200,
+        }
 
     async def get_diagnostic_completed_student_ids(self, school_id: UUID, student_ids: list[UUID]) -> set[UUID]:
         """Return the subset of student_ids that have at least one COMPLETED enrollment diagnostic.
@@ -216,6 +299,9 @@ class AnalyticsService:
             select(
                 Class.id,
                 Class.name,
+                Subject.name.label("subject_name"),
+                User.first_name.label("teacher_first"),
+                User.last_name.label("teacher_last"),
                 func.count(func.distinct(ClassEnrollment.student_id)).label("student_count"),
                 func.avg(GapState.mastery_score).label("avg_mastery"),
                 func.count(
@@ -229,6 +315,8 @@ class AnalyticsService:
                     )
                 ).label("assessments_completed"),
             )
+            .join(Subject, Subject.id == Class.subject_id)
+            .outerjoin(User, User.id == Class.teacher_id)
             .join(
                 ClassEnrollment,
                 ClassEnrollment.class_id == Class.id,
@@ -250,7 +338,7 @@ class AnalyticsService:
                 isouter=True,
             )
             .where(Class.school_id == school_id, Class.is_active.is_(True))
-            .group_by(Class.id)
+            .group_by(Class.id, Subject.name, User.first_name, User.last_name)
             .order_by(func.avg(GapState.mastery_score).asc().nulls_first())
         )
         rows = result.all()
@@ -259,6 +347,10 @@ class AnalyticsService:
             ClassBreakdown(
                 class_id=row.id,
                 class_name=row.name,
+                subject_name=row.subject_name,
+                teacher_name=(
+                    f"{row.teacher_first} {row.teacher_last}" if row.teacher_first and row.teacher_last else None
+                ),
                 student_count=row.student_count or 0,
                 avg_mastery=row.avg_mastery,
                 assessments_completed=row.assessments_completed or 0,
