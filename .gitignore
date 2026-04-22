@@ -40,4 +40,4 @@ mcp.json
 
 
 # Vite cache
-node_modules/.vite
+node_modules/.vite.worktrees/
