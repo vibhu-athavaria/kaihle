@@ -8,7 +8,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import CurrentUser, _check_school_access, require_full_access, require_role
 from app.models.user import UserRole
-from app.schemas.user import MeResponse, UserInvite, UserListResponse, UserResponse, UserSelfUpdate, UserUpdate
+from app.schemas.user import (
+    MeResponse,
+    StudentListItem,
+    StudentListResponse,
+    UserInvite,
+    UserListResponse,
+    UserResponse,
+    UserSelfUpdate,
+    UserUpdate,
+)
+from app.services.analytics_service import AnalyticsService
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/schools/{school_id}/users", tags=["users"])
@@ -74,7 +84,7 @@ async def invite_user(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-@router.get("", response_model=UserListResponse)
+@router.get("", response_model=StudentListResponse | UserListResponse)
 async def list_users(
     school_id: uuid.UUID,
     role: str | None = Query(None),
@@ -82,11 +92,47 @@ async def list_users(
     page_size: int = Query(20, ge=1, le=100),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
     db: AsyncSession = Depends(get_db),
-) -> UserListResponse:
-    """List users in a school with optional role filter and pagination."""
+) -> StudentListResponse | UserListResponse:
+    """List users in a school with optional role filter and pagination.
+
+    When role=STUDENT, the response includes mastery aggregates (worst_mastery,
+    class_count, needs_work_class_count, diagnostic_completed) so the School
+    Admin dashboard can surface at-risk students without a second request.
+    All mastery data is fetched in two batch queries — no N+1.
+    """
     _check_school_access(school_id, current_user)
     service = UserService(db)
     users, total = await service.list_users(school_id, role, page, page_size)
+
+    if role == "STUDENT":
+        # Batch fetch mastery summaries and diagnostic completion — two queries total.
+        analytics = AnalyticsService(db)
+        student_ids = [u.id for u in users]
+
+        summaries = await analytics.get_student_mastery_summaries(school_id)
+        summary_map = {s.student_id: s for s in summaries}
+
+        completed_ids = await analytics.get_diagnostic_completed_student_ids(school_id, student_ids)
+
+        items = [
+            StudentListItem(
+                id=u.id,
+                email=u.email,
+                role=str(u.role),
+                first_name=u.first_name,
+                last_name=u.last_name,
+                is_active=u.is_active,
+                school_id=u.school_id,
+                last_login_at=getattr(u, "last_login_at", None),
+                worst_mastery=summary_map[u.id].worst_mastery if u.id in summary_map else None,
+                class_count=summary_map[u.id].class_count if u.id in summary_map else 0,
+                needs_work_class_count=summary_map[u.id].needs_work_class_count if u.id in summary_map else 0,
+                diagnostic_completed=u.id in completed_ids,
+            )
+            for u in users
+        ]
+        return StudentListResponse(users=items, total=total, page=page, page_size=page_size)
+
     return UserListResponse(
         users=[UserResponse.model_validate(u) for u in users],
         total=total,

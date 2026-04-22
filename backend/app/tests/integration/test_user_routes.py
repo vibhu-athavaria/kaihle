@@ -310,6 +310,103 @@ class TestListUsers:
         assert data["page_size"] == 3
 
 
+class TestListStudentsWithMastery:
+    """Tests for GET /api/v1/schools/{school_id}/users?role=STUDENT mastery fields."""
+
+    @pytest.mark.asyncio
+    async def test_list_students_when_school_admin_then_includes_worst_mastery(
+        self, client: AsyncClient, db_session: AsyncSession, school_admin: User, school: School
+    ) -> None:
+        """Student list response includes mastery fields when role=STUDENT."""
+        # Arrange — create a student in the school
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-mastery-{uuid.uuid4().hex[:8]}@example.com",
+            first_name="Student",
+            last_name="Mastery",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.commit()
+
+        headers = auth_header(school_admin)
+
+        # Act
+        response = await client.get(
+            f"/api/v1/schools/{school.id}/users?role=STUDENT",
+            headers=headers,
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        assert "users" in data
+        assert "total" in data
+        for s in data["users"]:
+            assert "worst_mastery" in s
+            assert "class_count" in s
+            assert "needs_work_class_count" in s
+            assert "diagnostic_completed" in s
+
+    @pytest.mark.asyncio
+    async def test_list_students_when_no_assessments_then_worst_mastery_is_null(
+        self, client: AsyncClient, db_session: AsyncSession, school_admin: User, school: School
+    ) -> None:
+        """Students with no gap_states have worst_mastery=null and class_count=0."""
+        # Arrange
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-nodata-{uuid.uuid4().hex[:8]}@example.com",
+            first_name="NoData",
+            last_name="Student",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.commit()
+
+        headers = auth_header(school_admin)
+
+        # Act
+        response = await client.get(
+            f"/api/v1/schools/{school.id}/users?role=STUDENT",
+            headers=headers,
+        )
+
+        # Assert
+        assert response.status_code == 200
+        students_data = response.json()["users"]
+        target = next((s for s in students_data if s["id"] == str(student.id)), None)
+        assert target is not None
+        assert target["worst_mastery"] is None
+        assert target["class_count"] == 0
+        assert target["needs_work_class_count"] == 0
+        assert target["diagnostic_completed"] is False
+
+    @pytest.mark.asyncio
+    async def test_list_non_students_when_role_teacher_then_no_mastery_fields(
+        self, client: AsyncClient, school_admin: User, school: School, teacher: User
+    ) -> None:
+        """Teacher list response uses standard UserResponse without mastery fields."""
+        headers = auth_header(school_admin)
+
+        # Act
+        response = await client.get(
+            f"/api/v1/schools/{school.id}/users?role=TEACHER",
+            headers=headers,
+        )
+
+        # Assert
+        assert response.status_code == 200
+        data = response.json()
+        for u in data["users"]:
+            assert "worst_mastery" not in u
+            assert "class_count" not in u
+
+
 class TestUpdateUser:
     """Tests for PATCH /api/v1/schools/{school_id}/users/{user_id}"""
 
