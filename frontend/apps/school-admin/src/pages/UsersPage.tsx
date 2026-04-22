@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
@@ -27,9 +27,13 @@ export function UsersPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("students");
   const [filter, setFilter] = useState<StudentFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: students = [], isLoading: studentsLoading } =
-    useSchoolStudents();
+  const {
+    data: students = [],
+    isLoading: studentsLoading,
+    isError: studentsError,
+  } = useSchoolStudents();
   const { data: teachers = [] } = useSchoolUsers("TEACHER");
   const { data: parents = [] } = useSchoolUsers("PARENT");
 
@@ -50,12 +54,28 @@ export function UsersPage() {
       if (filter === "not_logged_in") return !s.last_login_at;
       return true;
     })
+    .filter(
+      (s) =>
+        !searchQuery ||
+        `${s.first_name} ${s.last_name}`
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()),
+    )
     .sort((a, b) => {
       if (a.worst_mastery === null && b.worst_mastery === null) return 0;
       if (a.worst_mastery === null) return 1;
       if (b.worst_mastery === null) return -1;
       return a.worst_mastery - b.worst_mastery;
     });
+
+  if (studentsError)
+    return (
+      <DashboardLayout variant="school-admin" pageTitle="Users">
+        <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
+          Failed to load data. Please refresh the page.
+        </div>
+      </DashboardLayout>
+    );
 
   return (
     <DashboardLayout variant="school-admin" pageTitle="Users">
@@ -111,8 +131,11 @@ export function UsersPage() {
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
               <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="text-xs outline-none font-sans bg-transparent w-40 placeholder:text-brand-muted"
                 placeholder="Search students…"
+                aria-label="Search students"
               />
             </div>
             {[
@@ -189,13 +212,22 @@ export function UsersPage() {
                     const lastActive = s.last_login_at
                       ? new Date(s.last_login_at).toLocaleDateString()
                       : "Never";
+                    const handleNavigate = () =>
+                      navigate(`/school-admin/users/students/${s.id}`);
                     return (
                       <tr
                         key={s.id}
-                        onClick={() =>
-                          navigate(`/school-admin/users/students/${s.id}`)
-                        }
-                        className={`border-b border-[#f0f5ee] last:border-0 cursor-pointer transition-colors ${
+                        onClick={handleNavigate}
+                        onKeyDown={(e: KeyboardEvent<HTMLTableRowElement>) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleNavigate();
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`View details for ${s.first_name} ${s.last_name}`}
+                        className={`border-b border-[#f0f5ee] last:border-0 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-inset ${
                           isAtRisk
                             ? "bg-[#fffbeb] hover:bg-[#fef9c3]"
                             : "hover:bg-[#fafcfa]"

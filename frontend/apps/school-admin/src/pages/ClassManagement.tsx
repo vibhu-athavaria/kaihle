@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
@@ -6,10 +6,11 @@ import { useSchoolClasses, type ClassSummary } from "../hooks/useSchoolAdmin";
 
 export function ClassManagement() {
   const navigate = useNavigate();
-  const { data: classes = [], isLoading } = useSchoolClasses();
+  const { data: classes = [], isLoading, isError } = useSchoolClasses();
   const [filter, setFilter] = useState<"all" | "attention">("all");
   const [gradeFilter, setGradeFilter] = useState<number | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const attentionCount = classes.filter(
     (c) => c.diagnostic_status !== "has_data",
@@ -21,10 +22,35 @@ export function ClassManagement() {
       return true;
     })
     .filter((c) => gradeFilter === null || c.grade_level === gradeFilter)
-    .filter((c) => subjectFilter === null || c.subject_name === subjectFilter);
+    .filter((c) => subjectFilter === null || c.subject_name === subjectFilter)
+    .filter(
+      (c) =>
+        !searchQuery ||
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()),
+    );
 
   const grades = [...new Set(classes.map((c) => c.grade_level))].sort();
   const subjects = [...new Set(classes.map((c) => c.subject_name))].sort();
+
+  if (isLoading)
+    return (
+      <DashboardLayout variant="school-admin" pageTitle="Classes">
+        <div className="animate-pulse space-y-3">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-12 bg-role-school-border rounded-lg" />
+          ))}
+        </div>
+      </DashboardLayout>
+    );
+
+  if (isError)
+    return (
+      <DashboardLayout variant="school-admin" pageTitle="Classes">
+        <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
+          Failed to load data. Please refresh the page.
+        </div>
+      </DashboardLayout>
+    );
 
   return (
     <DashboardLayout variant="school-admin" pageTitle="Classes">
@@ -42,8 +68,11 @@ export function ClassManagement() {
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="text-xs outline-none font-sans bg-transparent text-brand-ink placeholder:text-brand-muted w-40"
               placeholder="Search classes…"
+              aria-label="Search classes"
             />
           </div>
           <button
@@ -101,54 +130,46 @@ export function ClassManagement() {
         </button>
       </div>
 
-      {isLoading ? (
-        <div className="animate-pulse space-y-3">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-12 bg-role-school-border rounded-lg" />
-          ))}
-        </div>
-      ) : (
-        <div className="bg-white border border-role-school-border rounded-xl overflow-hidden">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-[#fafcfa] border-b border-role-school-border">
-                {[
-                  "Class",
-                  "Subject",
-                  "Grade",
-                  "Teacher",
-                  "Mastery",
-                  "Students",
-                  "",
-                ].map((h) => (
-                  <th
-                    key={h}
-                    className="px-4 py-[10px] text-left text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c) => (
-                <ClassRow
-                  key={c.id}
-                  cls={c}
-                  onClick={() =>
-                    navigate(`/school-admin/classes/${c.id}/gap-map`)
-                  }
-                />
+      <div className="bg-white border border-role-school-border rounded-xl overflow-hidden">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-[#fafcfa] border-b border-role-school-border">
+              {[
+                "Class",
+                "Subject",
+                "Grade",
+                "Teacher",
+                "Mastery",
+                "Students",
+                "",
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="px-4 py-[10px] text-left text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted"
+                >
+                  {h}
+                </th>
               ))}
-            </tbody>
-          </table>
-          {filtered.length === 0 && (
-            <div className="py-16 text-center text-brand-muted text-sm">
-              No classes match this filter.
-            </div>
-          )}
-        </div>
-      )}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((c) => (
+              <ClassRow
+                key={c.id}
+                cls={c}
+                onClick={() =>
+                  navigate(`/school-admin/classes/${c.id}/gap-map`)
+                }
+              />
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && (
+          <div className="py-16 text-center text-brand-muted text-sm">
+            No classes match this filter.
+          </div>
+        )}
+      </div>
 
       <div className="flex gap-5 mt-3 px-1">
         {[
@@ -189,10 +210,22 @@ function ClassRow({
   const isSetup = cls.diagnostic_status === "setup_needed";
   const isPending = cls.diagnostic_status === "pending";
   const { dotClass, label } = getMasteryStyle(cls.avg_mastery);
+
+  function handleKeyDown(e: KeyboardEvent<HTMLTableRowElement>) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  }
+
   return (
     <tr
       onClick={onClick}
-      className={`border-b border-[#f0f5ee] cursor-pointer transition-colors ${
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="button"
+      aria-label={`View gap map for ${cls.name}`}
+      className={`border-b border-[#f0f5ee] cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-inset ${
         isSetup ? "bg-[#fffbeb] hover:bg-[#fef9c3]" : "hover:bg-[#fafcfa]"
       }`}
     >

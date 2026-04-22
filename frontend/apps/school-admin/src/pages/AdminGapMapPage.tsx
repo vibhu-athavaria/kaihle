@@ -18,7 +18,7 @@ export function AdminGapMapPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["class-gap-map", classId],
     queryFn: async () => {
       const res = await apiClient.get(`/api/v1/classes/${classId}/gap-map`);
@@ -31,6 +31,15 @@ export function AdminGapMapPage() {
     data?.cells.find(
       (c) => c.student_id === studentId && c.subtopic_id === subtopicId,
     )?.mastery_score ?? null;
+
+  if (isError)
+    return (
+      <DashboardLayout variant="school-admin" pageTitle="Gap Map">
+        <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
+          Failed to load data. Please refresh the page.
+        </div>
+      </DashboardLayout>
+    );
 
   return (
     <DashboardLayout variant="school-admin" pageTitle="Gap Map">

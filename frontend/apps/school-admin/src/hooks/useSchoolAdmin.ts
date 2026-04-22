@@ -3,14 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, useAuthStore } from "@kaihle/auth";
 import { UserRole, type UserRole as UserRoleType } from "@kaihle/types";
 
-// ── shared helpers ───────────────────────────────────────────────────────────
-
-function getSchoolId(): string {
-  const user = useAuthStore.getState().user;
-  if (!user?.school_id) throw new Error("No school_id for current user");
-  return user.school_id;
-}
-
 // ── types ────────────────────────────────────────────────────────────────────
 
 // Legacy types kept for backward compatibility with existing pages
@@ -108,13 +100,32 @@ export interface Grade {
   level: number;
 }
 
+export interface AssessmentAttempt {
+  id: string;
+  assessment_name: string;
+  class_name?: string;
+  completed_at: string | null;
+  score: number | null;
+  assessment_type: string;
+}
+
+export interface StudyPlan {
+  id: string;
+  title: string;
+  assigned_at: string;
+  resources_completed: number;
+  total_resources: number;
+  status: string;
+  is_active?: boolean;
+}
+
 // ── queries ──────────────────────────────────────────────────────────────────
 
 export function useSchoolAnalytics(fromDate?: string, toDate?: string) {
+  const schoolId = useAuthStore((state) => state.user?.school_id);
   return useQuery({
-    queryKey: ["school", "analytics", fromDate, toDate],
+    queryKey: ["school", "analytics", schoolId, fromDate, toDate],
     queryFn: async () => {
-      const schoolId = getSchoolId();
       const params = new URLSearchParams();
       if (fromDate) params.set("from_date", fromDate);
       if (toDate) params.set("to_date", toDate);
@@ -124,15 +135,15 @@ export function useSchoolAnalytics(fromDate?: string, toDate?: string) {
       );
       return res.data as SchoolAnalytics;
     },
-    enabled: !!useAuthStore.getState().user?.school_id,
+    enabled: !!schoolId,
   });
 }
 
 export function useSchoolClasses() {
+  const schoolId = useAuthStore((state) => state.user?.school_id);
   return useQuery({
-    queryKey: ["school", "classes"],
+    queryKey: ["school", "classes", schoolId],
     queryFn: async () => {
-      const schoolId = getSchoolId();
       const res = await apiClient.get(
         `/api/v1/schools/${schoolId}/classes?include_summary=true`,
       );
@@ -146,22 +157,22 @@ export function useSchoolClasses() {
             : ("has_data" as const),
       }));
     },
-    enabled: !!useAuthStore.getState().user?.school_id,
+    enabled: !!schoolId,
   });
 }
 
 export function useSchoolStudents() {
+  const schoolId = useAuthStore((state) => state.user?.school_id);
   return useQuery({
-    queryKey: ["school", "users", "STUDENT"],
+    queryKey: ["school", "users", "STUDENT", schoolId],
     queryFn: async () => {
-      const schoolId = getSchoolId();
       const res = await apiClient.get(
         `/api/v1/schools/${schoolId}/users?role=STUDENT`,
       );
       const raw = res.data?.users ?? res.data;
       return raw as StudentListItem[];
     },
-    enabled: !!useAuthStore.getState().user?.school_id,
+    enabled: !!schoolId,
   });
 }
 
@@ -171,10 +182,10 @@ export function useSchoolUsers(
     | typeof UserRole.STUDENT
     | typeof UserRole.PARENT,
 ) {
+  const schoolId = useAuthStore((state) => state.user?.school_id);
   return useQuery({
-    queryKey: ["school", "users", role],
+    queryKey: ["school", "users", role, schoolId],
     queryFn: async () => {
-      const schoolId = getSchoolId();
       const res = await apiClient.get(
         `/api/v1/schools/${schoolId}/users?role=${role}`,
       );
@@ -200,7 +211,7 @@ export function useSchoolUsers(
 
       return users;
     },
-    enabled: !!useAuthStore.getState().user?.school_id,
+    enabled: !!schoolId,
   });
 }
 
@@ -215,25 +226,25 @@ export function useStudentDetail(studentId: string) {
   });
 }
 
-export function useStudentAttempts(studentId: string) {
-  return useQuery({
+export function useStudentAttempts(studentId: string | undefined) {
+  return useQuery<AssessmentAttempt[]>({
     queryKey: ["student", studentId, "attempts"],
     queryFn: async () => {
       const res = await apiClient.get(`/api/v1/students/${studentId}/attempts`);
-      return res.data;
+      return res.data as AssessmentAttempt[];
     },
     enabled: !!studentId,
   });
 }
 
-export function useStudentStudyPlans(studentId: string) {
-  return useQuery({
+export function useStudentStudyPlans(studentId: string | undefined) {
+  return useQuery<StudyPlan[]>({
     queryKey: ["student", studentId, "study-plans"],
     queryFn: async () => {
       const res = await apiClient.get(
         `/api/v1/students/${studentId}/study-plans`,
       );
-      return res.data;
+      return res.data as StudyPlan[];
     },
     enabled: !!studentId,
   });
@@ -262,6 +273,7 @@ export function useGrades() {
 // ── mutations ────────────────────────────────────────────────────────────────
 
 export function useInviteUser() {
+  const schoolId = useAuthStore((state) => state.user?.school_id);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: {
@@ -270,7 +282,7 @@ export function useInviteUser() {
       email: string;
       role: UserRoleType;
     }) => {
-      const schoolId = getSchoolId();
+      if (!schoolId) throw new Error("No school_id for current user");
       const res = await apiClient.post(
         `/api/v1/schools/${schoolId}/users`,
         data,
@@ -283,6 +295,7 @@ export function useInviteUser() {
 }
 
 export function useCreateClass() {
+  const schoolId = useAuthStore((state) => state.user?.school_id);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: {
@@ -292,7 +305,7 @@ export function useCreateClass() {
       curriculum_id: string;
       teacher_id?: string;
     }) => {
-      const schoolId = getSchoolId();
+      if (!schoolId) throw new Error("No school_id for current user");
       const res = await apiClient.post(
         `/api/v1/schools/${schoolId}/classes`,
         data,
@@ -324,13 +337,14 @@ export function useUpdateClass() {
 }
 
 export function useUpdateUser() {
+  const schoolId = useAuthStore((state) => state.user?.school_id);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: {
       userId: string;
       status: "ACTIVE" | "INACTIVE";
     }) => {
-      const schoolId = getSchoolId();
+      if (!schoolId) throw new Error("No school_id for current user");
       const res = await apiClient.patch(
         `/api/v1/schools/${schoolId}/users/${data.userId}`,
         { status: data.status },

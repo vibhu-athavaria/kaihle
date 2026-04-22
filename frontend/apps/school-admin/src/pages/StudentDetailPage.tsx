@@ -40,7 +40,11 @@ export function StudentDetailPage() {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
 
-  const { data: student, isLoading } = useQuery({
+  const {
+    data: student,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["student", studentId, "detail"],
     queryFn: async () => {
       const res = await apiClient.get(`/api/v1/students/${studentId}`);
@@ -49,10 +53,10 @@ export function StudentDetailPage() {
     enabled: !!studentId,
   });
 
-  const { data: attempts = [] } = useStudentAttempts(studentId ?? "");
-  const { data: studyPlans = [] } = useStudentStudyPlans(studentId ?? "");
+  const { data: attempts = [] } = useStudentAttempts(studentId);
+  const { data: studyPlans = [] } = useStudentStudyPlans(studentId);
   const activeStudyPlan = Array.isArray(studyPlans)
-    ? (studyPlans as Record<string, unknown>[]).find((p) => p.is_active)
+    ? studyPlans.find((p) => p.is_active)
     : null;
 
   const needsWorkClassCount = (student?.class_enrollments ?? []).filter(
@@ -66,6 +70,15 @@ export function StudentDetailPage() {
       return avg !== null && avg < 0.4;
     },
   ).length;
+
+  if (isError)
+    return (
+      <DashboardLayout variant="school-admin" pageTitle="Student Detail">
+        <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
+          Failed to load data. Please refresh the page.
+        </div>
+      </DashboardLayout>
+    );
 
   return (
     <DashboardLayout variant="school-admin" pageTitle="Student Detail">
@@ -140,7 +153,7 @@ export function StudentDetailPage() {
               </div>
               <div className="text-center">
                 <div className="font-display font-bold text-[20px] text-brand-ink">
-                  {(attempts as unknown[]).length}
+                  {attempts.length}
                 </div>
                 <div className="text-[10px] font-black uppercase tracking-[0.5px] text-brand-muted">
                   Assessments
@@ -256,13 +269,13 @@ export function StudentDetailPage() {
                 </div>
                 <div>
                   <div className="text-[13px] font-bold text-brand-ink">
-                    {String(activeStudyPlan.title ?? "Active study plan")}
+                    {activeStudyPlan.title ?? "Active study plan"}
                   </div>
                   <div className="text-[11px] text-brand-muted mt-0.5">
                     Assigned{" "}
                     {activeStudyPlan.assigned_at
                       ? new Date(
-                          String(activeStudyPlan.assigned_at),
+                          activeStudyPlan.assigned_at,
                         ).toLocaleDateString()
                       : "—"}
                   </div>
@@ -296,49 +309,44 @@ export function StudentDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(attempts as Record<string, unknown>[])
-                    .slice(0, 8)
-                    .map((a, i) => {
-                      const score =
-                        typeof a.score === "number" ? a.score : null;
-                      const { label, bgClass, textClass } =
-                        getMasteryStyle(score);
-                      return (
-                        <tr
-                          key={i}
-                          className="border-b border-[#f0f5ee] last:border-0"
-                        >
-                          <td className="px-4 py-[9px] text-xs font-bold text-brand-ink">
-                            {String(a.assessment_name ?? "Assessment")}
-                          </td>
-                          <td className="px-4 py-[9px] text-xs text-brand-muted">
-                            {String(a.class_name ?? "—")}
-                          </td>
-                          <td className="px-4 py-[9px] text-xs text-brand-muted">
-                            {a.completed_at
-                              ? new Date(
-                                  String(a.completed_at),
-                                ).toLocaleDateString()
-                              : "—"}
-                          </td>
-                          <td className="px-4 py-[9px]">
-                            <span
-                              className={`text-[10px] font-bold rounded-full px-2 py-px ${bgClass} ${textClass}`}
-                            >
-                              {label}
-                            </span>
-                          </td>
-                          <td className="px-4 py-[9px] text-[10px] text-brand-muted capitalize">
-                            {String(a.assessment_type ?? "")
-                              .toLowerCase()
-                              .replace("_", " ")}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                  {attempts.slice(0, 8).map((a, i) => {
+                    const { label, bgClass, textClass } = getMasteryStyle(
+                      a.score,
+                    );
+                    return (
+                      <tr
+                        key={i}
+                        className="border-b border-[#f0f5ee] last:border-0"
+                      >
+                        <td className="px-4 py-[9px] text-xs font-bold text-brand-ink">
+                          {a.assessment_name ?? "Assessment"}
+                        </td>
+                        <td className="px-4 py-[9px] text-xs text-brand-muted">
+                          {a.class_name ?? "—"}
+                        </td>
+                        <td className="px-4 py-[9px] text-xs text-brand-muted">
+                          {a.completed_at
+                            ? new Date(a.completed_at).toLocaleDateString()
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-[9px]">
+                          <span
+                            className={`text-[10px] font-bold rounded-full px-2 py-px ${bgClass} ${textClass}`}
+                          >
+                            {label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-[9px] text-[10px] text-brand-muted capitalize">
+                          {(a.assessment_type ?? "")
+                            .toLowerCase()
+                            .replace("_", " ")}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-              {(attempts as unknown[]).length === 0 && (
+              {attempts.length === 0 && (
                 <div className="py-10 text-center text-brand-muted text-sm">
                   No assessments yet.
                 </div>
