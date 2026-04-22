@@ -88,6 +88,24 @@ export function useAttempt(attemptId: string) {
   });
 }
 
+// ─── Start Tier 2 assessment (lazy attempt creation) ─────────
+
+/**
+ * POST /api/v1/assessments/:assessmentId/start
+ * Idempotent — returns existing attempt or creates one on first call.
+ * Used for teacher-created (Tier 2) assessments where no attemptId exists yet.
+ */
+export function useStartAssessment() {
+  return useMutation<AttemptResponse, Error, string>({
+    mutationFn: async (assessmentId: string) => {
+      const res = await apiClient.post<AttemptResponse>(
+        `/api/v1/assessments/${assessmentId}/start`,
+      );
+      return res.data;
+    },
+  });
+}
+
 // ─── Save single answer ──────────────────────────────────────
 
 interface SubmitResponseVars {

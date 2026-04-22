@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
 import { StudentLayout } from "@kaihle/ui";
-import { useAuth } from "@kaihle/auth";
 import { ClassCard, ClassCardSkeleton } from "../../components/ClassCard";
 import { NextStepCard, EmptyNextSteps } from "./NextStepCard";
 import {
@@ -8,31 +7,14 @@ import {
   SubjectEntry,
   ResolvedSubjectScore,
 } from "./SubjectScoresSection";
-import { useStudentInfo } from "../../hooks/useStudentInfo";
+import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import { useStudentDashboard } from "../../hooks/useStudentDashboard";
-import {
-  useMyClasses,
-  type StudentClassResponse,
-} from "../../hooks/useMyClasses";
+import { type AssessmentItem } from "../../hooks/useStudentAssessments";
 
 export function StudentDashboard() {
-  const { logout } = useAuth();
-  const {
-    data: studentInfo,
-    isLoading: isInfoLoading,
-    isError: isInfoError,
-  } = useStudentInfo();
-  const { data: classesData, isLoading: isClassesLoading } = useMyClasses();
+  const layout = useStudentLayoutProps();
   const { data: dashboardData, isPending: isDashboardLoading } =
     useStudentDashboard();
-
-  // Extract student info
-  const firstName = studentInfo?.firstName || "";
-  const lastName = studentInfo?.lastName || "";
-  const studentName =
-    firstName && lastName ? `${firstName} ${lastName}` : firstName || "Student";
-  const gradeName = studentInfo?.gradeName || "";
-  const curriculumName = studentInfo?.curriculumName || "";
 
   // State for resolved subject scores (used in buildNextSteps for weakest-area)
   const [resolvedSubjectScores, setResolvedSubjectScores] = useState<
@@ -47,9 +29,8 @@ export function StudentDashboard() {
     setResolvedSubjectScores(scores);
   }, []);
 
-  // For now, default empty arrays - these would come from other API calls
   const studyPlans = dashboardData?.studyPlans ?? [];
-  const assessments = dashboardData?.assessments ?? [];
+  const activeAssessments = dashboardData?.activeAssessments ?? [];
 
   const studyPlanBadgeCount =
     studyPlans.filter(
@@ -63,7 +44,7 @@ export function StudentDashboard() {
 
   // Build next steps including subject scores for weakest-area logic
   const nextSteps = buildNextSteps(
-    assessments,
+    activeAssessments,
     activeStudyPlans,
     inProgressStudyPlans,
     resolvedSubjectScores,
@@ -73,60 +54,49 @@ export function StudentDashboard() {
   const uniqueSubjects = useMemo<SubjectEntry[]>(() => {
     const seen = new Set<string>();
     const result: SubjectEntry[] = [];
-    const safeClasses = Array.isArray(classesData) ? classesData : [];
-    for (const cls of safeClasses) {
+    for (const cls of layout.sidebarClasses) {
       if (cls.subjectId && !seen.has(cls.subjectId)) {
         seen.add(cls.subjectId);
         result.push({ subjectId: cls.subjectId, subjectName: cls.subjectName });
       }
     }
     return result;
-  }, [classesData]);
+  }, [layout.sidebarClasses]);
 
-  if (isInfoError) {
+  if (layout.isError) {
     return (
       <StudentLayout
         activeNav="home"
-        studentName={studentName}
-        gradeName={gradeName}
-        curriculumName={curriculumName}
-        onLogout={logout}
+        studentName={layout.studentName}
+        gradeName={layout.gradeName}
+        curriculumName={layout.curriculumName}
+        classes={layout.sidebarClasses}
+        onLogout={layout.onLogout}
       >
-        <div className="text-center py-8">
-          <p className="text-brand-red">
-            Failed to load dashboard data. Please try again or contact support
-            if the problem persists.
+        <div className="text-center py-16">
+          <p className="font-sans text-sm text-brand-body">
+            Something went wrong loading your dashboard. Please refresh the
+            page.
           </p>
         </div>
       </StudentLayout>
     );
   }
 
-  // Build class items for sidebar - safely handle potentially non-array data
-  const sidebarClasses = Array.isArray(classesData)
-    ? classesData.map((cls: StudentClassResponse) => ({
-        id: cls.id,
-        name: cls.name,
-        subjectName: cls.subjectName,
-        subjectId: cls.subjectId,
-        diagnosticStatus: cls.onboardingDiagnosticStatus,
-        diagnosticAttemptId: cls.diagnosticAttemptId,
-      }))
-    : [];
-
   return (
     <StudentLayout
       activeNav="home"
-      studentName={studentName}
-      gradeName={gradeName}
-      curriculumName={curriculumName}
-      classes={sidebarClasses}
+      studentName={layout.studentName}
+      gradeName={layout.gradeName}
+      curriculumName={layout.curriculumName}
+      classes={layout.sidebarClasses}
       studyPlanBadge={studyPlanBadgeCount}
-      onLogout={logout}
+      assessmentBadge={layout.assessmentBadge}
+      onLogout={layout.onLogout}
     >
       <div className="space-y-6">
         {/* Subject Scores Section - Render first before My Classes */}
-        {!isInfoLoading && uniqueSubjects.length > 0 && (
+        {!layout.isLoading && uniqueSubjects.length > 0 && (
           <SubjectScoresSection
             subjects={uniqueSubjects}
             onScoresResolved={handleScoresResolved}
@@ -148,7 +118,7 @@ export function StudentDashboard() {
 
         {/* Class Cards - Per-class diagnostic locked/unlocked state */}
         {(() => {
-          const safeClasses = Array.isArray(classesData) ? classesData : [];
+          const safeClasses = layout.sidebarClasses;
           if (safeClasses.length === 0) return null;
           return (
             <div>
@@ -156,7 +126,7 @@ export function StudentDashboard() {
                 My classes
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {isClassesLoading
+                {layout.isLoading
                   ? Array.from({ length: safeClasses.length || 2 }).map(
                       (_, i) => <ClassCardSkeleton key={i} />,
                     )
@@ -167,7 +137,7 @@ export function StudentDashboard() {
                         className={cls.name}
                         subjectName={cls.subjectName}
                         teacherName={cls.teacherName}
-                        diagnosticStatus={cls.onboardingDiagnosticStatus}
+                        diagnosticStatus={cls.diagnosticStatus}
                         diagnosticAttemptId={
                           cls.diagnosticAttemptId ?? undefined
                         }
@@ -184,7 +154,7 @@ export function StudentDashboard() {
             What&apos;s waiting for you
           </h2>
           <div className="space-y-3">
-            {isInfoLoading || isClassesLoading || isDashboardLoading ? (
+            {layout.isLoading || isDashboardLoading ? (
               <>
                 <SkeletonNextStep />
                 <SkeletonNextStep />
@@ -228,34 +198,31 @@ interface NextStep {
 }
 
 function buildNextSteps(
-  assessments: Array<{ id: string; subjectName: string; dueDate: string }>,
+  activeAssessments: AssessmentItem[],
   activeStudyPlans: Array<{ id: string; title: string; status: string }>,
   inProgressStudyPlans: Array<{ id: string; title: string; status: string }>,
   subjectScores: ResolvedSubjectScore[],
 ): NextStep[] {
   const nextSteps: NextStep[] = [];
 
-  // Priority 1: Active assessments due within 7 days
-  if (assessments.length > 0) {
-    const daysUntilDue = Math.ceil(
-      (new Date(assessments[0].dueDate).getTime() - Date.now()) /
-        (1000 * 60 * 60 * 24),
+  // Priority 1: Active assessments
+  // urgent = any active assessment has a deadline within 48 hours
+  if (activeAssessments.length > 0) {
+    const now = Date.now();
+    const fortyEightHours = 48 * 60 * 60 * 1000;
+    const urgent = activeAssessments.some(
+      (a) =>
+        a.deadline !== null &&
+        new Date(a.deadline).getTime() - now <= fortyEightHours,
     );
     nextSteps.push({
       type: "assessment",
-      id: `assessment-${assessments[0].id}`,
-      title: `${assessments.length} assessment${
-        assessments.length > 1 ? "s" : ""
-      } due`,
-      subtitle: `${assessments[0].subjectName} · Due ${new Date(
-        assessments[0].dueDate,
-      ).toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "short",
-      })}`,
+      id: "assessment-active",
+      title: `${activeAssessments.length} assessment${activeAssessments.length !== 1 ? "s" : ""} active`,
+      subtitle: "Complete your pending assessments",
       actionLabel: "Start now →",
       route: "/student/assessments",
-      urgent: daysUntilDue <= 3,
+      urgent,
     });
   }
 

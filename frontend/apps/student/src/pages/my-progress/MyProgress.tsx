@@ -1,11 +1,6 @@
 import { useState, useMemo } from "react";
 import { StudentLayout } from "@kaihle/ui";
-import { useAuth } from "@kaihle/auth";
-import { useStudentInfo } from "../../hooks/useStudentInfo";
-import {
-  useMyClasses,
-  type StudentClassResponse,
-} from "../../hooks/useMyClasses";
+import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import { useStudentGapMap } from "../../hooks/useStudentGapMap";
 import { TopicSection } from "../../components/my-progress/TopicSection";
 import { ConceptGuideProvider } from "../../context/ConceptGuideContext";
@@ -17,40 +12,19 @@ interface SubjectEntry {
 }
 
 export function MyProgress() {
-  const { logout } = useAuth();
-  const { data: studentInfo } = useStudentInfo();
-  const { data: classesData } = useMyClasses();
-
-  const firstName = studentInfo?.firstName ?? "";
-  const lastName = studentInfo?.lastName ?? "";
-  const studentName =
-    [firstName, lastName].filter(Boolean).join(" ") || "Student";
-  const gradeName = studentInfo?.gradeName ?? "";
-  const curriculumName = studentInfo?.curriculumName ?? "";
-
-  const sidebarClasses = (Array.isArray(classesData) ? classesData : []).map(
-    (cls: StudentClassResponse) => ({
-      id: cls.id,
-      name: cls.name,
-      subjectName: cls.subjectName,
-      subjectId: cls.subjectId,
-      diagnosticStatus: cls.onboardingDiagnosticStatus,
-      diagnosticAttemptId: cls.diagnosticAttemptId,
-    }),
-  );
+  const layout = useStudentLayoutProps();
 
   const uniqueSubjects = useMemo<SubjectEntry[]>(() => {
     const seen = new Set<string>();
     const result: SubjectEntry[] = [];
-    const safeClasses = Array.isArray(classesData) ? classesData : [];
-    for (const cls of safeClasses) {
+    for (const cls of layout.sidebarClasses) {
       if (cls.subjectId && !seen.has(cls.subjectId)) {
         seen.add(cls.subjectId);
         result.push({ subjectId: cls.subjectId, subjectName: cls.subjectName });
       }
     }
     return result;
-  }, [classesData]);
+  }, [layout.sidebarClasses]);
 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(
     uniqueSubjects.length > 0 ? uniqueSubjects[0].subjectId : null,
@@ -104,11 +78,12 @@ export function MyProgress() {
     <ConceptGuideProvider>
       <StudentLayout
         activeNav="progress"
-        studentName={studentName}
-        gradeName={gradeName}
-        curriculumName={curriculumName}
-        classes={sidebarClasses}
-        onLogout={logout}
+        studentName={layout.studentName}
+        gradeName={layout.gradeName}
+        curriculumName={layout.curriculumName}
+        classes={layout.sidebarClasses}
+        assessmentBadge={layout.assessmentBadge}
+        onLogout={layout.onLogout}
       >
         <div className="space-y-6">
           <h1 className="font-display font-bold text-2xl text-brand-ink">

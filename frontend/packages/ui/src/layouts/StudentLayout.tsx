@@ -22,6 +22,7 @@ export interface StudentClass {
   name: string; // "Mathematics 9B"
   subjectName: string; // "Mathematics"
   subjectId: string; // UUID
+  teacherName: string;
   diagnosticStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED";
   diagnosticAttemptId: string | null;
 }
@@ -35,6 +36,7 @@ export interface StudentLayoutProps {
   curriculumName: string; // "Cambridge IGCSE" — sidebar profile card + top nav subtitle
   onLogout: () => void; // sidebar logout button
   studyPlanBadge?: number; // count of ACTIVE + IN_PROGRESS plans shown on sidebar
+  assessmentBadge?: number; // count of new ACTIVE assessments not yet started
 }
 
 // Subject dot color map — per DESIGN_SYSTEM.md §8 Subject Colors
@@ -76,6 +78,7 @@ export function StudentLayout({
   curriculumName,
   onLogout,
   studyPlanBadge,
+  assessmentBadge,
 }: StudentLayoutProps) {
   const navigate = useNavigate();
 
@@ -135,8 +138,13 @@ export function StudentLayout({
             },
           ].map(({ key, label, Icon }) => {
             const isActive = activeNav === key;
-            const showBadge =
-              key === "study-plans" && studyPlanBadge && studyPlanBadge > 0;
+            const badgeCount =
+              key === "study-plans"
+                ? studyPlanBadge
+                : key === "assessments"
+                  ? assessmentBadge
+                  : undefined;
+            const showBadge = !!badgeCount && badgeCount > 0;
             return (
               <Link
                 key={key}
@@ -161,7 +169,7 @@ export function StudentLayout({
                 {label}
                 {showBadge && (
                   <span className="ml-auto bg-brand-primary text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-                    {studyPlanBadge}
+                    {badgeCount}
                   </span>
                 )}
               </Link>
@@ -249,7 +257,7 @@ export function StudentLayout({
         >
           {/* Left: greeting + grade/curriculum */}
           <div>
-            <div className="ffont-display font-bold text-xl text-brand-ink leading-tight">
+            <div className="font-display font-bold text-xl text-brand-ink leading-tight">
               {getGreeting()}, {firstName} 👋
             </div>
             {gradeName && curriculumName && (

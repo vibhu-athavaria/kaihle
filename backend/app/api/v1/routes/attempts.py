@@ -107,6 +107,46 @@ async def get_class_diagnostic(
     )
 
 
+@router.post("/assessments/{assessment_id}/start", response_model=AttemptResponse, status_code=status.HTTP_200_OK)
+async def start_assessment(
+    assessment_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.STUDENT)),
+    db: AsyncSession = Depends(get_db),
+) -> AttemptResponse:
+    """Get or create a Tier 2 attempt for the requesting student.
+
+    Idempotent — calling this multiple times returns the same attempt.
+    Returns 403 if the student is not enrolled in the assessment's class.
+    Returns 404 if the assessment is not found or not ACTIVE.
+    """
+    assert current_user.school_id is not None, "Student must belong to a school"
+    service = AttemptService(db)
+    try:
+        attempt, questions = await service.get_or_create_attempt(
+            assessment_id=assessment_id,
+            student_id=current_user.id,
+            school_id=current_user.school_id,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg) from exc
+        if "not enrolled" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
+
+    return AttemptResponse(
+        id=attempt.id,
+        assessment_id=attempt.assessment_id,
+        student_id=attempt.student_id,
+        status=attempt.status,
+        started_at=attempt.started_at,
+        submitted_at=attempt.completed_at,
+        score=attempt.overall_score,
+        questions=_questions_to_schema(questions),
+    )
+
+
 @router.get("/attempts/{attempt_id}", response_model=AttemptResponse)
 async def get_attempt(
     attempt_id: UUID,

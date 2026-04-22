@@ -1,39 +1,14 @@
 import { Link } from "react-router-dom";
 import { StudentLayout } from "@kaihle/ui";
-import { useAuth } from "@kaihle/auth";
-import { useStudentInfo } from "../../hooks/useStudentInfo";
-import {
-  useMyClasses,
-  type StudentClassResponse,
-} from "../../hooks/useMyClasses";
+import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import {
   useMyStudyPlans,
   type StudyPlanSummary,
 } from "../../hooks/useMyStudyPlans";
 
 export function StudyPlans() {
-  const { logout } = useAuth();
-  const { data: studentInfo } = useStudentInfo();
-  const { data: classesData } = useMyClasses();
+  const layout = useStudentLayoutProps();
   const { data: plansData, isLoading } = useMyStudyPlans();
-
-  const firstName = studentInfo?.firstName ?? "";
-  const lastName = studentInfo?.lastName ?? "";
-  const studentName =
-    [firstName, lastName].filter(Boolean).join(" ") || "Student";
-  const gradeName = studentInfo?.gradeName ?? "";
-  const curriculumName = studentInfo?.curriculumName ?? "";
-
-  const sidebarClasses = (Array.isArray(classesData) ? classesData : []).map(
-    (cls: StudentClassResponse) => ({
-      id: cls.id,
-      name: cls.name,
-      subjectName: cls.subjectName,
-      subjectId: cls.subjectId,
-      diagnosticStatus: cls.onboardingDiagnosticStatus,
-      diagnosticAttemptId: cls.diagnosticAttemptId,
-    }),
-  );
 
   const plans = plansData?.data ?? [];
 
@@ -43,18 +18,19 @@ export function StudyPlans() {
   const generatingPlans = plans.filter((p) => p.status === "GENERATING");
   const completedPlans = plans.filter((p) => p.status === "COMPLETED");
 
-  const hasDiagnosticComplete = sidebarClasses.some(
+  const hasDiagnosticComplete = layout.sidebarClasses.some(
     (cls) => cls.diagnosticStatus === "COMPLETED",
   );
 
   return (
     <StudentLayout
       activeNav="study-plans"
-      studentName={studentName}
-      gradeName={gradeName}
-      curriculumName={curriculumName}
-      classes={sidebarClasses}
-      onLogout={logout}
+      studentName={layout.studentName}
+      gradeName={layout.gradeName}
+      curriculumName={layout.curriculumName}
+      classes={layout.sidebarClasses}
+      assessmentBadge={layout.assessmentBadge}
+      onLogout={layout.onLogout}
     >
       <div className="space-y-6">
         <h1 className="font-display font-bold text-2xl text-brand-ink">
