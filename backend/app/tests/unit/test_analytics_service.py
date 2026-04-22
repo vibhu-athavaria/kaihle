@@ -72,3 +72,11 @@ async def test_get_student_mastery_summary_when_no_gap_states_then_returns_none(
     mock_db.execute.return_value = empty_result
     result = await service.get_student_mastery_summaries(SCHOOL_ID)
     assert result == []
+
+
+async def test_get_school_analytics_when_no_dates_then_defaults_to_30_day_window(
+    service: AnalyticsService, mock_db: MagicMock
+) -> None:
+    mock_db.execute.return_value = _make_zero_result()
+    result = await service.get_school_analytics(SCHOOL_ID)
+    assert result is not None

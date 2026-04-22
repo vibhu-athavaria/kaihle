@@ -219,6 +219,8 @@ class TestSchoolAnalyticsResponse:
     async def test_get_school_analytics_when_no_period_params_then_defaults_to_30_days(
         self, client: AsyncClient
     ) -> None:
+        # Date defaulting now lives in AnalyticsService, not the route.
+        # The route passes None, None through to the service when no query params are given.
         app.dependency_overrides[get_current_user] = lambda: _make_school_admin(_TEST_SCHOOL_ID)
         stub = _stub_analytics_data(_TEST_SCHOOL_ID)
 
@@ -236,9 +238,6 @@ class TestSchoolAnalyticsResponse:
         call_args = instance.get_school_analytics.call_args
         assert call_args is not None
         pos_args = call_args.args
-        from datetime import date
-
-        today = date.today()
-        # from_date should be ~30 days ago, to_date should be today
-        assert pos_args[2] == today
-        assert (today - pos_args[1]).days == 30
+        # Route passes None, None — service owns the defaulting logic
+        assert pos_args[1] is None
+        assert pos_args[2] is None

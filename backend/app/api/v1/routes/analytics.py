@@ -10,7 +10,7 @@ Note on the /platform prefix: platform-level endpoints are not nested under
 the separation between tenant-scoped and platform-scoped concerns.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 import structlog
@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, _check_school_access, require_role
+from app.core.deps import CurrentUser, _check_school_access, require_full_access, require_role
 from app.models.user import UserRole
 from app.schemas.analytics import PlatformStats, SchoolAnalytics
 from app.services.analytics_service import AnalyticsService
@@ -32,19 +32,17 @@ async def get_school_analytics(
     school_id: UUID,
     from_date: date | None = Query(default=None),
     to_date: date | None = Query(default=None),
-    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    current_user: CurrentUser = Depends(require_full_access),
+    _role_check: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> SchoolAnalytics:
     # Check school access - KAIHLE_ADMIN bypasses, others must match (Rule 12)
     _check_school_access(school_id, current_user)
 
-    today = date.today()
-    effective_from = from_date or (today - timedelta(days=30))
-    effective_to = to_date or today
-
     service = AnalyticsService(db)
-    data = await service.get_school_analytics(school_id, effective_from, effective_to)
-    # SchoolAnalytics is a subclass of SchoolAnalyticsData — model_validate handles the cast
+    data = await service.get_school_analytics(school_id, from_date, to_date)
+    logger.info("analytics.school.requested", school_id=str(school_id), user_id=str(current_user.id))
+    # SchoolAnalytics is an alias for SchoolAnalyticsData — model_validate handles the cast
     return SchoolAnalytics.model_validate(data.model_dump())
 
 

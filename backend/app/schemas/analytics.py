@@ -60,10 +60,9 @@ class SchoolAnalyticsData(BaseModel):
 
 
 # SchoolAnalytics is the canonical response schema for GET /schools/{id}/analytics.
-# It is an alias for SchoolAnalyticsData — kept as a named class so that the
-# route's response_model and any downstream consumers have a stable name to import.
-class SchoolAnalytics(SchoolAnalyticsData):
-    pass
+# It is a type alias for SchoolAnalyticsData — kept as a stable name so that routes
+# and downstream consumers can import it without depending on the internal class name.
+SchoolAnalytics = SchoolAnalyticsData
 
 
 class PlatformStats(BaseModel):

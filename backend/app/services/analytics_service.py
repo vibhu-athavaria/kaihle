@@ -1,6 +1,6 @@
 """Analytics service — school-level aggregations for the school-admin dashboard."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from datetime import time as dt_time
 from uuid import UUID
 
@@ -35,11 +35,14 @@ class AnalyticsService:
     async def get_school_analytics(
         self,
         school_id: UUID,
-        from_date: date,
-        to_date: date,
+        from_date: date | None = None,
+        to_date: date | None = None,
     ) -> SchoolAnalyticsData:
-        from_dt = datetime.combine(from_date, dt_time.min).replace(tzinfo=UTC)
-        to_dt = datetime.combine(to_date, dt_time.max).replace(tzinfo=UTC)
+        today = date.today()
+        effective_from = from_date or (today - timedelta(days=30))
+        effective_to = to_date or today
+        from_dt = datetime.combine(effective_from, dt_time.min).replace(tzinfo=UTC)
+        to_dt = datetime.combine(effective_to, dt_time.max).replace(tzinfo=UTC)
 
         total_students = await self._count(
             select(func.count(User.id)).where(
