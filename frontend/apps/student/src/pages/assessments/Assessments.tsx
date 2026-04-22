@@ -84,8 +84,12 @@ function TeacherAssessmentCard({
     : null;
 
   const handleStart = async () => {
-    const attempt = await startAssessment.mutateAsync(assessment.id);
-    navigate(`/student/assessments/${attempt.id}/take`);
+    try {
+      const attempt = await startAssessment.mutateAsync(assessment.id);
+      navigate(`/student/assessments/${attempt.id}/take`);
+    } catch {
+      // error is handled by React Query's onError / isError state on startAssessment
+    }
   };
 
   return (
