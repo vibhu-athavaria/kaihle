@@ -84,54 +84,55 @@ async def invite_user(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
-@router.get("", response_model=StudentListResponse | UserListResponse)
+@router.get("", response_model=UserListResponse | StudentListResponse)
 async def list_users(
+    request: Request,
     school_id: uuid.UUID,
-    role: str | None = Query(None),
+    role: UserRole | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    # require_full_access guards against password_setup-scoped tokens (security gap fix).
+    # require_role enforces that only SCHOOL_ADMIN or KAIHLE_ADMIN may list users.
+    _full: CurrentUser = Depends(require_full_access),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
     db: AsyncSession = Depends(get_db),
-) -> StudentListResponse | UserListResponse:
+) -> UserListResponse | StudentListResponse:
     """List users in a school with optional role filter and pagination.
 
-    When role=STUDENT, the response includes mastery aggregates (worst_mastery,
-    class_count, needs_work_class_count, diagnostic_completed) so the School
-    Admin dashboard can surface at-risk students without a second request.
-    All mastery data is fetched in two batch queries — no N+1.
+    When role=STUDENT, returns a StudentListResponse enriched with worst_mastery
+    and diagnostic_completed derived from two single-query AnalyticsService calls
+    (no N+1).
     """
     _check_school_access(school_id, current_user)
     service = UserService(db)
     users, total = await service.list_users(school_id, role, page, page_size)
 
-    if role == "STUDENT":
-        # Batch fetch mastery summaries and diagnostic completion — two queries total.
-        analytics = AnalyticsService(db)
+    if role == UserRole.STUDENT:
+        analytics = AnalyticsService(db, request.app.state.redis)
         student_ids = [u.id for u in users]
-
-        summaries = await analytics.get_student_mastery_summaries(school_id)
+        summaries = await analytics.get_student_mastery_summaries(school_id, student_ids=student_ids)
         summary_map = {s.student_id: s for s in summaries}
-
         completed_ids = await analytics.get_diagnostic_completed_student_ids(school_id, student_ids)
-
-        items = [
-            StudentListItem(
-                id=u.id,
-                email=u.email,
-                role=str(u.role),
-                first_name=u.first_name,
-                last_name=u.last_name,
-                is_active=u.is_active,
-                school_id=u.school_id,
-                last_login_at=getattr(u, "last_login_at", None),
-                worst_mastery=summary_map[u.id].worst_mastery if u.id in summary_map else None,
-                class_count=summary_map[u.id].class_count if u.id in summary_map else 0,
-                needs_work_class_count=summary_map[u.id].needs_work_class_count if u.id in summary_map else 0,
-                diagnostic_completed=u.id in completed_ids,
-            )
-            for u in users
-        ]
-        return StudentListResponse(users=items, total=total, page=page, page_size=page_size)
+        return StudentListResponse(
+            users=[
+                StudentListItem(
+                    id=u.id,
+                    first_name=u.first_name,
+                    last_name=u.last_name,
+                    email=u.email,
+                    is_active=u.is_active,
+                    last_login_at=u.last_login_at,
+                    worst_mastery=summary_map[u.id].worst_mastery if u.id in summary_map else None,
+                    class_count=summary_map[u.id].class_count if u.id in summary_map else 0,
+                    needs_work_class_count=summary_map[u.id].needs_work_class_count if u.id in summary_map else 0,
+                    diagnostic_completed=u.id in completed_ids,
+                )
+                for u in users
+            ],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
 
     return UserListResponse(
         users=[UserResponse.model_validate(u) for u in users],

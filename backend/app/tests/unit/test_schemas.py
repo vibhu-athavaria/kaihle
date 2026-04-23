@@ -4,7 +4,9 @@ import uuid
 from datetime import date, datetime
 
 from app.schemas.analytics import (
+    AtRiskStudent,
     ClassBreakdown,
+    OnboardingFunnel,
     PlatformStats,
     SchoolAnalytics,
 )
@@ -412,18 +414,19 @@ class TestSchemaInstantiation:
     def test_school_analytics_zero_values(self):
         s = SchoolAnalytics(
             school_id=uuid.uuid4(),
-            school_name="Test",
             generated_at=datetime.utcnow(),
             total_students=0,
-            active_students_last_7_days=0,
-            onboarding_completion_rate=0.0,
-            students_pending_onboarding=0,
+            active_students=0,
             assessments_completed=0,
-            study_plans_assigned=0,
-            study_plans_completed=0,
-            lesson_plans_generated=0,
-            lesson_plans_used=0,
+            study_plans_active=0,
+            onboarding_funnel=OnboardingFunnel(
+                invited=0,
+                password_set=0,
+                profile_complete=0,
+                diagnostic_done=0,
+            ),
             classes=[],
+            at_risk_students=[],
         )
         assert s.total_students == 0
         assert s.classes == []
@@ -431,17 +434,17 @@ class TestSchemaInstantiation:
     def test_school_analytics_with_classes(self):
         s = SchoolAnalytics(
             school_id=uuid.uuid4(),
-            school_name="Test School",
             generated_at=datetime.utcnow(),
             total_students=100,
-            active_students_last_7_days=95,
-            onboarding_completion_rate=0.9,
-            students_pending_onboarding=5,
+            active_students=95,
             assessments_completed=50,
-            study_plans_assigned=30,
-            study_plans_completed=10,
-            lesson_plans_generated=20,
-            lesson_plans_used=5,
+            study_plans_active=30,
+            onboarding_funnel=OnboardingFunnel(
+                invited=100,
+                password_set=95,
+                profile_complete=90,
+                diagnostic_done=80,
+            ),
             classes=[
                 ClassBreakdown(
                     class_id=uuid.uuid4(),
@@ -454,9 +457,18 @@ class TestSchemaInstantiation:
                     assessments_completed=5,
                 ),
             ],
+            at_risk_students=[
+                AtRiskStudent(
+                    student_id=uuid.uuid4(),
+                    first_name="Bob",
+                    last_name="Jones",
+                    worst_mastery=0.25,
+                    needs_work_class_count=2,
+                ),
+            ],
         )
         assert len(s.classes) == 1
-        assert s.onboarding_completion_rate == 0.9
+        assert s.active_students == 95
 
     def test_platform_stats(self):
         p = PlatformStats(

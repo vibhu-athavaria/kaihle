@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { Button } from "@kaihle/ui";
-import { Input } from "@kaihle/ui";
+import { Button, Input, Modal } from "@kaihle/ui";
 import { UserRole } from "@kaihle/types";
-import { X } from "lucide-react";
 
 type SchoolRole =
   | typeof UserRole.TEACHER
@@ -39,8 +37,6 @@ export function InviteUserModal({
   const [role, setRole] = useState(defaultRole);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  if (!isOpen) return null;
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -96,111 +92,90 @@ export function InviteUserModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div
-        className="relative bg-white rounded-2xl border border-brand-border shadow-xl p-6 w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="modal-title"
-      >
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1 text-brand-muted hover:text-brand-ink rounded-full hover:bg-gray-100"
-          aria-label="Close"
-        >
-          <X className="w-5 h-5" />
-        </button>
+    <Modal
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={getTitle()}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+        <div>
+          <Input
+            id="firstName"
+            label="First name"
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            placeholder="Enter first name"
+            error={errors.firstName}
+          />
+        </div>
 
-        <h2
-          id="modal-title"
-          className="text-xl font-display font-bold text-brand-ink mb-6"
-        >
-          {getTitle()}
-        </h2>
+        <div>
+          <Input
+            id="lastName"
+            label="Last name"
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            placeholder="Enter last name"
+            error={errors.lastName}
+          />
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Input
-              id="firstName"
-              label="First name"
-              type="text"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              placeholder="Enter first name"
-              error={errors.firstName}
-            />
-          </div>
+        <div>
+          <Input
+            id="email"
+            label="Email address"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter email address"
+            error={errors.email}
+          />
+        </div>
 
-          <div>
-            <Input
-              id="lastName"
-              label="Last name"
-              type="text"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              placeholder="Enter last name"
-              error={errors.lastName}
-            />
-          </div>
+        <div>
+          <label
+            htmlFor="role"
+            className="block text-sm font-semibold text-brand-ink mb-1.5"
+          >
+            Role
+          </label>
+          <select
+            id="role"
+            value={role}
+            onChange={(e) => setRole(e.target.value as typeof role)}
+            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+          >
+            {roleOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-          <div>
-            <Input
-              id="email"
-              label="Email address"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter email address"
-              error={errors.email}
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="role"
-              className="block text-sm font-semibold text-brand-ink mb-1.5"
-            >
-              Role
-            </label>
-            <select
-              id="role"
-              value={role}
-              onChange={(e) => setRole(e.target.value as typeof role)}
-              className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-            >
-              {roleOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              loading={isSubmitting}
-              className="flex-1"
-            >
-              Send invite →
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="flex gap-3 pt-4">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={isSubmitting}
+            className="flex-1"
+          >
+            Send invite →
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

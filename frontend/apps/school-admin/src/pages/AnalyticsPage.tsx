@@ -1,110 +1,284 @@
+import { useState, type KeyboardEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
-import { Card } from "@kaihle/ui";
-import { TrendingUp, Users, GraduationCap, UserCog } from "lucide-react";
-import { useAuth } from "@kaihle/auth";
+import { getMasteryStyle } from "@kaihle/types";
 import { useSchoolAnalytics } from "../hooks/useSchoolAdmin";
 
-export function AnalyticsPage() {
-  const { logout } = useAuth();
-  const { data: analytics, isLoading } = useSchoolAnalytics();
+type Period = "week" | "month";
 
-  if (isLoading) {
+function periodDates(p: Period): { from: string; to: string } {
+  const today = new Date();
+  const to = today.toISOString().split("T")[0];
+  const from = new Date(today);
+  if (p === "week") from.setDate(from.getDate() - 7);
+  else from.setMonth(from.getMonth() - 1);
+  return { from: from.toISOString().split("T")[0], to };
+}
+
+export function AnalyticsPage() {
+  const navigate = useNavigate();
+  const [period, setPeriod] = useState<Period>("month");
+  const { from, to } = periodDates(period);
+  const { data, isLoading, isError } = useSchoolAnalytics(from, to);
+
+  const funnel = data?.onboarding_funnel;
+  const total = funnel?.invited ?? 1;
+
+  const funnelSteps = funnel
+    ? [
+        { label: "Invited", count: funnel.invited },
+        { label: "Password set", count: funnel.password_set },
+        { label: "Profile complete", count: funnel.profile_complete },
+        { label: "Diagnostic done", count: funnel.diagnostic_done },
+      ]
+    : [];
+
+  const subjectGroups = (data?.classes ?? []).reduce<Record<string, number[]>>(
+    (acc, c) => {
+      const subj = c.class_name.split("—")[1]?.trim() ?? c.class_name;
+      if (!acc[subj]) acc[subj] = [];
+      if (c.avg_mastery !== null) acc[subj].push(c.avg_mastery);
+      return acc;
+    },
+    {},
+  );
+
+  const onboardingPct = funnel
+    ? Math.round((funnel.diagnostic_done / Math.max(funnel.invited, 1)) * 100)
+    : 0;
+
+  const kpis = data
+    ? [
+        {
+          label: "Active students",
+          value: `${data.active_students}/${data.total_students}`,
+        },
+        { label: "Assessments completed", value: data.assessments_completed },
+        { label: "Study plans active", value: data.study_plans_active },
+        { label: "Onboarding rate", value: `${onboardingPct}%` },
+      ]
+    : [];
+
+  if (isLoading)
     return (
-      <DashboardLayout
-        variant="school-admin"
-        pageTitle="Analytics"
-        onLogout={logout}
-      >
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary"></div>
+      <DashboardLayout variant="school-admin" pageTitle="Analytics">
+        <div className="animate-pulse space-y-4">
+          <div className="grid grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 bg-role-school-border rounded-xl" />
+            ))}
+          </div>
         </div>
       </DashboardLayout>
     );
-  }
+
+  if (isError)
+    return (
+      <DashboardLayout variant="school-admin" pageTitle="Analytics">
+        <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
+          Failed to load data. Please refresh the page.
+        </div>
+      </DashboardLayout>
+    );
 
   return (
-    <DashboardLayout
-      variant="school-admin"
-      pageTitle="Analytics"
-      onLogout={logout}
-    >
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold font-display text-gray-900">
-            Analytics
-          </h1>
-          <p className="text-gray-600 mt-1">
-            Track your school&apos;s performance metrics
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Teachers</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {analytics?.teacher_count ?? 0}
-                </p>
-              </div>
-              <div className="p-3 bg-brand-green/10 rounded-full">
-                <Users className="w-6 h-6 text-brand-green" />
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Students</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {analytics?.student_count ?? 0}
-                </p>
-              </div>
-              <div className="p-3 bg-brand-green/10 rounded-full">
-                <GraduationCap className="w-6 h-6 text-brand-green" />
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Parents</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {analytics?.parent_count ?? 0}
-                </p>
-              </div>
-              <div className="p-3 bg-brand-green/10 rounded-full">
-                <UserCog className="w-6 h-6 text-brand-green" />
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Onboarding Rate</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {analytics?.onboarding_percentage ?? 0}%
-                </p>
-              </div>
-              <div className="p-3 bg-brand-green/10 rounded-full">
-                <TrendingUp className="w-6 h-6 text-brand-green" />
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold font-display text-gray-900 mb-4">
-            Performance Overview
-          </h2>
-          <div className="h-64 flex items-center justify-center text-gray-400">
-            <p>Detailed analytics charts coming soon</p>
-          </div>
-        </Card>
+    <DashboardLayout variant="school-admin" pageTitle="Analytics">
+      <div className="flex items-center gap-1 mb-5 bg-white border border-role-school-border rounded-lg p-1 self-start w-fit">
+        {(["week", "month"] as Period[]).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPeriod(p)}
+            className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors ${
+              period === p
+                ? "bg-brand-primary text-white"
+                : "text-brand-muted hover:text-brand-ink"
+            }`}
+          >
+            {p === "week" ? "This week" : "This month"}
+          </button>
+        ))}
+        <button className="px-4 py-1.5 rounded-md text-xs font-bold text-brand-muted opacity-40 cursor-not-allowed">
+          This term
+        </button>
       </div>
+
+      <>
+        <div className="grid grid-cols-4 gap-4 mb-5">
+          {kpis.map(({ label, value }) => (
+            <div
+              key={label}
+              className="bg-white border border-role-school-border rounded-xl p-4"
+            >
+              <div className="text-xs font-black uppercase tracking-[0.7px] text-role-school-muted mb-1.5">
+                {label}
+              </div>
+              <div className="font-display font-bold text-2xl text-brand-ink leading-none">
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-5 mb-5">
+          <div className="bg-white border border-role-school-border rounded-xl p-4">
+            <div className="text-xs font-black uppercase tracking-[0.7px] text-role-school-muted mb-3">
+              Mastery by subject
+            </div>
+            <div className="space-y-3">
+              {Object.entries(subjectGroups).map(([subj, scores]) => {
+                const avg = scores.length
+                  ? scores.reduce((a, b) => a + b, 0) / scores.length
+                  : null;
+                const { label, dotClass, textClass } = getMasteryStyle(avg);
+                const pct = avg !== null ? Math.round(avg * 100) : 0;
+                return (
+                  <div key={subj}>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-semibold text-brand-ink">
+                        {subj}
+                      </span>
+                      <span className={`text-xs font-bold ${textClass}`}>
+                        {label}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full ${dotClass}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white border border-role-school-border rounded-xl p-4">
+            <div className="text-xs font-black uppercase tracking-[0.7px] text-role-school-muted mb-3">
+              Onboarding funnel
+            </div>
+            <div className="space-y-3">
+              {funnelSteps.map((step, i) => {
+                const next = funnelSteps[i + 1];
+                const dropoff = next ? step.count - next.count : 0;
+                const pct = Math.round((step.count / Math.max(total, 1)) * 100);
+                return (
+                  <div key={step.label}>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-semibold text-brand-ink">
+                        {step.label}
+                      </span>
+                      <span className="text-xs font-bold text-brand-ink">
+                        {step.count}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full bg-brand-primary"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    {next && dropoff > 0 && (
+                      <div className="text-xs text-brand-red font-bold mt-0.5">
+                        −{dropoff} dropped off
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-role-school-border rounded-xl overflow-hidden">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-[#fafcfa] border-b border-role-school-border">
+                {[
+                  "Class",
+                  "Subject",
+                  "Teacher",
+                  "Mastery",
+                  "At risk",
+                  "Students",
+                  "Assessments",
+                  "",
+                ].map((h) => (
+                  <th
+                    key={h}
+                    className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...(data?.classes ?? [])]
+                .sort((a, b) => {
+                  if (a.avg_mastery === null) return 1;
+                  if (b.avg_mastery === null) return -1;
+                  return (a.avg_mastery ?? 0) - (b.avg_mastery ?? 0);
+                })
+                .map((c) => {
+                  const { dotClass, label } = getMasteryStyle(c.avg_mastery);
+                  const handleNavigate = () =>
+                    navigate(`/school-admin/classes/${c.class_id}/gap-map`);
+                  return (
+                    <tr
+                      key={c.class_id}
+                      onClick={handleNavigate}
+                      onKeyDown={(e: KeyboardEvent<HTMLTableRowElement>) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleNavigate();
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`View gap map for ${c.class_name}`}
+                      className="border-b border-[#f0f5ee] last:border-0 cursor-pointer hover:bg-[#fafcfa] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-inset"
+                    >
+                      <td className="px-4 py-3 font-bold text-sm text-brand-ink">
+                        {c.class_name}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-brand-muted">
+                        {c.subject_name ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-brand-muted">
+                        {c.teacher_name ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`w-2 h-2 rounded-full ${dotClass}`}
+                          />
+                          <span className="text-xs font-semibold">{label}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {c.avg_mastery !== null && c.avg_mastery < 0.4 ? (
+                          <span className="text-xs font-bold bg-red-50 text-brand-red rounded-full px-2 py-0.5">
+                            At risk
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-brand-muted">
+                        {c.student_count}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-brand-muted">
+                        {c.assessments_completed}
+                      </td>
+                      <td className="px-4 py-3 text-brand-muted text-base">
+                        ›
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+      </>
     </DashboardLayout>
   );
 }

@@ -86,7 +86,7 @@ function SortHeader({
   return (
     <button
       onClick={() => onSort(field)}
-      className="flex items-center gap-1 font-inter text-[11px] uppercase tracking-wide text-gray-400 hover:text-gray-600 transition-colors"
+      className="flex items-center gap-1 font-['Inter'] text-xs uppercase tracking-wide text-gray-400 hover:text-gray-600 transition-colors"
       aria-label={`Sort by ${label}`}
     >
       {label}
@@ -157,22 +157,22 @@ export function SubscriptionsTable({
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left py-3 px-4 font-inter text-[11px] uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 font-['Inter'] text-xs uppercase tracking-wide text-gray-400">
                 School
               </th>
-              <th className="text-left py-3 px-4 font-inter text-[11px] uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 font-['Inter'] text-xs uppercase tracking-wide text-gray-400">
                 Plan
               </th>
-              <th className="text-left py-3 px-4 font-inter text-[11px] uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 font-['Inter'] text-xs uppercase tracking-wide text-gray-400">
                 Students
               </th>
-              <th className="text-left py-3 px-4 font-inter text-[11px] uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 font-['Inter'] text-xs uppercase tracking-wide text-gray-400">
                 Amount
               </th>
-              <th className="text-left py-3 px-4 font-inter text-[11px] uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 font-['Inter'] text-xs uppercase tracking-wide text-gray-400">
                 Status
               </th>
-              <th className="text-left py-3 px-4 font-inter text-[11px] uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 font-['Inter'] text-xs uppercase tracking-wide text-gray-400">
                 Next Billing
               </th>
             </tr>
@@ -221,7 +221,7 @@ export function SubscriptionsTable({
               />
             </th>
             <th className="text-left py-3 px-4">
-              <span className="font-inter text-[11px] uppercase tracking-wide text-gray-400">
+              <span className="font-['Inter'] text-xs uppercase tracking-wide text-gray-400">
                 Plan
               </span>
             </th>
@@ -253,7 +253,7 @@ export function SubscriptionsTable({
               />
             </th>
             <th className="text-left py-3 px-4">
-              <span className="font-inter text-[11px] uppercase tracking-wide text-gray-400">
+              <span className="font-['Inter'] text-xs uppercase tracking-wide text-gray-400">
                 Next Billing
               </span>
             </th>
@@ -272,7 +272,7 @@ export function SubscriptionsTable({
                 <td className="py-4 px-4">
                   <Link
                     to={`/kaihle-admin/schools/${subscription.school_id}`}
-                    className="font-inter text-sm font-medium text-gray-700 hover:text-brand-primary"
+                    className="font-['Inter'] text-sm font-medium text-gray-700 hover:text-brand-primary"
                   >
                     {subscription.school_name}
                   </Link>
@@ -287,13 +287,13 @@ export function SubscriptionsTable({
                   </span>
                 </td>
                 <td className="py-4 px-4">
-                  <span className="font-inter text-sm text-gray-700">
+                  <span className="font-['Inter'] text-sm text-gray-700">
                     {subscription.student_count}
                   </span>
                 </td>
                 <td className="py-4 px-4">
                   <span
-                    className={`font-inter text-sm font-medium ${
+                    className={`font-['Inter'] text-sm font-medium ${
                       annualValue > 0 ? "text-brand-primary" : "text-gray-400"
                     }`}
                   >
@@ -312,7 +312,7 @@ export function SubscriptionsTable({
                       }`}
                       aria-label={subscription.payment_status}
                     />
-                    <span className="font-inter text-sm text-gray-700">
+                    <span className="font-['Inter'] text-sm text-gray-700">
                       {subscription.payment_status === "PAST_DUE"
                         ? "Past Due"
                         : subscription.payment_status}
@@ -320,7 +320,7 @@ export function SubscriptionsTable({
                   </div>
                 </td>
                 <td className="py-4 px-4">
-                  <span className="font-inter text-sm text-gray-500">
+                  <span className="font-['Inter'] text-sm text-gray-500">
                     {subscription.next_billing_date
                       ? new Date(
                           subscription.next_billing_date,
@@ -343,7 +343,7 @@ export function SubscriptionsTable({
       </table>
       {sortedSubscriptions.length === 0 && (
         <div className="py-12 text-center">
-          <p className="font-inter text-sm text-gray-400">
+          <p className="font-['Inter'] text-sm text-gray-400">
             No subscriptions found
           </p>
         </div>

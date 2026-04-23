@@ -59,7 +59,7 @@ export function LogFilterBar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search logs..."
-          className="w-full text-sm font-inter placeholder-gray-400 bg-transparent outline-none"
+          className="w-full text-sm font-['Inter'] placeholder-gray-400 bg-transparent outline-none"
           data-testid="logs-search-input"
         />
       </div>
@@ -68,7 +68,7 @@ export function LogFilterBar({
       <select
         value={levelFilter}
         onChange={(e) => onLevelChange(e.target.value as LogLevel | "")}
-        className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm font-inter text-gray-600 w-36 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none min-h-[44px]"
+        className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm font-['Inter'] text-gray-600 w-36 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none min-h-[44px]"
         data-testid="logs-level-select"
       >
         <option value="">All levels</option>
@@ -80,7 +80,7 @@ export function LogFilterBar({
       </select>
 
       {/* Auto-scroll Toggle */}
-      <div className="flex items-center gap-2 text-sm font-inter text-gray-600">
+      <div className="flex items-center gap-2 text-sm font-['Inter'] text-gray-600">
         <span data-testid="logs-auto-scroll-label">Auto-scroll</span>
         <Switch
           checked={autoScroll}

@@ -50,7 +50,7 @@ jobs:
         run: pip install uv
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --frozen --all-extras
         working-directory: backend
 
       # ruff check: does NOT auto-fix — surfaces violations explicitly
@@ -116,7 +116,7 @@ jobs:
         run: pip install uv
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --frozen --all-extras
         working-directory: backend
 
       - name: Enable pgvector extension

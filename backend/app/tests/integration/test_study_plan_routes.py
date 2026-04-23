@@ -10,7 +10,9 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, require_full_access
 from app.main import app
@@ -26,12 +28,22 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-integration-tests")
 
 
-@pytest.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
+@pytest_asyncio.fixture
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create an async HTTP client for testing."""
+    from app.core.database import get_db
+
+    # Override database dependency
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+    app.dependency_overrides.clear()
 
 
 def _make_student_user(school_id: str | None = None) -> MagicMock:

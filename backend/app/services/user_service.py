@@ -95,7 +95,7 @@ class UserService:
     async def list_users(
         self,
         school_id: uuid.UUID,
-        role: str | None = None,
+        role: UserRole | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[User], int]:
@@ -105,8 +105,8 @@ class UserService:
             User.is_active.is_(True),
         )
         if role:
-            # Convert to string for type-safe comparison with User.role column
-            stmt = stmt.where(User.role == role)
+            # User.role is Mapped[str]; SQLAlchemy serialises the enum to its .value for comparison.
+            stmt = stmt.where(User.role == role.value)
 
         offset = (page - 1) * page_size
         result = await self.db.execute(stmt.order_by(User.last_name, User.first_name).offset(offset).limit(page_size))
@@ -114,7 +114,7 @@ class UserService:
 
         count_stmt = select(func.count()).select_from(User).where(User.school_id == school_id, User.is_active.is_(True))
         if role:
-            count_stmt = count_stmt.where(User.role == role)
+            count_stmt = count_stmt.where(User.role == role.value)
         total = await self.db.scalar(count_stmt) or 0
         return list(users), total
 

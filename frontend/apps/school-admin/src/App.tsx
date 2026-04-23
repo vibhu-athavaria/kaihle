@@ -6,7 +6,10 @@ import { LoginPage } from "./pages/LoginPage";
 import { PasswordSetupPage } from "./pages/PasswordSetupPage";
 import { SchoolOverview } from "./pages/SchoolOverview";
 import { UserManagement } from "./pages/UserManagement";
+import { UsersPage } from "./pages/UsersPage";
+import { StudentDetailPage } from "./pages/StudentDetailPage";
 import { ClassManagement } from "./pages/ClassManagement";
+import { AdminGapMapPage } from "./pages/AdminGapMapPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { BillingPage } from "./pages/BillingPage";
 import { SchoolAdminSettingsPage } from "./pages/settings/SchoolAdminSettingsPage";
@@ -39,8 +42,17 @@ export default function App() {
                   <ErrorBoundary role="school-admin">
                     <Routes>
                       <Route path="dashboard" element={<SchoolOverview />} />
-                      <Route path="users" element={<UserManagement />} />
+                      <Route path="users" element={<UsersPage />} />
+                      <Route
+                        path="users/students/:studentId"
+                        element={<StudentDetailPage />}
+                      />
+                      <Route path="users/legacy" element={<UserManagement />} />
                       <Route path="classes" element={<ClassManagement />} />
+                      <Route
+                        path="classes/:classId/gap-map"
+                        element={<AdminGapMapPage />}
+                      />
                       <Route
                         path="settings"
                         element={<SchoolAdminSettingsPage />}

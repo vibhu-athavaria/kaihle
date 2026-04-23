@@ -43,43 +43,35 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class StudentListItem(BaseModel):
-    """Extended user response for students in the School Admin user list.
+class UserListResponse(BaseModel):
+    """Schema for paginated user list response."""
 
-    Includes mastery aggregates from AnalyticsService so the School Admin
-    can see at a glance which students need attention.
-    """
-
-    id: uuid.UUID
-    email: str
-    role: str
-    first_name: str
-    last_name: str
-    is_active: bool
-    school_id: uuid.UUID | None
-    last_login_at: datetime | None = None
-    # Mastery fields — None means no assessments have been taken yet.
-    worst_mastery: float | None = None
-    class_count: int = 0
-    needs_work_class_count: int = 0
-    diagnostic_completed: bool = False
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class StudentListResponse(BaseModel):
-    """Paginated response for STUDENT role listing."""
-
-    users: list[StudentListItem]
+    users: list[UserResponse]
     total: int
     page: int
     page_size: int
 
 
-class UserListResponse(BaseModel):
-    """Schema for paginated user list response."""
+class StudentListItem(BaseModel):
+    """Schema for a single student in the school admin student list."""
 
-    users: list[UserResponse]
+    id: uuid.UUID
+    first_name: str
+    last_name: str
+    email: str
+    is_active: bool
+    last_login_at: datetime | None
+    # NULL = no enrollments yet (or no gap states recorded)
+    worst_mastery: float | None
+    class_count: int
+    needs_work_class_count: int
+    diagnostic_completed: bool
+
+
+class StudentListResponse(BaseModel):
+    """Paginated student list with mastery and diagnostic enrichment."""
+
+    users: list[StudentListItem]
     total: int
     page: int
     page_size: int

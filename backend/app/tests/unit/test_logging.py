@@ -7,7 +7,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-logging-tests")
 import json
 import logging
 import uuid
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Generator
 from typing import Any
 
 import pytest
@@ -44,12 +44,26 @@ def _build_test_app(
 
 
 @pytest.fixture(autouse=True)
-def _setup_logging() -> None:
+def _setup_logging() -> Generator[None, None, None]:
     """Ensure structlog is configured before each test.
 
-    Use reset_defaults() to clear both the configuration AND the logger cache,
-    then reconfigure with our test settings.
+    Two sources of pollution are cleared on every test:
+
+    1. structlog global config — another test may have called structlog.configure()
+       with different processors.  reset_defaults() wipes the global config AND
+       the internal logger cache so get_logger() always returns a fresh logger.
+
+    2. settings.jwt_secret_key — settings is a module-level singleton instantiated
+       at import time.  If app.core.config is imported before the os.environ.setdefault
+       at the top of this file takes effect (which happens when any other test module
+       imports it first), jwt_secret_key will be "" and the middleware JWT decode
+       silently returns (None, None).  We patch it directly on the singleton to
+       guarantee the middleware can decode tokens issued by create_access_token().
     """
+    from unittest.mock import patch
+
+    from app.core.config import settings
+
     structlog.reset_defaults()
     structlog.contextvars.clear_contextvars()
     structlog.configure(
@@ -65,6 +79,12 @@ def _setup_logging() -> None:
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=False,
     )
+
+    with patch.object(settings, "jwt_secret_key", "test-secret-key-for-logging-tests"):
+        yield
+
+    structlog.reset_defaults()
+    structlog.contextvars.clear_contextvars()
 
 
 # ---------------------------------------------------------------------------

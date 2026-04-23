@@ -177,7 +177,7 @@ export function AdminQuestionReview() {
       <div className="bg-white border border-[#eaecf0] rounded-lg p-3 mb-4 space-y-3">
         <div className="flex flex-wrap gap-2">
           <select
-            className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-36"
+            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-36"
             value={curriculumId}
             onChange={(e) => setFilter("curriculum_id", e.target.value)}
           >
@@ -189,7 +189,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-28"
+            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-28"
             value={gradeId}
             onChange={(e) => setFilter("grade_id", e.target.value)}
           >
@@ -201,7 +201,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-32"
+            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-32"
             value={subjectId}
             onChange={(e) => setFilter("subject_id", e.target.value)}
           >
@@ -213,7 +213,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-36"
+            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-36"
             value={topicId}
             onChange={(e) => setFilter("topic_id", e.target.value)}
           >
@@ -225,7 +225,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-36"
+            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-36"
             value={subtopicId}
             onChange={(e) => setFilter("subtopic_id", e.target.value)}
           >
@@ -237,7 +237,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-40"
+            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-40"
             value={curriculumTopicId}
             onChange={(e) => setFilter("curriculum_topic_id", e.target.value)}
           >
@@ -249,7 +249,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-32"
+            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-32"
             value={questionType}
             onChange={(e) => setFilter("question_type", e.target.value)}
           >
@@ -265,13 +265,13 @@ export function AdminQuestionReview() {
           <input
             type="text"
             placeholder="🔍 Search question text…"
-            className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] flex-1"
+            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] flex-1"
             value={search}
             onChange={(e) => setFilter("search", e.target.value)}
           />
           <button
             onClick={clearAll}
-            className="text-[11px] font-semibold text-[#6b7280] hover:text-[#374151] px-2 py-1"
+            className="text-xs font-semibold text-[#6b7280] hover:text-[#374151] px-2 py-1"
           >
             Clear all
           </button>
@@ -281,11 +281,11 @@ export function AdminQuestionReview() {
       {/* Table card */}
       <div className="bg-white border border-[#eaecf0] rounded-lg overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#eaecf0]">
-          <h2 className="text-[11px] font-semibold text-[#374151]">
+          <h2 className="text-xs font-semibold text-[#374151]">
             Assessment Questions
           </h2>
           {data && (
-            <span className="text-[10px] text-[#6b7280]">
+            <span className="text-xs text-[#6b7280]">
               Showing {startItem}–{endItem} of {data.total} questions
             </span>
           )}
@@ -295,31 +295,31 @@ export function AdminQuestionReview() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-[#eaecf0]">
-                <th className="text-left py-2 px-3 text-[8px] font-bold uppercase tracking-wider text-[#9ca3af]">
+                <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-wider text-[#9ca3af]">
                   Question
                 </th>
-                <th className="text-left py-2 px-3 text-[8px] font-bold uppercase tracking-wider text-[#9ca3af]">
+                <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-wider text-[#9ca3af]">
                   Type
                 </th>
-                <th className="text-left py-2 px-3 text-[8px] font-bold uppercase tracking-wider text-[#9ca3af]">
+                <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-wider text-[#9ca3af]">
                   Curr.
                 </th>
-                <th className="text-left py-2 px-3 text-[8px] font-bold uppercase tracking-wider text-[#9ca3af]">
+                <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-wider text-[#9ca3af]">
                   Gr
                 </th>
-                <th className="text-left py-2 px-3 text-[8px] font-bold uppercase tracking-wider text-[#9ca3af]">
+                <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-wider text-[#9ca3af]">
                   Subj
                 </th>
-                <th className="text-left py-2 px-3 text-[8px] font-bold uppercase tracking-wider text-[#9ca3af]">
+                <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-wider text-[#9ca3af]">
                   Topic
                 </th>
-                <th className="text-left py-2 px-3 text-[8px] font-bold uppercase tracking-wider text-[#9ca3af]">
+                <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-wider text-[#9ca3af]">
                   Subtopic
                 </th>
-                <th className="text-left py-2 px-3 text-[8px] font-bold uppercase tracking-wider text-[#9ca3af]">
+                <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-wider text-[#9ca3af]">
                   Diff
                 </th>
-                <th className="text-left py-2 px-3 text-[8px] font-bold uppercase tracking-wider text-[#9ca3af]">
+                <th className="text-left py-2 px-3 text-xs font-bold uppercase tracking-wider text-[#9ca3af]">
                   Edit
                 </th>
               </tr>
@@ -341,12 +341,12 @@ export function AdminQuestionReview() {
                       key={q.id}
                       className="border-b border-[#eaecf0] hover:bg-[#fafafa] transition-colors"
                     >
-                      <td className="py-2 px-3 text-[10px] text-[#374151] max-w-xs truncate">
+                      <td className="py-2 px-3 text-xs text-[#374151] max-w-xs truncate">
                         {q.question_text.slice(0, 80)}…
                       </td>
                       <td className="py-2 px-3">
                         <span
-                          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                          className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
                             TYPE_PILL[q.question_type] ||
                             "bg-gray-50 text-gray-600"
                           }`}
@@ -354,23 +354,23 @@ export function AdminQuestionReview() {
                           {q.question_type}
                         </span>
                       </td>
-                      <td className="py-2 px-3 text-[10px] text-[#374151]">
+                      <td className="py-2 px-3 text-xs text-[#374151]">
                         {q.curriculum_name?.slice(0, 8) ?? "—"}
                       </td>
-                      <td className="py-2 px-3 text-[10px] text-[#374151]">
+                      <td className="py-2 px-3 text-xs text-[#374151]">
                         {q.grade_name?.replace("Grade ", "") ?? "—"}
                       </td>
-                      <td className="py-2 px-3 text-[10px] text-[#374151]">
+                      <td className="py-2 px-3 text-xs text-[#374151]">
                         {q.subject_name?.slice(0, 6) ?? "—"}
                       </td>
-                      <td className="py-2 px-3 text-[10px] text-[#374151]">
+                      <td className="py-2 px-3 text-xs text-[#374151]">
                         {q.topic_name?.slice(0, 10) ?? "—"}
                       </td>
-                      <td className="py-2 px-3 text-[10px] text-[#374151]">
+                      <td className="py-2 px-3 text-xs text-[#374151]">
                         {q.subtopic_name?.slice(0, 10) ?? "—"}
                       </td>
                       <td
-                        className={`py-2 px-3 text-[10px] font-medium ${diff.cls}`}
+                        className={`py-2 px-3 text-xs font-medium ${diff.cls}`}
                       >
                         {diff.label}
                       </td>
@@ -390,7 +390,7 @@ export function AdminQuestionReview() {
                 <tr>
                   <td
                     colSpan={9}
-                    className="py-12 text-center text-[12px] text-[#9ca3af]"
+                    className="py-12 text-center text-xs text-[#9ca3af]"
                   >
                     No questions found
                   </td>
@@ -406,7 +406,7 @@ export function AdminQuestionReview() {
             <button
               onClick={() => setFilter("page", String(page - 1))}
               disabled={page <= 1}
-              className="w-8 h-8 rounded border border-[#eaecf0] bg-white text-[#374151] text-[11px] font-semibold hover:bg-[#f3f4f6] disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-8 h-8 rounded border border-[#eaecf0] bg-white text-[#374151] text-xs font-semibold hover:bg-[#f3f4f6] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               ←
             </button>
@@ -417,7 +417,7 @@ export function AdminQuestionReview() {
                 <button
                   key={p}
                   onClick={() => setFilter("page", String(p))}
-                  className={`w-8 h-8 rounded border text-[11px] font-semibold ${
+                  className={`w-8 h-8 rounded border text-xs font-semibold ${
                     p === page
                       ? "bg-[#1a5c38] border-[#1a5c38] text-white"
                       : "border-[#eaecf0] bg-white text-[#374151] hover:bg-[#f3f4f6]"
@@ -430,7 +430,7 @@ export function AdminQuestionReview() {
             <button
               onClick={() => setFilter("page", String(page + 1))}
               disabled={page >= totalPages}
-              className="w-8 h-8 rounded border border-[#eaecf0] bg-white text-[#374151] text-[11px] font-semibold hover:bg-[#f3f4f6] disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-8 h-8 rounded border border-[#eaecf0] bg-white text-[#374151] text-xs font-semibold hover:bg-[#f3f4f6] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               →
             </button>
@@ -602,7 +602,7 @@ function EditModal({
       <div className="bg-white rounded-lg w-full max-w-[600px] shadow-xl">
         {/* Header */}
         <div className="px-5 py-4 border-b border-[#eaecf0] flex items-center justify-between">
-          <h2 className="text-[13px] font-semibold text-[#111827]">
+          <h2 className="text-sm font-semibold text-[#111827]">
             Edit Question
           </h2>
           <button
@@ -617,16 +617,16 @@ function EditModal({
         <div className="overflow-y-auto max-h-[70vh] px-5 py-4 space-y-5">
           {/* Curriculum Context */}
           <div>
-            <div className="text-[9px] font-bold uppercase tracking-widest text-[#9ca3af] border-b border-[#f3f4f6] pb-1 mb-3">
+            <div className="text-xs font-bold uppercase tracking-widest text-[#9ca3af] border-b border-[#f3f4f6] pb-1 mb-3">
               CURRICULUM CONTEXT
             </div>
-            <p className="text-[10px] text-[#6b7280] mb-2">
+            <p className="text-xs text-[#6b7280] mb-2">
               Current:{" "}
               <span className="text-[#374151]">{currentContext || "None"}</span>
             </p>
             <div className="grid grid-cols-5 gap-2">
               <select
-                className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
+                className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
                 value={selectedCurriculum}
                 onChange={(e) => handleCurriculumChange(e.target.value)}
               >
@@ -638,7 +638,7 @@ function EditModal({
                 ))}
               </select>
               <select
-                className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
+                className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
                 value={selectedGrade}
                 onChange={(e) => handleGradeChange(e.target.value)}
               >
@@ -650,7 +650,7 @@ function EditModal({
                 ))}
               </select>
               <select
-                className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
+                className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
                 value={selectedSubject}
                 onChange={(e) => handleSubjectChange(e.target.value)}
               >
@@ -662,7 +662,7 @@ function EditModal({
                 ))}
               </select>
               <select
-                className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
+                className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
                 value={selectedTopic}
                 onChange={(e) => handleTopicChange(e.target.value)}
               >
@@ -674,7 +674,7 @@ function EditModal({
                 ))}
               </select>
               <select
-                className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
+                className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
                 value={selectedSubtopic}
                 onChange={(e) => setSelectedSubtopic(e.target.value)}
               >
@@ -690,16 +690,16 @@ function EditModal({
 
           {/* Content */}
           <div>
-            <div className="text-[9px] font-bold uppercase tracking-widest text-[#9ca3af] border-b border-[#f3f4f6] pb-1 mb-3">
+            <div className="text-xs font-bold uppercase tracking-widest text-[#9ca3af] border-b border-[#f3f4f6] pb-1 mb-3">
               CONTENT
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-[10px] text-[#374151] font-medium mb-1 block">
+                <label className="text-xs text-[#374151] font-medium mb-1 block">
                   Question Text <span className="text-[#ef4444]">*</span>
                 </label>
                 <textarea
-                  className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full resize-none"
+                  className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full resize-none"
                   rows={4}
                   value={form.question_text}
                   onChange={(e) =>
@@ -708,11 +708,11 @@ function EditModal({
                 />
               </div>
               <div>
-                <label className="text-[10px] text-[#374151] font-medium mb-1 block">
+                <label className="text-xs text-[#374151] font-medium mb-1 block">
                   Question Type <span className="text-[#ef4444]">*</span>
                 </label>
                 <select
-                  className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full"
+                  className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full"
                   value={form.question_type}
                   onChange={(e) =>
                     setForm({
@@ -732,11 +732,11 @@ function EditModal({
                 </select>
               </div>
               <div>
-                <label className="text-[10px] text-[#374151] font-medium mb-1 block">
+                <label className="text-xs text-[#374151] font-medium mb-1 block">
                   Correct Answer <span className="text-[#ef4444]">*</span>
                 </label>
                 <textarea
-                  className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full resize-none"
+                  className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full resize-none"
                   rows={2}
                   value={form.correct_answer}
                   onChange={(e) =>
@@ -745,11 +745,11 @@ function EditModal({
                 />
               </div>
               <div>
-                <label className="text-[10px] text-[#374151] font-medium mb-1 block">
+                <label className="text-xs text-[#374151] font-medium mb-1 block">
                   Explanation
                 </label>
                 <textarea
-                  className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full resize-none"
+                  className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full resize-none"
                   rows={3}
                   value={form.explanation}
                   onChange={(e) =>
@@ -758,7 +758,7 @@ function EditModal({
                 />
               </div>
               <div>
-                <label className="text-[10px] text-[#374151] font-medium mb-1 block">
+                <label className="text-xs text-[#374151] font-medium mb-1 block">
                   Difficulty (1.0–5.0)
                 </label>
                 <input
@@ -766,7 +766,7 @@ function EditModal({
                   min="1"
                   max="5"
                   step="0.1"
-                  className="border border-[#eaecf0] rounded-md text-[12px] text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full"
+                  className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full"
                   value={form.difficulty_level}
                   onChange={(e) =>
                     setForm({ ...form, difficulty_level: e.target.value })
@@ -774,7 +774,7 @@ function EditModal({
                 />
               </div>
               <div>
-                <label className="text-[10px] text-[#374151] font-medium mb-1 block">
+                <label className="text-xs text-[#374151] font-medium mb-1 block">
                   Active
                 </label>
                 <button
@@ -804,21 +804,21 @@ function EditModal({
           {error && (
             <span
               role="alert"
-              className="text-[10px] text-[#ef4444] text-right mr-auto"
+              className="text-xs text-[#ef4444] text-right mr-auto"
             >
               {error}
             </span>
           )}
           <button
             onClick={onClose}
-            className="border border-[#eaecf0] bg-white text-[#374151] text-[11px] font-semibold px-4 py-2 rounded-md hover:bg-[#f3f4f6]"
+            className="border border-[#eaecf0] bg-white text-[#374151] text-xs font-semibold px-4 py-2 rounded-md hover:bg-[#f3f4f6]"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving || !isFormValid}
-            className="bg-[#1a5c38] text-white text-[11px] font-semibold px-4 py-2 rounded-md hover:bg-[#155231] disabled:opacity-60 disabled:cursor-not-allowed"
+            className="bg-[#1a5c38] text-white text-xs font-semibold px-4 py-2 rounded-md hover:bg-[#155231] disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {saving ? "Saving…" : "Save changes"}
           </button>

@@ -1,365 +1,282 @@
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
-import { Card } from "@kaihle/ui";
-import { Badge } from "@kaihle/ui";
-import { Button } from "@kaihle/ui";
-import { useAuth } from "@kaihle/auth";
-import { UserRole } from "@kaihle/types";
-import { Plus, X, BookOpen } from "lucide-react";
-import {
-  useSchoolClasses,
-  useSchoolUsers,
-  useUpdateClass,
-  useEnrollStudents,
-  type Class,
-  type User as UserType,
-} from "../hooks/useSchoolAdmin";
-import { CreateClassModal } from "./CreateClassModal";
-
-function getInitials(firstName: string, lastName: string): string {
-  const first = firstName?.[0] || "";
-  const last = lastName?.[0] || "";
-  return (first + last).toUpperCase() || "?";
-}
-
-function ClassDetailPanel({
-  cls,
-  teachers,
-  students,
-  onClose,
-  onUpdateTeacher,
-  onEnrollStudents,
-  onDeactivate,
-}: {
-  cls: Class;
-  teachers: UserType[];
-  students: UserType[];
-  onClose: () => void;
-  onUpdateTeacher: (teacherId: string) => void;
-  onEnrollStudents: (studentIds: string[]) => void;
-  onDeactivate: () => void;
-}) {
-  const [selectedTeacherId, setSelectedTeacherId] = useState(
-    cls.teacher_id || "",
-  );
-  const [isEnrollOpen, setIsEnrollOpen] = useState(false);
-  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
-
-  const handleTeacherChange = () => {
-    if (selectedTeacherId !== cls.teacher_id) {
-      onUpdateTeacher(selectedTeacherId);
-    }
-  };
-
-  const toggleStudent = (studentId: string) => {
-    setSelectedStudents((prev) =>
-      prev.includes(studentId)
-        ? prev.filter((id) => id !== studentId)
-        : [...prev, studentId],
-    );
-  };
-
-  const handleEnroll = () => {
-    if (selectedStudents.length > 0) {
-      onEnrollStudents(selectedStudents);
-      setIsEnrollOpen(false);
-      setSelectedStudents([]);
-    }
-  };
-
-  const enrolledStudents = students.slice(0, 10);
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
-      <div className="fixed right-0 top-0 h-full w-80 bg-white border-l border-brand-border shadow-xl z-50 overflow-y-auto animate-in slide-in-from-right duration-200">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-display font-bold text-brand-ink">
-              Class Details
-            </h3>
-            <button
-              onClick={onClose}
-              className="p-1 hover:bg-gray-100 rounded-full"
-              aria-label="Close"
-            >
-              <X className="w-5 h-5 text-brand-muted" />
-            </button>
-          </div>
-
-          <div className="space-y-6">
-            <div>
-              <label className="block text-xs font-bold uppercase text-brand-muted mb-1">
-                Class Name
-              </label>
-              <p className="text-brand-ink font-medium">{cls.name}</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase text-brand-muted mb-1">
-                  Subject
-                </label>
-                <p className="text-brand-ink font-medium">{cls.subject}</p>
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase text-brand-muted mb-1">
-                  Grade
-                </label>
-                <p className="text-brand-ink font-medium">Grade {cls.grade}</p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase text-brand-muted mb-1">
-                Teacher
-              </label>
-              <select
-                value={selectedTeacherId}
-                onChange={(e) => setSelectedTeacherId(e.target.value)}
-                onBlur={handleTeacherChange}
-                className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-              >
-                <option value="">Unassigned</option>
-                {teachers?.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.first_name} {t.last_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold uppercase text-brand-muted">
-                  Enrolled Students
-                </label>
-                <button
-                  onClick={() => setIsEnrollOpen(!isEnrollOpen)}
-                  className="text-xs text-brand-primary hover:underline font-medium"
-                >
-                  + Enroll
-                </button>
-              </div>
-
-              {isEnrollOpen && (
-                <div className="mb-3 p-3 bg-brand-light rounded-lg border border-brand-mid">
-                  <p className="text-xs text-brand-muted mb-2">
-                    Select students to enroll:
-                  </p>
-                  <div className="max-h-40 overflow-y-auto space-y-1">
-                    {students.map((s) => (
-                      <label
-                        key={s.id}
-                        className="flex items-center gap-2 text-sm text-brand-ink"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedStudents.includes(s.id)}
-                          onChange={() => toggleStudent(s.id)}
-                          className="rounded border-brand-border"
-                        />
-                        {s.first_name} {s.last_name}
-                      </label>
-                    ))}
-                  </div>
-                  {selectedStudents.length > 0 && (
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={handleEnroll}
-                      className="mt-2 w-full"
-                    >
-                      Enroll {selectedStudents.length} student(s)
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {enrolledStudents.length > 0 ? (
-                <div className="space-y-2">
-                  {enrolledStudents.map((s) => (
-                    <div
-                      key={s.id}
-                      className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-brand-light text-brand-primary text-xs font-bold flex items-center justify-center">
-                          {getInitials(s.first_name, s.last_name)}
-                        </div>
-                        <span className="text-sm text-brand-ink">
-                          {s.first_name} {s.last_name}
-                        </span>
-                      </div>
-                      <Badge variant="success">Active</Badge>
-                    </div>
-                  ))}
-                  {students.length > 10 && (
-                    <p className="text-xs text-brand-muted text-center">
-                      +{students.length - 10} more students
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-brand-muted">
-                  No students enrolled yet.
-                </p>
-              )}
-            </div>
-
-            <div className="pt-4 border-t border-brand-border">
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={onDeactivate}
-                className="w-full"
-              >
-                Deactivate class
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
+import { getMasteryStyle } from "@kaihle/types";
+import { useSchoolClasses, type ClassSummary } from "../hooks/useSchoolAdmin";
 
 export function ClassManagement() {
-  const { logout } = useAuth();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedClass, setSelectedClass] = useState<Class | null>(null);
+  const navigate = useNavigate();
+  const { data: classes = [], isLoading, isError } = useSchoolClasses();
+  const [filter, setFilter] = useState<"all" | "attention">("all");
+  const [gradeFilter, setGradeFilter] = useState<number | null>(null);
+  const [subjectFilter, setSubjectFilter] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const { data: classes, isLoading: classesLoading } = useSchoolClasses();
-  const { data: teachers } = useSchoolUsers(UserRole.TEACHER);
-  const { data: students } = useSchoolUsers(UserRole.STUDENT);
-  const updateClass = useUpdateClass();
-  const enrollStudents = useEnrollStudents(selectedClass?.id || "");
+  const attentionCount = classes.filter(
+    (c) => c.diagnostic_status !== "has_data",
+  ).length;
 
-  const handleUpdateTeacher = (teacherId: string) => {
-    if (selectedClass) {
-      updateClass.mutate({
-        classId: selectedClass.id,
-        teacher_id: teacherId || undefined,
-      });
-      setSelectedClass({ ...selectedClass, teacher_id: teacherId });
-    }
-  };
+  const filtered = classes
+    .filter((c) => {
+      if (filter === "attention") return c.diagnostic_status !== "has_data";
+      return true;
+    })
+    .filter((c) => gradeFilter === null || c.grade_level === gradeFilter)
+    .filter((c) => subjectFilter === null || c.subject_name === subjectFilter)
+    .filter(
+      (c) =>
+        !searchQuery ||
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()),
+    );
 
-  const handleEnrollStudents = (studentIds: string[]) => {
-    if (selectedClass) {
-      enrollStudents.mutate({ student_ids: studentIds });
-    }
-  };
+  const grades = [...new Set(classes.map((c) => c.grade_level))].sort();
+  const subjects = [...new Set(classes.map((c) => c.subject_name))].sort();
 
-  const handleDeactivate = () => {
-    if (selectedClass) {
-      setSelectedClass(null);
-    }
-  };
+  if (isLoading)
+    return (
+      <DashboardLayout variant="school-admin" pageTitle="Classes">
+        <div className="animate-pulse space-y-3">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-12 bg-role-school-border rounded-lg" />
+          ))}
+        </div>
+      </DashboardLayout>
+    );
+
+  if (isError)
+    return (
+      <DashboardLayout variant="school-admin" pageTitle="Classes">
+        <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
+          Failed to load data. Please refresh the page.
+        </div>
+      </DashboardLayout>
+    );
 
   return (
-    <DashboardLayout
-      variant="school-admin"
-      pageTitle="Classes"
-      pageSubtitle="Manage classes, assign teachers, and enroll students"
-      onLogout={logout}
-      topNavAction={
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => setIsModalOpen(true)}
-        >
-          <Plus className="w-4 h-4 mr-1" />
-          Create class
-        </Button>
-      }
-    >
-      <div className="space-y-6">
-        <Card
-          variant="default"
-          className="bg-white border-role-school-border overflow-hidden"
-        >
-          {classesLoading ? (
-            <div className="p-8 text-center text-brand-muted">Loading...</div>
-          ) : classes && classes.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-brand-border text-left">
-                    <th className="py-3 px-4 text-xs font-bold uppercase text-brand-muted">
-                      Class
-                    </th>
-                    <th className="py-3 px-4 text-xs font-bold uppercase text-brand-muted">
-                      Subject
-                    </th>
-                    <th className="py-3 px-4 text-xs font-bold uppercase text-brand-muted">
-                      Grade
-                    </th>
-                    <th className="py-3 px-4 text-xs font-bold uppercase text-brand-muted">
-                      Teacher
-                    </th>
-                    <th className="py-3 px-4 text-xs font-bold uppercase text-brand-muted">
-                      Students
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {classes.map((cls) => (
-                    <tr
-                      key={cls.id}
-                      onClick={() => setSelectedClass(cls)}
-                      className="border-b border-brand-border-soft last:border-0 hover:bg-brand-light/30 cursor-pointer"
-                    >
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="w-4 h-4 text-brand-primary" />
-                          <span className="text-sm font-medium text-brand-ink">
-                            {cls.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-brand-body">
-                        {cls.subject}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-brand-body">
-                        {cls.grade}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-brand-body">
-                        {cls.teacher_name || "Unassigned"}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-brand-body">
-                        {cls.student_count}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-8 text-center text-brand-muted">
-              No classes yet. Create your first class to get started.
-            </div>
-          )}
-        </Card>
+    <DashboardLayout variant="school-admin" pageTitle="Classes">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 bg-white border border-role-school-border rounded-lg px-3 py-[7px]">
+            <svg
+              className="w-3 h-3 text-brand-muted"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="text-xs outline-none font-sans bg-transparent text-brand-ink placeholder:text-brand-muted w-40"
+              placeholder="Search classes…"
+              aria-label="Search classes"
+            />
+          </div>
+          <button
+            onClick={() =>
+              setFilter(filter === "attention" ? "all" : "attention")
+            }
+            className={`px-3 py-[5px] rounded-full text-xs font-semibold border transition-colors ${
+              filter === "attention"
+                ? "bg-brand-primary text-white border-brand-primary"
+                : "bg-white text-brand-body border-role-school-border"
+            }`}
+          >
+            Needs attention {attentionCount > 0 && `(${attentionCount})`}
+          </button>
+          <select
+            onChange={(e) =>
+              setGradeFilter(e.target.value ? Number(e.target.value) : null)
+            }
+            className="px-3 py-[5px] rounded-full text-xs font-semibold border border-role-school-border bg-white text-brand-body outline-none"
+          >
+            <option value="">All grades</option>
+            {grades.map((g) => (
+              <option key={g} value={g}>
+                Grade {g}
+              </option>
+            ))}
+          </select>
+          <select
+            onChange={(e) => setSubjectFilter(e.target.value || null)}
+            className="px-3 py-[5px] rounded-full text-xs font-semibold border border-role-school-border bg-white text-brand-body outline-none"
+          >
+            <option value="">All subjects</option>
+            {subjects.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-brand-muted">
+            {filtered.length} classes
+          </span>
+        </div>
+        <button className="bg-brand-primary text-white rounded-full px-4 py-[6px] text-xs font-bold flex items-center gap-1">
+          <svg
+            className="w-3 h-3"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          New class
+        </button>
+      </div>
 
-        <CreateClassModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onCreated={() => {}}
-        />
-
-        {selectedClass && (
-          <ClassDetailPanel
-            cls={selectedClass}
-            teachers={teachers || []}
-            students={students || []}
-            onClose={() => setSelectedClass(null)}
-            onUpdateTeacher={handleUpdateTeacher}
-            onEnrollStudents={handleEnrollStudents}
-            onDeactivate={handleDeactivate}
-          />
+      <div className="bg-white border border-role-school-border rounded-xl overflow-hidden">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-[#fafcfa] border-b border-role-school-border">
+              {[
+                "Class",
+                "Subject",
+                "Grade",
+                "Teacher",
+                "Mastery",
+                "Students",
+                "",
+              ].map((h) => (
+                <th
+                  key={h}
+                  className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((c) => (
+              <ClassRow
+                key={c.id}
+                cls={c}
+                onClick={() =>
+                  navigate(`/school-admin/classes/${c.id}/gap-map`)
+                }
+              />
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && (
+          <div className="py-16 text-center text-brand-muted text-sm">
+            No classes match this filter.
+          </div>
         )}
       </div>
+
+      <div className="flex gap-5 mt-3 px-1">
+        {[
+          { dotClass: "bg-brand-red", label: "Needs Work" },
+          { dotClass: "bg-brand-amber", label: "Developing" },
+          { dotClass: "bg-brand-green", label: "Strong" },
+          {
+            dotClass: "border-[1.5px] border-gray-300 bg-transparent",
+            label: "Diagnostic pending",
+          },
+          {
+            dotClass: "bg-[#fffbeb] border-[1.5px] border-brand-amber",
+            label: "Setup needed",
+          },
+        ].map(({ dotClass, label }) => (
+          <div
+            key={label}
+            className="flex items-center gap-1.5 text-xs text-brand-body font-semibold"
+          >
+            <span
+              className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotClass}`}
+            />
+            {label}
+          </div>
+        ))}
+      </div>
     </DashboardLayout>
+  );
+}
+
+function ClassRow({
+  cls,
+  onClick,
+}: {
+  cls: ClassSummary;
+  onClick: () => void;
+}) {
+  const isSetup = cls.diagnostic_status === "setup_needed";
+  const isPending = cls.diagnostic_status === "pending";
+  const { dotClass, label } = getMasteryStyle(cls.avg_mastery);
+
+  function handleKeyDown(e: KeyboardEvent<HTMLTableRowElement>) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onClick();
+    }
+  }
+
+  return (
+    <tr
+      onClick={onClick}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="button"
+      aria-label={`View gap map for ${cls.name}`}
+      className={`border-b border-[#f0f5ee] cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-inset ${
+        isSetup ? "bg-[#fffbeb] hover:bg-[#fef9c3]" : "hover:bg-[#fafcfa]"
+      }`}
+    >
+      <td className="px-4 py-3 font-bold text-sm text-brand-ink">{cls.name}</td>
+      <td className="px-4 py-3 text-xs font-semibold text-brand-body">
+        {cls.subject_name}
+      </td>
+      <td className="px-4 py-3 text-xs text-brand-muted">
+        Grade {cls.grade_level}
+      </td>
+      <td className="px-4 py-3">
+        {isSetup ? (
+          <span className="flex items-center gap-1.5 text-xs font-bold text-brand-amber">
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            Assign teacher
+          </span>
+        ) : (
+          <span className="text-xs text-brand-body">{cls.teacher_name}</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {isPending ? (
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full border-[1.5px] border-gray-300" />
+            <span className="text-xs text-brand-muted">Diagnostic pending</span>
+          </div>
+        ) : isSetup ? (
+          <span className="text-brand-muted">—</span>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2.5 h-2.5 rounded-full ${dotClass}`} />
+            <span className="text-xs font-semibold text-brand-ink">
+              {label}
+            </span>
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-3 text-xs text-brand-muted">
+        {cls.student_count}
+      </td>
+      <td className="px-4 py-3 text-brand-muted text-base">›</td>
+    </tr>
   );
 }
