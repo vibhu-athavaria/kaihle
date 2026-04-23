@@ -14,16 +14,19 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models import Class, SubtopicContent
-from app.models.curriculum import Subtopic
+from app.models.curriculum import Grade, Subject, Subtopic
+from app.models.gap import GapState
+from app.models.school import ClassEnrollment
 from app.models.subtopic_content import ContentType
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.schemas.teacher_content import (
     TeacherExplanationReviewDetailResponse,
     TeacherExplanationReviewItem,
@@ -244,3 +247,114 @@ async def list_all_teacher_explanation_review(
     )
 
     return [TeacherExplanationReviewWithClass(**item) for item in items]
+
+
+# =============================================================================
+# GET /teachers/{teacher_id} — teacher detail with assigned classes
+# =============================================================================
+
+
+class AssignedClassSummary(BaseModel):
+    """Summary of a class assigned to a teacher."""
+
+    class_id: UUID
+    class_name: str
+    subject_name: str
+    grade_level: int
+    student_count: int
+    avg_mastery: float | None
+
+
+class TeacherDetailResponse(BaseModel):
+    """Full teacher profile for school-admin detail view."""
+
+    id: UUID
+    first_name: str
+    last_name: str
+    email: str
+    is_active: bool
+    assigned_classes: list[AssignedClassSummary]
+
+
+@teacher_router.get("/{teacher_id}", response_model=TeacherDetailResponse)
+async def get_teacher_detail(
+    teacher_id: UUID = Path(...),
+    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> TeacherDetailResponse:
+    """Get full teacher detail including assigned classes.
+
+    Auth: SCHOOL_ADMIN (same school) or KAIHLE_ADMIN only.
+
+    Raises:
+        404: If teacher not found.
+    """
+    teacher_query = select(User).where(User.id == teacher_id, User.role == UserRole.TEACHER)
+    if current_user.role == UserRole.SCHOOL_ADMIN:
+        teacher_query = teacher_query.where(User.school_id == current_user.school_id)
+
+    teacher_result = await db.execute(teacher_query)
+    teacher = teacher_result.scalar_one_or_none()
+
+    if teacher is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Teacher not found",
+        )
+
+    # Fetch all active classes for this teacher
+    classes_query = (
+        select(Class, Subject, Grade)
+        .join(Subject, Subject.id == Class.subject_id)
+        .join(Grade, Grade.id == Class.grade_id)
+        .where(
+            Class.teacher_id == teacher_id,
+            Class.is_active.is_(True),
+        )
+        .order_by(Class.name)
+    )
+    classes_result = await db.execute(classes_query)
+    class_rows = classes_result.all()
+
+    assigned_classes: list[AssignedClassSummary] = []
+    for class_, subject, grade in class_rows:
+        # Count active enrollments
+        count_result = await db.execute(
+            select(func.count(ClassEnrollment.class_id)).where(
+                ClassEnrollment.class_id == class_.id,
+                ClassEnrollment.is_active.is_(True),
+            )
+        )
+        student_count = count_result.scalar() or 0
+
+        # Average mastery score across all gap states in this class
+        avg_result = await db.execute(select(func.avg(GapState.mastery_score)).where(GapState.class_id == class_.id))
+        avg_mastery: float | None = avg_result.scalar()
+
+        assigned_classes.append(
+            AssignedClassSummary(
+                class_id=class_.id,
+                class_name=class_.name,
+                subject_name=subject.name if subject else "",
+                grade_level=grade.level if grade else 0,
+                student_count=student_count,
+                avg_mastery=avg_mastery,
+            )
+        )
+
+    logger.info(
+        "teacher_detail_requested",
+        requester_id=str(current_user.id),
+        requester_role=str(current_user.role),
+        target_teacher_id=str(teacher_id),
+        class_count=len(assigned_classes),
+    )
+
+    return TeacherDetailResponse(
+        id=teacher.id,
+        first_name=teacher.first_name or "",
+        last_name=teacher.last_name or "",
+        email=teacher.email,
+        is_active=teacher.is_active,
+        assigned_classes=assigned_classes,
+    )
