@@ -6,7 +6,10 @@ without importing them — pytest discovers conftest.py automatically.
 
 import os
 import uuid
+from collections.abc import Generator
+from unittest.mock import AsyncMock
 
+import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,6 +51,23 @@ from app.models.school import Class
 from app.models.user import (
     StudentProfile,
 )
+
+
+@pytest.fixture(autouse=True)
+def _mock_app_redis() -> Generator[None, None, None]:
+    """Set a mock Redis on app.state for all integration tests.
+
+    FastAPI lifespan does not run under ASGITransport, so app.state.redis is
+    never set by startup. Any route that touches request.app.state.redis needs
+    this fixture or it raises AttributeError.
+    """
+    mock_redis = AsyncMock()
+    mock_redis.get = AsyncMock(return_value=None)
+    mock_redis.setex = AsyncMock()
+    app.state.redis = mock_redis
+    yield
+    if hasattr(app.state, "redis"):
+        del app.state._state["redis"]
 
 
 def make_auth_header(user: User) -> dict[str, str]:

@@ -2,7 +2,7 @@
 
 import os
 from collections.abc import AsyncGenerator, Generator
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Set test environment variables BEFORE importing app modules
 TEST_DATABASE_URL = os.environ.get(
@@ -19,6 +19,18 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from app.core.deps import get_current_user  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.user import UserRole  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _mock_app_redis() -> Generator[None, None, None]:
+    """FastAPI lifespan doesn't run under ASGITransport — mock redis on app.state."""
+    mock_redis = AsyncMock()
+    mock_redis.get = AsyncMock(return_value=None)
+    mock_redis.setex = AsyncMock()
+    app.state.redis = mock_redis
+    yield
+    if hasattr(app.state, "redis"):
+        del app.state._state["redis"]
 
 
 @pytest.fixture
