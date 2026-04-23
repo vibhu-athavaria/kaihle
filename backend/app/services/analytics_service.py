@@ -1,7 +1,10 @@
 """Analytics service — school-level aggregations for the school-admin dashboard."""
 
+from __future__ import annotations
+
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as dt_time
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -33,7 +36,7 @@ _DIAGNOSTIC_COMPLETED = "COMPLETED"
 
 
 class AnalyticsService:
-    def __init__(self, db: AsyncSession, redis: "Redis[bytes]") -> None:
+    def __init__(self, db: AsyncSession, redis: Redis[Any]) -> None:
         self._db = db
         self._redis = redis
 
@@ -51,7 +54,8 @@ class AnalyticsService:
         cache_key = f"analytics:{school_id}:{effective_from}:{effective_to}"
         cached = await self._redis.get(cache_key)
         if cached:
-            return SchoolAnalyticsData.model_validate_json(cached)
+            cached_str = cached.decode("utf-8") if isinstance(cached, bytes) else cached
+            return SchoolAnalyticsData.model_validate_json(cached_str)
 
         from_dt = datetime.combine(effective_from, dt_time.min).replace(tzinfo=UTC)
         to_dt = datetime.combine(effective_to, dt_time.max).replace(tzinfo=UTC)
@@ -174,7 +178,8 @@ class AnalyticsService:
         cache_key = "analytics:platform"
         cached = await self._redis.get(cache_key)
         if cached:
-            return PlatformStats.model_validate_json(cached)
+            cached_str = cached.decode("utf-8") if isinstance(cached, bytes) else cached
+            return PlatformStats.model_validate_json(cached_str)
 
         total_schools = await self._count(select(func.count(School.id)).where(School.status == "active"))
         total_active_students = await self._count(
