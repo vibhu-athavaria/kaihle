@@ -16,7 +16,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy (backend type check)
-        entry: bash -c "cd backend && mypy app/ --pretty --show-error-codes --show-column-numbers"
+        entry: bash -c "cd backend && uv run mypy app/ --pretty --show-error-codes --show-column-numbers"
         language: system
         files: ^backend/
         types: [python]
@@ -28,7 +28,7 @@ repos:
     hooks:
       - id: pytest-unit
         name: pytest unit tests
-        entry: bash -c "cd backend && pytest app/tests/unit/ -v --tb=long --cov=app/services --cov-fail-under=80 --cov-report=term-missing"
+        entry: bash -c "cd backend && uv run pytest app/tests/unit/ -v --tb=long --cov=app/services --cov-fail-under=80 --cov-report=term-missing"
         language: system
         files: ^backend/
         types: [python]

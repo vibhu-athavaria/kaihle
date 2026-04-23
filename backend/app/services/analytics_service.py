@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as dt_time
-from typing import Any
 from uuid import UUID
 
 import structlog
@@ -36,7 +35,7 @@ _DIAGNOSTIC_COMPLETED = "COMPLETED"
 
 
 class AnalyticsService:
-    def __init__(self, db: AsyncSession, redis: Redis[Any]) -> None:
+    def __init__(self, db: AsyncSession, redis: Redis) -> None:
         self._db = db
         self._redis = redis
 

@@ -22,7 +22,7 @@ AI-powered learning diagnostics platform for international schools (Cambridge, I
 
 ```bash
 cd backend
-uv pip install -e .
+uv sync --all-extras
 uvicorn app.main:app --reload
 
 pytest app/tests/unit/ -v
