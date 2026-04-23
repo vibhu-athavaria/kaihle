@@ -376,7 +376,7 @@ class AnalyticsService:
     async def _get_at_risk_students(self, school_id: UUID) -> list[AtRiskStudent]:
         summaries = await self.get_student_mastery_summaries(school_id)
         at_risk = [s for s in summaries if s.worst_mastery is not None and s.worst_mastery < 0.4]
-        at_risk.sort(key=lambda s: (s.worst_mastery or 1.0))
+        at_risk.sort(key=lambda s: s.worst_mastery or 1.0)
 
         if not at_risk:
             return []
