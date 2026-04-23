@@ -14,7 +14,9 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-integration-tests")
 
 import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
 from app.core.deps import get_current_user  # noqa: E402
 from app.main import app  # noqa: E402
@@ -33,12 +35,22 @@ def _mock_app_redis() -> Generator[None, None, None]:
         del app.state._state["redis"]
 
 
-@pytest.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
+@pytest_asyncio.fixture
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create an async HTTP client for testing."""
+    from app.core.database import get_db
+
+    # Override database dependency
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+    app.dependency_overrides.clear()
 
 
 def _make_admin_user() -> MagicMock:
