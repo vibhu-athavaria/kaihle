@@ -109,10 +109,10 @@ export function AnalyticsPage() {
               key={label}
               className="bg-white border border-role-school-border rounded-xl p-4"
             >
-              <div className="text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted mb-1.5">
+              <div className="text-xs font-black uppercase tracking-[0.7px] text-role-school-muted mb-1.5">
                 {label}
               </div>
-              <div className="font-display font-bold text-[26px] text-brand-ink leading-none">
+              <div className="font-display font-bold text-2xl text-brand-ink leading-none">
                 {value}
               </div>
             </div>
@@ -121,7 +121,7 @@ export function AnalyticsPage() {
 
         <div className="grid grid-cols-2 gap-5 mb-5">
           <div className="bg-white border border-role-school-border rounded-xl p-4">
-            <div className="text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted mb-3">
+            <div className="text-xs font-black uppercase tracking-[0.7px] text-role-school-muted mb-3">
               Mastery by subject
             </div>
             <div className="space-y-3">
@@ -154,7 +154,7 @@ export function AnalyticsPage() {
           </div>
 
           <div className="bg-white border border-role-school-border rounded-xl p-4">
-            <div className="text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted mb-3">
+            <div className="text-xs font-black uppercase tracking-[0.7px] text-role-school-muted mb-3">
               Onboarding funnel
             </div>
             <div className="space-y-3">
@@ -179,7 +179,7 @@ export function AnalyticsPage() {
                       />
                     </div>
                     {next && dropoff > 0 && (
-                      <div className="text-[10px] text-brand-red font-bold mt-0.5">
+                      <div className="text-xs text-brand-red font-bold mt-0.5">
                         −{dropoff} dropped off
                       </div>
                     )}
@@ -206,7 +206,7 @@ export function AnalyticsPage() {
                 ].map((h) => (
                   <th
                     key={h}
-                    className="px-4 py-[10px] text-left text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted"
+                    className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
                   >
                     {h}
                   </th>
@@ -239,7 +239,7 @@ export function AnalyticsPage() {
                       aria-label={`View gap map for ${c.class_name}`}
                       className="border-b border-[#f0f5ee] last:border-0 cursor-pointer hover:bg-[#fafcfa] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-inset"
                     >
-                      <td className="px-4 py-3 font-bold text-[13px] text-brand-ink">
+                      <td className="px-4 py-3 font-bold text-sm text-brand-ink">
                         {c.class_name}
                       </td>
                       <td className="px-4 py-3 text-xs text-brand-muted">
@@ -258,7 +258,7 @@ export function AnalyticsPage() {
                       </td>
                       <td className="px-4 py-3">
                         {c.avg_mastery !== null && c.avg_mastery < 0.4 ? (
-                          <span className="text-[10px] font-bold bg-red-50 text-brand-red rounded-full px-2 py-0.5">
+                          <span className="text-xs font-bold bg-red-50 text-brand-red rounded-full px-2 py-0.5">
                             At risk
                           </span>
                         ) : null}

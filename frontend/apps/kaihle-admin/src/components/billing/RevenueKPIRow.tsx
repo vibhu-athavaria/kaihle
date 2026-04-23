@@ -53,10 +53,10 @@ function KPICard({
           {icon}
         </div>
         <div>
-          <p className="font-inter text-[11px] uppercase tracking-widest text-gray-400">
+          <p className="font-['Inter'] text-xs uppercase tracking-widest text-gray-400">
             {label}
           </p>
-          <p className={`font-inter text-2xl font-bold ${valueColor}`}>
+          <p className={`font-['Inter'] text-2xl font-bold ${valueColor}`}>
             {value}
           </p>
         </div>

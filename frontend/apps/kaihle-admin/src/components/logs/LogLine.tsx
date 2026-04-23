@@ -55,7 +55,7 @@ export function LogLine({ log }: LogLineProps) {
       >
         {/* Timestamp */}
         <span
-          className="font-mono text-[11px] text-slate-500 w-48 flex-shrink-0 tabular-nums"
+          className="font-mono text-xs text-slate-500 w-48 flex-shrink-0 tabular-nums"
           data-testid={`log-timestamp-${log.id}`}
         >
           {formatTimestamp(log.timestamp)}
@@ -63,7 +63,7 @@ export function LogLine({ log }: LogLineProps) {
 
         {/* Level badge */}
         <span
-          className={`font-mono text-[11px] font-bold w-12 flex-shrink-0 ${
+          className={`font-mono text-xs font-bold w-12 flex-shrink-0 ${
             levelColors[log.level]
           }`}
           data-testid={`log-level-${log.id}`}
@@ -73,7 +73,7 @@ export function LogLine({ log }: LogLineProps) {
 
         {/* Service */}
         <span
-          className="font-mono text-[11px] text-blue-400 w-24 flex-shrink-0"
+          className="font-mono text-xs text-blue-400 w-24 flex-shrink-0"
           data-testid={`log-service-${log.id}`}
         >
           {log.service}
@@ -81,7 +81,7 @@ export function LogLine({ log }: LogLineProps) {
 
         {/* Message */}
         <span
-          className={`font-mono text-[12px] flex-1 break-words ${
+          className={`font-mono text-xs flex-1 break-words ${
             levelColors[log.level]
           }`}
           data-testid={`log-message-${log.id}`}
@@ -93,7 +93,7 @@ export function LogLine({ log }: LogLineProps) {
       {/* Expandable extra fields */}
       {expanded && hasExtra && (
         <div
-          className="bg-slate-950 text-slate-300 text-[11px] font-mono p-3 mt-1 rounded whitespace-pre-wrap"
+          className="bg-slate-950 text-slate-300 text-xs font-mono p-3 mt-1 rounded whitespace-pre-wrap"
           data-testid={`log-extra-${log.id}`}
         >
           {JSON.stringify(log.extra, null, 2)}

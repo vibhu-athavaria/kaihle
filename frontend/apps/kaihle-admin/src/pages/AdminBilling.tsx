@@ -16,7 +16,7 @@ export function AdminBilling() {
       <div className="space-y-6">
         {/* KPI Section */}
         <section>
-          <h2 className="font-inter text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">
+          <h2 className="font-['Inter'] text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">
             Revenue overview
           </h2>
           <RevenueKPIRow summary={summary} loading={isLoading} />
@@ -24,7 +24,7 @@ export function AdminBilling() {
 
         {/* Subscriptions Table Section */}
         <section>
-          <h2 className="font-inter text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">
+          <h2 className="font-['Inter'] text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">
             All subscriptions
           </h2>
           <SubscriptionsTable

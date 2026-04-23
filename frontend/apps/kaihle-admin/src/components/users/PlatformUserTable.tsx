@@ -136,25 +136,25 @@ export function PlatformUserTable({
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left py-3 px-4 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wide text-gray-400">
                 Name
               </th>
-              <th className="text-left py-3 px-4 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wide text-gray-400">
                 Role
               </th>
-              <th className="text-left py-3 px-4 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wide text-gray-400">
                 School
               </th>
-              <th className="text-left py-3 px-4 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wide text-gray-400">
                 Email
               </th>
-              <th className="text-left py-3 px-4 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wide text-gray-400">
                 Status
               </th>
-              <th className="text-left py-3 px-4 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wide text-gray-400">
                 Last active
               </th>
-              <th className="text-left py-3 px-4 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+              <th className="text-left py-3 px-4 text-xs font-bold uppercase tracking-wide text-gray-400">
                 Action
               </th>
             </tr>

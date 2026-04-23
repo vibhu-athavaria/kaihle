@@ -59,10 +59,10 @@ export function SchoolOverview() {
               key={label}
               className="bg-white border border-role-school-border rounded-xl p-4"
             >
-              <div className="text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted mb-1.5">
+              <div className="text-xs font-black uppercase tracking-[0.7px] text-role-school-muted mb-1.5">
                 {label}
               </div>
-              <div className="font-display font-bold text-[26px] text-brand-ink leading-none">
+              <div className="font-display font-bold text-2xl text-brand-ink leading-none">
                 {value}
               </div>
             </div>
@@ -71,7 +71,7 @@ export function SchoolOverview() {
 
         <div className="grid grid-cols-2 gap-5">
           <div className="bg-white border border-role-school-border rounded-xl p-4">
-            <div className="text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted mb-3">
+            <div className="text-xs font-black uppercase tracking-[0.7px] text-role-school-muted mb-3">
               Students needing attention
             </div>
             {!analytics?.at_risk_students.length ? (
@@ -89,7 +89,7 @@ export function SchoolOverview() {
                       className="flex items-center justify-between"
                     >
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-brand-red flex items-center justify-center text-white text-[10px] font-black flex-shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-brand-red flex items-center justify-center text-white text-xs font-black flex-shrink-0">
                           {s.first_name.charAt(0)}
                           {initial}
                         </div>
@@ -109,7 +109,7 @@ export function SchoolOverview() {
           </div>
 
           <div className="bg-white border border-role-school-border rounded-xl p-4">
-            <div className="text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted mb-3">
+            <div className="text-xs font-black uppercase tracking-[0.7px] text-role-school-muted mb-3">
               Classes needing setup
             </div>
             {needsAttention.length === 0 ? (
@@ -130,7 +130,7 @@ export function SchoolOverview() {
                       {c.name}
                     </span>
                     <span
-                      className={`text-[10px] font-bold ${
+                      className={`text-xs font-bold ${
                         c.diagnostic_status === "setup_needed"
                           ? "text-brand-amber"
                           : "text-brand-muted"

@@ -96,7 +96,7 @@ export function UsersPage() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-5 py-2 text-[13px] font-bold border-b-[3px] -mb-[2px] transition-colors ${
+            className={`px-5 py-2 text-sm font-bold border-b-[3px] -mb-[2px] transition-colors ${
               tab === key
                 ? "text-brand-primary border-brand-primary"
                 : "text-brand-muted border-transparent"
@@ -104,7 +104,7 @@ export function UsersPage() {
           >
             {label}{" "}
             <span
-              className={`inline-block rounded-full px-1.5 py-px text-[10px] font-black ml-1 ${
+              className={`inline-block rounded-full px-1.5 py-px text-xs font-black ml-1 ${
                 tab === key
                   ? "bg-brand-green-light text-brand-primary"
                   : "bg-gray-100 text-brand-muted"
@@ -157,7 +157,7 @@ export function UsersPage() {
               <button
                 key={key}
                 onClick={() => setFilter(key)}
-                className={`px-3 py-[5px] rounded-full text-[11px] font-semibold border transition-colors ${
+                className={`px-3 py-[5px] rounded-full text-xs font-semibold border transition-colors ${
                   filter === key
                     ? "bg-brand-primary text-white border-brand-primary"
                     : warn
@@ -194,7 +194,7 @@ export function UsersPage() {
                     ].map((h) => (
                       <th
                         key={h}
-                        className="px-4 py-[10px] text-left text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted"
+                        className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
                       >
                         {h}
                       </th>
@@ -236,11 +236,11 @@ export function UsersPage() {
                         <td className="px-4 py-[10px]">
                           <div className="flex items-center gap-2.5">
                             <div
-                              className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 ${isAtRisk ? "bg-brand-red" : "bg-brand-primary"}`}
+                              className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0 ${isAtRisk ? "bg-brand-red" : "bg-brand-primary"}`}
                             >
                               {initials(s.first_name, s.last_name)}
                             </div>
-                            <div className="text-[13px] font-bold text-brand-ink">
+                            <div className="text-sm font-bold text-brand-ink">
                               {nameDisplay(s.first_name, s.last_name)}
                             </div>
                           </div>
@@ -274,7 +274,7 @@ export function UsersPage() {
                               {label}
                             </span>
                             {s.needs_work_class_count > 1 && (
-                              <span className="text-[10px] text-brand-muted">
+                              <span className="text-xs text-brand-muted">
                                 · {s.needs_work_class_count} classes
                               </span>
                             )}
@@ -283,7 +283,7 @@ export function UsersPage() {
                         <td className="px-4 py-[10px]">
                           {diag && (
                             <span
-                              className={`text-[10px] font-bold rounded-full px-2 py-px ${
+                              className={`text-xs font-bold rounded-full px-2 py-px ${
                                 diag === "Completed"
                                   ? "bg-[#f0fdf4] text-brand-green"
                                   : "bg-[#fffbeb] text-brand-gold"
@@ -293,7 +293,7 @@ export function UsersPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-[10px] text-[11px] text-brand-muted">
+                        <td className="px-4 py-[10px] text-xs text-brand-muted">
                           {lastActive}
                         </td>
                         <td className="px-4 py-[10px] text-brand-muted text-base">

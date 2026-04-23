@@ -56,7 +56,7 @@ export function AdminGapMapPage() {
             {data?.class_name ?? "Loading…"}
           </span>
         </div>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted bg-gray-100 px-3 py-1 rounded-full">
+        <span className="text-xs font-bold uppercase tracking-widest text-brand-muted bg-gray-100 px-3 py-1 rounded-full">
           Read only — contact teacher to update
         </span>
       </div>
@@ -76,7 +76,7 @@ export function AdminGapMapPage() {
                 {data.students.map((s) => (
                   <th
                     key={s.id}
-                    className="px-1 pb-2 text-[10px] font-bold text-brand-muted text-center whitespace-nowrap max-w-[48px] overflow-hidden text-ellipsis"
+                    className="px-1 pb-2 text-xs font-bold text-brand-muted text-center whitespace-nowrap max-w-[48px] overflow-hidden text-ellipsis"
                   >
                     {s.name.split(" ")[0]}
                   </th>
@@ -119,7 +119,7 @@ export function AdminGapMapPage() {
         ].map(({ dotClass, label }) => (
           <div
             key={label}
-            className="flex items-center gap-1.5 text-[10px] text-brand-body font-semibold"
+            className="flex items-center gap-1.5 text-xs text-brand-body font-semibold"
           >
             <span className={`w-2.5 h-2.5 rounded-full ${dotClass}`} />
             {label}

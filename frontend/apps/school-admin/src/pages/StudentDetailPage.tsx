@@ -97,7 +97,7 @@ export function StudentDetailPage() {
           Students
         </button>
         <span className="text-brand-border">›</span>
-        <span className="font-display font-bold text-brand-ink text-[15px]">
+        <span className="font-display font-bold text-brand-ink text-sm">
           {student
             ? nameDisplay(student.first_name, student.last_name)
             : "Loading…"}
@@ -119,7 +119,7 @@ export function StudentDetailPage() {
               {initials(student.first_name, student.last_name)}
             </div>
             <div>
-              <div className="font-display font-bold text-[18px] text-brand-ink">
+              <div className="font-display font-bold text-lg text-brand-ink">
                 {student.first_name} {student.last_name.charAt(0).toUpperCase()}
                 .
               </div>
@@ -134,33 +134,33 @@ export function StudentDetailPage() {
             </div>
             <div className="ml-auto flex gap-6">
               <div className="text-center">
-                <div className="font-display font-bold text-[20px] text-brand-ink">
+                <div className="font-display font-bold text-xl text-brand-ink">
                   {student.class_enrollments.length}
                 </div>
-                <div className="text-[10px] font-black uppercase tracking-[0.5px] text-brand-muted">
+                <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
                   Classes
                 </div>
               </div>
               <div className="text-center">
                 <div
-                  className={`font-display font-bold text-[20px] ${needsWorkClassCount > 0 ? "text-brand-red" : "text-brand-ink"}`}
+                  className={`font-display font-bold text-xl ${needsWorkClassCount > 0 ? "text-brand-red" : "text-brand-ink"}`}
                 >
                   {needsWorkClassCount}
                 </div>
-                <div className="text-[10px] font-black uppercase tracking-[0.5px] text-brand-muted">
+                <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
                   Needs Work
                 </div>
               </div>
               <div className="text-center">
-                <div className="font-display font-bold text-[20px] text-brand-ink">
+                <div className="font-display font-bold text-xl text-brand-ink">
                   {attempts.length}
                 </div>
-                <div className="text-[10px] font-black uppercase tracking-[0.5px] text-brand-muted">
+                <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
                   Assessments
                 </div>
               </div>
               <div className="text-center">
-                <div className="font-display font-bold text-[20px] text-brand-ink">
+                <div className="font-display font-bold text-xl text-brand-ink">
                   {student.last_login_at
                     ? new Date(student.last_login_at).toLocaleDateString(
                         "en-GB",
@@ -168,7 +168,7 @@ export function StudentDetailPage() {
                       )
                     : "Never"}
                 </div>
-                <div className="text-[10px] font-black uppercase tracking-[0.5px] text-brand-muted">
+                <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
                   Last active
                 </div>
               </div>
@@ -176,7 +176,7 @@ export function StudentDetailPage() {
           </div>
 
           <div className="mb-5">
-            <div className="text-[9px] font-black uppercase tracking-[0.8px] text-role-school-muted mb-3">
+            <div className="text-xs font-black uppercase tracking-[0.8px] text-role-school-muted mb-3">
               Mastery by class
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -195,10 +195,10 @@ export function StudentDetailPage() {
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <div className="text-[13px] font-bold text-brand-ink">
+                        <div className="text-sm font-bold text-brand-ink">
                           {ce.class_name}
                         </div>
-                        <div className="text-[10px] text-brand-muted mt-0.5">
+                        <div className="text-xs text-brand-muted mt-0.5">
                           {ce.teacher_name}
                         </div>
                       </div>
@@ -225,7 +225,7 @@ export function StudentDetailPage() {
                             key={gs.subtopic_name}
                             className="flex items-center gap-2"
                           >
-                            <span className="text-[10px] text-brand-body w-28 flex-shrink-0 truncate">
+                            <span className="text-xs text-brand-body w-28 flex-shrink-0 truncate">
                               {gs.subtopic_name}
                             </span>
                             <div className="flex-1 h-[5px] bg-gray-100 rounded-full">
@@ -235,7 +235,7 @@ export function StudentDetailPage() {
                               />
                             </div>
                             <span
-                              className={`text-[9px] font-bold w-16 text-right flex-shrink-0 ${textClass}`}
+                              className={`text-xs font-bold w-16 text-right flex-shrink-0 ${textClass}`}
                             >
                               {gl}
                             </span>
@@ -251,7 +251,7 @@ export function StudentDetailPage() {
 
           {activeStudyPlan && (
             <div className="mb-5">
-              <div className="text-[9px] font-black uppercase tracking-[0.8px] text-role-school-muted mb-3">
+              <div className="text-xs font-black uppercase tracking-[0.8px] text-role-school-muted mb-3">
                 Study plan
               </div>
               <div className="bg-white border border-role-school-border rounded-xl p-4 flex items-center gap-4">
@@ -268,10 +268,10 @@ export function StudentDetailPage() {
                   </svg>
                 </div>
                 <div>
-                  <div className="text-[13px] font-bold text-brand-ink">
+                  <div className="text-sm font-bold text-brand-ink">
                     {activeStudyPlan.title ?? "Active study plan"}
                   </div>
-                  <div className="text-[11px] text-brand-muted mt-0.5">
+                  <div className="text-xs text-brand-muted mt-0.5">
                     Assigned{" "}
                     {activeStudyPlan.assigned_at
                       ? new Date(
@@ -289,7 +289,7 @@ export function StudentDetailPage() {
           )}
 
           <div>
-            <div className="text-[9px] font-black uppercase tracking-[0.8px] text-role-school-muted mb-3">
+            <div className="text-xs font-black uppercase tracking-[0.8px] text-role-school-muted mb-3">
               Recent assessments
             </div>
             <div className="bg-white border border-role-school-border rounded-xl overflow-hidden">
@@ -300,7 +300,7 @@ export function StudentDetailPage() {
                       (h) => (
                         <th
                           key={h}
-                          className="px-4 py-[9px] text-left text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted"
+                          className="px-4 py-[9px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
                         >
                           {h}
                         </th>
@@ -331,12 +331,12 @@ export function StudentDetailPage() {
                         </td>
                         <td className="px-4 py-[9px]">
                           <span
-                            className={`text-[10px] font-bold rounded-full px-2 py-px ${bgClass} ${textClass}`}
+                            className={`text-xs font-bold rounded-full px-2 py-px ${bgClass} ${textClass}`}
                           >
                             {label}
                           </span>
                         </td>
-                        <td className="px-4 py-[9px] text-[10px] text-brand-muted capitalize">
+                        <td className="px-4 py-[9px] text-xs text-brand-muted capitalize">
                           {(a.assessment_type ?? "")
                             .toLowerCase()
                             .replace("_", " ")}

@@ -145,7 +145,7 @@ export function ClassManagement() {
               ].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-[10px] text-left text-[9px] font-black uppercase tracking-[0.7px] text-role-school-muted"
+                  className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
                 >
                   {h}
                 </th>
@@ -187,7 +187,7 @@ export function ClassManagement() {
         ].map(({ dotClass, label }) => (
           <div
             key={label}
-            className="flex items-center gap-1.5 text-[10px] text-brand-body font-semibold"
+            className="flex items-center gap-1.5 text-xs text-brand-body font-semibold"
           >
             <span
               className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotClass}`}
@@ -229,9 +229,7 @@ function ClassRow({
         isSetup ? "bg-[#fffbeb] hover:bg-[#fef9c3]" : "hover:bg-[#fafcfa]"
       }`}
     >
-      <td className="px-4 py-3 font-bold text-[13px] text-brand-ink">
-        {cls.name}
-      </td>
+      <td className="px-4 py-3 font-bold text-sm text-brand-ink">{cls.name}</td>
       <td className="px-4 py-3 text-xs font-semibold text-brand-body">
         {cls.subject_name}
       </td>
@@ -240,7 +238,7 @@ function ClassRow({
       </td>
       <td className="px-4 py-3">
         {isSetup ? (
-          <span className="flex items-center gap-1.5 text-[11px] font-bold text-brand-amber">
+          <span className="flex items-center gap-1.5 text-xs font-bold text-brand-amber">
             <svg
               className="w-3.5 h-3.5"
               viewBox="0 0 24 24"
