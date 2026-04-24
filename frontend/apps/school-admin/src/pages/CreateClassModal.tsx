@@ -130,6 +130,7 @@ export function CreateClassModal({
   const [studentSearch, setStudentSearch] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
+  const [enrollError, setEnrollError] = useState("");
 
   const queryClient = useQueryClient();
 
@@ -201,6 +202,7 @@ export function CreateClassModal({
     setSelectedStudentIds(new Set());
     setStudentSearch("");
     setSubmitting(false);
+    setEnrollError("");
   }, []);
 
   function handleClose() {
@@ -240,9 +242,17 @@ export function CreateClassModal({
 
   function toggleSelectAll() {
     if (allStudentsSelected) {
-      setSelectedStudentIds(new Set());
+      setSelectedStudentIds((prev) => {
+        const next = new Set(prev);
+        filteredStudents.forEach((s) => next.delete(s.id));
+        return next;
+      });
     } else {
-      setSelectedStudentIds(new Set(filteredStudents.map((s) => s.id)));
+      setSelectedStudentIds((prev) => {
+        const next = new Set(prev);
+        filteredStudents.forEach((s) => next.add(s.id));
+        return next;
+      });
     }
   }
 
@@ -268,7 +278,11 @@ export function CreateClassModal({
           });
           queryClient.invalidateQueries({ queryKey: ["school", "classes"] });
         } catch {
-          // class was created — enrollment failed, still close
+          setEnrollError(
+            "Class created, but some students couldn't be enrolled. You can enrol them from the class page.",
+          );
+          setSubmitting(false);
+          return;
         }
       }
 
@@ -509,7 +523,7 @@ export function CreateClassModal({
     if (selectAllRef.current) {
       selectAllRef.current.indeterminate = someSelected;
     }
-  });
+  }, [someSelected]);
 
   function renderStep3() {
     const selectedList = Array.from(selectedStudentIds);
@@ -517,12 +531,12 @@ export function CreateClassModal({
     return (
       <div className="space-y-4">
         {/* Info banner */}
-        <div className="flex gap-2 px-4 py-3 rounded-xl bg-blue-50 border border-blue-200">
+        <div className="flex gap-3 items-start bg-brand-green-light border border-role-school-border rounded-xl p-3.5 mb-4 text-sm text-brand-ink">
           <Info
-            className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0"
+            className="w-4 h-4 text-brand-primary mt-0.5 flex-shrink-0"
             aria-hidden="true"
           />
-          <p className="text-xs text-blue-700 font-sans leading-relaxed">
+          <p className="text-xs font-sans leading-relaxed">
             A Tier 1 Diagnostic will be automatically generated for each student
             enrolled.
           </p>
@@ -615,6 +629,12 @@ export function CreateClassModal({
             );
           })}
         </div>
+
+        {enrollError && (
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+            {enrollError}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex gap-3 pt-2">
