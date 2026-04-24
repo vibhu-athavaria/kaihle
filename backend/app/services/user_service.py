@@ -19,6 +19,7 @@ from app.models.curriculum import Curriculum, Grade, Subject, Subtopic
 from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment
 from app.models.user import ParentStudent, TeacherProfile, User, UserRole
+from app.schemas.students import EnrolledClassInfo, StudentClassResponse, StudentInfoResponse
 from app.schemas.user import UserInvite, UserSelfUpdate, UserUpdate
 from app.schemas.user_detail import (
     AssignedClassSummary,
@@ -497,3 +498,94 @@ class UserService:
             is_active=parent.is_active,
             linked_students=linked_students,
         )
+
+    async def get_student_info(self, student: User) -> StudentInfoResponse:
+        """Return basic student info including enrolled classes.
+
+        Authorization checks must be performed by the caller before invoking this method.
+        """
+        enrollment_query = (
+            select(ClassEnrollment, Class, Subject, Grade, Curriculum)
+            .join(Class, Class.id == ClassEnrollment.class_id)
+            .join(Subject, Subject.id == Class.subject_id)
+            .join(Grade, Grade.id == Class.grade_id)
+            .join(Curriculum, Curriculum.id == Class.curriculum_id)
+            .where(
+                ClassEnrollment.student_id == student.id,
+                ClassEnrollment.is_active.is_(True),
+            )
+            .order_by(ClassEnrollment.enrolled_at)
+        )
+        enrollment_rows = (await self.db.execute(enrollment_query)).all()
+
+        grade_name = ""
+        curriculum_name = ""
+        class_id = None
+        enrolled_classes: list[EnrolledClassInfo] = []
+
+        for _, class_, subject, grade, curriculum in enrollment_rows:
+            if class_id is None:
+                class_id = class_.id
+            if not curriculum_name:
+                curriculum_name = curriculum.name if curriculum else ""
+            if not grade_name and grade:
+                grade_name = grade.name
+            enrolled_classes.append(
+                EnrolledClassInfo(
+                    class_id=class_.id,
+                    class_name=class_.name,
+                    subject_id=class_.subject_id,
+                    subject_name=subject.name if subject else "",
+                    grade_name=grade.name if grade else "",
+                )
+            )
+
+        logger.debug(
+            "student_info_retrieved",
+            student_id=str(student.id),
+            enrolled_class_count=len(enrolled_classes),
+        )
+        return StudentInfoResponse(
+            first_name=student.first_name or "",
+            last_name=student.last_name or "",
+            email=student.email,
+            grade_name=grade_name,
+            curriculum_name=curriculum_name,
+            class_id=class_id,
+            streak_days=None,
+            is_enrolled=len(enrolled_classes) > 0,
+            enrolled_classes=enrolled_classes,
+        )
+
+    async def get_student_classes(self, student: User) -> list[StudentClassResponse]:
+        """Return all active enrolled classes for a student with full details."""
+        query = (
+            select(ClassEnrollment, Class, Subject, Grade, User)
+            .join(Class, Class.id == ClassEnrollment.class_id)
+            .join(Subject, Subject.id == Class.subject_id)
+            .join(Grade, Grade.id == Class.grade_id)
+            .join(User, User.id == Class.teacher_id)
+            .where(
+                ClassEnrollment.student_id == student.id,
+                ClassEnrollment.is_active.is_(True),
+            )
+            .order_by(ClassEnrollment.enrolled_at)
+        )
+        rows = (await self.db.execute(query)).all()
+
+        return [
+            StudentClassResponse(
+                id=class_.id,
+                name=class_.name,
+                subject_id=class_.subject_id,
+                subject_name=subject.name if subject else "",
+                grade_name=grade.name if grade else "",
+                teacher_name=f"{teacher.first_name} {teacher.last_name}".strip() if teacher else "",
+                curriculum_id=class_.curriculum_id,
+                academic_year=class_.academic_year or "",
+                is_active=enrollment.is_active,
+                onboarding_diagnostic_status=enrollment.onboarding_diagnostic_status,
+                diagnostic_attempt_id=None,
+            )
+            for enrollment, class_, subject, grade, teacher in rows
+        ]

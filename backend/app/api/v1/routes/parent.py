@@ -20,6 +20,7 @@ from app.models.user import UserRole
 from app.schemas.common import Page
 from app.schemas.parent import ChildSummary, ParentGapMap, WeeklyReport
 from app.schemas.user_detail import ParentDetailResponse
+from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
 
 router = APIRouter(prefix="/parent", tags=["parent"])
 parents_router = APIRouter(prefix="/parents", tags=["parents"])
@@ -100,7 +101,6 @@ async def get_parent_detail(
         403: If SCHOOL_ADMIN tries to access a parent in another school.
         404: If parent not found.
     """
-    from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
 
     caller_school = current_user.school_id if current_user.role == UserRole.SCHOOL_ADMIN else None
     try:
