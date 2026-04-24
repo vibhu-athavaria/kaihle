@@ -110,6 +110,30 @@ function currentAcademicYear(): string {
   return month >= 8 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
 }
 
+// ── Label helper ──────────────────────────────────────────────────────────────
+
+function FieldLabel({
+  children,
+  htmlFor,
+  badge,
+}: {
+  children: React.ReactNode;
+  htmlFor?: string;
+  badge?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2 mb-1.5">
+      <label
+        htmlFor={htmlFor}
+        className="block text-[11px] font-bold uppercase tracking-wider text-role-school-muted"
+      >
+        {children}
+      </label>
+      {badge}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CreateClassModal({
@@ -129,13 +153,13 @@ export function CreateClassModal({
   // Step 2 state
   const [teacherId, setTeacherId] = useState("");
   const [teacherSearch, setTeacherSearch] = useState("");
-  const [step2Error, setStep2Error] = useState("");
 
   // Step 3 state
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(
     new Set(),
   );
   const [studentSearch, setStudentSearch] = useState("");
+  const [studentGradeFilter, setStudentGradeFilter] = useState<string>("all");
 
   const [submitting, setSubmitting] = useState(false);
   const [enrollError, setEnrollError] = useState("");
@@ -181,20 +205,42 @@ export function CreateClassModal({
     );
   }, [teachers, teacherSearch]);
 
-  const filteredStudents = useMemo(() => {
+  // Students filtered by grade filter + search
+  const gradeFilteredStudents = useMemo(() => {
     if (!students) return [];
+    if (studentGradeFilter === "all") return students;
+    return students.filter(() => {
+      // Try to infer grade from student data if available
+      // For now, we just return all since the API doesn't return grade per student
+      // This will be refined when grade data is available on student objects
+      return true;
+    });
+  }, [students, studentGradeFilter]);
+
+  const filteredStudents = useMemo(() => {
+    if (!gradeFilteredStudents) return [];
     const q = studentSearch.toLowerCase();
-    if (!q) return students;
-    return students.filter(
+    if (!q) return gradeFilteredStudents;
+    return gradeFilteredStudents.filter(
       (s) =>
         `${s.first_name} ${s.last_name}`.toLowerCase().includes(q) ||
         s.email.toLowerCase().includes(q),
     );
-  }, [students, studentSearch]);
+  }, [gradeFilteredStudents, studentSearch]);
 
   const allStudentsSelected =
     filteredStudents.length > 0 &&
     filteredStudents.every((s) => selectedStudentIds.has(s.id));
+
+  // Grade filter tabs (computed from students)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const gradeTabs = useMemo(() => {
+    if (!students || !grades)
+      return [] as Array<{ gradeId: string; level: number; count: number }>;
+    // Since students don't have grade info from useSchoolUsers, we can't group them
+    // Return empty for now — this feature needs backend support
+    return [] as Array<{ gradeId: string; level: number; count: number }>;
+  }, [students, grades]);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -207,9 +253,9 @@ export function CreateClassModal({
     setStep1Errors({});
     setTeacherId("");
     setTeacherSearch("");
-    setStep2Error("");
     setSelectedStudentIds(new Set());
     setStudentSearch("");
+    setStudentGradeFilter("all");
     setSubmitting(false);
     setEnrollError("");
     setCreateError("");
@@ -240,10 +286,11 @@ export function CreateClassModal({
   }
 
   function handleStep2Next() {
-    if (!teacherId) {
-      setStep2Error("Please assign a teacher to this class");
-      return;
-    }
+    setStep(3);
+  }
+
+  function handleStep2Skip() {
+    setTeacherId("");
     setStep(3);
   }
 
@@ -282,7 +329,7 @@ export function CreateClassModal({
         subject_id: subjectId,
         grade_id: gradeId,
         curriculum_id: curriculumId,
-        teacher_id: teacherId,
+        teacher_id: teacherId || null,
         academic_year: academicYear,
       });
 
@@ -322,51 +369,73 @@ export function CreateClassModal({
   function renderStep1() {
     return (
       <div className="space-y-4">
+        {/* Title + subtitle */}
+        <div className="mb-2">
+          <h2 className="font-display font-bold text-2xl text-brand-ink">
+            Create New Class
+          </h2>
+          <p className="text-sm text-brand-body mt-1">
+            Set up a class, assign a teacher, and add students
+          </p>
+        </div>
+
         <Input
           id="className"
           label="Class name"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value.slice(0, 100))}
-          placeholder="e.g. Maths 9B"
+          placeholder="e.g. Grade 7 Mathematics"
           error={step1Errors.name}
         />
+        <p className="text-xs text-brand-muted -mt-2">
+          Give it a clear name teachers and students will recognise
+        </p>
 
-        <div>
-          <label className="block text-sm font-semibold text-brand-ink mb-1.5">
-            Grade <span className="text-brand-red">*</span>
-          </label>
-          <select
-            value={gradeId}
-            onChange={(e) => {
-              setGradeId(e.target.value);
-              setSubjectId(""); // reset subject when grade changes
-            }}
-            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-          >
-            <option value="">Select grade</option>
-            {grades?.map((g) => (
-              <option key={g.id} value={g.id}>
-                Grade {g.level}
-              </option>
-            ))}
-          </select>
-          {step1Errors.grade && (
-            <p className="mt-1 text-xs text-brand-red">{step1Errors.grade}</p>
-          )}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <FieldLabel htmlFor="grade">Grade</FieldLabel>
+            <select
+              id="grade"
+              value={gradeId}
+              onChange={(e) => {
+                setGradeId(e.target.value);
+                setSubjectId(""); // reset subject when grade changes
+              }}
+              className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+            >
+              <option value="">Select grade</option>
+              {grades?.map((g) => (
+                <option key={g.id} value={g.id}>
+                  Grade {g.level}
+                </option>
+              ))}
+            </select>
+            {step1Errors.grade && (
+              <p className="mt-1 text-xs text-brand-red">{step1Errors.grade}</p>
+            )}
+          </div>
+
+          <div>
+            <FieldLabel
+              badge={
+                <span className="text-[10px] font-bold uppercase tracking-wider text-brand-primary bg-brand-green-light px-2 py-0.5 rounded-full">
+                  Auto-detected
+                </span>
+              }
+            >
+              Curriculum
+            </FieldLabel>
+            <div className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-gray-50 text-brand-muted font-sans text-sm">
+              {gradeId && selectedGrade
+                ? detectCurriculumLabel(selectedGrade.level)
+                : "—"}
+            </div>
+          </div>
         </div>
 
-        {gradeId && selectedGrade && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-brand-border text-sm text-brand-body">
-            <span className="font-semibold text-brand-ink">Curriculum:</span>
-            <span>{detectCurriculumLabel(selectedGrade.level)}</span>
-          </div>
-        )}
-
         <div>
-          <label className="block text-sm font-semibold text-brand-ink mb-2">
-            Subject <span className="text-brand-red">*</span>
-          </label>
+          <FieldLabel>Subject</FieldLabel>
           <div className="flex flex-wrap gap-2">
             {allSubjects?.map((s) => (
               <button
@@ -395,15 +464,22 @@ export function CreateClassModal({
           {step1Errors.subject && (
             <p className="mt-1 text-xs text-brand-red">{step1Errors.subject}</p>
           )}
+          <p className="text-xs text-brand-muted mt-1">
+            Pulled from your school&apos;s active subjects
+          </p>
         </div>
 
         <div>
-          <label
+          <FieldLabel
             htmlFor="academicYear"
-            className="block text-sm font-semibold text-brand-ink mb-1.5"
+            badge={
+              <span className="text-[10px] font-bold uppercase tracking-wider text-brand-primary bg-brand-green-light px-2 py-0.5 rounded-full">
+                Auto-filled
+              </span>
+            }
           >
             Academic Year
-          </label>
+          </FieldLabel>
           <input
             id="academicYear"
             type="text"
@@ -438,7 +514,7 @@ export function CreateClassModal({
             onClick={handleStep1Next}
             className="flex-1"
           >
-            Next →
+            Next: Assign Teacher →
           </Button>
         </div>
       </div>
@@ -448,8 +524,11 @@ export function CreateClassModal({
   function renderStep2() {
     return (
       <div className="space-y-4">
-        <p className="text-[11px] font-bold text-role-school-muted uppercase tracking-wider mb-4">
-          Select a Teacher <span className="text-brand-red">*</span>
+        <p className="text-[11px] font-bold text-role-school-muted uppercase tracking-wider">
+          Select a Teacher{" "}
+          <span className="text-[10px] font-medium normal-case tracking-normal text-gray-400">
+            (optional — can be assigned later)
+          </span>
         </p>
         <div className="relative">
           <Search
@@ -458,7 +537,7 @@ export function CreateClassModal({
           />
           <input
             type="text"
-            placeholder="Search teachers..."
+            placeholder="Search teachers by name..."
             value={teacherSearch}
             onChange={(e) => setTeacherSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
@@ -493,7 +572,6 @@ export function CreateClassModal({
                 type="button"
                 onClick={() => {
                   setTeacherId(selected ? "" : t.id);
-                  setStep2Error("");
                 }}
                 className={[
                   "w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all",
@@ -524,27 +602,30 @@ export function CreateClassModal({
           })}
         </div>
 
-        {step2Error && (
-          <p className="mt-2 text-xs text-brand-red">{step2Error}</p>
-        )}
-
         <div className="flex gap-3 pt-2">
           <Button
             type="button"
             variant="secondary"
             onClick={() => setStep(1)}
-            className="flex-1"
+            className="flex-shrink-0"
           >
             ← Back
           </Button>
           <Button
             type="button"
-            variant="primary"
-            onClick={handleStep2Next}
-            disabled={!teacherId}
+            variant="secondary"
+            onClick={handleStep2Skip}
             className="flex-1"
           >
-            Next →
+            Skip for now
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={handleStep2Next}
+            className="flex-1"
+          >
+            Next: Add Students →
           </Button>
         </div>
       </div>
@@ -579,12 +660,45 @@ export function CreateClassModal({
           </p>
         </div>
 
-        <p className="text-[11px] font-bold text-role-school-muted uppercase tracking-wider mb-4">
+        <p className="text-[11px] font-bold text-role-school-muted uppercase tracking-wider">
           Select Students{" "}
           <span className="text-[10px] font-medium normal-case tracking-normal text-gray-400">
             (optional — can enrol later)
           </span>
         </p>
+
+        {/* Grade filter tabs */}
+        {gradeTabs.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setStudentGradeFilter("all")}
+              className={[
+                "px-3 py-1.5 rounded-full text-xs font-semibold font-sans transition-all",
+                studentGradeFilter === "all"
+                  ? "bg-brand-primary text-white"
+                  : "border border-role-school-border text-brand-body hover:border-brand-primary hover:text-brand-primary",
+              ].join(" ")}
+            >
+              All Grades
+            </button>
+            {gradeTabs.map((tab) => (
+              <button
+                key={tab.gradeId}
+                type="button"
+                onClick={() => setStudentGradeFilter(tab.gradeId)}
+                className={[
+                  "px-3 py-1.5 rounded-full text-xs font-semibold font-sans transition-all",
+                  studentGradeFilter === tab.gradeId
+                    ? "bg-brand-primary text-white"
+                    : "border border-role-school-border text-brand-body hover:border-brand-primary hover:text-brand-primary",
+                ].join(" ")}
+              >
+                Grade {tab.level} ({tab.count})
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Search */}
         <div className="relative">
@@ -594,28 +708,46 @@ export function CreateClassModal({
           />
           <input
             type="text"
-            placeholder="Search students..."
+            placeholder="Search students by name..."
             value={studentSearch}
             onChange={(e) => setStudentSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
           />
         </div>
 
-        {/* Select all */}
+        {/* Select all + count */}
         {filteredStudents.length > 0 && (
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              ref={selectAllRef}
-              type="checkbox"
-              checked={allStudentsSelected}
-              onChange={toggleSelectAll}
-              aria-label={`Select all ${filteredStudents.length} students`}
-              className="w-4 h-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary"
-            />
-            <span className="text-sm font-semibold text-brand-ink">
-              Select all ({filteredStudents.length})
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                ref={selectAllRef}
+                type="checkbox"
+                checked={allStudentsSelected}
+                onChange={toggleSelectAll}
+                aria-label={`Select all ${filteredStudents.length} students`}
+                className="w-4 h-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary"
+              />
+              <span className="text-sm font-semibold text-brand-ink">
+                Select all{" "}
+                {studentGradeFilter !== "all" && gradeTabs.length > 0
+                  ? `Grade ${gradeTabs.find((g) => g.gradeId === studentGradeFilter)?.level ?? ""} students`
+                  : "students"}
+              </span>
+            </label>
+            <span className="text-sm font-semibold text-brand-primary">
+              {selectedList.length} selected
             </span>
-          </label>
+          </div>
+        )}
+
+        {/* Table header */}
+        {filteredStudents.length > 0 && (
+          <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-brand-muted border-b border-brand-border">
+            <div className="w-4" />
+            <span>Student</span>
+            <span>Grade</span>
+            <span>Status</span>
+          </div>
         )}
 
         {/* Student list */}
@@ -645,7 +777,7 @@ export function CreateClassModal({
               <label
                 key={s.id}
                 className={[
-                  "flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all",
+                  "grid grid-cols-[auto_1fr_1fr_1fr] gap-3 items-center px-4 py-3 rounded-xl border cursor-pointer transition-all",
                   checked
                     ? "bg-brand-green-light border-brand-primary"
                     : "border-role-school-border hover:border-brand-primary/50",
@@ -657,12 +789,16 @@ export function CreateClassModal({
                   onChange={() => toggleStudent(s.id)}
                   className="w-4 h-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary"
                 />
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0">
                   <p className="font-semibold text-sm text-brand-ink truncate">
                     {s.first_name} {s.last_name}
                   </p>
                   <p className="text-xs text-brand-muted truncate">{s.email}</p>
                 </div>
+                <span className="text-sm text-brand-body">—</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-brand-green-light text-brand-primary w-fit">
+                  Active
+                </span>
               </label>
             );
           })}
@@ -708,8 +844,8 @@ export function CreateClassModal({
             disabled={submitting}
             className="flex-1"
           >
-            ✓ Create Class
-            {selectedList.length > 0 ? ` (${selectedList.length})` : ""}
+            ✓ Create Class{" "}
+            {selectedList.length > 0 ? `(${selectedList.length} students)` : ""}
           </Button>
         </div>
       </div>

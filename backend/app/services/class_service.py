@@ -45,18 +45,19 @@ class ClassService:
         Raises:
             ValueError: If the teacher doesn't belong to this school
         """
-        # Verify teacher belongs to this school and is active
-        result = await self.db.execute(
-            select(User).where(
-                User.id == data.teacher_id,
-                User.school_id == school_id,
-                User.role == UserRole.TEACHER,
-                User.is_active.is_(True),
+        # Verify teacher belongs to this school and is active (if provided)
+        if data.teacher_id:
+            result = await self.db.execute(
+                select(User).where(
+                    User.id == data.teacher_id,
+                    User.school_id == school_id,
+                    User.role == UserRole.TEACHER,
+                    User.is_active.is_(True),
+                )
             )
-        )
-        teacher = result.scalar_one_or_none()
-        if not teacher:
-            raise ValueError("Teacher not found in this school")
+            teacher = result.scalar_one_or_none()
+            if not teacher:
+                raise ValueError("Teacher not found in this school")
 
         class_ = Class(
             school_id=school_id,

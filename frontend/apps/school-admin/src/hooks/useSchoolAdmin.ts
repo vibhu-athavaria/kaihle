@@ -387,7 +387,7 @@ export function useCreateClass() {
       grade_id: string;
       subject_id: string;
       curriculum_id: string;
-      teacher_id: string;
+      teacher_id: string | null;
       academic_year: string;
     }) => {
       if (!schoolId) throw new Error("No school_id for current user");

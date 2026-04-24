@@ -81,10 +81,10 @@ class Class(Base, UUIDMixin, TimestampMixin):
         ForeignKey("curricula.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    teacher_id: Mapped[uuid.UUID] = mapped_column(
+    teacher_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     academic_year: Mapped[str] = mapped_column(String(20), nullable=False)
