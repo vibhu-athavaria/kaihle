@@ -1,8 +1,8 @@
 """Unit tests for class route handlers.
 
 Verifies that the route handler delegates to ClassService and returns
-the correct response. Task dispatch is now owned by the service layer
-and tested in test_class_service.py.
+the correct response. BackgroundTasks scheduling is verified by checking
+that _dispatch_class_diagnostic is added as a background task.
 """
 
 import uuid
@@ -51,7 +51,7 @@ async def test_create_class_when_valid_payload_then_delegates_to_service_and_ret
              ClassService.create_class mocked to return fake_class.
     Act:     POST to /api/v1/schools/{school_id}/classes with valid payload.
     Assert:  response is 201, service.create_class was called once.
-             (Diagnostic task dispatch is tested in test_class_service.py, not here.)
+             Background task is scheduled for diagnostic dispatch.
     """
     from app.core.database import get_db
     from app.core.deps import get_current_user
@@ -77,7 +77,10 @@ async def test_create_class_when_valid_payload_then_delegates_to_service_and_ret
     # Mock ClassService.create_class to return our fake class
     mock_service_create = AsyncMock(return_value=fake_class)
 
-    with patch("app.api.v1.routes.classes.ClassService") as MockService:
+    with (
+        patch("app.api.v1.routes.classes.ClassService") as MockService,
+        patch("app.api.v1.routes.classes._dispatch_class_diagnostic") as mock_dispatch,
+    ):
         MockService.return_value.create_class = mock_service_create
 
         app.dependency_overrides[get_db] = _fake_db
@@ -104,4 +107,11 @@ async def test_create_class_when_valid_payload_then_delegates_to_service_and_ret
 
     assert response.status_code == 201, response.text
     mock_service_create.assert_called_once()
-    # Task dispatch is now in ClassService.create_class — verified in test_class_service.py
+    # Verify payload completeness — academic_year must be passed through
+    call_args = mock_service_create.call_args
+    assert call_args is not None
+    assert call_args.args[1].academic_year == "2026"
+    # Background task is registered during the route body via add_task().
+    # FastAPI executes it after the response is sent, but add_task() itself
+    # is called synchronously within the route.
+    mock_dispatch.assert_called_once_with(str(fake_class.id))

@@ -220,11 +220,17 @@ export function CreateClassModal({
     onClose();
   }
 
+  const ACADEMIC_YEAR_REGEX = /^\d{4}\/\d{4}$/;
+
   function validateStep1(): boolean {
     const errs: Record<string, string> = {};
     if (!name.trim()) errs.name = "Class name is required";
     if (!subjectId) errs.subject = "Subject is required";
     if (!gradeId) errs.grade = "Grade is required";
+    if (!ACADEMIC_YEAR_REGEX.test(academicYear)) {
+      errs.academicYear =
+        "Academic year must be in format YYYY/YYYY (e.g. 2025/2026)";
+    }
     setStep1Errors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -267,7 +273,7 @@ export function CreateClassModal({
   }
 
   async function handleSubmit(studentIds: string[]) {
-    if (!curriculumId) return;
+    if (!curriculumId || submitting) return;
     setCreateError("");
     setSubmitting(true);
     try {
@@ -380,7 +386,9 @@ export function CreateClassModal({
             ))}
             {!allSubjects?.length && (
               <span className="text-sm text-brand-muted">
-                {gradeId ? "No subjects available" : "Select a grade first"}
+                {gradeId
+                  ? "No subjects available for this curriculum. Contact support if this is unexpected."
+                  : "Select a grade first"}
               </span>
             )}
           </div>
@@ -390,15 +398,29 @@ export function CreateClassModal({
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-brand-ink mb-1.5">
+          <label
+            htmlFor="academicYear"
+            className="block text-sm font-semibold text-brand-ink mb-1.5"
+          >
             Academic Year
           </label>
           <input
+            id="academicYear"
             type="text"
             value={academicYear}
             onChange={(e) => setAcademicYear(e.target.value)}
+            aria-invalid={!!step1Errors.academicYear}
+            aria-describedby={
+              step1Errors.academicYear ? "academicYear-error" : undefined
+            }
+            pattern="^\d{4}/\d{4}$"
             className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
           />
+          {step1Errors.academicYear && (
+            <p id="academicYear-error" className="mt-1 text-xs text-brand-red">
+              {step1Errors.academicYear}
+            </p>
+          )}
         </div>
 
         <div className="flex gap-3 pt-2">
@@ -587,6 +609,7 @@ export function CreateClassModal({
               type="checkbox"
               checked={allStudentsSelected}
               onChange={toggleSelectAll}
+              aria-label={`Select all ${filteredStudents.length} students`}
               className="w-4 h-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary"
             />
             <span className="text-sm font-semibold text-brand-ink">

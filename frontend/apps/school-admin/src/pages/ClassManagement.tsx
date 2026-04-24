@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
 import { useSchoolClasses, type ClassSummary } from "../hooks/useSchoolAdmin";
+import { CreateClassModal } from "./CreateClassModal";
 
 export function ClassManagement() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export function ClassManagement() {
   const [gradeFilter, setGradeFilter] = useState<number | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const attentionCount = classes.filter(
     (c) => c.diagnostic_status !== "has_data",
@@ -115,7 +117,10 @@ export function ClassManagement() {
             {filtered.length} classes
           </span>
         </div>
-        <button className="bg-brand-primary text-white rounded-full px-4 py-[6px] text-xs font-bold flex items-center gap-1">
+        <button
+          onClick={() => setCreateModalOpen(true)}
+          className="bg-brand-primary text-white rounded-full px-4 py-[6px] text-xs font-bold flex items-center gap-1"
+        >
           <svg
             className="w-3 h-3"
             viewBox="0 0 24 24"
@@ -196,6 +201,11 @@ export function ClassManagement() {
           </div>
         ))}
       </div>
+      <CreateClassModal
+        isOpen={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onCreated={() => setCreateModalOpen(false)}
+      />
     </DashboardLayout>
   );
 }

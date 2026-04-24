@@ -14,7 +14,7 @@ from app.schemas.class_enrollment import (
     StudentSummary,
     TeacherStudentItem,
 )
-from app.tasks.onboarding_tasks import create_class_diagnostic_task, trigger_onboarding_diagnostics
+from app.tasks.onboarding_tasks import trigger_onboarding_diagnostics
 
 
 class _StudentClassData(TypedDict):
@@ -70,7 +70,6 @@ class ClassService:
         )
         self.db.add(class_)
         await self.db.flush()
-        create_class_diagnostic_task.delay(str(class_.id))
         return class_
 
     async def list_classes(

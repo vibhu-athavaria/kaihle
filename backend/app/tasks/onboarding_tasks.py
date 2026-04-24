@@ -39,11 +39,30 @@ def _parse_uuid(value: str, param_name: str) -> _uuid.UUID:
         raise ValueError(f"Invalid UUID for {param_name}: {value}")
 
 
+def _on_class_diagnostic_failure(
+    task_self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo: object
+) -> None:
+    """Called by Celery when all retries are exhausted.
+
+    Emits a CRITICAL structured log event so the operations team is alerted.
+    Per CONSTITUTION Rule 18.
+    """
+    logger.critical(
+        "celery_task_permanently_failed",
+        task_name=task_self.name,
+        task_id=task_id,
+        class_id=args[0] if args else kwargs.get("class_id"),
+        error=str(exc),
+        exc_info=True,
+    )
+
+
 @celery_app.task(
     bind=True,
     max_retries=3,
     default_retry_delay=30,
     name="app.tasks.onboarding_tasks.create_class_diagnostic_task",
+    on_failure=_on_class_diagnostic_failure,
 )
 def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:
     """Create a Tier 1 DIAGNOSTIC assessment for a newly created class.
@@ -122,20 +141,22 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:
         )
         raise self.retry(exc=exc)
 
-    def on_failure(self, exc, task_id, args, kwargs, einfo) -> None:
-        """Called by Celery when all retries are exhausted.
 
-        Emits a CRITICAL structured log event so the operations team is alerted.
-        Per CONSTITUTION Rule 18.
-        """
-        logger.critical(
-            "celery_task_permanently_failed",
-            task_name=self.name,
-            task_id=task_id,
-            class_id=args[0] if args else kwargs.get("class_id"),
-            error=str(exc),
-            exc_info=True,
-        )
+def _on_onboarding_failure(task_self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo: object) -> None:
+    """Called by Celery when all retries are exhausted.
+
+    Emits a CRITICAL structured log event so the operations team is alerted.
+    Per CONSTITUTION Rule 18.
+    """
+    logger.critical(
+        "celery_task_permanently_failed",
+        task_name=task_self.name,
+        task_id=task_id,
+        student_id=args[0] if args else kwargs.get("student_id"),
+        class_id=args[1] if len(args) > 1 else kwargs.get("class_id"),
+        error=str(exc),
+        exc_info=True,
+    )
 
 
 @celery_app.task(
@@ -143,6 +164,7 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:
     max_retries=3,
     default_retry_delay=30,
     name="app.tasks.onboarding_tasks.trigger_onboarding_diagnostics",
+    on_failure=_on_onboarding_failure,
 )
 def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict[str, object]:
     """Create a StudentAttempt for the class diagnostic on student enrollment.
@@ -240,19 +262,3 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
             exc_info=True,
         )
         raise self.retry(exc=exc)
-
-    def on_failure(self, exc, task_id, args, kwargs, einfo) -> None:
-        """Called by Celery when all retries are exhausted.
-
-        Emits a CRITICAL structured log event so the operations team is alerted.
-        Per CONSTITUTION Rule 18.
-        """
-        logger.critical(
-            "celery_task_permanently_failed",
-            task_name=self.name,
-            task_id=task_id,
-            student_id=args[0] if args else kwargs.get("student_id"),
-            class_id=args[1] if len(args) > 1 else kwargs.get("class_id"),
-            error=str(exc),
-            exc_info=True,
-        )
