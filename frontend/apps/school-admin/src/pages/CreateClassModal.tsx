@@ -4,6 +4,7 @@ import { UserRole } from "@kaihle/types";
 import {
   useCurricula,
   useGrades,
+  useSubjects,
   useSchoolUsers,
   useCreateClass,
 } from "../hooks/useSchoolAdmin";
@@ -14,83 +15,72 @@ interface CreateClassModalProps {
   onCreated: () => void;
 }
 
-const subjectOptions = [
-  { value: "MATH", label: "Mathematics" },
-  { value: "SCI", label: "Science" },
-  { value: "ENG", label: "English" },
-  { value: "BIO", label: "Biology" },
-  { value: "CHEM", label: "Chemistry" },
-  { value: "PHY", label: "Physics" },
-  { value: "ENGL", label: "English Literature" },
-];
-
 export function CreateClassModal({
   isOpen,
   onClose,
   onCreated,
 }: CreateClassModalProps) {
   const [name, setName] = useState("");
-  const [subject, setSubject] = useState("");
-  const [grade, setGrade] = useState("");
+  const [subjectId, setSubjectId] = useState("");
+  const [gradeId, setGradeId] = useState("");
   const [teacherId, setTeacherId] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { data: curricula } = useCurricula();
   const { data: grades } = useGrades();
+  const { data: subjects } = useSubjects();
   const { data: teachers } = useSchoolUsers(UserRole.TEACHER);
   const createClass = useCreateClass();
 
+  const selectedGrade = useMemo(
+    () => grades?.find((g) => g.id === gradeId),
+    [grades, gradeId],
+  );
+
   const curriculumId = useMemo(() => {
-    if (!grade || !curricula || !grades) return "";
-    const gradeData = grades.find((g) => g.level === parseInt(grade));
-    if (!gradeData) return "";
-    if (gradeData.level <= 8) {
+    if (!selectedGrade || !curricula) return "";
+    if (selectedGrade.level <= 8) {
       return (
         curricula.find((c) => c.name.toLowerCase().includes("lower"))?.id ?? ""
       );
     }
-    if (gradeData.level <= 10) {
+    if (selectedGrade.level <= 10) {
       return (
         curricula.find((c) => c.name.toLowerCase().includes("igcse"))?.id ?? ""
       );
     }
     return "";
-  }, [grade, curricula, grades]);
+  }, [selectedGrade, curricula]);
+
+  const academicYear = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    return month >= 8 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
+  }, []);
 
   function resetForm() {
     setName("");
-    setSubject("");
-    setGrade("");
+    setSubjectId("");
+    setGradeId("");
     setTeacherId("");
     setErrors({});
   }
 
   const getSuggestedCurriculum = () => {
-    if (!grade || !curricula) return "";
-    const gradeNum = parseInt(grade);
-    if (gradeNum <= 8) {
-      return "Cambridge Lower Secondary";
-    }
-    if (gradeNum <= 10) {
-      return "Cambridge IGCSE";
-    }
+    if (!selectedGrade || !curricula) return "";
+    if (selectedGrade.level <= 8) return "Cambridge Lower Secondary";
+    if (selectedGrade.level <= 10) return "Cambridge IGCSE";
     return "Cambridge A-Level";
   };
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    if (!name.trim()) {
-      newErrors.name = "Class name is required";
-    }
-    if (!subject) {
-      newErrors.subject = "Subject is required";
-    }
-    if (!grade) {
-      newErrors.grade = "Grade is required";
-    }
-    if (!curriculumId) {
-      newErrors.curriculum = "Curriculum is required";
-    }
+    if (!name.trim()) newErrors.name = "Class name is required";
+    if (!subjectId) newErrors.subject = "Subject is required";
+    if (!gradeId) newErrors.grade = "Grade is required";
+    if (!curriculumId) newErrors.curriculum = "Curriculum is required";
+    if (!teacherId) newErrors.teacher = "Teacher is required";
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -102,10 +92,11 @@ export function CreateClassModal({
     try {
       await createClass.mutateAsync({
         name: name.trim(),
-        subject,
-        grade: parseInt(grade),
+        subject_id: subjectId,
+        grade_id: gradeId,
         curriculum_id: curriculumId,
-        teacher_id: teacherId || undefined,
+        teacher_id: teacherId,
+        academic_year: academicYear,
       });
       resetForm();
       onCreated();
@@ -150,14 +141,14 @@ export function CreateClassModal({
           </label>
           <select
             id="subject"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
+            value={subjectId}
+            onChange={(e) => setSubjectId(e.target.value)}
             className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
           >
             <option value="">Select subject</option>
-            {subjectOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
+            {subjects?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
               </option>
             ))}
           </select>
@@ -175,13 +166,13 @@ export function CreateClassModal({
           </label>
           <select
             id="grade"
-            value={grade}
-            onChange={(e) => setGrade(e.target.value)}
+            value={gradeId}
+            onChange={(e) => setGradeId(e.target.value)}
             className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
           >
             <option value="">Select grade</option>
             {grades?.map((g) => (
-              <option key={g.id} value={g.level}>
+              <option key={g.id} value={g.id}>
                 Grade {g.level}
               </option>
             ))}
@@ -214,7 +205,7 @@ export function CreateClassModal({
           {errors.curriculum && (
             <p className="mt-1 text-xs text-brand-red">{errors.curriculum}</p>
           )}
-          {grade && !errors.curriculum && (
+          {gradeId && !errors.curriculum && (
             <p className="mt-1 text-xs text-brand-muted">
               Suggested: {getSuggestedCurriculum()}
             </p>
@@ -226,7 +217,7 @@ export function CreateClassModal({
             htmlFor="teacher"
             className="block text-sm font-semibold text-brand-ink mb-1.5"
           >
-            Teacher (optional)
+            Teacher <span className="text-brand-red">*</span>
           </label>
           <select
             id="teacher"
@@ -241,6 +232,9 @@ export function CreateClassModal({
               </option>
             ))}
           </select>
+          {errors.teacher && (
+            <p className="mt-1 text-xs text-brand-red">{errors.teacher}</p>
+          )}
         </div>
 
         <div className="flex gap-3 pt-4">
