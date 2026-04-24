@@ -1,6 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Check, Search, Info } from "lucide-react";
 import { Button, Input, Modal } from "@kaihle/ui";
 import { UserRole } from "@kaihle/types";
+import { apiClient } from "@kaihle/auth";
 import {
   useCurricula,
   useGrades,
@@ -15,82 +18,239 @@ interface CreateClassModalProps {
   onCreated: () => void;
 }
 
+// ── Step Progress Bar ─────────────────────────────────────────────────────────
+
+interface StepBarProps {
+  current: 1 | 2 | 3;
+}
+
+function StepBar({ current }: StepBarProps) {
+  const steps = [
+    { n: 1, label: "Class Details" },
+    { n: 2, label: "Assign Teacher" },
+    { n: 3, label: "Add Students" },
+  ];
+
+  return (
+    <div className="flex items-center mb-6">
+      {steps.map((step, idx) => {
+        const done = step.n < current;
+        const active = step.n === current;
+
+        return (
+          <div key={step.n} className="flex items-center flex-1 last:flex-none">
+            <div className="flex flex-col items-center">
+              <div
+                className={[
+                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all",
+                  done
+                    ? "bg-brand-primary text-white"
+                    : active
+                      ? "bg-brand-primary text-white ring-4 ring-brand-primary/20"
+                      : "bg-gray-100 text-gray-400",
+                ].join(" ")}
+              >
+                {done ? (
+                  <Check className="w-4 h-4" aria-hidden="true" />
+                ) : (
+                  step.n
+                )}
+              </div>
+              <span
+                className={[
+                  "text-[10px] font-sans mt-1 whitespace-nowrap",
+                  active ? "text-brand-primary font-semibold" : "text-gray-400",
+                ].join(" ")}
+              >
+                {step.label}
+              </span>
+            </div>
+            {idx < steps.length - 1 && (
+              <div
+                className={[
+                  "flex-1 h-0.5 mx-2 mb-4 rounded transition-all",
+                  done ? "bg-brand-primary" : "bg-gray-200",
+                ].join(" ")}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Curriculum detection ──────────────────────────────────────────────────────
+
+function detectCurriculumKeyword(gradeLevel: number): string {
+  if (gradeLevel <= 5) return "primary";
+  if (gradeLevel <= 8) return "lower";
+  if (gradeLevel <= 10) return "igcse";
+  return "a level";
+}
+
+function detectCurriculumLabel(gradeLevel: number): string {
+  if (gradeLevel <= 5) return "Cambridge Primary";
+  if (gradeLevel <= 8) return "Cambridge Lower Secondary";
+  if (gradeLevel <= 10) return "Cambridge IGCSE";
+  return "Cambridge AS & A Level";
+}
+
+function currentAcademicYear(): string {
+  const year = new Date().getFullYear();
+  const month = new Date().getMonth() + 1;
+  return month >= 8 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function CreateClassModal({
   isOpen,
   onClose,
   onCreated,
 }: CreateClassModalProps) {
-  const [name, setName] = useState("");
-  const [subjectId, setSubjectId] = useState("");
-  const [gradeId, setGradeId] = useState("");
-  const [teacherId, setTeacherId] = useState("");
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [step, setStep] = useState<1 | 2 | 3>(1);
 
+  // Step 1 state
+  const [name, setName] = useState("");
+  const [gradeId, setGradeId] = useState("");
+  const [subjectId, setSubjectId] = useState("");
+  const [academicYear, setAcademicYear] = useState(currentAcademicYear);
+  const [step1Errors, setStep1Errors] = useState<Record<string, string>>({});
+
+  // Step 2 state
+  const [teacherId, setTeacherId] = useState("");
+  const [teacherSearch, setTeacherSearch] = useState("");
+  const [step2Error, setStep2Error] = useState("");
+
+  // Step 3 state
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [studentSearch, setStudentSearch] = useState("");
+
+  const [submitting, setSubmitting] = useState(false);
+
+  const queryClient = useQueryClient();
+
+  // Data hooks
   const { data: curricula } = useCurricula();
   const { data: grades } = useGrades();
-  const { data: subjects } = useSubjects();
-  const { data: teachers } = useSchoolUsers(UserRole.TEACHER);
-  const createClass = useCreateClass();
-
   const selectedGrade = useMemo(
     () => grades?.find((g) => g.id === gradeId),
     [grades, gradeId],
   );
-
   const curriculumId = useMemo(() => {
     if (!selectedGrade || !curricula) return "";
-    if (selectedGrade.level <= 8) {
-      return (
-        curricula.find((c) => c.name.toLowerCase().includes("lower"))?.id ?? ""
-      );
-    }
-    if (selectedGrade.level <= 10) {
-      return (
-        curricula.find((c) => c.name.toLowerCase().includes("igcse"))?.id ?? ""
-      );
-    }
-    return "";
+    const keyword = detectCurriculumKeyword(selectedGrade.level);
+    return (
+      curricula.find((c) => c.name.toLowerCase().includes(keyword))?.id ?? ""
+    );
   }, [selectedGrade, curricula]);
 
-  const academicYear = useMemo(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    return month >= 8 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
+  const { data: allSubjects } = useSubjects(curriculumId || undefined);
+  const { data: teachers, isLoading: teachersLoading } = useSchoolUsers(
+    UserRole.TEACHER,
+  );
+  const { data: students, isLoading: studentsLoading } = useSchoolUsers(
+    UserRole.STUDENT,
+  );
+
+  const createClass = useCreateClass();
+
+  // ── Derived lists ───────────────────────────────────────────────────────────
+
+  const filteredTeachers = useMemo(() => {
+    if (!teachers) return [];
+    const q = teacherSearch.toLowerCase();
+    if (!q) return teachers;
+    return teachers.filter(
+      (t) =>
+        `${t.first_name} ${t.last_name}`.toLowerCase().includes(q) ||
+        t.email.toLowerCase().includes(q),
+    );
+  }, [teachers, teacherSearch]);
+
+  const filteredStudents = useMemo(() => {
+    if (!students) return [];
+    const q = studentSearch.toLowerCase();
+    if (!q) return students;
+    return students.filter(
+      (s) =>
+        `${s.first_name} ${s.last_name}`.toLowerCase().includes(q) ||
+        s.email.toLowerCase().includes(q),
+    );
+  }, [students, studentSearch]);
+
+  const allStudentsSelected =
+    filteredStudents.length > 0 &&
+    filteredStudents.every((s) => selectedStudentIds.has(s.id));
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
+
+  const resetAll = useCallback(() => {
+    setStep(1);
+    setName("");
+    setGradeId("");
+    setSubjectId("");
+    setAcademicYear(currentAcademicYear());
+    setStep1Errors({});
+    setTeacherId("");
+    setTeacherSearch("");
+    setStep2Error("");
+    setSelectedStudentIds(new Set());
+    setStudentSearch("");
+    setSubmitting(false);
   }, []);
 
-  function resetForm() {
-    setName("");
-    setSubjectId("");
-    setGradeId("");
-    setTeacherId("");
-    setErrors({});
+  function handleClose() {
+    resetAll();
+    onClose();
   }
 
-  const getSuggestedCurriculum = () => {
-    if (!selectedGrade || !curricula) return "";
-    if (selectedGrade.level <= 8) return "Cambridge Lower Secondary";
-    if (selectedGrade.level <= 10) return "Cambridge IGCSE";
-    return "Cambridge A-Level";
-  };
+  function validateStep1(): boolean {
+    const errs: Record<string, string> = {};
+    if (!name.trim()) errs.name = "Class name is required";
+    if (!subjectId) errs.subject = "Subject is required";
+    if (!gradeId) errs.grade = "Grade is required";
+    setStep1Errors(errs);
+    return Object.keys(errs).length === 0;
+  }
 
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    if (!name.trim()) newErrors.name = "Class name is required";
-    if (!subjectId) newErrors.subject = "Subject is required";
-    if (!gradeId) newErrors.grade = "Grade is required";
-    if (!curriculumId) newErrors.curriculum = "Curriculum is required";
-    if (!teacherId) newErrors.teacher = "Teacher is required";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  function handleStep1Next() {
+    if (validateStep1()) setStep(2);
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validate()) return;
+  function handleStep2Next() {
+    if (!teacherId) {
+      setStep2Error("Please assign a teacher to this class");
+      return;
+    }
+    setStep(3);
+  }
 
+  function toggleStudent(id: string) {
+    setSelectedStudentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (allStudentsSelected) {
+      setSelectedStudentIds(new Set());
+    } else {
+      setSelectedStudentIds(new Set(filteredStudents.map((s) => s.id)));
+    }
+  }
+
+  async function handleSubmit(studentIds: string[]) {
+    if (!curriculumId) return;
+    setSubmitting(true);
     try {
-      await createClass.mutateAsync({
+      const created = await createClass.mutateAsync({
         name: name.trim(),
         subject_id: subjectId,
         grade_id: gradeId,
@@ -98,76 +258,55 @@ export function CreateClassModal({
         teacher_id: teacherId,
         academic_year: academicYear,
       });
-      resetForm();
+
+      const newClassId = created.id;
+
+      if (studentIds.length > 0) {
+        try {
+          await apiClient.post(`/api/v1/classes/${newClassId}/enrollments`, {
+            student_ids: studentIds,
+          });
+          queryClient.invalidateQueries({ queryKey: ["school", "classes"] });
+        } catch {
+          // class was created — enrollment failed, still close
+        }
+      }
+
+      resetAll();
       onCreated();
       onClose();
     } catch {
-      // Error handling done by caller
+      // stay open, allow retry
+    } finally {
+      setSubmitting(false);
     }
-  };
-
-  function handleClose() {
-    resetForm();
-    onClose();
   }
 
-  return (
-    <Modal
-      open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) handleClose();
-      }}
-      title="Create a new class"
-    >
-      <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-        <div>
-          <Input
-            id="className"
-            label="Class name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Maths 9B"
-            error={errors.name}
-          />
-        </div>
+  // ── Render helpers ──────────────────────────────────────────────────────────
+
+  function renderStep1() {
+    return (
+      <div className="space-y-4">
+        <Input
+          id="className"
+          label="Class name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value.slice(0, 100))}
+          placeholder="e.g. Maths 9B"
+          error={step1Errors.name}
+        />
 
         <div>
-          <label
-            htmlFor="subject"
-            className="block text-sm font-semibold text-brand-ink mb-1.5"
-          >
-            Subject <span className="text-brand-red">*</span>
-          </label>
-          <select
-            id="subject"
-            value={subjectId}
-            onChange={(e) => setSubjectId(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-          >
-            <option value="">Select subject</option>
-            {subjects?.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          {errors.subject && (
-            <p className="mt-1 text-xs text-brand-red">{errors.subject}</p>
-          )}
-        </div>
-
-        <div>
-          <label
-            htmlFor="grade"
-            className="block text-sm font-semibold text-brand-ink mb-1.5"
-          >
+          <label className="block text-sm font-semibold text-brand-ink mb-1.5">
             Grade <span className="text-brand-red">*</span>
           </label>
           <select
-            id="grade"
             value={gradeId}
-            onChange={(e) => setGradeId(e.target.value)}
+            onChange={(e) => {
+              setGradeId(e.target.value);
+              setSubjectId(""); // reset subject when grade changes
+            }}
             className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
           >
             <option value="">Select grade</option>
@@ -177,67 +316,63 @@ export function CreateClassModal({
               </option>
             ))}
           </select>
-          {errors.grade && (
-            <p className="mt-1 text-xs text-brand-red">{errors.grade}</p>
+          {step1Errors.grade && (
+            <p className="mt-1 text-xs text-brand-red">{step1Errors.grade}</p>
           )}
         </div>
 
+        {gradeId && selectedGrade && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-brand-border text-sm text-brand-body">
+            <span className="font-semibold text-brand-ink">Curriculum:</span>
+            <span>{detectCurriculumLabel(selectedGrade.level)}</span>
+          </div>
+        )}
+
         <div>
-          <label
-            htmlFor="curriculum"
-            className="block text-sm font-semibold text-brand-ink mb-1.5"
-          >
-            Curriculum <span className="text-brand-red">*</span>
+          <label className="block text-sm font-semibold text-brand-ink mb-2">
+            Subject <span className="text-brand-red">*</span>
           </label>
-          <select
-            id="curriculum"
-            value={curriculumId}
-            disabled
-            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-gray-50 text-brand-ink font-sans text-sm cursor-not-allowed"
-          >
-            <option value="">Select curriculum</option>
-            {curricula?.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
+          <div className="flex flex-wrap gap-2">
+            {allSubjects?.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSubjectId(s.id)}
+                className={[
+                  "px-3 py-1.5 rounded-full text-xs font-semibold font-sans transition-all",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2",
+                  subjectId === s.id
+                    ? "bg-brand-primary text-white"
+                    : "border border-role-school-border text-brand-body hover:border-brand-primary hover:text-brand-primary",
+                ].join(" ")}
+              >
+                {s.name}
+              </button>
             ))}
-          </select>
-          {errors.curriculum && (
-            <p className="mt-1 text-xs text-brand-red">{errors.curriculum}</p>
-          )}
-          {gradeId && !errors.curriculum && (
-            <p className="mt-1 text-xs text-brand-muted">
-              Suggested: {getSuggestedCurriculum()}
-            </p>
+            {!allSubjects?.length && (
+              <span className="text-sm text-brand-muted">
+                {gradeId ? "No subjects available" : "Select a grade first"}
+              </span>
+            )}
+          </div>
+          {step1Errors.subject && (
+            <p className="mt-1 text-xs text-brand-red">{step1Errors.subject}</p>
           )}
         </div>
 
         <div>
-          <label
-            htmlFor="teacher"
-            className="block text-sm font-semibold text-brand-ink mb-1.5"
-          >
-            Teacher <span className="text-brand-red">*</span>
+          <label className="block text-sm font-semibold text-brand-ink mb-1.5">
+            Academic Year
           </label>
-          <select
-            id="teacher"
-            value={teacherId}
-            onChange={(e) => setTeacherId(e.target.value)}
+          <input
+            type="text"
+            value={academicYear}
+            onChange={(e) => setAcademicYear(e.target.value)}
             className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-          >
-            <option value="">Select teacher</option>
-            {teachers?.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.first_name} {t.last_name}
-              </option>
-            ))}
-          </select>
-          {errors.teacher && (
-            <p className="mt-1 text-xs text-brand-red">{errors.teacher}</p>
-          )}
+          />
         </div>
 
-        <div className="flex gap-3 pt-4">
+        <div className="flex gap-3 pt-2">
           <Button
             type="button"
             variant="secondary"
@@ -247,15 +382,268 @@ export function CreateClassModal({
             Cancel
           </Button>
           <Button
-            type="submit"
+            type="button"
             variant="primary"
-            loading={createClass.isPending}
+            onClick={handleStep1Next}
             className="flex-1"
           >
-            Create class →
+            Next →
           </Button>
         </div>
-      </form>
+      </div>
+    );
+  }
+
+  function renderStep2() {
+    return (
+      <div className="space-y-4">
+        <div className="relative">
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+            aria-hidden="true"
+          />
+          <input
+            type="text"
+            placeholder="Search teachers..."
+            value={teacherSearch}
+            onChange={(e) => setTeacherSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+          />
+        </div>
+
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {teachersLoading && (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-16 rounded-xl bg-gray-100 animate-pulse"
+                />
+              ))}
+            </div>
+          )}
+
+          {!teachersLoading && filteredTeachers.length === 0 && (
+            <div className="text-center py-10 text-sm text-brand-muted">
+              {teachers?.length === 0
+                ? "No teachers in this school yet."
+                : "No teachers match your search."}
+            </div>
+          )}
+
+          {filteredTeachers.map((t) => {
+            const selected = teacherId === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setTeacherId(selected ? "" : t.id);
+                  setStep2Error("");
+                }}
+                className={[
+                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2",
+                  selected
+                    ? "bg-brand-green-light border-brand-primary"
+                    : "border-role-school-border hover:border-brand-primary/50",
+                ].join(" ")}
+              >
+                <div className="w-9 h-9 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary font-bold text-sm flex-shrink-0">
+                  {t.first_name?.[0]}
+                  {t.last_name?.[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-brand-ink truncate">
+                    {t.first_name} {t.last_name}
+                  </p>
+                  <p className="text-xs text-brand-muted truncate">{t.email}</p>
+                </div>
+                {selected && (
+                  <Check
+                    className="w-4 h-4 text-brand-primary flex-shrink-0"
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {step2Error && (
+          <p className="mt-2 text-xs text-brand-red">{step2Error}</p>
+        )}
+
+        <div className="flex gap-3 pt-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setStep(1)}
+            className="flex-1"
+          >
+            ← Back
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={handleStep2Next}
+            className="flex-1"
+          >
+            Next →
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderStep3() {
+    const selectedList = Array.from(selectedStudentIds);
+
+    return (
+      <div className="space-y-4">
+        {/* Info banner */}
+        <div className="flex gap-2 px-4 py-3 rounded-xl bg-blue-50 border border-blue-200">
+          <Info
+            className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0"
+            aria-hidden="true"
+          />
+          <p className="text-xs text-blue-700 font-sans leading-relaxed">
+            A Tier 1 Diagnostic will be automatically generated for each student
+            enrolled.
+          </p>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+            aria-hidden="true"
+          />
+          <input
+            type="text"
+            placeholder="Search students..."
+            value={studentSearch}
+            onChange={(e) => setStudentSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+          />
+        </div>
+
+        {/* Select all */}
+        {filteredStudents.length > 0 && (
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={allStudentsSelected}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary"
+            />
+            <span className="text-sm font-semibold text-brand-ink">
+              Select all ({filteredStudents.length})
+            </span>
+          </label>
+        )}
+
+        {/* Student list */}
+        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+          {studentsLoading && (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-14 rounded-xl bg-gray-100 animate-pulse"
+                />
+              ))}
+            </div>
+          )}
+
+          {!studentsLoading && filteredStudents.length === 0 && (
+            <div className="text-center py-8 text-sm text-brand-muted">
+              {students?.length === 0
+                ? "No students in this school yet."
+                : "No students match your search."}
+            </div>
+          )}
+
+          {filteredStudents.map((s) => {
+            const checked = selectedStudentIds.has(s.id);
+            return (
+              <label
+                key={s.id}
+                className={[
+                  "flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all",
+                  checked
+                    ? "bg-brand-green-light border-brand-primary"
+                    : "border-role-school-border hover:border-brand-primary/50",
+                ].join(" ")}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleStudent(s.id)}
+                  className="w-4 h-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-brand-ink truncate">
+                    {s.first_name} {s.last_name}
+                  </p>
+                  <p className="text-xs text-brand-muted truncate">{s.email}</p>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 pt-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setStep(2)}
+            className="flex-shrink-0"
+          >
+            ← Back
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => handleSubmit([])}
+            loading={submitting && selectedList.length === 0}
+            disabled={submitting}
+            className="flex-1 border border-gray-200 text-gray-500 rounded-full"
+          >
+            Create without students
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => handleSubmit(selectedList)}
+            loading={submitting && selectedList.length > 0}
+            disabled={submitting}
+            className="flex-1"
+          >
+            ✓ Create Class
+            {selectedList.length > 0 ? ` (${selectedList.length})` : ""}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Modal
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
+      title="Create a New Class"
+      maxWidth="lg"
+    >
+      <div className="mt-4">
+        <StepBar current={step} />
+        {step === 1 && renderStep1()}
+        {step === 2 && renderStep2()}
+        {step === 3 && renderStep3()}
+      </div>
     </Modal>
   );
 }
