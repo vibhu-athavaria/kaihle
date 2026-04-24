@@ -342,6 +342,7 @@ export function useInviteUser() {
       last_name: string;
       email: string;
       role: UserRoleType;
+      student_ids?: string[];
     }) => {
       if (!schoolId) throw new Error("No school_id for current user");
       const res = await apiClient.post(

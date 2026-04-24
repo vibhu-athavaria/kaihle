@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, Input, Modal } from "@kaihle/ui";
 import { UserRole } from "@kaihle/types";
+import { useSchoolStudents } from "../hooks/useSchoolAdmin";
 
 type SchoolRole =
   | typeof UserRole.TEACHER
@@ -15,6 +16,7 @@ interface InviteUserModalProps {
     last_name: string;
     email: string;
     role: SchoolRole;
+    student_ids?: string[];
   }) => void;
   defaultRole?: SchoolRole;
 }
@@ -35,8 +37,12 @@ export function InviteUserModal({
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState(defaultRole);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { data: students = [], isLoading: studentsLoading } =
+    useSchoolStudents();
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -66,11 +72,15 @@ export function InviteUserModal({
         last_name: lastName.trim(),
         email: email.trim().toLowerCase(),
         role,
+        ...(role === UserRole.PARENT && selectedStudentIds.length > 0
+          ? { student_ids: selectedStudentIds }
+          : {}),
       });
       setFirstName("");
       setLastName("");
       setEmail("");
       setRole(defaultRole);
+      setSelectedStudentIds([]);
       setErrors({});
       onClose();
     } catch {
@@ -146,7 +156,13 @@ export function InviteUserModal({
           <select
             id="role"
             value={role}
-            onChange={(e) => setRole(e.target.value as typeof role)}
+            onChange={(e) => {
+              const newRole = e.target.value as typeof role;
+              setRole(newRole);
+              if (newRole !== UserRole.PARENT) {
+                setSelectedStudentIds([]);
+              }
+            }}
             className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
           >
             {roleOptions.map((opt) => (
@@ -156,6 +172,48 @@ export function InviteUserModal({
             ))}
           </select>
         </div>
+
+        {role === UserRole.PARENT && (
+          <div>
+            <label className="block text-sm font-semibold text-brand-ink mb-1.5">
+              Link to students{" "}
+              <span className="text-brand-muted font-normal">(optional)</span>
+            </label>
+            {studentsLoading ? (
+              <div className="animate-pulse h-8 bg-brand-border rounded-lg" />
+            ) : students.length === 0 ? (
+              <p className="text-xs text-brand-muted">
+                No students in this school yet.
+              </p>
+            ) : (
+              <div className="max-h-40 overflow-y-auto border border-brand-border rounded-xl divide-y divide-brand-border">
+                {students.map((s) => (
+                  <label
+                    key={s.id}
+                    className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedStudentIds.includes(String(s.id))}
+                      onChange={(e) => {
+                        const id = String(s.id);
+                        setSelectedStudentIds((prev) =>
+                          e.target.checked
+                            ? [...prev, id]
+                            : prev.filter((x) => x !== id),
+                        );
+                      }}
+                      className="w-4 h-4 rounded accent-brand-primary"
+                    />
+                    <span className="text-sm text-brand-ink">
+                      {s.first_name} {s.last_name}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex gap-3 pt-4">
           <Button

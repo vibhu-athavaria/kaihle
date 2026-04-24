@@ -16,6 +16,7 @@ class UserInvite(BaseModel):
     first_name: str
     last_name: str
     subjects: list[str] | None = None  # for TEACHER role only
+    student_ids: list[uuid.UUID] | None = None  # for PARENT role only
 
 
 class UserUpdate(BaseModel):

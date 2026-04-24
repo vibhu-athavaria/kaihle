@@ -15,7 +15,7 @@ from app.core.security import (
     hash_token,
     store_magic_link_token,
 )
-from app.models.user import TeacherProfile, User, UserRole
+from app.models.user import ParentStudent, TeacherProfile, User, UserRole
 from app.schemas.user import UserInvite, UserSelfUpdate, UserUpdate
 
 logger = structlog.get_logger()
@@ -73,6 +73,12 @@ class UserService:
                 qualifications={"subjects": data.subjects or []},
             )
             self.db.add(profile)
+            await self.db.flush()
+
+        # Create parent-student links if role is PARENT and student_ids provided
+        if data.role == UserRole.PARENT and data.student_ids:
+            for sid in data.student_ids:
+                self.db.add(ParentStudent(parent_id=user.id, student_id=sid))
             await self.db.flush()
 
         # Send magic link welcome email
