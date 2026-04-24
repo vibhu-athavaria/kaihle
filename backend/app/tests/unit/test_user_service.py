@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User, UserRole
 from app.schemas.user import UserInvite, UserSelfUpdate, UserUpdate
-from app.services.user_service import UserService
+from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
 
 
 @pytest.fixture
@@ -629,3 +629,308 @@ class TestUpdateMe:
                 user_id=user_id,
                 data=data,
             )
+
+
+# ==============================================================================
+# Tests for invite_user — parent-student link path
+# ==============================================================================
+
+
+class TestInviteUserParentLink:
+    """Tests for invite_user parent-student link validation."""
+
+    def _patch_invite(self) -> tuple:
+        return (
+            patch("app.services.user_service.create_magic_link_token", return_value="tok"),
+            patch("app.services.user_service.hash_token", return_value="h"),
+            patch("app.services.user_service.store_magic_link_token"),
+            patch("app.services.user_service.UserService._send_welcome_email"),
+        )
+
+    @pytest.mark.asyncio
+    async def test_invite_user_when_parent_with_valid_student_ids_then_creates_links(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """invite_user creates ParentStudent rows when student_ids are valid school members."""
+        student_id = uuid.uuid4()
+        data = UserInvite(
+            email="parent@school.com",
+            role=UserRole.PARENT,
+            first_name="Parent",
+            last_name="One",
+            student_ids=[student_id],
+        )
+
+        # First scalar call: email uniqueness check → None (no duplicate)
+        # scalars call: validate student_ids → returns the valid student id
+        mock_db.scalar = AsyncMock(return_value=None)
+        scalars_result = MagicMock()
+        scalars_result.all = MagicMock(return_value=[student_id])
+        mock_db.scalars = AsyncMock(return_value=scalars_result)
+
+        with (
+            patch("app.services.user_service.create_magic_link_token", return_value="tok"),
+            patch("app.services.user_service.hash_token", return_value="h"),
+            patch("app.services.user_service.store_magic_link_token"),
+            patch("app.services.user_service.UserService._send_welcome_email"),
+        ):
+            result = await user_service.invite_user(school_id, data, "https://app.kaihle.com")
+
+        # Arrange — ParentStudent row should have been added
+        assert result.role == UserRole.PARENT
+        add_calls = mock_db.add.call_args_list
+        from app.models.user import ParentStudent
+
+        parent_student_calls = [c for c in add_calls if isinstance(c.args[0], ParentStudent)]
+        assert len(parent_student_calls) == 1
+        assert parent_student_calls[0].args[0].student_id == student_id
+
+    @pytest.mark.asyncio
+    async def test_invite_user_when_parent_with_cross_school_student_ids_then_raises(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """invite_user raises ValueError when student_ids belong to a different school."""
+        foreign_student_id = uuid.uuid4()
+        data = UserInvite(
+            email="parent2@school.com",
+            role=UserRole.PARENT,
+            first_name="Parent",
+            last_name="Two",
+            student_ids=[foreign_student_id],
+        )
+
+        mock_db.scalar = AsyncMock(return_value=None)
+        # scalars returns empty — student not found in this school
+        scalars_result = MagicMock()
+        scalars_result.all = MagicMock(return_value=[])
+        mock_db.scalars = AsyncMock(return_value=scalars_result)
+
+        with (
+            patch("app.services.user_service.create_magic_link_token", return_value="tok"),
+            patch("app.services.user_service.hash_token", return_value="h"),
+            patch("app.services.user_service.store_magic_link_token"),
+            patch("app.services.user_service.UserService._send_welcome_email"),
+        ):
+            with pytest.raises(ValueError, match="Student IDs not found in this school"):
+                await user_service.invite_user(school_id, data, "https://app.kaihle.com")
+
+    @pytest.mark.asyncio
+    async def test_invite_user_when_parent_with_no_student_ids_then_no_links_created(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """invite_user creates no ParentStudent rows when student_ids is None."""
+        data = UserInvite(
+            email="parent3@school.com",
+            role=UserRole.PARENT,
+            first_name="Parent",
+            last_name="Three",
+        )
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        with (
+            patch("app.services.user_service.create_magic_link_token", return_value="tok"),
+            patch("app.services.user_service.hash_token", return_value="h"),
+            patch("app.services.user_service.store_magic_link_token"),
+            patch("app.services.user_service.UserService._send_welcome_email"),
+        ):
+            await user_service.invite_user(school_id, data, "https://app.kaihle.com")
+
+        from app.models.user import ParentStudent
+
+        parent_student_calls = [c for c in mock_db.add.call_args_list if isinstance(c.args[0], ParentStudent)]
+        assert len(parent_student_calls) == 0
+
+
+# ==============================================================================
+# Tests for get_student_detail
+# ==============================================================================
+
+
+class TestGetStudentDetail:
+    """Tests for UserService.get_student_detail."""
+
+    @pytest.mark.asyncio
+    async def test_get_student_detail_when_not_found_then_raises_user_not_found_error(
+        self, user_service: UserService, mock_db: MagicMock
+    ) -> None:
+        """get_student_detail raises UserNotFoundError when student doesn't exist."""
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        with pytest.raises(UserNotFoundError, match="Student not found"):
+            await user_service.get_student_detail(uuid.uuid4(), caller_school_id=None)
+
+    @pytest.mark.asyncio
+    async def test_get_student_detail_when_cross_school_then_raises_cross_school_error(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """get_student_detail raises CrossSchoolAccessError when schools don't match."""
+        other_school = uuid.uuid4()
+        student = User(
+            id=uuid.uuid4(),
+            school_id=other_school,
+            role=UserRole.STUDENT,
+            email="s@school.com",
+            first_name="S",
+            last_name="T",
+            is_active=True,
+        )
+        mock_db.scalar = AsyncMock(return_value=student)
+
+        with pytest.raises(CrossSchoolAccessError):
+            await user_service.get_student_detail(student.id, caller_school_id=school_id)
+
+    @pytest.mark.asyncio
+    async def test_get_student_detail_when_same_school_then_returns_response(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """get_student_detail returns StudentDetailResponse for valid same-school caller."""
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            role=UserRole.STUDENT,
+            email="s@school.com",
+            first_name="Sam",
+            last_name="Lee",
+            is_active=True,
+            last_login_at=None,
+        )
+        mock_db.scalar = AsyncMock(return_value=student)
+        # Both execute calls (enrollments + gap states) return empty results
+        empty_result = MagicMock()
+        empty_result.all = MagicMock(return_value=[])
+        mock_db.execute = AsyncMock(return_value=empty_result)
+
+        from app.schemas.user_detail import StudentDetailResponse
+
+        result = await user_service.get_student_detail(student.id, caller_school_id=school_id)
+        assert isinstance(result, StudentDetailResponse)
+        assert result.first_name == "Sam"
+        assert result.class_enrollments == []
+
+
+# ==============================================================================
+# Tests for get_teacher_detail
+# ==============================================================================
+
+
+class TestGetTeacherDetail:
+    """Tests for UserService.get_teacher_detail."""
+
+    @pytest.mark.asyncio
+    async def test_get_teacher_detail_when_not_found_then_raises_user_not_found_error(
+        self, user_service: UserService, mock_db: MagicMock
+    ) -> None:
+        """get_teacher_detail raises UserNotFoundError when teacher doesn't exist."""
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        with pytest.raises(UserNotFoundError, match="Teacher not found"):
+            await user_service.get_teacher_detail(uuid.uuid4(), caller_school_id=None)
+
+    @pytest.mark.asyncio
+    async def test_get_teacher_detail_when_cross_school_then_raises_cross_school_error(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """get_teacher_detail raises CrossSchoolAccessError when schools don't match."""
+        teacher = User(
+            id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            role=UserRole.TEACHER,
+            email="t@school.com",
+            first_name="T",
+            last_name="E",
+            is_active=True,
+        )
+        mock_db.scalar = AsyncMock(return_value=teacher)
+
+        with pytest.raises(CrossSchoolAccessError):
+            await user_service.get_teacher_detail(teacher.id, caller_school_id=school_id)
+
+    @pytest.mark.asyncio
+    async def test_get_teacher_detail_when_same_school_then_returns_response(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """get_teacher_detail returns TeacherDetailResponse for valid same-school caller."""
+        teacher = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            role=UserRole.TEACHER,
+            email="t@school.com",
+            first_name="Jane",
+            last_name="Smith",
+            is_active=True,
+        )
+        mock_db.scalar = AsyncMock(return_value=teacher)
+        empty_result = MagicMock()
+        empty_result.all = MagicMock(return_value=[])
+        mock_db.execute = AsyncMock(return_value=empty_result)
+
+        from app.schemas.user_detail import TeacherDetailResponse
+
+        result = await user_service.get_teacher_detail(teacher.id, caller_school_id=school_id)
+        assert isinstance(result, TeacherDetailResponse)
+        assert result.email == "t@school.com"
+        assert result.assigned_classes == []
+
+
+# ==============================================================================
+# Tests for get_parent_detail
+# ==============================================================================
+
+
+class TestGetParentDetail:
+    """Tests for UserService.get_parent_detail."""
+
+    @pytest.mark.asyncio
+    async def test_get_parent_detail_when_not_found_then_raises_user_not_found_error(
+        self, user_service: UserService, mock_db: MagicMock
+    ) -> None:
+        """get_parent_detail raises UserNotFoundError when parent doesn't exist."""
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        with pytest.raises(UserNotFoundError, match="Parent not found"):
+            await user_service.get_parent_detail(uuid.uuid4(), caller_school_id=None)
+
+    @pytest.mark.asyncio
+    async def test_get_parent_detail_when_cross_school_then_raises_cross_school_error(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """get_parent_detail raises CrossSchoolAccessError when schools don't match."""
+        parent = User(
+            id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            role=UserRole.PARENT,
+            email="p@school.com",
+            first_name="P",
+            last_name="Q",
+            is_active=True,
+        )
+        mock_db.scalar = AsyncMock(return_value=parent)
+
+        with pytest.raises(CrossSchoolAccessError):
+            await user_service.get_parent_detail(parent.id, caller_school_id=school_id)
+
+    @pytest.mark.asyncio
+    async def test_get_parent_detail_when_same_school_then_returns_response(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """get_parent_detail returns ParentDetailResponse for valid same-school caller."""
+        parent = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            role=UserRole.PARENT,
+            email="p@school.com",
+            first_name="Paul",
+            last_name="Lee",
+            is_active=True,
+        )
+        mock_db.scalar = AsyncMock(return_value=parent)
+        empty_result = MagicMock()
+        empty_result.all = MagicMock(return_value=[])
+        mock_db.execute = AsyncMock(return_value=empty_result)
+
+        from app.schemas.user_detail import ParentDetailResponse
+
+        result = await user_service.get_parent_detail(parent.id, caller_school_id=school_id)
+        assert isinstance(result, ParentDetailResponse)
+        assert result.first_name == "Paul"
+        assert result.linked_students == []

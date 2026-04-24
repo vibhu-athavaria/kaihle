@@ -146,14 +146,14 @@ async def test_get_parent_detail_when_parent_has_no_linked_students_then_200_wit
 
 
 @pytest.mark.asyncio
-async def test_get_parent_detail_when_school_admin_views_parent_from_other_school_then_404(
+async def test_get_parent_detail_when_school_admin_views_parent_from_other_school_then_403(
     client: AsyncClient,
     db_session: AsyncSession,
     school: School,
     other_school: School,
     school_admin: User,
 ) -> None:
-    """SchoolAdmin from school A cannot view a parent in school B; returns 404."""
+    """SchoolAdmin from school A cannot view a parent in school B; returns 403."""
     # Arrange — parent belongs to other_school
     other_parent = User(
         id=uuid.uuid4(),
@@ -174,7 +174,7 @@ async def test_get_parent_detail_when_school_admin_views_parent_from_other_schoo
     )
 
     # Assert
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

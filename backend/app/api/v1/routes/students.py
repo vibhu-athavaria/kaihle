@@ -19,10 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user, require_role
-from app.models.curriculum import Curriculum, Grade, Subject, Subtopic
-from app.models.gap import GapState
+from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
+from app.schemas.user_detail import StudentDetailResponse
 
 logger = structlog.get_logger()
 
@@ -570,35 +570,6 @@ async def submit_concept_guide_answer(
 # =============================================================================
 
 
-class GapStateDetail(BaseModel):
-    """Gap state summary for a single subtopic."""
-
-    subtopic_name: str
-    mastery_score: float | None
-
-
-class ClassEnrollmentDetail(BaseModel):
-    """Enrollment detail with gap states for a single class."""
-
-    class_id: UUID
-    class_name: str
-    teacher_name: str
-    gap_states: list[GapStateDetail]
-
-
-class StudentDetailResponse(BaseModel):
-    """Full student profile for school-admin detail view."""
-
-    id: UUID
-    first_name: str
-    last_name: str
-    grade_level: int
-    curriculum_name: str
-    enrolled_at: str
-    last_login_at: str | None
-    class_enrollments: list[ClassEnrollmentDetail]
-
-
 @router.get(
     "/{student_id}",
     response_model=StudentDetailResponse,
@@ -612,104 +583,16 @@ async def get_student_detail(
 
     Auth: SCHOOL_ADMIN (same school) or KAIHLE_ADMIN only.
 
-    Returns:
-        StudentDetailResponse with enrollments and gap state data.
-
     Raises:
         403: If SCHOOL_ADMIN tries to access a student in another school.
         404: If student not found.
     """
-    student_query = select(User).where(User.id == student_id, User.role == UserRole.STUDENT)
-    if current_user.role == UserRole.SCHOOL_ADMIN:
-        student_query = student_query.where(User.school_id == current_user.school_id)
+    from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
 
-    student_result = await db.execute(student_query)
-    student = student_result.scalar_one_or_none()
-
-    if student is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not found",
-        )
-
-    # Fetch all active enrollments with class, grade, curriculum, and teacher
-    enrollment_query = (
-        select(ClassEnrollment, Class, Grade, Curriculum, User)
-        .join(Class, Class.id == ClassEnrollment.class_id)
-        .join(Grade, Grade.id == Class.grade_id)
-        .join(Curriculum, Curriculum.id == Class.curriculum_id)
-        .outerjoin(User, User.id == Class.teacher_id)
-        .where(
-            ClassEnrollment.student_id == student_id,
-            ClassEnrollment.is_active.is_(True),
-        )
-        .order_by(ClassEnrollment.enrolled_at)
-    )
-    enrollment_result = await db.execute(enrollment_query)
-    enrollment_rows = enrollment_result.all()
-
-    grade_level: int = 0
-    curriculum_name: str = ""
-    earliest_enrolled_at: str = ""
-    class_enrollments: list[ClassEnrollmentDetail] = []
-
-    for enrollment, class_, grade, curriculum, teacher in enrollment_rows:
-        if grade_level == 0 and grade:
-            grade_level = grade.level if grade.level is not None else 0
-        if curriculum_name == "" and curriculum:
-            curriculum_name = curriculum.name
-        if earliest_enrolled_at == "" and enrollment.enrolled_at:
-            earliest_enrolled_at = enrollment.enrolled_at.isoformat()
-
-        teacher_name = ""
-        if teacher:
-            teacher_name = f"{teacher.first_name} {teacher.last_name}".strip()
-
-        # Fetch gap states for this class enrollment
-        gap_query = (
-            select(GapState, Subtopic)
-            .join(Subtopic, Subtopic.id == GapState.subtopic_id)
-            .where(
-                GapState.student_id == student_id,
-                GapState.class_id == class_.id,
-            )
-            .order_by(Subtopic.name)
-        )
-        gap_result = await db.execute(gap_query)
-        gap_rows = gap_result.all()
-
-        gap_states = [
-            GapStateDetail(
-                subtopic_name=subtopic.name,
-                mastery_score=gap.mastery_score,
-            )
-            for gap, subtopic in gap_rows
-        ]
-
-        class_enrollments.append(
-            ClassEnrollmentDetail(
-                class_id=class_.id,
-                class_name=class_.name,
-                teacher_name=teacher_name,
-                gap_states=gap_states,
-            )
-        )
-
-    logger.info(
-        "student_detail_requested",
-        requester_id=str(current_user.id),
-        requester_role=str(current_user.role),
-        target_student_id=str(student_id),
-        class_count=len(class_enrollments),
-    )
-
-    return StudentDetailResponse(
-        id=student.id,
-        first_name=student.first_name or "",
-        last_name=student.last_name or "",
-        grade_level=grade_level,
-        curriculum_name=curriculum_name,
-        enrolled_at=earliest_enrolled_at,
-        last_login_at=student.last_login_at.isoformat() if student.last_login_at else None,
-        class_enrollments=class_enrollments,
-    )
+    caller_school = current_user.school_id if current_user.role == UserRole.SCHOOL_ADMIN else None
+    try:
+        return await UserService(db).get_student_detail(student_id, caller_school)
+    except CrossSchoolAccessError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    except UserNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")

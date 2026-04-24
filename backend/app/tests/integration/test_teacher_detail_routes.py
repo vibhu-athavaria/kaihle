@@ -167,14 +167,14 @@ async def test_get_teacher_detail_when_teacher_has_no_classes_then_200_with_empt
 
 
 @pytest.mark.asyncio
-async def test_get_teacher_detail_when_school_admin_views_teacher_from_other_school_then_404(
+async def test_get_teacher_detail_when_school_admin_views_teacher_from_other_school_then_403(
     client: AsyncClient,
     db_session: AsyncSession,
     school: School,
     other_school: School,
     school_admin: User,
 ) -> None:
-    """SchoolAdmin from school A cannot view a teacher in school B; returns 404."""
+    """SchoolAdmin from school A cannot view a teacher in school B; returns 403."""
     # Arrange — teacher belongs to other_school
     other_teacher = User(
         id=uuid.uuid4(),
@@ -195,7 +195,7 @@ async def test_get_teacher_detail_when_school_admin_views_teacher_from_other_sch
     )
 
     # Assert
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
