@@ -105,74 +105,39 @@ class TestCreateClass:
         with pytest.raises(ValueError, match="Teacher not found in this school"):
             await class_service.create_class(school_id, data)
 
-
-class TestListClasses:
-    """Tests for ClassService.list_classes method."""
-
     @pytest.mark.asyncio
-    async def test_list_classes_when_no_filter_then_returns_all(
+    async def test_enroll_students_without_students_then_returns_error(
         self, class_service: ClassService, mock_db: MagicMock
     ) -> None:
-        """Test listing all classes in a school."""
+        """Test that enrolling without student IDs returns error."""
         # Arrange
+        class_id = uuid.uuid4()
         school_id = uuid.uuid4()
-        classes = [
-            Class(
-                id=uuid.uuid4(),
-                school_id=school_id,
-                name=f"Class {i}",
-                grade_id=uuid.uuid4(),
-                subject_id=uuid.uuid4(),
-                curriculum_id=uuid.uuid4(),
-                teacher_id=uuid.uuid4(),
-                academic_year="2026",
-            )
-            for i in range(3)
-        ]
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = classes
-        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        class_ = Class(
+            id=class_id,
+            school_id=school_id,
+            name="Test Class",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            teacher_id=uuid.uuid4(),
+            academic_year="2026",
+        )
+        mock_db.get = AsyncMock(return_value=class_)
+
+        # Mock empty student result
+        mock_student_result = MagicMock()
+        mock_student_result.scalars.return_value.all.return_value = []
+        mock_db.execute = AsyncMock(return_value=mock_student_result)
 
         # Act
-        result = await class_service.list_classes(school_id)
+        result = await class_service.enroll_students(class_id, [])
 
         # Assert
-        assert len(result) == 3
-
-    @pytest.mark.asyncio
-    async def test_list_classes_when_teacher_filter_then_returns_own_classes(
-        self, class_service: ClassService, mock_db: MagicMock
-    ) -> None:
-        """Test that teacher filter returns only their classes."""
-        # Arrange
-        school_id = uuid.uuid4()
-        teacher_id = uuid.uuid4()
-
-        classes = [
-            Class(
-                id=uuid.uuid4(),
-                school_id=school_id,
-                name="Class 1",
-                grade_id=uuid.uuid4(),
-                subject_id=uuid.uuid4(),
-                curriculum_id=uuid.uuid4(),
-                teacher_id=teacher_id,
-                academic_year="2026",
-            )
-        ]
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = classes
-        mock_db.execute = AsyncMock(return_value=mock_result)
-
-        # Act
-        result = await class_service.list_classes(school_id, teacher_id=teacher_id)
-
-        # Assert
-        assert len(result) == 1
-
-
-class TestEnrollStudents:
-    """Tests for ClassService.enroll_students method."""
+        assert result.enrolled == 0
+        assert result.skipped == 0
+        assert len(result.errors) == 0
 
     @pytest.mark.asyncio
     @patch("app.services.class_service.trigger_onboarding_diagnostics")

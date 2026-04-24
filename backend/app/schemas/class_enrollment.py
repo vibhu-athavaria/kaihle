@@ -12,7 +12,7 @@ class ClassCreate(BaseModel):
     grade_id: uuid.UUID
     subject_id: uuid.UUID
     curriculum_id: uuid.UUID
-    teacher_id: uuid.UUID | None = None
+    teacher_id: uuid.UUID
     academic_year: str = Field(..., description="e.g. '2025-2026'")
 
 

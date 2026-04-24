@@ -153,6 +153,7 @@ export function CreateClassModal({
   // Step 2 state
   const [teacherId, setTeacherId] = useState("");
   const [teacherSearch, setTeacherSearch] = useState("");
+  const [step2Error, setStep2Error] = useState("");
 
   // Step 3 state
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(
@@ -286,11 +287,11 @@ export function CreateClassModal({
   }
 
   function handleStep2Next() {
-    setStep(3);
-  }
-
-  function handleStep2Skip() {
-    setTeacherId("");
+    if (!teacherId) {
+      setStep2Error("Please select a teacher for this class");
+      return;
+    }
+    setStep2Error("");
     setStep(3);
   }
 
@@ -321,6 +322,10 @@ export function CreateClassModal({
 
   async function handleSubmit(studentIds: string[]) {
     if (!curriculumId || submitting) return;
+    if (studentIds.length === 0) {
+      setCreateError("Please select at least one student to enroll");
+      return;
+    }
     setCreateError("");
     setSubmitting(true);
     try {
@@ -329,7 +334,7 @@ export function CreateClassModal({
         subject_id: subjectId,
         grade_id: gradeId,
         curriculum_id: curriculumId,
-        teacher_id: teacherId || null,
+        teacher_id: teacherId,
         academic_year: academicYear,
       });
 
@@ -525,10 +530,7 @@ export function CreateClassModal({
     return (
       <div className="space-y-4">
         <p className="text-[11px] font-bold text-role-school-muted uppercase tracking-wider">
-          Select a Teacher{" "}
-          <span className="text-[10px] font-medium normal-case tracking-normal text-gray-400">
-            (optional — can be assigned later)
-          </span>
+          Select a Teacher <span className="text-brand-red">*</span>
         </p>
         <div className="relative">
           <Search
@@ -602,27 +604,24 @@ export function CreateClassModal({
           })}
         </div>
 
+        {step2Error && (
+          <p className="mt-2 text-xs text-brand-red">{step2Error}</p>
+        )}
+
         <div className="flex gap-3 pt-2">
           <Button
             type="button"
             variant="secondary"
             onClick={() => setStep(1)}
-            className="flex-shrink-0"
+            className="flex-1"
           >
             ← Back
           </Button>
           <Button
             type="button"
-            variant="secondary"
-            onClick={handleStep2Skip}
-            className="flex-1"
-          >
-            Skip for now
-          </Button>
-          <Button
-            type="button"
             variant="primary"
             onClick={handleStep2Next}
+            disabled={!teacherId}
             className="flex-1"
           >
             Next: Add Students →
@@ -661,10 +660,7 @@ export function CreateClassModal({
         </div>
 
         <p className="text-[11px] font-bold text-role-school-muted uppercase tracking-wider">
-          Select Students{" "}
-          <span className="text-[10px] font-medium normal-case tracking-normal text-gray-400">
-            (optional — can enrol later)
-          </span>
+          Select Students <span className="text-brand-red">*</span>
         </p>
 
         {/* Grade filter tabs */}
@@ -822,26 +818,16 @@ export function CreateClassModal({
             type="button"
             variant="secondary"
             onClick={() => setStep(2)}
-            className="flex-shrink-0"
+            className="flex-1"
           >
             ← Back
           </Button>
           <Button
             type="button"
-            variant="secondary"
-            onClick={() => handleSubmit([])}
-            loading={submitting && selectedList.length === 0}
-            disabled={submitting}
-            className="flex-1 border border-gray-200 text-gray-500 rounded-full"
-          >
-            Create without students
-          </Button>
-          <Button
-            type="button"
             variant="primary"
             onClick={() => handleSubmit(selectedList)}
-            loading={submitting && selectedList.length > 0}
-            disabled={submitting}
+            loading={submitting}
+            disabled={submitting || selectedList.length === 0}
             className="flex-1"
           >
             ✓ Create Class{" "}
