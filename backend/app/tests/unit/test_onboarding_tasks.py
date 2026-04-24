@@ -474,12 +474,13 @@ class TestOnFailureCallback:
 
         from app.tasks import onboarding_tasks
 
-        source = inspect.getsource(onboarding_tasks.create_class_diagnostic_task)
+        # on_failure is a standalone function referenced by the decorator
+        source = inspect.getsource(onboarding_tasks._on_class_diagnostic_failure)
         # Verify the on_failure method uses logger.critical
         assert "logger.critical" in source
         assert "celery_task_permanently_failed" in source
         # Verify it includes required fields
-        assert "task_name=self.name" in source
+        assert "task_name=task_self.name" in source
         assert "task_id=task_id" in source
         assert "class_id=args[0]" in source or "class_id=kwargs.get" in source
         assert "error=str(exc)" in source
@@ -505,7 +506,8 @@ class TestOnFailureCallback:
 
         from app.tasks import onboarding_tasks
 
-        source = inspect.getsource(onboarding_tasks.trigger_onboarding_diagnostics)
+        # on_failure is a standalone function referenced by the decorator
+        source = inspect.getsource(onboarding_tasks._on_onboarding_failure)
         # Verify the on_failure method uses logger.critical
         assert "logger.critical" in source
         assert "celery_task_permanently_failed" in source

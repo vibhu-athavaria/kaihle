@@ -100,6 +100,12 @@ export interface Grade {
   level: number;
 }
 
+export interface Subject {
+  id: string;
+  name: string;
+  code: string;
+}
+
 export interface AssessmentAttempt {
   id: string;
   assessment_name: string;
@@ -318,6 +324,7 @@ export function useCurricula() {
       const res = await apiClient.get("/api/v1/curricula");
       return res.data as Curriculum[];
     },
+    staleTime: Infinity,
   });
 }
 
@@ -328,6 +335,21 @@ export function useGrades() {
       const res = await apiClient.get("/api/v1/grades");
       return res.data as Grade[];
     },
+    staleTime: Infinity,
+  });
+}
+
+export function useSubjects(curriculumId?: string) {
+  return useQuery({
+    queryKey: ["subjects", curriculumId ?? "all"],
+    queryFn: async () => {
+      const url = curriculumId
+        ? `/api/v1/subjects?curriculum_id=${curriculumId}`
+        : "/api/v1/subjects";
+      const res = await apiClient.get(url);
+      return res.data as Subject[];
+    },
+    staleTime: Infinity,
   });
 }
 
@@ -362,17 +384,18 @@ export function useCreateClass() {
   return useMutation({
     mutationFn: async (data: {
       name: string;
-      subject: string;
-      grade: number;
+      grade_id: string;
+      subject_id: string;
       curriculum_id: string;
-      teacher_id?: string;
+      teacher_id: string;
+      academic_year: string;
     }) => {
       if (!schoolId) throw new Error("No school_id for current user");
       const res = await apiClient.post(
         `/api/v1/schools/${schoolId}/classes`,
         data,
       );
-      return res.data;
+      return res.data as { id: string; name: string; academic_year: string };
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["school", "classes"] }),
@@ -423,10 +446,14 @@ export function useEnrollStudents(classId: string) {
   return useMutation({
     mutationFn: async (data: { student_ids: string[] }) => {
       const res = await apiClient.post(
-        `/api/v1/classes/${classId}/enroll`,
+        `/api/v1/classes/${classId}/enrollments`,
         data,
       );
-      return res.data;
+      return res.data as {
+        enrolled: number;
+        skipped: number;
+        errors: string[];
+      };
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["school", "classes"] }),

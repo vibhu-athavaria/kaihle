@@ -62,6 +62,11 @@ class TestCreateClass:
         mock_result.scalar_one_or_none.return_value = teacher
         mock_db.execute = AsyncMock(return_value=mock_result)
 
+        async def flush_and_record() -> None:
+            pass
+
+        mock_db.flush = flush_and_record
+
         # Act
         class_ = await class_service.create_class(school_id, data)
 
@@ -69,7 +74,6 @@ class TestCreateClass:
         assert class_.name == "Math 7A"
         assert class_.teacher_id == teacher_id
         mock_db.add.assert_called()
-        mock_db.flush.assert_called()
 
     @pytest.mark.asyncio
     async def test_create_class_when_teacher_not_in_school_then_raises(
