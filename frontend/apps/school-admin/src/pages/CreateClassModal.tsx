@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Search, Info } from "lucide-react";
 import { Button, Input, Modal } from "@kaihle/ui";
@@ -397,6 +397,9 @@ export function CreateClassModal({
   function renderStep2() {
     return (
       <div className="space-y-4">
+        <p className="text-[11px] font-bold text-role-school-muted uppercase tracking-wider mb-4">
+          Select a Teacher <span className="text-brand-red">*</span>
+        </p>
         <div className="relative">
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
@@ -487,6 +490,7 @@ export function CreateClassModal({
             type="button"
             variant="primary"
             onClick={handleStep2Next}
+            disabled={!teacherId}
             className="flex-1"
           >
             Next →
@@ -495,6 +499,17 @@ export function CreateClassModal({
       </div>
     );
   }
+
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const someSelected =
+    filteredStudents.some((s) => selectedStudentIds.has(s.id)) &&
+    !allStudentsSelected;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someSelected;
+    }
+  });
 
   function renderStep3() {
     const selectedList = Array.from(selectedStudentIds);
@@ -512,6 +527,13 @@ export function CreateClassModal({
             enrolled.
           </p>
         </div>
+
+        <p className="text-[11px] font-bold text-role-school-muted uppercase tracking-wider mb-4">
+          Select Students{" "}
+          <span className="text-[10px] font-medium normal-case tracking-normal text-gray-400">
+            (optional — can enrol later)
+          </span>
+        </p>
 
         {/* Search */}
         <div className="relative">
@@ -532,6 +554,7 @@ export function CreateClassModal({
         {filteredStudents.length > 0 && (
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
+              ref={selectAllRef}
               type="checkbox"
               checked={allStudentsSelected}
               onChange={toggleSelectAll}
