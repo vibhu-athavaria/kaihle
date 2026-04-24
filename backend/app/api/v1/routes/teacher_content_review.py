@@ -32,6 +32,7 @@ from app.schemas.teacher_content import (
     TeacherExplanationUpdateRequest,
     TeacherExplanationUpdateResponse,
 )
+from app.schemas.user_detail import TeacherDetailResponse
 from app.services.teacher_content_service import list_all_explanation_content, list_explanation_content
 
 logger = structlog.get_logger()
@@ -244,3 +245,33 @@ async def list_all_teacher_explanation_review(
     )
 
     return [TeacherExplanationReviewWithClass(**item) for item in items]
+
+
+# =============================================================================
+# GET /teachers/{teacher_id} — teacher detail with assigned classes
+# =============================================================================
+
+
+@teacher_router.get("/{teacher_id}", response_model=TeacherDetailResponse)
+async def get_teacher_detail(
+    teacher_id: UUID = Path(...),
+    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> TeacherDetailResponse:
+    """Get full teacher detail including assigned classes.
+
+    Auth: SCHOOL_ADMIN (same school) or KAIHLE_ADMIN only.
+
+    Raises:
+        403: If SCHOOL_ADMIN tries to access a teacher in another school.
+        404: If teacher not found.
+    """
+    from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
+
+    caller_school = current_user.school_id if current_user.role == UserRole.SCHOOL_ADMIN else None
+    try:
+        return await UserService(db).get_teacher_detail(teacher_id, caller_school)
+    except CrossSchoolAccessError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    except UserNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Teacher not found")

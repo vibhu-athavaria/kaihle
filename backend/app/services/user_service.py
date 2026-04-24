@@ -15,10 +15,31 @@ from app.core.security import (
     hash_token,
     store_magic_link_token,
 )
-from app.models.user import TeacherProfile, User, UserRole
+from app.models.curriculum import Curriculum, Grade, Subject, Subtopic
+from app.models.gap import GapState
+from app.models.school import Class, ClassEnrollment
+from app.models.user import ParentStudent, TeacherProfile, User, UserRole
+from app.schemas.students import EnrolledClassInfo, StudentClassResponse, StudentInfoResponse
 from app.schemas.user import UserInvite, UserSelfUpdate, UserUpdate
+from app.schemas.user_detail import (
+    AssignedClassSummary,
+    ClassEnrollmentDetail,
+    GapStateDetail,
+    LinkedStudentSummary,
+    ParentDetailResponse,
+    StudentDetailResponse,
+    TeacherDetailResponse,
+)
 
 logger = structlog.get_logger()
+
+
+class UserNotFoundError(ValueError):
+    """Raised when a user cannot be found."""
+
+
+class CrossSchoolAccessError(PermissionError):
+    """Raised when a school-scoped caller accesses a user from another school."""
 
 
 class UserService:
@@ -73,6 +94,23 @@ class UserService:
                 qualifications={"subjects": data.subjects or []},
             )
             self.db.add(profile)
+            await self.db.flush()
+
+        # Create parent-student links if role is PARENT and student_ids provided
+        if data.role == UserRole.PARENT and data.student_ids:
+            valid_result = await self.db.scalars(
+                select(User.id).where(
+                    User.id.in_(data.student_ids),
+                    User.school_id == school_id,
+                    User.role == UserRole.STUDENT,
+                )
+            )
+            valid_ids = set(valid_result.all())
+            invalid = [str(sid) for sid in data.student_ids if sid not in valid_ids]
+            if invalid:
+                raise ValueError(f"Student IDs not found in this school: {invalid}")
+            for sid in data.student_ids:
+                self.db.add(ParentStudent(parent_id=user.id, student_id=sid))
             await self.db.flush()
 
         # Send magic link welcome email
@@ -229,3 +267,325 @@ class UserService:
         # email, role, school_id are NOT updatable here — never touch them
         await self.db.flush()
         return user
+
+    async def get_student_detail(
+        self,
+        student_id: uuid.UUID,
+        caller_school_id: uuid.UUID | None,
+    ) -> StudentDetailResponse:
+        """Return full student profile with class enrollments and gap states.
+
+        Raises UserNotFoundError if the student doesn't exist.
+        Raises CrossSchoolAccessError if caller_school_id is set and doesn't match.
+        """
+        student = await self.db.scalar(select(User).where(User.id == student_id, User.role == UserRole.STUDENT))
+        if student is None:
+            raise UserNotFoundError("Student not found")
+        if caller_school_id is not None and student.school_id != caller_school_id:
+            raise CrossSchoolAccessError("Access denied")
+
+        enrollment_query = (
+            select(ClassEnrollment, Class, Grade, Curriculum, User)
+            .join(Class, Class.id == ClassEnrollment.class_id)
+            .join(Grade, Grade.id == Class.grade_id)
+            .join(Curriculum, Curriculum.id == Class.curriculum_id)
+            .outerjoin(User, User.id == Class.teacher_id)
+            .where(
+                ClassEnrollment.student_id == student_id,
+                ClassEnrollment.is_active.is_(True),
+            )
+            .order_by(ClassEnrollment.enrolled_at)
+        )
+        enrollment_rows = (await self.db.execute(enrollment_query)).all()
+
+        # Fetch all gap states in one query, then group by class_id in Python
+        gap_rows = (
+            await self.db.execute(
+                select(GapState, Subtopic)
+                .join(Subtopic, Subtopic.id == GapState.subtopic_id)
+                .where(GapState.student_id == student_id)
+                .order_by(GapState.class_id, Subtopic.name)
+            )
+        ).all()
+        gap_by_class: dict[uuid.UUID, list[GapStateDetail]] = {}
+        for gap, subtopic in gap_rows:
+            gap_by_class.setdefault(gap.class_id, []).append(
+                GapStateDetail(subtopic_name=subtopic.name, mastery_score=gap.mastery_score)
+            )
+
+        grade_level: int = 0
+        curriculum_name: str = ""
+        earliest_enrolled_at: str = ""
+        class_enrollments: list[ClassEnrollmentDetail] = []
+
+        for enrollment, class_, grade, curriculum, teacher in enrollment_rows:
+            if grade_level == 0 and grade:
+                grade_level = grade.level if grade.level is not None else 0
+            if curriculum_name == "" and curriculum:
+                curriculum_name = curriculum.name
+            if earliest_enrolled_at == "" and enrollment.enrolled_at:
+                earliest_enrolled_at = enrollment.enrolled_at.isoformat()
+            teacher_name = f"{teacher.first_name} {teacher.last_name}".strip() if teacher else ""
+            class_enrollments.append(
+                ClassEnrollmentDetail(
+                    class_id=class_.id,
+                    class_name=class_.name,
+                    teacher_name=teacher_name,
+                    gap_states=gap_by_class.get(class_.id, []),
+                )
+            )
+
+        logger.info(
+            "student_detail_requested",
+            target_student_id=str(student_id),
+            class_count=len(class_enrollments),
+        )
+        return StudentDetailResponse(
+            id=student.id,
+            first_name=student.first_name or "",
+            last_name=student.last_name or "",
+            grade_level=grade_level,
+            curriculum_name=curriculum_name,
+            enrolled_at=earliest_enrolled_at,
+            last_login_at=student.last_login_at.isoformat() if student.last_login_at else None,
+            class_enrollments=class_enrollments,
+        )
+
+    async def get_teacher_detail(
+        self,
+        teacher_id: uuid.UUID,
+        caller_school_id: uuid.UUID | None,
+    ) -> TeacherDetailResponse:
+        """Return teacher profile with assigned classes.
+
+        Raises UserNotFoundError if the teacher doesn't exist.
+        Raises CrossSchoolAccessError if caller_school_id is set and doesn't match.
+        """
+        teacher = await self.db.scalar(select(User).where(User.id == teacher_id, User.role == UserRole.TEACHER))
+        if teacher is None:
+            raise UserNotFoundError("Teacher not found")
+        if caller_school_id is not None and teacher.school_id != caller_school_id:
+            raise CrossSchoolAccessError("Access denied")
+
+        class_rows = (
+            await self.db.execute(
+                select(Class, Subject, Grade)
+                .join(Subject, Subject.id == Class.subject_id)
+                .join(Grade, Grade.id == Class.grade_id)
+                .where(Class.teacher_id == teacher_id, Class.is_active.is_(True))
+                .order_by(Class.name)
+            )
+        ).all()
+
+        class_ids = [c.id for c, _, _ in class_rows]
+        counts: dict[uuid.UUID, int] = {}
+        avgs: dict[uuid.UUID, float | None] = {}
+
+        if class_ids:
+            for row in (
+                await self.db.execute(
+                    select(ClassEnrollment.class_id, func.count(ClassEnrollment.class_id).label("cnt"))
+                    .where(ClassEnrollment.class_id.in_(class_ids), ClassEnrollment.is_active.is_(True))
+                    .group_by(ClassEnrollment.class_id)
+                )
+            ).all():
+                counts[row.class_id] = row.cnt
+
+            for row in (
+                await self.db.execute(
+                    select(GapState.class_id, func.avg(GapState.mastery_score).label("avg"))
+                    .where(GapState.class_id.in_(class_ids))
+                    .group_by(GapState.class_id)
+                )
+            ).all():
+                avgs[row.class_id] = row.avg
+
+        assigned_classes = [
+            AssignedClassSummary(
+                class_id=c.id,
+                class_name=c.name,
+                subject_name=subject.name if subject else "",
+                grade_level=grade.level if grade else 0,
+                student_count=counts.get(c.id, 0),
+                avg_mastery=avgs.get(c.id),
+            )
+            for c, subject, grade in class_rows
+        ]
+
+        logger.info(
+            "teacher_detail_requested",
+            target_teacher_id=str(teacher_id),
+            class_count=len(assigned_classes),
+        )
+        return TeacherDetailResponse(
+            id=teacher.id,
+            first_name=teacher.first_name or "",
+            last_name=teacher.last_name or "",
+            email=teacher.email,
+            is_active=teacher.is_active,
+            assigned_classes=assigned_classes,
+        )
+
+    async def get_parent_detail(
+        self,
+        parent_id: uuid.UUID,
+        caller_school_id: uuid.UUID | None,
+    ) -> ParentDetailResponse:
+        """Return parent profile with linked students.
+
+        Raises UserNotFoundError if the parent doesn't exist.
+        Raises CrossSchoolAccessError if caller_school_id is set and doesn't match.
+        """
+        parent = await self.db.scalar(select(User).where(User.id == parent_id, User.role == UserRole.PARENT))
+        if parent is None:
+            raise UserNotFoundError("Parent not found")
+        if caller_school_id is not None and parent.school_id != caller_school_id:
+            raise CrossSchoolAccessError("Access denied")
+
+        link_rows = (
+            await self.db.execute(
+                select(ParentStudent, User)
+                .join(User, User.id == ParentStudent.student_id)
+                .where(ParentStudent.parent_id == parent_id)
+                .order_by(User.first_name, User.last_name)
+            )
+        ).all()
+
+        student_ids = [s.id for _, s in link_rows]
+        class_counts: dict[uuid.UUID, int] = {}
+        worst_masteries: dict[uuid.UUID, float | None] = {}
+
+        if student_ids:
+            for count_row in (
+                await self.db.execute(
+                    select(ClassEnrollment.student_id, func.count(ClassEnrollment.class_id).label("cnt"))
+                    .where(ClassEnrollment.student_id.in_(student_ids), ClassEnrollment.is_active.is_(True))
+                    .group_by(ClassEnrollment.student_id)
+                )
+            ).all():
+                class_counts[count_row.student_id] = count_row.cnt
+
+            for mastery_row in (
+                await self.db.execute(
+                    select(GapState.student_id, func.min(GapState.mastery_score).label("worst"))
+                    .where(GapState.student_id.in_(student_ids))
+                    .group_by(GapState.student_id)
+                )
+            ).all():
+                worst_masteries[mastery_row.student_id] = mastery_row.worst
+
+        linked_students = [
+            LinkedStudentSummary(
+                student_id=s.id,
+                first_name=s.first_name or "",
+                last_name=s.last_name or "",
+                worst_mastery=worst_masteries.get(s.id),
+                class_count=class_counts.get(s.id, 0),
+            )
+            for _, s in link_rows
+        ]
+
+        logger.info(
+            "parent_detail_requested",
+            target_parent_id=str(parent_id),
+            linked_student_count=len(linked_students),
+        )
+        return ParentDetailResponse(
+            id=parent.id,
+            first_name=parent.first_name or "",
+            last_name=parent.last_name or "",
+            email=parent.email,
+            is_active=parent.is_active,
+            linked_students=linked_students,
+        )
+
+    async def get_student_info(self, student: User) -> StudentInfoResponse:
+        """Return basic student info including enrolled classes.
+
+        Authorization checks must be performed by the caller before invoking this method.
+        """
+        enrollment_query = (
+            select(ClassEnrollment, Class, Subject, Grade, Curriculum)
+            .join(Class, Class.id == ClassEnrollment.class_id)
+            .join(Subject, Subject.id == Class.subject_id)
+            .join(Grade, Grade.id == Class.grade_id)
+            .join(Curriculum, Curriculum.id == Class.curriculum_id)
+            .where(
+                ClassEnrollment.student_id == student.id,
+                ClassEnrollment.is_active.is_(True),
+            )
+            .order_by(ClassEnrollment.enrolled_at)
+        )
+        enrollment_rows = (await self.db.execute(enrollment_query)).all()
+
+        grade_name = ""
+        curriculum_name = ""
+        class_id = None
+        enrolled_classes: list[EnrolledClassInfo] = []
+
+        for _, class_, subject, grade, curriculum in enrollment_rows:
+            if class_id is None:
+                class_id = class_.id
+            if not curriculum_name:
+                curriculum_name = curriculum.name if curriculum else ""
+            if not grade_name and grade:
+                grade_name = grade.name
+            enrolled_classes.append(
+                EnrolledClassInfo(
+                    class_id=class_.id,
+                    class_name=class_.name,
+                    subject_id=class_.subject_id,
+                    subject_name=subject.name if subject else "",
+                    grade_name=grade.name if grade else "",
+                )
+            )
+
+        logger.debug(
+            "student_info_retrieved",
+            student_id=str(student.id),
+            enrolled_class_count=len(enrolled_classes),
+        )
+        return StudentInfoResponse(
+            first_name=student.first_name or "",
+            last_name=student.last_name or "",
+            email=student.email,
+            grade_name=grade_name,
+            curriculum_name=curriculum_name,
+            class_id=class_id,
+            streak_days=None,
+            is_enrolled=len(enrolled_classes) > 0,
+            enrolled_classes=enrolled_classes,
+        )
+
+    async def get_student_classes(self, student: User) -> list[StudentClassResponse]:
+        """Return all active enrolled classes for a student with full details."""
+        query = (
+            select(ClassEnrollment, Class, Subject, Grade, User)
+            .join(Class, Class.id == ClassEnrollment.class_id)
+            .join(Subject, Subject.id == Class.subject_id)
+            .join(Grade, Grade.id == Class.grade_id)
+            .join(User, User.id == Class.teacher_id)
+            .where(
+                ClassEnrollment.student_id == student.id,
+                ClassEnrollment.is_active.is_(True),
+            )
+            .order_by(ClassEnrollment.enrolled_at)
+        )
+        rows = (await self.db.execute(query)).all()
+
+        return [
+            StudentClassResponse(
+                id=class_.id,
+                name=class_.name,
+                subject_id=class_.subject_id,
+                subject_name=subject.name if subject else "",
+                grade_name=grade.name if grade else "",
+                teacher_name=f"{teacher.first_name} {teacher.last_name}".strip() if teacher else "",
+                curriculum_id=class_.curriculum_id,
+                academic_year=class_.academic_year or "",
+                is_active=enrollment.is_active,
+                onboarding_diagnostic_status=enrollment.onboarding_diagnostic_status,
+                diagnostic_attempt_id=None,
+            )
+            for enrollment, class_, subject, grade, teacher in rows
+        ]

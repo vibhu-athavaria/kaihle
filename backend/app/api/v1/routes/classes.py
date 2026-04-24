@@ -20,7 +20,7 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, _check_school_access, require_role
 from app.models.curriculum import Grade, Subject
 from app.models.school import Class
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.schemas.class_enrollment import (
     ClassCreate,
     ClassResponse,
@@ -100,6 +100,10 @@ async def list_classes(
         subjects_result = await db.execute(select(Subject).where(Subject.id.in_([c.subject_id for c in classes])))
         subjects = {s.id: s.name for s in subjects_result.scalars().all()}
 
+        teacher_ids = [c.teacher_id for c in classes if c.teacher_id]
+        teachers_result = await db.execute(select(User).where(User.id.in_(teacher_ids)))
+        teachers = {t.id: f"{t.first_name} {t.last_name}".strip() for t in teachers_result.scalars().all()}
+
         gap_service = GapService(db)
         summaries = await gap_service.get_class_summaries_batch(
             class_ids=[c.id for c in classes],
@@ -117,6 +121,8 @@ async def list_classes(
                     subject_id=cls.subject_id,
                     curriculum_id=cls.curriculum_id,
                     teacher_id=cls.teacher_id,
+                    teacher_name=teachers.get(cls.teacher_id) if cls.teacher_id else None,
+                    has_teacher=cls.teacher_id is not None,
                     name=cls.name,
                     academic_year=cls.academic_year,
                     is_active=cls.is_active,

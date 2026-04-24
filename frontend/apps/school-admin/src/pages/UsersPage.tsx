@@ -11,6 +11,26 @@ import {
 type Tab = "students" | "teachers" | "parents";
 type StudentFilter = "all" | "attention" | "pending" | "not_logged_in";
 
+function statusBadge(status: "ACTIVE" | "INVITED" | "INACTIVE") {
+  if (status === "ACTIVE")
+    return (
+      <span className="text-xs font-bold rounded-full px-2 py-px bg-[#f0fdf4] text-brand-green">
+        Active
+      </span>
+    );
+  if (status === "INVITED")
+    return (
+      <span className="text-xs font-bold rounded-full px-2 py-px bg-[#fffbeb] text-brand-gold">
+        Invited
+      </span>
+    );
+  return (
+    <span className="text-xs font-bold rounded-full px-2 py-px bg-gray-100 text-brand-muted">
+      Inactive
+    </span>
+  );
+}
+
 function nameDisplay(first: string, last: string) {
   return `${first} ${last.charAt(0).toUpperCase()}.`;
 }
@@ -28,14 +48,17 @@ export function UsersPage() {
   const [tab, setTab] = useState<Tab>("students");
   const [filter, setFilter] = useState<StudentFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [teacherSearchQuery, setTeacherSearchQuery] = useState("");
 
   const {
     data: students = [],
     isLoading: studentsLoading,
     isError: studentsError,
   } = useSchoolStudents();
-  const { data: teachers = [] } = useSchoolUsers("TEACHER");
-  const { data: parents = [] } = useSchoolUsers("PARENT");
+  const { data: teachers = [], isLoading: teachersLoading } =
+    useSchoolUsers("TEACHER");
+  const { data: parents = [], isLoading: parentsLoading } =
+    useSchoolUsers("PARENT");
 
   const attentionCount = students.filter(
     (s) => s.worst_mastery !== null && s.worst_mastery < 0.4,
@@ -314,14 +337,206 @@ export function UsersPage() {
         </>
       )}
       {tab === "teachers" && (
-        <div className="bg-white border border-role-school-border rounded-xl p-6 text-center text-brand-muted text-sm">
-          Teachers tab — list and invite teachers.
-        </div>
+        <>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-2 bg-white border border-role-school-border rounded-lg px-3 py-[7px]">
+              <svg
+                className="w-3 h-3 text-brand-muted"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                value={teacherSearchQuery}
+                onChange={(e) => setTeacherSearchQuery(e.target.value)}
+                className="text-xs outline-none font-sans bg-transparent w-40 placeholder:text-brand-muted"
+                placeholder="Search teachers…"
+                aria-label="Search teachers"
+              />
+            </div>
+          </div>
+
+          {teachersLoading ? (
+            <div className="animate-pulse space-y-2">
+              {[...Array(4)].map((_, i) => (
+                <div
+                  key={i}
+                  className="h-12 bg-role-school-border rounded-lg"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white border border-role-school-border rounded-xl overflow-hidden">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-[#fafcfa] border-b border-role-school-border">
+                    {["Teacher", "Email", "Status", ""].map((h) => (
+                      <th
+                        key={h}
+                        className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {teachers
+                    .filter(
+                      (t) =>
+                        !teacherSearchQuery ||
+                        `${t.first_name} ${t.last_name}`
+                          .toLowerCase()
+                          .includes(teacherSearchQuery.toLowerCase()),
+                    )
+                    .map((t) => {
+                      const isActive = t.status === "ACTIVE";
+                      const handleNavigate = () =>
+                        navigate(`/school-admin/users/teachers/${t.id}`);
+                      return (
+                        <tr
+                          key={t.id}
+                          onClick={handleNavigate}
+                          onKeyDown={(
+                            e: KeyboardEvent<HTMLTableRowElement>,
+                          ) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleNavigate();
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`View details for ${t.first_name} ${t.last_name}`}
+                          className="border-b border-[#f0f5ee] last:border-0 cursor-pointer hover:bg-[#fafcfa] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-inset"
+                        >
+                          <td className="px-4 py-[10px]">
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0 ${isActive ? "bg-brand-primary" : "bg-gray-300"}`}
+                              >
+                                {initials(t.first_name, t.last_name)}
+                              </div>
+                              <span className="text-sm font-bold text-brand-ink">
+                                {t.first_name} {t.last_name}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-[10px] text-xs text-brand-body">
+                            {t.email}
+                          </td>
+                          <td className="px-4 py-[10px]">
+                            {statusBadge(t.status)}
+                          </td>
+                          <td className="px-4 py-[10px] text-brand-muted text-base">
+                            ›
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+              {teachers.filter(
+                (t) =>
+                  !teacherSearchQuery ||
+                  `${t.first_name} ${t.last_name}`
+                    .toLowerCase()
+                    .includes(teacherSearchQuery.toLowerCase()),
+              ).length === 0 && (
+                <div className="py-12 text-center text-brand-muted text-sm">
+                  No teachers yet.
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
+
       {tab === "parents" && (
-        <div className="bg-white border border-role-school-border rounded-xl p-6 text-center text-brand-muted text-sm">
-          Parents tab — list parents and their linked students.
-        </div>
+        <>
+          {parentsLoading ? (
+            <div className="animate-pulse space-y-2">
+              {[...Array(4)].map((_, i) => (
+                <div
+                  key={i}
+                  className="h-12 bg-role-school-border rounded-lg"
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white border border-role-school-border rounded-xl overflow-hidden">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-[#fafcfa] border-b border-role-school-border">
+                    {["Parent", "Email", "Status", ""].map((h) => (
+                      <th
+                        key={h}
+                        className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {parents.map((p) => {
+                    const isActive = p.status === "ACTIVE";
+                    const handleNavigate = () =>
+                      navigate(`/school-admin/users/parents/${p.id}`);
+                    return (
+                      <tr
+                        key={p.id}
+                        onClick={handleNavigate}
+                        onKeyDown={(e: KeyboardEvent<HTMLTableRowElement>) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleNavigate();
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`View details for ${p.first_name} ${p.last_name}`}
+                        className="border-b border-[#f0f5ee] last:border-0 cursor-pointer hover:bg-[#fafcfa] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-inset"
+                      >
+                        <td className="px-4 py-[10px]">
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0 ${isActive ? "bg-brand-primary" : "bg-gray-300"}`}
+                            >
+                              {initials(p.first_name, p.last_name)}
+                            </div>
+                            <span className="text-sm font-bold text-brand-ink">
+                              {p.first_name} {p.last_name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-[10px] text-xs text-brand-body">
+                          {p.email}
+                        </td>
+                        <td className="px-4 py-[10px]">
+                          {statusBadge(p.status)}
+                        </td>
+                        <td className="px-4 py-[10px] text-brand-muted text-base">
+                          ›
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {parents.length === 0 && (
+                <div className="py-12 text-center text-brand-muted text-sm">
+                  No parents yet.
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </DashboardLayout>
   );

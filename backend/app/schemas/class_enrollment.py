@@ -40,7 +40,9 @@ class ClassWithSummary(BaseModel):
     grade_id: uuid.UUID
     subject_id: uuid.UUID
     curriculum_id: uuid.UUID
-    teacher_id: uuid.UUID
+    teacher_id: uuid.UUID | None = None
+    teacher_name: str | None = None
+    has_teacher: bool = False
     name: str
     academic_year: str
     is_active: bool

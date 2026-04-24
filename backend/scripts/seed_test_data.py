@@ -171,6 +171,21 @@ async def seed_test_data() -> None:
 
         teacher_id = user_ids["TEACHER"]
         student_id = user_ids["STUDENT"]
+        parent_id = user_ids["PARENT"]
+
+        # -------------------------------------------------------------------
+        # 2b. Create parent-student link
+        # -------------------------------------------------------------------
+        await db.execute(
+            text("""
+                INSERT INTO parent_student (parent_id, student_id)
+                VALUES (:parent_id, :student_id)
+                ON CONFLICT DO NOTHING
+            """),
+            {"parent_id": str(parent_id), "student_id": str(student_id)},
+        )
+        await db.commit()
+        log.info("parent_student_link_created", parent_id=str(parent_id), student_id=str(student_id))
 
         # -------------------------------------------------------------------
         # 3. Create teacher profile

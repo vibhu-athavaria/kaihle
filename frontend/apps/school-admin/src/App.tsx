@@ -8,6 +8,8 @@ import { SchoolOverview } from "./pages/SchoolOverview";
 import { UserManagement } from "./pages/UserManagement";
 import { UsersPage } from "./pages/UsersPage";
 import { StudentDetailPage } from "./pages/StudentDetailPage";
+import { TeacherDetailPage } from "./pages/TeacherDetailPage";
+import { ParentDetailPage } from "./pages/ParentDetailPage";
 import { ClassManagement } from "./pages/ClassManagement";
 import { AdminGapMapPage } from "./pages/AdminGapMapPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
@@ -46,6 +48,14 @@ export default function App() {
                       <Route
                         path="users/students/:studentId"
                         element={<StudentDetailPage />}
+                      />
+                      <Route
+                        path="users/teachers/:teacherId"
+                        element={<TeacherDetailPage />}
+                      />
+                      <Route
+                        path="users/parents/:parentId"
+                        element={<ParentDetailPage />}
                       />
                       <Route path="users/legacy" element={<UserManagement />} />
                       <Route path="classes" element={<ClassManagement />} />

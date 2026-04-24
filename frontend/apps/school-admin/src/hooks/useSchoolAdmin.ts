@@ -215,6 +215,67 @@ export function useSchoolUsers(
   });
 }
 
+// ── Teacher detail ────────────────────────────────────────────────────────────
+
+export interface AssignedClass {
+  class_id: string;
+  class_name: string;
+  subject_name: string;
+  grade_level: number;
+  student_count: number;
+  avg_mastery: number | null;
+}
+
+export interface TeacherDetail {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  is_active: boolean;
+  assigned_classes: AssignedClass[];
+}
+
+export function useTeacherDetail(teacherId: string) {
+  return useQuery({
+    queryKey: ["teacher", teacherId],
+    queryFn: async () => {
+      const res = await apiClient.get(`/api/v1/teachers/${teacherId}`);
+      return res.data as TeacherDetail;
+    },
+    enabled: !!teacherId,
+  });
+}
+
+// ── Parent detail ─────────────────────────────────────────────────────────────
+
+export interface LinkedStudent {
+  student_id: string;
+  first_name: string;
+  last_name: string;
+  worst_mastery: number | null;
+  class_count: number;
+}
+
+export interface ParentDetail {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  is_active: boolean;
+  linked_students: LinkedStudent[];
+}
+
+export function useParentDetail(parentId: string) {
+  return useQuery({
+    queryKey: ["parent", parentId],
+    queryFn: async () => {
+      const res = await apiClient.get(`/api/v1/parents/${parentId}`);
+      return res.data as ParentDetail;
+    },
+    enabled: !!parentId,
+  });
+}
+
 export function useStudentDetail(studentId: string) {
   return useQuery({
     queryKey: ["student", studentId],
@@ -231,7 +292,7 @@ export function useStudentAttempts(studentId: string | undefined) {
     queryKey: ["student", studentId, "attempts"],
     queryFn: async () => {
       const res = await apiClient.get(`/api/v1/students/${studentId}/attempts`);
-      return res.data as AssessmentAttempt[];
+      return (res.data?.data ?? res.data) as AssessmentAttempt[];
     },
     enabled: !!studentId,
   });
@@ -281,6 +342,7 @@ export function useInviteUser() {
       last_name: string;
       email: string;
       role: UserRoleType;
+      student_ids?: string[];
     }) => {
       if (!schoolId) throw new Error("No school_id for current user");
       const res = await apiClient.post(

@@ -95,6 +95,9 @@ class AuthService:
         if not user.hashed_password or not verify_password(password, user.hashed_password):
             raise ValueError("Invalid credentials")
 
+        user.last_login_at = datetime.now(UTC)
+        await self.db.flush()
+
         access_token = create_access_token(user.id, user.school_id, user.role)
         raw_refresh, hashed_refresh = generate_refresh_token()
         await store_refresh_token(self.db, user.id, hashed_refresh)
@@ -164,6 +167,9 @@ class AuthService:
         user = await self.db.get(User, user_id)
         if not user:
             raise InvalidTokenError("User not found")
+
+        user.last_login_at = datetime.now(UTC)
+        await self.db.flush()
 
         access_token = create_access_token(user.id, user.school_id, user.role)
         raw_refresh, hashed_refresh = generate_refresh_token()
@@ -251,6 +257,7 @@ class AuthService:
 
         # Hash and set the new password
         user.hashed_password = hash_password(new_password)
+        user.last_login_at = datetime.now(UTC)
         await self.db.flush()
 
         # Generate full-access tokens
