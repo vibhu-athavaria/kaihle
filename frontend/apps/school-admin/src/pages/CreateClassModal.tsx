@@ -32,15 +32,23 @@ function StepBar({ current }: StepBarProps) {
   ];
 
   return (
-    <div className="flex items-center mb-6">
+    <div
+      className="flex items-center mb-6"
+      role="list"
+      aria-label="Form progress"
+    >
       {steps.map((step, idx) => {
         const done = step.n < current;
         const active = step.n === current;
+        const state = done ? "done" : active ? "active" : "upcoming";
 
         return (
           <div key={step.n} className="flex items-center flex-1 last:flex-none">
             <div className="flex flex-col items-center">
               <div
+                role="listitem"
+                aria-label={`Step ${step.n}: ${step.label}${state === "done" ? " (completed)" : state === "active" ? " (current)" : ""}`}
+                aria-current={state === "active" ? "step" : undefined}
                 className={[
                   "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all",
                   done
@@ -131,6 +139,7 @@ export function CreateClassModal({
 
   const [submitting, setSubmitting] = useState(false);
   const [enrollError, setEnrollError] = useState("");
+  const [createError, setCreateError] = useState("");
 
   const queryClient = useQueryClient();
 
@@ -203,6 +212,7 @@ export function CreateClassModal({
     setStudentSearch("");
     setSubmitting(false);
     setEnrollError("");
+    setCreateError("");
   }, []);
 
   function handleClose() {
@@ -258,6 +268,7 @@ export function CreateClassModal({
 
   async function handleSubmit(studentIds: string[]) {
     if (!curriculumId) return;
+    setCreateError("");
     setSubmitting(true);
     try {
       const created = await createClass.mutateAsync({
@@ -289,8 +300,12 @@ export function CreateClassModal({
       resetAll();
       onCreated();
       onClose();
-    } catch {
-      // stay open, allow retry
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error && err.message.includes("409")
+          ? "A class with this name already exists for this school year."
+          : "Something went wrong. Please try again.";
+      setCreateError(message);
     } finally {
       setSubmitting(false);
     }
@@ -629,6 +644,12 @@ export function CreateClassModal({
             );
           })}
         </div>
+
+        {createError && (
+          <div className="text-xs text-brand-red bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
+            {createError}
+          </div>
+        )}
 
         {enrollError && (
           <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">

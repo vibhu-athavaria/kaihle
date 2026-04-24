@@ -41,7 +41,7 @@ def fake_class(school_id: uuid.UUID) -> SimpleNamespace:
 
 
 @pytest.mark.asyncio
-async def test_create_class_fires_diagnostic_task_when_class_created(
+async def test_create_class_when_valid_payload_then_delegates_to_service_and_returns_201(
     school_id: uuid.UUID,
     fake_class: SimpleNamespace,
 ) -> None:
@@ -51,7 +51,7 @@ async def test_create_class_fires_diagnostic_task_when_class_created(
              ClassService.create_class mocked to return fake_class.
     Act:     POST to /api/v1/schools/{school_id}/classes with valid payload.
     Assert:  response is 201, service.create_class was called once.
-             (Task dispatch is verified in test_class_service.py.)
+             (Diagnostic task dispatch is tested in test_class_service.py, not here.)
     """
     from app.core.database import get_db
     from app.core.deps import get_current_user
