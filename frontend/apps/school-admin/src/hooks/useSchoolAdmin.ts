@@ -292,7 +292,7 @@ export function useStudentAttempts(studentId: string | undefined) {
     queryKey: ["student", studentId, "attempts"],
     queryFn: async () => {
       const res = await apiClient.get(`/api/v1/students/${studentId}/attempts`);
-      return res.data as AssessmentAttempt[];
+      return (res.data?.data ?? res.data) as AssessmentAttempt[];
     },
     enabled: !!studentId,
   });
