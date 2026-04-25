@@ -18,7 +18,7 @@ from app.core.security import (
 from app.models.curriculum import Curriculum, Grade, Subject, Subtopic
 from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment
-from app.models.user import ParentStudent, TeacherProfile, User, UserRole
+from app.models.user import ParentStudent, StudentProfile, TeacherProfile, User, UserRole
 from app.schemas.students import EnrolledClassInfo, StudentClassResponse, StudentInfoResponse
 from app.schemas.user import UserDirectCreate, UserInvite, UserSelfUpdate, UserUpdate
 from app.schemas.user_detail import (
@@ -164,8 +164,6 @@ class UserService:
         await self.db.flush()  # get user.id before creating related rows
 
         if data.role == UserRole.STUDENT:
-            from app.models.user import StudentProfile
-
             profile = StudentProfile(
                 user_id=user.id,
                 grade_id=data.grade_id,
@@ -186,8 +184,6 @@ class UserService:
 
         elif data.role == UserRole.PARENT:
             if data.student_ids:
-                from app.models.user import ParentStudent
-
                 for student_id in data.student_ids:
                     self.db.add(ParentStudent(parent_id=user.id, student_id=student_id))
 
