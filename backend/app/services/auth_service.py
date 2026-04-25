@@ -106,6 +106,7 @@ class AuthService:
             access_token=access_token,
             refresh_token=raw_refresh,
             token_type="bearer",
+            must_change_password=bool(user.must_change_password),
             user={
                 "id": str(user.id),
                 "email": user.email,
@@ -179,6 +180,7 @@ class AuthService:
             access_token=access_token,
             refresh_token=raw_refresh,
             token_type="bearer",
+            must_change_password=bool(user.must_change_password),
             user={
                 "id": str(user.id),
                 "email": user.email,
@@ -269,6 +271,7 @@ class AuthService:
             access_token=access_token,
             refresh_token=raw_refresh,
             token_type="bearer",
+            must_change_password=False,
             user={
                 "id": str(user.id),
                 "email": user.email,
@@ -371,4 +374,5 @@ class AuthService:
         )
 
         user.hashed_password = hash_password(new_password)
+        user.must_change_password = False
         await self.db.flush()
