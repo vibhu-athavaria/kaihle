@@ -12,6 +12,14 @@ export interface User {
   school_id: string | null;
 }
 
+export interface LoginResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  must_change_password: boolean;
+  user: User;
+}
+
 export interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
