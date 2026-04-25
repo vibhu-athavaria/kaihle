@@ -12,6 +12,7 @@ from app.schemas.user import (
     MeResponse,
     StudentListItem,
     StudentListResponse,
+    UserDirectCreate,
     UserInvite,
     UserListResponse,
     UserResponse,
@@ -52,6 +53,34 @@ async def update_me(
         return MeResponse.model_validate(user)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post(
+    "/create",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_user_direct(
+    school_id: uuid.UUID,
+    body: UserDirectCreate,
+    request: Request,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    """Create a user with an admin-supplied password. No magic link is sent.
+
+    Only SCHOOL_ADMIN and KAIHLE_ADMIN may call this endpoint.
+    """
+    _check_school_access(school_id, current_user)
+
+    service = UserService(db=db)
+    try:
+        user = await service.create_user_direct(school_id=school_id, data=body)
+        await db.commit()
+        return UserResponse.model_validate(user)
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
