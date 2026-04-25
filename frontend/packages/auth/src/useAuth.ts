@@ -16,8 +16,18 @@ export function useAuth() {
         "/api/v1/auth/login",
         credentials,
       );
-      const { access_token, refresh_token, user: userData } = response.data;
-      setTokens(access_token, refresh_token, userData);
+      const {
+        access_token,
+        refresh_token,
+        user: userData,
+        must_change_password,
+      } = response.data;
+      setTokens(
+        access_token,
+        refresh_token,
+        userData,
+        must_change_password ?? false,
+      );
       return userData;
     },
     [setTokens],
@@ -57,7 +67,7 @@ export function useAuth() {
         },
       );
       const { access_token, refresh_token, user: userData } = response.data;
-      setTokens(access_token, refresh_token, userData);
+      setTokens(access_token, refresh_token, userData, false);
       return userData;
     },
     [setTokens],
