@@ -1,6 +1,13 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def parse_cors_origins(v: str | list[str]) -> list[str]:
+    """Parse CORS origins from comma-separated string or list."""
+    if isinstance(v, str):
+        return [origin.strip() for origin in v.split(",") if origin.strip()]
+    return v
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -54,6 +61,24 @@ class Settings(BaseSettings):
     platform_trial_students_limit: int = 30
     platform_rate_limit_requests_per_minute: int = 100
     platform_rate_limit_concurrent_users: int = 50
+
+    # CORS — comma-separated list of allowed origins
+    # Example: CORS_ORIGINS=https://teacher.kaihle.com,https://student.kaihle.com
+    cors_origins: list[str] = [
+        "http://localhost:3001",  # teacher
+        "http://localhost:3002",  # student
+        "http://localhost:3003",  # parent
+        "http://localhost:3004",  # school-admin
+        "http://localhost:3005",  # kaihle-admin
+    ]
+
+    def model_post_init(self, __context: object) -> None:
+        """Parse CORS_ORIGINS env var if provided as comma-separated string."""
+        import os
+
+        cors_env = os.environ.get("CORS_ORIGINS")
+        if cors_env:
+            self.cors_origins = parse_cors_origins(cors_env)
 
 
 settings = Settings()

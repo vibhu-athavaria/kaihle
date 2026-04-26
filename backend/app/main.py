@@ -78,13 +78,7 @@ app.add_middleware(RequestLoggingMiddleware)
 # CORS middleware for frontend apps
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3001",  # apps/teacher
-        "http://localhost:3002",  # apps/student
-        "http://localhost:3003",  # apps/parent
-        "http://localhost:3004",  # apps/school-admin
-        "http://localhost:3005",  # apps/kaihle-admin
-    ],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
