@@ -14,7 +14,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY pyproject.toml .
 
 # Install only production dependencies (no [dev] extras)
-RUN uv pip install -e "."
+RUN uv pip install "."
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
 FROM python:3.12-slim
@@ -36,4 +36,7 @@ USER app
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Allow worker count to be configured via environment variable
+ENV UVICORN_WORKERS=2
+
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS}"]
