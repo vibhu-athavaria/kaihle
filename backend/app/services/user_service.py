@@ -18,9 +18,9 @@ from app.core.security import (
 from app.models.curriculum import Curriculum, Grade, Subject, Subtopic
 from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment
-from app.models.user import ParentStudent, TeacherProfile, User, UserRole
+from app.models.user import ParentStudent, StudentProfile, TeacherProfile, User, UserRole
 from app.schemas.students import EnrolledClassInfo, StudentClassResponse, StudentInfoResponse
-from app.schemas.user import UserInvite, UserSelfUpdate, UserUpdate
+from app.schemas.user import UserDirectCreate, UserInvite, UserSelfUpdate, UserUpdate
 from app.schemas.user_detail import (
     AssignedClassSummary,
     ClassEnrollmentDetail,
@@ -30,6 +30,7 @@ from app.schemas.user_detail import (
     StudentDetailResponse,
     TeacherDetailResponse,
 )
+from app.services.class_service import ClassService
 
 logger = structlog.get_logger()
 
@@ -127,6 +128,64 @@ class UserService:
         )
 
         await self._send_welcome_email(user, token, base_url)
+
+        return user
+
+    async def create_user_direct(
+        self,
+        school_id: uuid.UUID,
+        data: UserDirectCreate,
+    ) -> User:
+        """Create a user with an admin-set password. No magic link is sent.
+        User will be required to change password on first login (must_change_password=True).
+        """
+
+        # Check email uniqueness within school
+        result = await self.db.execute(
+            select(User).where(
+                User.email == data.email,
+                User.school_id == school_id,
+            )
+        )
+        if result.scalar_one_or_none() is not None:
+            raise ValueError(f"A user with email '{data.email}' already exists in this school")
+
+        user = User(
+            school_id=school_id,
+            email=data.email,
+            first_name=data.first_name,
+            last_name=data.last_name,
+            role=data.role,
+            hashed_password=hash_password(data.password),
+            is_active=True,
+            must_change_password=True,
+        )
+        self.db.add(user)
+        await self.db.flush()  # get user.id before creating related rows
+
+        if data.role == UserRole.STUDENT:
+            profile = StudentProfile(
+                user_id=user.id,
+                grade_id=data.grade_id,
+                age=data.age,
+                is_learning_profile_complete=False,
+            )
+            self.db.add(profile)
+
+        elif data.role == UserRole.TEACHER:
+            if data.class_ids:
+                cs = ClassService(db=self.db)
+                for class_id in data.class_ids:
+                    await cs.update_teacher(
+                        class_id=class_id,
+                        teacher_id=user.id,
+                        school_id=school_id,
+                    )
+
+        elif data.role == UserRole.PARENT:
+            if data.student_ids:
+                for student_id in data.student_ids:
+                    self.db.add(ParentStudent(parent_id=user.id, student_id=student_id))
 
         return user
 

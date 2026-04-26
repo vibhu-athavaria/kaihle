@@ -329,3 +329,41 @@ class ClassService:
             for student_id, data in student_classes.items()
             if student_id in students
         ]
+
+    async def update_teacher(
+        self,
+        class_id: uuid.UUID,
+        teacher_id: uuid.UUID,
+        school_id: uuid.UUID,
+    ) -> Class:
+        """Update the teacher assigned to a class.
+
+        Args:
+            class_id: The class UUID
+            teacher_id: The new teacher UUID
+            school_id: The school UUID for scoping
+
+        Returns:
+            The updated Class model
+
+        Raises:
+            ValueError: If the class or teacher is not found in this school
+        """
+        class_ = await self.verify_class_school(class_id, school_id)
+
+        # Verify teacher belongs to this school and is active
+        result = await self.db.execute(
+            select(User).where(
+                User.id == teacher_id,
+                User.school_id == school_id,
+                User.role == UserRole.TEACHER,
+                User.is_active.is_(True),
+            )
+        )
+        teacher = result.scalar_one_or_none()
+        if not teacher:
+            raise ValueError("Teacher not found in this school")
+
+        class_.teacher_id = teacher_id
+        await self.db.flush()
+        return class_

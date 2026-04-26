@@ -1,8 +1,14 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { PrivateRoute, RoleRoute, OnboardingRoute } from "@kaihle/auth";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  PrivateRoute,
+  RoleRoute,
+  OnboardingRoute,
+  useAuthStore,
+} from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { ErrorBoundary } from "@kaihle/ui";
 import { LoginPage } from "./pages/LoginPage";
+import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { OnboardingRouter } from "./pages/onboarding/OnboardingRouter";
 import { ProfileQuestionnaire } from "./pages/onboarding/ProfileQuestionnaire";
 import { StudentDashboard } from "./pages/dashboard/StudentDashboard";
@@ -14,122 +20,147 @@ import { TakeAssessmentPage } from "./pages/assessments/TakeAssessmentPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudyPlanDetail } from "./pages/study-plans/StudyPlanDetail";
 
+function PrivateRouteWithPasswordCheck({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const mustChangePassword = useAuthStore((state) => state.mustChangePassword);
+  return (
+    <PrivateRoute>
+      {mustChangePassword ? (
+        <Navigate to="/student/change-password" replace />
+      ) : (
+        children
+      )}
+    </PrivateRoute>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
-          path="/student/onboarding"
+          path="/student/change-password"
           element={
             <PrivateRoute>
-              <OnboardingRouter />
+              <ChangePasswordPage />
             </PrivateRoute>
+          }
+        />
+        <Route
+          path="/student/onboarding"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <OnboardingRouter />
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/student/onboarding/profile"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <ProfileQuestionnaire />
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/student/dashboard"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <ErrorBoundary role="student">
                 <StudentDashboard />
               </ErrorBoundary>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/student/my-progress"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <ErrorBoundary role="student">
                 <MyProgress />
               </ErrorBoundary>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/student/study-plans"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <ErrorBoundary role="student">
                 <StudyPlans />
               </ErrorBoundary>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/student/study-plans/:planId"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <OnboardingRoute>
                 <ErrorBoundary role="student">
                   <StudyPlanDetail />
                 </ErrorBoundary>
               </OnboardingRoute>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/student/assessments"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <ErrorBoundary role="student">
                 <Assessments />
               </ErrorBoundary>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/student/assessments/:attemptId/take"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <OnboardingRoute>
                 <ErrorBoundary role="student">
                   <TakeAssessmentPage />
                 </ErrorBoundary>
               </OnboardingRoute>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/student/assessments/:attemptId/results"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <OnboardingRoute>
                 <ErrorBoundary role="student">
                   <AssessmentResultsPage />
                 </ErrorBoundary>
               </OnboardingRoute>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/student/settings"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <RoleRoute allowedRoles={[UserRole.STUDENT]}>
                 <StudentSettings />
               </RoleRoute>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         {/* Catch-all for any unmatched /student/* routes - redirect to dashboard */}
         <Route
           path="/student/*"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <ErrorBoundary role="student">
                 <StudentDashboard />
               </ErrorBoundary>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
       </Routes>

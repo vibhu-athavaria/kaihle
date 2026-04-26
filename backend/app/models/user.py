@@ -84,6 +84,7 @@ class User(Base, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false", default=False)
 
 
 class StudentProfile(Base, TimestampMixin):

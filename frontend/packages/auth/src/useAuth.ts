@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useAuthStore } from "./tokenStore";
+import { useAuthStore, type LoginResponse } from "./tokenStore";
 import { apiClient } from "./apiClient";
 
 interface LoginCredentials {
@@ -12,9 +12,22 @@ export function useAuth() {
 
   const login = useCallback(
     async (credentials: LoginCredentials) => {
-      const response = await apiClient.post("/api/v1/auth/login", credentials);
-      const { access_token, refresh_token, user: userData } = response.data;
-      setTokens(access_token, refresh_token, userData);
+      const response = await apiClient.post<LoginResponse>(
+        "/api/v1/auth/login",
+        credentials,
+      );
+      const {
+        access_token,
+        refresh_token,
+        user: userData,
+        must_change_password,
+      } = response.data;
+      setTokens(
+        access_token,
+        refresh_token,
+        userData,
+        must_change_password ?? false,
+      );
       return userData;
     },
     [setTokens],
@@ -46,12 +59,15 @@ export function useAuth() {
    */
   const setPassword = useCallback(
     async (password: string) => {
-      const response = await apiClient.post("/api/v1/auth/set-password", {
-        password,
-        confirm_password: password,
-      });
+      const response = await apiClient.post<LoginResponse>(
+        "/api/v1/auth/set-password",
+        {
+          password,
+          confirm_password: password,
+        },
+      );
       const { access_token, refresh_token, user: userData } = response.data;
-      setTokens(access_token, refresh_token, userData);
+      setTokens(access_token, refresh_token, userData, false);
       return userData;
     },
     [setTokens],

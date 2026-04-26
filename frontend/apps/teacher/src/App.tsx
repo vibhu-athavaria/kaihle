@@ -6,9 +6,10 @@ import {
   useRoutes,
 } from "react-router-dom";
 import { useMemo } from "react";
-import { PrivateRoute, RoleRoute, useAuth } from "@kaihle/auth";
+import { PrivateRoute, RoleRoute, useAuth, useAuthStore } from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
+import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { DashboardLayout, ErrorBoundary } from "@kaihle/ui";
 import { TeacherDashboard } from "./pages/dashboard/TeacherDashboard";
 import { TeacherSettingsPage } from "./pages/settings/TeacherSettingsPage";
@@ -115,15 +116,40 @@ function NewAssessmentApp() {
   );
 }
 
+function PrivateRouteWithPasswordCheck({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const mustChangePassword = useAuthStore((state) => state.mustChangePassword);
+  return (
+    <PrivateRoute>
+      {mustChangePassword ? (
+        <Navigate to="/teacher/change-password" replace />
+      ) : (
+        children
+      )}
+    </PrivateRoute>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
-          path="/teacher/settings"
+          path="/teacher/change-password"
           element={
             <PrivateRoute>
+              <ChangePasswordPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/teacher/settings"
+          element={
+            <PrivateRouteWithPasswordCheck>
               <RoleRoute
                 allowedRoles={[
                   UserRole.TEACHER,
@@ -135,13 +161,13 @@ export default function App() {
                   <TeacherSettingsApp />
                 </ErrorBoundary>
               </RoleRoute>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/teacher/assessments/new"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <RoleRoute
                 allowedRoles={[
                   UserRole.TEACHER,
@@ -153,13 +179,13 @@ export default function App() {
                   <NewAssessmentApp />
                 </ErrorBoundary>
               </RoleRoute>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/teacher/classes/:classId/*"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <RoleRoute
                 allowedRoles={[
                   UserRole.TEACHER,
@@ -171,13 +197,13 @@ export default function App() {
                   <TeacherContentShell />
                 </ErrorBoundary>
               </RoleRoute>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/teacher/assessments/:assessmentId/results/:studentId"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <RoleRoute
                 allowedRoles={[
                   UserRole.TEACHER,
@@ -189,13 +215,13 @@ export default function App() {
                   <StudentResultDetailPage />
                 </ErrorBoundary>
               </RoleRoute>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/teacher/assessments/:assessmentId/results"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <RoleRoute
                 allowedRoles={[
                   UserRole.TEACHER,
@@ -207,13 +233,13 @@ export default function App() {
                   <AssessmentResultsPage />
                 </ErrorBoundary>
               </RoleRoute>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route
           path="/teacher/*"
           element={
-            <PrivateRoute>
+            <PrivateRouteWithPasswordCheck>
               <RoleRoute
                 allowedRoles={[
                   UserRole.TEACHER,
@@ -225,7 +251,7 @@ export default function App() {
                   <TeacherShell />
                 </ErrorBoundary>
               </RoleRoute>
-            </PrivateRoute>
+            </PrivateRouteWithPasswordCheck>
           }
         />
         <Route path="*" element={<Navigate to="/login" replace />} />

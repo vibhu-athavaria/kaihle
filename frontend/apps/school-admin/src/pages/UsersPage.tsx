@@ -2,11 +2,15 @@ import { useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
+import { Plus } from "lucide-react";
 import {
   useSchoolStudents,
   useSchoolUsers,
   type StudentListItem,
 } from "../hooks/useSchoolAdmin";
+import CreateStudentModal from "./CreateStudentModal";
+import CreateTeacherModal from "./CreateTeacherModal";
+import CreateParentModal from "./CreateParentModal";
 
 type Tab = "students" | "teachers" | "parents";
 type StudentFilter = "all" | "attention" | "pending" | "not_logged_in";
@@ -49,6 +53,9 @@ export function UsersPage() {
   const [filter, setFilter] = useState<StudentFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [teacherSearchQuery, setTeacherSearchQuery] = useState("");
+  const [studentModalOpen, setStudentModalOpen] = useState(false);
+  const [teacherModalOpen, setTeacherModalOpen] = useState(false);
+  const [parentModalOpen, setParentModalOpen] = useState(false);
 
   const {
     data: students = [],
@@ -102,41 +109,76 @@ export function UsersPage() {
 
   return (
     <DashboardLayout variant="school-admin" pageTitle="Users">
-      <div className="flex border-b-2 border-role-school-border mb-4">
-        {[
-          { key: "students" as Tab, label: "Students", count: students.length },
-          {
-            key: "teachers" as Tab,
-            label: "Teachers",
-            count: (teachers as unknown[]).length,
-          },
-          {
-            key: "parents" as Tab,
-            label: "Parents",
-            count: (parents as unknown[]).length,
-          },
-        ].map(({ key, label, count }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`px-5 py-2 text-sm font-bold border-b-[3px] -mb-[2px] transition-colors ${
-              tab === key
-                ? "text-brand-primary border-brand-primary"
-                : "text-brand-muted border-transparent"
-            }`}
-          >
-            {label}{" "}
-            <span
-              className={`inline-block rounded-full px-1.5 py-px text-xs font-black ml-1 ${
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex border-b-2 border-role-school-border">
+          {[
+            {
+              key: "students" as Tab,
+              label: "Students",
+              count: students.length,
+            },
+            {
+              key: "teachers" as Tab,
+              label: "Teachers",
+              count: (teachers as unknown[]).length,
+            },
+            {
+              key: "parents" as Tab,
+              label: "Parents",
+              count: (parents as unknown[]).length,
+            },
+          ].map(({ key, label, count }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`px-5 py-2 text-sm font-bold border-b-[3px] -mb-[2px] transition-colors ${
                 tab === key
-                  ? "bg-brand-green-light text-brand-primary"
-                  : "bg-gray-100 text-brand-muted"
+                  ? "text-brand-primary border-brand-primary"
+                  : "text-brand-muted border-transparent"
               }`}
             >
-              {count}
-            </span>
+              {label}{" "}
+              <span
+                className={`inline-block rounded-full px-1.5 py-px text-xs font-black ml-1 ${
+                  tab === key
+                    ? "bg-brand-green-light text-brand-primary"
+                    : "bg-gray-100 text-brand-muted"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Contextual CTA */}
+        {tab === "students" && (
+          <button
+            onClick={() => setStudentModalOpen(true)}
+            className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+          >
+            <Plus aria-hidden="true" className="w-3.5 h-3.5" />
+            New Student
           </button>
-        ))}
+        )}
+        {tab === "teachers" && (
+          <button
+            onClick={() => setTeacherModalOpen(true)}
+            className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+          >
+            <Plus aria-hidden="true" className="w-3.5 h-3.5" />
+            New Teacher
+          </button>
+        )}
+        {tab === "parents" && (
+          <button
+            onClick={() => setParentModalOpen(true)}
+            className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+          >
+            <Plus aria-hidden="true" className="w-3.5 h-3.5" />
+            New Parent
+          </button>
+        )}
       </div>
 
       {tab === "students" && (
@@ -538,6 +580,19 @@ export function UsersPage() {
           )}
         </>
       )}
+
+      <CreateStudentModal
+        open={studentModalOpen}
+        onOpenChange={setStudentModalOpen}
+      />
+      <CreateTeacherModal
+        open={teacherModalOpen}
+        onOpenChange={setTeacherModalOpen}
+      />
+      <CreateParentModal
+        open={parentModalOpen}
+        onOpenChange={setParentModalOpen}
+      />
     </DashboardLayout>
   );
 }

@@ -543,3 +543,76 @@ class TestDeactivateUser:
         # Verify user is inactive
         await db_session.refresh(user_to_deactivate)
         assert user_to_deactivate.is_active is False
+
+
+class TestCreateUserDirect:
+    """Tests for POST /api/v1/schools/{school_id}/users/create"""
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_student_when_valid_data_then_201(
+        self, client: AsyncClient, db_session: AsyncSession, school_admin: User, school: School
+    ) -> None:
+        """POST /schools/{id}/users/create returns 201 with student user when valid data."""
+        from app.models.curriculum import Grade
+
+        grade = Grade(id=uuid.uuid4(), name="Grade 8", level=8, is_active=True)
+        db_session.add(grade)
+        await db_session.commit()
+
+        headers = auth_header(school_admin)
+        resp = await client.post(
+            f"/api/v1/schools/{school.id}/users/create",
+            json={
+                "first_name": "Aisha",
+                "last_name": "Al-Rashid",
+                "email": "aisha@test.edu",
+                "password": "Secure123!",
+                "role": "STUDENT",
+                "age": 13,
+                "grade_id": str(grade.id),
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["role"] == "STUDENT"
+        assert body["email"] == "aisha@test.edu"
+        assert "hashed_password" not in body
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_when_duplicate_email_then_409(
+        self, client: AsyncClient, school_admin: User, school: School, teacher: User
+    ) -> None:
+        """POST /schools/{id}/users/create returns 409 when email already exists."""
+        headers = auth_header(school_admin)
+        resp = await client.post(
+            f"/api/v1/schools/{school.id}/users/create",
+            json={
+                "first_name": "X",
+                "last_name": "Y",
+                "email": teacher.email,
+                "password": "Secure123!",
+                "role": "TEACHER",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_when_teacher_role_then_403_for_non_admin(
+        self, client: AsyncClient, teacher: User, school: School
+    ) -> None:
+        """POST /schools/{id}/users/create returns 403 when caller is not SCHOOL_ADMIN."""
+        headers = auth_header(teacher)
+        resp = await client.post(
+            f"/api/v1/schools/{school.id}/users/create",
+            json={
+                "first_name": "T",
+                "last_name": "T",
+                "email": "t@school.edu",
+                "password": "Secure123!",
+                "role": "TEACHER",
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 403

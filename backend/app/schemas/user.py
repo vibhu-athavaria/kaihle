@@ -115,3 +115,32 @@ class MeResponse(BaseModel):
     is_active: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserDirectCreate(BaseModel):
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=72)
+    role: UserRole
+
+    # Student-only fields
+    age: int | None = Field(default=None, ge=5, le=25)
+    grade_id: uuid.UUID | None = None
+
+    # Teacher-only fields
+    class_ids: list[uuid.UUID] | None = None
+
+    # Parent-only fields
+    student_ids: list[uuid.UUID] | None = None
+
+    @model_validator(mode="after")
+    def validate_role_fields(self) -> "UserDirectCreate":
+        if self.role == UserRole.STUDENT:
+            if self.grade_id is None:
+                raise ValueError("grade_id is required for students")
+            if self.age is None:
+                raise ValueError("age is required for students")
+        if self.role not in (UserRole.STUDENT, UserRole.TEACHER, UserRole.PARENT):
+            raise ValueError("role must be STUDENT, TEACHER, or PARENT")
+        return self

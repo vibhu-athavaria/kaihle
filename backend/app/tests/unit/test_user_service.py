@@ -490,6 +490,120 @@ class TestDeactivateUser:
 # ==============================================================================
 
 
+class TestCreateUserDirect:
+    """Tests for UserService.create_user_direct method."""
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_student_creates_profile_when_student_role(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """create_user_direct creates StudentProfile with age and grade when role=STUDENT."""
+        grade_id = uuid.uuid4()
+
+        # No existing user with that email
+        mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+
+        from app.schemas.user import UserDirectCreate
+
+        data = UserDirectCreate(
+            first_name="Aisha",
+            last_name="Al-Rashid",
+            email="aisha@school.edu",
+            password="Secure123!",
+            role=UserRole.STUDENT,
+            age=13,
+            grade_id=grade_id,
+        )
+
+        with patch("app.services.user_service.hash_password", return_value="hashed") as mock_hash:
+            await user_service.create_user_direct(school_id=school_id, data=data)
+
+        mock_hash.assert_called_once_with("Secure123!")
+        # db.add called twice: once for User, once for StudentProfile
+        assert mock_db.add.call_count == 2
+        # User created with must_change_password=True
+        created_user = mock_db.add.call_args_list[0][0][0]
+        assert created_user.must_change_password is True
+        assert created_user.hashed_password == "hashed"
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_teacher_assigns_classes(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """create_user_direct calls update_teacher on ClassService when class_ids provided."""
+        class_id = uuid.uuid4()
+
+        mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+
+        from app.schemas.user import UserDirectCreate
+
+        data = UserDirectCreate(
+            first_name="Rachel",
+            last_name="Morgan",
+            email="r@school.edu",
+            password="Secure123!",
+            role=UserRole.TEACHER,
+            class_ids=[class_id],
+        )
+
+        with (
+            patch("app.services.user_service.hash_password", return_value="hashed"),
+            patch("app.services.user_service.ClassService") as MockClassService,
+        ):
+            mock_cs_instance = AsyncMock()
+            MockClassService.return_value = mock_cs_instance
+            await user_service.create_user_direct(school_id=school_id, data=data)
+
+        mock_cs_instance.update_teacher.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_raises_if_email_taken(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """create_user_direct raises ValueError when email already exists in school."""
+        existing_user = MagicMock()
+        mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=existing_user)))
+
+        from app.schemas.user import UserDirectCreate
+
+        data = UserDirectCreate(
+            first_name="A",
+            last_name="B",
+            email="existing@school.edu",
+            password="Secure123!",
+            role=UserRole.TEACHER,
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            await user_service.create_user_direct(school_id=school_id, data=data)
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_parent_creates_parent_student_links(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """create_user_direct creates ParentStudent rows when student_ids provided."""
+        student_id = uuid.uuid4()
+
+        mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+
+        from app.schemas.user import UserDirectCreate
+
+        data = UserDirectCreate(
+            first_name="James",
+            last_name="Smith",
+            email="j@gmail.com",
+            password="Secure123!",
+            role=UserRole.PARENT,
+            student_ids=[student_id],
+        )
+
+        with patch("app.services.user_service.hash_password", return_value="hashed"):
+            await user_service.create_user_direct(school_id=school_id, data=data)
+
+        # db.add called twice: User + ParentStudent
+        assert mock_db.add.call_count == 2
+
+
 class TestGetMe:
     """Tests for UserService.get_me method."""
 

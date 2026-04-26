@@ -12,14 +12,29 @@ export interface User {
   school_id: string | null;
 }
 
+export interface LoginResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  must_change_password: boolean;
+  user: User;
+}
+
 export interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   user: User | null;
   isAuthenticated: boolean;
-  setTokens: (access: string, refresh: string, user: User) => void;
+  mustChangePassword: boolean;
+  setTokens: (
+    access: string,
+    refresh: string,
+    user: User,
+    mustChangePassword?: boolean,
+  ) => void;
   clearTokens: () => void;
   updateAccessToken: (access: string) => void;
+  clearMustChangePassword: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -29,13 +44,15 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       user: null,
       isAuthenticated: false,
+      mustChangePassword: false,
 
-      setTokens: (access, refresh, user) =>
+      setTokens: (access, refresh, user, mustChangePassword = false) =>
         set({
           accessToken: access,
           refreshToken: refresh,
           user,
           isAuthenticated: true,
+          mustChangePassword,
         }),
 
       clearTokens: () =>
@@ -44,9 +61,12 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: null,
           user: null,
           isAuthenticated: false,
+          mustChangePassword: false,
         }),
 
       updateAccessToken: (access) => set({ accessToken: access }),
+
+      clearMustChangePassword: () => set({ mustChangePassword: false }),
     }),
     {
       name: STORAGE_KEY,
@@ -56,6 +76,7 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         user: state.user,
         isAuthenticated: state.isAuthenticated,
+        mustChangePassword: state.mustChangePassword,
       }),
     },
   ),

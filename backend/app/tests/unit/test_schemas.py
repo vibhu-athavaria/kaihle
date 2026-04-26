@@ -3,6 +3,9 @@
 import uuid
 from datetime import date, datetime
 
+import pytest
+
+from app.models.user import UserRole
 from app.schemas.analytics import (
     AtRiskStudent,
     ClassBreakdown,
@@ -60,6 +63,7 @@ from app.schemas.study_plans import (
     StudyPlanResource,
     StudyPlanResponse,
 )
+from app.schemas.user import UserDirectCreate
 
 
 class TestSchemaInstantiation:
@@ -525,3 +529,53 @@ class TestSchemaInstantiation:
             is_active=True,
         )
         assert c.is_active
+
+
+def test_user_direct_create_student_valid():
+    data = UserDirectCreate(
+        first_name="Aisha",
+        last_name="Al-Rashid",
+        email="aisha@school.edu",
+        password="Secure123!",
+        role=UserRole.STUDENT,
+        age=13,
+        grade_id=uuid.uuid4(),
+    )
+    assert data.role == UserRole.STUDENT
+    assert data.age == 13
+
+
+def test_user_direct_create_student_missing_grade_raises():
+    with pytest.raises(Exception):
+        UserDirectCreate(
+            first_name="A",
+            last_name="B",
+            email="a@b.com",
+            password="Secure123!",
+            role=UserRole.STUDENT,
+            age=13,
+            # grade_id omitted - should raise for STUDENT
+        )
+
+
+def test_user_direct_create_teacher_valid():
+    data = UserDirectCreate(
+        first_name="Rachel",
+        last_name="Morgan",
+        email="r@school.edu",
+        password="Secure123!",
+        role=UserRole.TEACHER,
+    )
+    assert data.class_ids is None  # optional
+
+
+def test_user_direct_create_parent_valid():
+    data = UserDirectCreate(
+        first_name="James",
+        last_name="Smith",
+        email="j@gmail.com",
+        password="Secure123!",
+        role=UserRole.PARENT,
+        student_ids=[uuid.uuid4()],
+    )
+    assert len(data.student_ids) == 1

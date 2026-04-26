@@ -378,6 +378,35 @@ export function useInviteUser() {
   });
 }
 
+export interface UserDirectCreatePayload {
+  first_name: string;
+  last_name: string;
+  email: string;
+  password: string;
+  role: "STUDENT" | "TEACHER" | "PARENT";
+  age?: number;
+  grade_id?: string;
+  class_ids?: string[];
+  student_ids?: string[];
+}
+
+export function useCreateUser() {
+  const schoolId = useAuthStore((state) => state.user?.school_id);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: UserDirectCreatePayload) => {
+      if (!schoolId) throw new Error("No school_id for current user");
+      const res = await apiClient.post(
+        `/api/v1/schools/${schoolId}/users/create`,
+        data,
+      );
+      return res.data;
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["school", "users"] }),
+  });
+}
+
 export function useCreateClass() {
   const schoolId = useAuthStore((state) => state.user?.school_id);
   const queryClient = useQueryClient();

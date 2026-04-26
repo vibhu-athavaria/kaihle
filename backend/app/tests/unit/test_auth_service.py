@@ -1011,3 +1011,93 @@ class TestSetPasswordFromScopedToken:
                     token_payload=token_payload,
                     new_password="SecurePass123!",
                 )
+
+
+class TestMustChangePassword:
+    """Tests for must_change_password flag in login and change_password."""
+
+    @pytest.mark.asyncio
+    async def test_login_when_must_change_password_true_then_flag_in_response(
+        self, auth_service: AuthService, mock_db: MagicMock
+    ) -> None:
+        """login returns must_change_password=True when user.must_change_password is True."""
+        user = User(
+            id=uuid.uuid4(),
+            email="a@b.com",
+            first_name="A",
+            last_name="B",
+            role="TEACHER",
+            school_id=uuid.uuid4(),
+            is_active=True,
+            hashed_password="hashed",
+            must_change_password=True,
+        )
+
+        mock_db.scalar = AsyncMock(return_value=user)
+
+        with (
+            patch("app.services.auth_service.verify_password", return_value=True),
+            patch("app.services.auth_service.create_access_token", return_value="access"),
+            patch("app.services.auth_service.generate_refresh_token", return_value=("raw", "hashed")),
+            patch("app.services.auth_service.store_refresh_token", new_callable=AsyncMock),
+        ):
+            response = await auth_service.login(email="a@b.com", password="pass")
+
+        assert response.must_change_password is True
+
+    @pytest.mark.asyncio
+    async def test_login_when_must_change_password_false_then_flag_false_in_response(
+        self, auth_service: AuthService, mock_db: MagicMock
+    ) -> None:
+        """login returns must_change_password=False when user.must_change_password is False."""
+        user = User(
+            id=uuid.uuid4(),
+            email="a@b.com",
+            first_name="A",
+            last_name="B",
+            role="TEACHER",
+            school_id=uuid.uuid4(),
+            is_active=True,
+            hashed_password="hashed",
+            must_change_password=False,
+        )
+
+        mock_db.scalar = AsyncMock(return_value=user)
+
+        with (
+            patch("app.services.auth_service.verify_password", return_value=True),
+            patch("app.services.auth_service.create_access_token", return_value="access"),
+            patch("app.services.auth_service.generate_refresh_token", return_value=("raw", "hashed")),
+            patch("app.services.auth_service.store_refresh_token", new_callable=AsyncMock),
+        ):
+            response = await auth_service.login(email="a@b.com", password="pass")
+
+        assert response.must_change_password is False
+
+    @pytest.mark.asyncio
+    async def test_change_password_clears_must_change_password_flag(
+        self, auth_service: AuthService, mock_db: MagicMock
+    ) -> None:
+        """change_password sets must_change_password=False after successful change."""
+        user = User(
+            id=uuid.uuid4(),
+            email="a@b.com",
+            first_name="A",
+            last_name="B",
+            role="TEACHER",
+            school_id=uuid.uuid4(),
+            is_active=True,
+            hashed_password="old_hash",
+            must_change_password=True,
+        )
+
+        mock_db.get = AsyncMock(return_value=user)
+
+        with (
+            patch("app.services.auth_service.verify_password", return_value=True),
+            patch("app.services.auth_service.hash_password", return_value="new_hash"),
+        ):
+            await auth_service.change_password(user_id=user.id, current_password="old", new_password="Newpass1!")
+
+        assert user.must_change_password is False
+        assert user.hashed_password == "new_hash"
