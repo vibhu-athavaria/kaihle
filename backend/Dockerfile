@@ -1,19 +1,39 @@
-FROM python:3.12-slim
+# ── Stage 1: Dependencies ────────────────────────────────────────────────────
+FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
 # Install uv
-RUN pip install uv
+RUN pip install --no-cache-dir uv
 
-# Copy dependency file first (layer caching)
+# Create virtual environment
+RUN uv venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy dependency file
 COPY pyproject.toml .
 
-# Install dependencies
-RUN uv pip install --system -e ".[dev]"
+# Install only production dependencies (no [dev] extras)
+RUN uv pip install -e "."
 
-# Copy application code
-COPY . .
+# ── Stage 2: Runtime ─────────────────────────────────────────────────────────
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Create non-root user for security
+RUN groupadd -r app && useradd -r -g app app
+
+# Copy application source
+COPY --chown=app:app . .
+
+# Switch to non-root user
+USER app
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
