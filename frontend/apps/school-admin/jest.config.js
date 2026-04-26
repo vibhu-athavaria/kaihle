@@ -14,16 +14,7 @@ export default {
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
-      tsconfig: {
-        jsx: 'react-jsx',
-        esModuleInterop: true,
-        module: 'ESNext',
-        moduleResolution: 'bundler',
-        types: ['jest', '@testing-library/jest-dom'],
-        // Relax strictness for test files — production code uses noUnusedLocals via tsconfig.json
-        noUnusedLocals: false,
-        noUnusedParameters: false,
-      },
+      tsconfig: '<rootDir>/tsconfig.test.json',
     }],
   },
   passWithNoTests: true,
