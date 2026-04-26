@@ -178,7 +178,7 @@ export function LoginForm({
             <button
               type="submit"
               disabled={isLoading || passwordForm.formState.isSubmitting}
-              className={`w-full ${buttonClassName ?? "bg-teal-600 hover:bg-teal-700"} disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors`}
+              className={`w-full ${buttonClassName || "bg-teal-600 hover:bg-teal-700"} disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors`}
             >
               {passwordForm.formState.isSubmitting ? "Signing in…" : "Sign in"}
             </button>
@@ -212,7 +212,7 @@ export function LoginForm({
             <button
               type="submit"
               disabled={magicForm.formState.isSubmitting}
-              className={`w-full ${buttonClassName ?? "bg-teal-600 hover:bg-teal-700"} disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors`}
+              className={`w-full ${buttonClassName || "bg-teal-600 hover:bg-teal-700"} disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors`}
             >
               {magicForm.formState.isSubmitting
                 ? "Sending…"
