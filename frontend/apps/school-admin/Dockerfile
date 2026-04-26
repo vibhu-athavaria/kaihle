@@ -45,4 +45,7 @@ RUN printf 'server {\n\
 
 EXPOSE 3004
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:3004/ || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]
