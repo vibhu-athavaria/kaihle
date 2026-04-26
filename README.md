@@ -352,3 +352,25 @@ The following secrets must be set in your GitHub repository Settings → Secrets
 | `RENDER_KAIHLE_ADMIN_SERVICE_ID` | Render service ID for Kaihle admin frontend |
 
 > Note: These IDs are set up in M6 when Render services are created.
+
+---
+
+## Render Setup Checklist
+
+Before the first production deploy, configure the following in the Render dashboard:
+
+### Backend Web Service
+- **Pre-Deploy Command:** `alembic upgrade head`
+- **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2`
+- **Always On:** enabled
+- **Environment Variables:** copy all from `.env.example`, set real values
+
+### Environment Variables to set in Render
+- `DATABASE_URL` — Render managed Postgres connection string
+- `REDIS_URL` — Render managed Redis connection string
+- `JWT_SECRET_KEY` — 64-char random hex (generate with: `openssl rand -hex 32`)
+- `RESEND_API_KEY` — from Resend dashboard
+- `GOOGLE_API_KEY`, `OPENAI_API_KEY` — from respective dashboards
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET` — from AWS
+- `CORS_ORIGINS` — comma-separated list of your Render frontend service URLs
+- `ENVIRONMENT` — `production`

@@ -13,6 +13,17 @@ jobs:
     # Double-check: only deploy if the CI run that triggered us actually passed
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    # ─────────────────────────────────────────────────────────────────────────
+    # RENDER PRE-DEPLOY COMMAND (set in Render dashboard, not here):
+    #   alembic upgrade head
+    #
+    # This must be configured under:
+    #   Render Dashboard → kaihle-backend service → Settings → Pre-Deploy Command
+    #
+    # The deploy trigger below starts the deploy. Render runs the pre-deploy
+    # command before routing traffic to the new instance — so migrations always
+    # run before new code goes live.
+    # ─────────────────────────────────────────────────────────────────────────
     steps:
       - name: Trigger Render deploy
         run: |
