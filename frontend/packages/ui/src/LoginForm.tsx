@@ -22,6 +22,7 @@ export interface LoginFormProps {
   logoLabel?: string; // e.g. "Teacher Portal"
   isLoading?: boolean;
   error?: string; // external error message
+  buttonClassName?: string; // custom button color classes (e.g. "bg-brand-gold hover:bg-brand-gold-dark")
 }
 
 export function LoginForm({
@@ -30,6 +31,7 @@ export function LoginForm({
   logoLabel,
   isLoading,
   error: externalError,
+  buttonClassName,
 }: LoginFormProps) {
   const [mode, setMode] = useState<"password" | "magic">("password");
   const [magicSent, setMagicSent] = useState(false);
@@ -176,7 +178,7 @@ export function LoginForm({
             <button
               type="submit"
               disabled={isLoading || passwordForm.formState.isSubmitting}
-              className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors"
+              className={`w-full ${buttonClassName ?? "bg-teal-600 hover:bg-teal-700"} disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors`}
             >
               {passwordForm.formState.isSubmitting ? "Signing in…" : "Sign in"}
             </button>
@@ -210,7 +212,7 @@ export function LoginForm({
             <button
               type="submit"
               disabled={magicForm.formState.isSubmitting}
-              className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors"
+              className={`w-full ${buttonClassName ?? "bg-teal-600 hover:bg-teal-700"} disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors`}
             >
               {magicForm.formState.isSubmitting
                 ? "Sending…"
