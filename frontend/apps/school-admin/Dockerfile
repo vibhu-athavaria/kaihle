@@ -37,6 +37,19 @@ RUN printf 'server {\n\
     listen 3004;\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
+\n\
+    # Security headers\n\
+    add_header X-Content-Type-Options "nosniff" always;\n\
+    add_header X-Frame-Options "DENY" always;\n\
+    add_header X-XSS-Protection "1; mode=block" always;\n\
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n\
+\n\
+    # Cache static assets with hash\n\
+    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {\n\
+        expires 1y;\n\
+        add_header Cache-Control "public, immutable";\n\
+    }\n\
+\n\
     location / {\n\
         try_files $uri $uri/ /index.html;\n\
     }\n\
