@@ -41,3 +41,6 @@ mcp.json
 
 # Vite cache
 node_modules/.vite.worktrees/
+
+# TypeScript build info
+*.tsbuildinfo

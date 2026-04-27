@@ -16,6 +16,7 @@ export function LoginPage() {
       onLogin={handleLogin}
       onMagicLink={sendMagicLink}
       logoLabel="Teacher Portal"
+      buttonClassName="bg-brand-gold hover:bg-brand-gold-dark text-white"
     />
   );
 }
