@@ -1,26 +1,64 @@
-FROM node:20-alpine
+# ============================================================================
+# PRODUCTION BUILD
+# Stage 1: build the static bundle
+# Stage 2: serve with nginx
+# For local Docker dev, use Dockerfile.dev instead
+# ============================================================================
+
+# ── Stage 1: Build ──────────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install pnpm globally
 RUN npm install -g pnpm
 
-# Copy package files for dependency resolution
+# Copy workspace manifest files first (layer caching)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/school-admin/package.json ./apps/school-admin/package.json
 COPY packages ./packages
 
-# Install ALL workspace dependencies (freezes versions from lock file)
-RUN pnpm install --config.confirmModulesPurge=false
+# Install dependencies from lockfile (frozen — no version drift)
+RUN pnpm install --frozen-lockfile
 
-# Copy the rest of the application
-COPY apps ./apps
-COPY packages ./packages
+# Copy application source
+COPY apps/school-admin ./apps/school-admin
 
-# Clear Vite cache to avoid stale build issues
-RUN find . -type d -name ".vite" -exec rm -rf {} + 2>/dev/null || true
+# Build the static bundle
+RUN pnpm --filter @kaihle/school-admin build
+
+# ── Stage 2: Serve ──────────────────────────────────────────────────────────
+FROM nginx:stable-alpine
+
+# Copy built assets
+COPY --from=builder /app/apps/school-admin/dist /usr/share/nginx/html
+
+# nginx config: serve on 3004, route all paths to index.html (SPA)
+RUN printf 'server {\n\
+    listen 3004;\n\
+    root /usr/share/nginx/html;\n\
+    index index.html;\n\
+\n\
+    # Security headers\n\
+    add_header X-Content-Type-Options "nosniff" always;\n\
+    add_header X-Frame-Options "DENY" always;\n\
+    add_header X-XSS-Protection "1; mode=block" always;\n\
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n\
+\n\
+    # Cache static assets with hash\n\
+    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {\n\
+        expires 1y;\n\
+        add_header Cache-Control "public, immutable";\n\
+    }\n\
+\n\
+    location / {\n\
+        try_files $uri $uri/ /index.html;\n\
+    }\n\
+}\n\
+' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 3004
 
-# Run in development mode with hot reload
-CMD ["pnpm", "dev:school-admin"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget --quiet --tries=1 --spider http://localhost:3004/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]

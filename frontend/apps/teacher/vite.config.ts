@@ -3,12 +3,15 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+  },
   server: {
     host: "0.0.0.0", // reachable from outside container
     port: 3001, // must match docker-compose port mapping
     hmr: {
-      host: "localhost", // ← browser connects back through Docker port mapping
-      port: 3001,
+      clientPort: 3001, // ← browser connects back through Docker port mapping
     },
     watch: {
       usePolling: true, // fixes macOS Docker Desktop file event issue
