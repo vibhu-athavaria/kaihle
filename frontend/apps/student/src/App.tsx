@@ -163,6 +163,8 @@ export default function App() {
             </PrivateRouteWithPasswordCheck>
           }
         />
+        {/* ADD THIS */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );
