@@ -1,11 +1,7 @@
+import json
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-def parse_cors_origins(v: str | list[str]) -> list[str]:
-    """Parse CORS origins from comma-separated string or list."""
-    if isinstance(v, str):
-        return [origin.strip() for origin in v.split(",") if origin.strip()]
-    return v
 
 
 class Settings(BaseSettings):
@@ -62,7 +58,7 @@ class Settings(BaseSettings):
     platform_rate_limit_requests_per_minute: int = 100
     platform_rate_limit_concurrent_users: int = 50
 
-    # CORS — comma-separated list of allowed origins
+    # CORS — accepts comma-separated string or JSON array
     # Example: CORS_ORIGINS=https://teacher.kaihle.com,https://student.kaihle.com
     cors_origins: list[str] = [
         "http://localhost:3001",  # teacher
@@ -72,13 +68,23 @@ class Settings(BaseSettings):
         "http://localhost:3005",  # kaihle-admin
     ]
 
-    def model_post_init(self, __context: object) -> None:
-        """Parse CORS_ORIGINS env var if provided as comma-separated string."""
-        import os
-
-        cors_env = os.environ.get("CORS_ORIGINS")
-        if cors_env:
-            self.cors_origins = parse_cors_origins(cors_env)
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: str | list[str]) -> list[str]:
+        """Accept comma-separated string, JSON array string, or list."""
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            stripped = v.strip()
+            if stripped.startswith("["):
+                try:
+                    parsed = json.loads(stripped)
+                    if isinstance(parsed, list):
+                        return [str(o).strip() for o in parsed]
+                except json.JSONDecodeError:
+                    pass
+            return [origin.strip() for origin in stripped.split(",") if origin.strip()]
+        return v
 
 
 settings = Settings()
