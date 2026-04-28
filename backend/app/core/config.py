@@ -1,6 +1,5 @@
 import json
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -58,33 +57,25 @@ class Settings(BaseSettings):
     platform_rate_limit_requests_per_minute: int = 100
     platform_rate_limit_concurrent_users: int = 50
 
-    # CORS — accepts comma-separated string or JSON array
-    # Example: CORS_ORIGINS=https://teacher.kaihle.com,https://student.kaihle.com
-    cors_origins: list[str] = [
-        "http://localhost:3001",  # teacher
-        "http://localhost:3002",  # student
-        "http://localhost:3003",  # parent
-        "http://localhost:3004",  # school-admin
-        "http://localhost:3005",  # kaihle-admin
-    ]
+    # CORS — stored as raw string, parsed at runtime via property
+    # Set CORS_ORIGINS_RAW in Render as comma-separated:
+    # https://teacher.kaihle.com,https://admin.kaihle.com,...
+    cors_origins_raw: str = (
+        "http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005"
+    )
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v: str | list[str]) -> list[str]:
-        """Accept comma-separated string, JSON array string, or list."""
-        if isinstance(v, list):
-            return v
-        if isinstance(v, str):
-            stripped = v.strip()
-            if stripped.startswith("["):
-                try:
-                    parsed = json.loads(stripped)
-                    if isinstance(parsed, list):
-                        return [str(o).strip() for o in parsed]
-                except json.JSONDecodeError:
-                    pass
-            return [origin.strip() for origin in stripped.split(",") if origin.strip()]
-        return v
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parse CORS origins from comma-separated string or JSON array."""
+        v = self.cors_origins_raw.strip()
+        if v.startswith("["):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return [str(o).strip() for o in parsed]
+            except json.JSONDecodeError:
+                pass
+        return [origin.strip() for origin in v.split(",") if origin.strip()]
 
 
 settings = Settings()

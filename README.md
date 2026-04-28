@@ -372,5 +372,5 @@ Before the first production deploy, configure the following in the Render dashbo
 - `RESEND_API_KEY` — from Resend dashboard
 - `GOOGLE_API_KEY`, `OPENAI_API_KEY` — from respective dashboards
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET` — from AWS
-- `CORS_ORIGINS` — comma-separated list of your Render frontend service URLs
+- `CORS_ORIGINS_RAW` — comma-separated list of your Render frontend service URLs
 - `ENVIRONMENT` — `production`
