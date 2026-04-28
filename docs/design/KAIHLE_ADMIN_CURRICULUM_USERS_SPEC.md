@@ -18,6 +18,292 @@ Two features, four tasks:
 
 ---
 
+## 7. API Contract — Full Request & Response Schemas
+
+### 7.1 Extended Read Schemas (admin-specific variants needed)
+
+Existing read schemas (`CurriculumResponse`, `SubjectResponse`, etc.) are too lean for the admin UI — they omit `is_active`, `description`, and other fields the edit forms need. We add admin-specific response schemas alongside the existing ones.
+
+```python
+# backend/app/schemas/curriculum.py — additions
+
+class CurriculumAdminResponse(BaseModel):
+    id: UUID
+    name: str
+    code: str
+    description: str | None
+    country: str | None
+    is_active: bool
+    created_at: datetime
+
+class GradeAdminResponse(BaseModel):
+    id: UUID
+    name: str
+    level: int
+    description: str | None
+    is_active: bool
+
+class SubjectAdminResponse(BaseModel):
+    id: UUID
+    name: str
+    code: str
+    description: str | None
+    icon: str | None
+    color: str | None      # hex e.g. "#1a5c38"
+    is_active: bool
+
+class CurriculumSubjectResponse(BaseModel):
+    curriculum_id: UUID
+    subject_id: UUID
+    subject_name: str      # joined from subjects.name
+    subject_code: str
+    is_core: bool
+    sort_order: int | None
+
+class TopicAdminResponse(BaseModel):
+    # curriculum_topics row joined with topics row
+    curriculum_topic_id: UUID
+    topic_id: UUID
+    name: str              # topics.name
+    canonical_code: str | None
+    standard_code: str | None          # curriculum_topics.standard_code
+    sequence_order: int | None         # curriculum_topics.sequence_order
+    learning_objectives: list[str]     # curriculum_topics.learning_objectives
+    recommended_weeks: int | None
+    is_required: bool
+    is_active: bool                    # curriculum_topics.is_active
+    subtopic_count: int                # COUNT of subtopics for this ct_id
+
+class SubtopicAdminResponse(BaseModel):
+    id: UUID
+    curriculum_topic_id: UUID
+    name: str
+    canonical_code: str | None
+    learning_objective: str
+    description: str | None
+    keywords: list[str]
+    bloom_taxonomy_level: str | None
+    difficulty_level: int | None
+    estimated_minutes: int | None
+    sequence_order: int | None
+    is_active: bool
+```
+
+### 7.2 Write Request Schemas
+
+```python
+# backend/app/schemas/curriculum.py — write schemas
+
+class CurriculumCreate(BaseModel):
+    name: str                          # max 200, unique
+    code: str                          # max 50, unique, slug
+    description: str | None = None
+    country: str | None = None
+    is_active: bool = True
+
+class CurriculumUpdate(BaseModel):
+    name: str | None = None
+    code: str | None = None
+    description: str | None = None
+    country: str | None = None
+    is_active: bool | None = None
+
+class GradeCreate(BaseModel):
+    name: str                          # max 50
+    level: int                         # 1–13, unique
+    description: str | None = None
+    is_active: bool = True
+
+class GradeUpdate(BaseModel):
+    name: str | None = None
+    level: int | None = None           # 1–13
+    description: str | None = None
+    is_active: bool | None = None
+
+class SubjectCreate(BaseModel):
+    name: str                          # max 100, unique
+    code: str                          # max 20, unique, uppercase slug
+    description: str | None = None
+    icon: str | None = None            # Lucide icon name
+    color: str | None = None           # hex "#rrggbb"
+    is_active: bool = True
+
+class SubjectUpdate(BaseModel):
+    name: str | None = None
+    code: str | None = None
+    description: str | None = None
+    icon: str | None = None
+    color: str | None = None
+    is_active: bool | None = None
+
+class LinkSubjectRequest(BaseModel):
+    subject_id: UUID
+    is_core: bool = True
+    sort_order: int | None = None
+
+class TopicIdentityCreate(BaseModel):
+    # used when creating a NEW topic (step 1, "Create new" branch)
+    name: str
+    canonical_code: str | None = None
+    description: str | None = None
+    keywords: list[str] = []
+
+class CurriculumTopicCreate(BaseModel):
+    # Exactly one of topic_id or topic_data must be provided
+    topic_id: UUID | None = None           # reuse existing topic
+    topic_data: TopicIdentityCreate | None = None  # create new topic
+    # placement fields (curriculum_id, grade_id, subject_id from URL path)
+    standard_code: str | None = None
+    sequence_order: int | None = None      # must be > 0 if set
+    learning_objectives: list[str] = []
+    recommended_weeks: int | None = None
+    is_required: bool = True
+
+class CurriculumTopicUpdate(BaseModel):
+    standard_code: str | None = None
+    sequence_order: int | None = None
+    learning_objectives: list[str] | None = None
+    recommended_weeks: int | None = None
+    is_required: bool | None = None
+    is_active: bool | None = None
+
+class SubtopicCreate(BaseModel):
+    name: str
+    learning_objective: str            # NOT NULL — min 10 chars
+    canonical_code: str | None = None
+    description: str | None = None
+    keywords: list[str] = []
+    bloom_taxonomy_level: str | None = None  # Remember|Understand|Apply|Analyse|Evaluate|Create
+    difficulty_level: int | None = None      # 1–5, DB CHECK enforced
+    estimated_minutes: int | None = None
+    sequence_order: int | None = None
+
+class SubtopicUpdate(BaseModel):
+    name: str | None = None
+    learning_objective: str | None = None
+    canonical_code: str | None = None
+    description: str | None = None
+    keywords: list[str] | None = None
+    bloom_taxonomy_level: str | None = None
+    difficulty_level: int | None = None
+    estimated_minutes: int | None = None
+    sequence_order: int | None = None
+    is_active: bool | None = None
+```
+
+### 7.3 New Endpoints — Full Contract
+
+All write endpoints require `require_role(UserRole.KAIHLE_ADMIN)`.
+
+```
+POST   /curricula
+  Body:     CurriculumCreate
+  Response: 201 CurriculumAdminResponse
+  Errors:   409 { detail: "Curriculum name already exists" }
+            409 { detail: "Curriculum code already exists" }
+
+PATCH  /curricula/{curriculum_id}
+  Body:     CurriculumUpdate
+  Response: 200 CurriculumAdminResponse
+  Errors:   404, 409
+
+POST   /grades
+  Body:     GradeCreate
+  Response: 201 GradeAdminResponse
+  Errors:   409 { detail: "Grade level {n} already exists" }
+            422 if level not in 1–13
+
+PATCH  /grades/{grade_id}
+  Body:     GradeUpdate
+  Response: 200 GradeAdminResponse
+  Errors:   404, 409, 422
+
+POST   /subjects
+  Body:     SubjectCreate
+  Response: 201 SubjectAdminResponse
+  Errors:   409 { detail: "Subject name already exists" }
+            409 { detail: "Subject code already exists" }
+
+PATCH  /subjects/{subject_id}
+  Body:     SubjectUpdate
+  Response: 200 SubjectAdminResponse
+  Errors:   404, 409
+
+POST   /curricula/{curriculum_id}/subjects
+  Body:     LinkSubjectRequest
+  Response: 201 CurriculumSubjectResponse
+  Errors:   404 if curriculum or subject not found
+            409 { detail: "Subject already linked to this curriculum" }
+
+DELETE /curricula/{curriculum_id}/subjects/{subject_id}
+  Body:     (none)
+  Response: 204
+  Errors:   404
+
+POST   /curricula/{curriculum_id}/grades/{grade_id}/subjects/{subject_id}/topics
+  Body:     CurriculumTopicCreate
+  Response: 201 TopicAdminResponse
+  Errors:   400 { detail: "Provide exactly one of topic_id or topic_data" }
+            404 if curriculum/grade/subject not found
+            404 if topic_id provided but not found
+            409 { detail: "Topic already placed in this curriculum/grade/subject" }
+
+PATCH  /curriculum-topics/{ct_id}
+  Body:     CurriculumTopicUpdate
+  Response: 200 TopicAdminResponse
+  Errors:   404
+
+DELETE /curriculum-topics/{ct_id}
+  Body:     (none)
+  Response: 204  — removes placement, does NOT delete global topic
+  Errors:   404
+
+POST   /curriculum-topics/{ct_id}/subtopics
+  Body:     SubtopicCreate
+  Response: 201 SubtopicAdminResponse
+  Errors:   400 { detail: "learning_objective is required" } if blank/empty
+            422 if difficulty_level not in 1–5
+            404 if ct_id not found
+
+PATCH  /subtopics/{subtopic_id}
+  Body:     SubtopicUpdate
+  Response: 200 SubtopicAdminResponse
+  Errors:   404
+            422 if difficulty_level not in 1–5
+```
+
+### 7.4 Platform Users Fix
+
+```
+GET    /platform/users
+  Query:    q (str, optional), role (str, optional), page (int ≥1), page_size (int 1–100)
+  Response: 200 PlatformUsersResponse (already defined in platform.py)
+  Change:   Inject AsyncSession; implement via UserService.list_platform_users()
+  Errors:   403 if not KAIHLE_ADMIN
+```
+
+`PlatformUserSummary.last_active` maps to `users.last_login_at`.
+`PlatformUserSummary.school_name` is a LEFT JOIN from `schools.name` (NULL for KAIHLE_ADMIN users who have no school).
+
+### 7.5 Existing Read Endpoints Reused Without Change
+
+The frontend reads use these as-is — no modifications needed:
+
+```
+GET /curricula                                    → list[CurriculumResponse]  (add admin variant)
+GET /curricula/{id}                               → CurriculumResponse
+GET /grades?curriculum_id=                        → list[GradeResponse]
+GET /subjects?curriculum_id=                      → list[SubjectResponse]
+GET /subjects/{id}/topics?curriculum_id=&grade_id= → list[TopicResponse]
+GET /topics/{id}/subtopics?curriculum_id=&grade_id= → list[SubtopicResponse]
+GET /topics                                       → list[TopicSimpleResponse]  (typeahead search)
+GET /curriculum-topics                            → list[CurriculumTopicSimpleResponse]
+```
+
+Note: The admin frontend will call the same read endpoints but needs the richer `*AdminResponse` variants for edit forms. We add `GET /curricula` returning `list[CurriculumAdminResponse]` when called with an `admin=true` query param, **or** simply add the missing fields to the existing response schemas since they add no breaking changes (additive only).
+
+---
+
 ## 2. Feature A — Curriculum Manager
 
 ### 2.1 New Route & Navigation
