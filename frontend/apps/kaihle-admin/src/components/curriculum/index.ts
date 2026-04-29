@@ -1,3 +1,5 @@
+export { CurriculumSubtree } from "./CurriculumSubtree";
+
 // Curriculum modals
 export { CreateCurriculumModal } from "./CreateCurriculumModal";
 export { EditCurriculumModal } from "./EditCurriculumModal";

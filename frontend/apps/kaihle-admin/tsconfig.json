@@ -13,5 +13,10 @@
     "noEmit": true
   },
   "include": ["src"],
-  "exclude": ["src/tests"]
+  "exclude": [
+    "src/tests",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/__mocks__"
+  ]
 }

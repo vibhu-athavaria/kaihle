@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import {
   useCurricula,
-  useGrades,
   useSubjects,
   useCreateCurriculum,
   useUpdateCurriculum,
@@ -41,6 +40,7 @@ import {
   Subtopic,
 } from "../hooks/useCurriculum";
 import {
+  CurriculumSubtree,
   CreateCurriculumModal,
   EditCurriculumModal,
   CreateGradeModal,
@@ -162,8 +162,7 @@ export function AdminCurriculum() {
 
   // API hooks
   const { data: curricula = [] } = useCurricula();
-  const { data: grades = [] } = useGrades();
-  const { data: subjects = [] } = useSubjects();
+  const { data: subjects = [] } = useSubjects(); // used for LinkSubjectModal available subjects list
 
   // Mutations
   const createCurriculum = useCreateCurriculum();
@@ -189,9 +188,6 @@ export function AdminCurriculum() {
     }
     setExpandedNodes(newExpanded);
   };
-
-  // Get subjects for a curriculum (TODO: filter by curriculum once endpoint exists)
-  const getCurriculumSubjects = (_curriculumId: string) => subjects;
 
   // Close modal helper
   const closeModal = () => setModalState({ type: null });
@@ -282,90 +278,30 @@ export function AdminCurriculum() {
                   }}
                 />
 
-                {/* Grades under curriculum */}
-                {expandedNodes.has(curriculum.id) &&
-                  grades.map((grade) => (
-                    <div key={`${curriculum.id}-${grade.id}`}>
-                      <TreeItem
-                        node={{
-                          id: `${curriculum.id}-${grade.id}`,
-                          type: "grade",
-                          name: grade.name,
-                          data: grade,
-                        }}
-                        isExpanded={expandedNodes.has(
-                          `${curriculum.id}-${grade.id}`,
-                        )}
-                        isSelected={
-                          selectedNode?.id === `${curriculum.id}-${grade.id}`
-                        }
-                        onToggle={() =>
-                          toggleNode(`${curriculum.id}-${grade.id}`)
-                        }
-                        onSelect={() =>
-                          setSelectedNode({
-                            id: `${curriculum.id}-${grade.id}`,
-                            type: "grade",
-                            name: grade.name,
-                            data: grade,
-                          })
-                        }
-                        onEdit={(e) => {
-                          e.stopPropagation();
-                          openEditGrade(grade);
-                        }}
-                        onDelete={(e) => {
-                          e.stopPropagation();
-                          // TODO: Implement delete
-                        }}
-                        level={1}
-                      />
-
-                      {/* Subjects under grade/curriculum */}
-                      {expandedNodes.has(`${curriculum.id}-${grade.id}`) &&
-                        getCurriculumSubjects(curriculum.id).map((subject) => (
-                          <TreeItem
-                            key={`${curriculum.id}-${grade.id}-${subject.id}`}
-                            node={{
-                              id: `${curriculum.id}-${grade.id}-${subject.id}`,
-                              type: "subject",
-                              name: subject.name,
-                              data: subject,
-                            }}
-                            isExpanded={false}
-                            isSelected={
-                              selectedNode?.id ===
-                              `${curriculum.id}-${grade.id}-${subject.id}`
-                            }
-                            onToggle={() => {}}
-                            onSelect={() =>
-                              setSelectedNode({
-                                id: `${curriculum.id}-${grade.id}-${subject.id}`,
-                                type: "subject",
-                                name: subject.name,
-                                data: subject,
-                              })
-                            }
-                            onEdit={(e) => {
-                              e.stopPropagation();
-                              openEditSubject(subject);
-                            }}
-                            onDelete={(e) => {
-                              e.stopPropagation();
-                              unlinkSubject.mutate({
-                                curriculumId: curriculum.id,
-                                subjectId: subject.id,
-                              });
-                            }}
-                            onAddChild={(e) => {
-                              e.stopPropagation();
-                              openAddTopic(curriculum.id, grade.id, subject.id);
-                            }}
-                            level={2}
-                          />
-                        ))}
-                    </div>
-                  ))}
+                {/* Grades and subjects under curriculum — filtered per curriculum */}
+                {expandedNodes.has(curriculum.id) && (
+                  <CurriculumSubtree
+                    curriculumId={curriculum.id}
+                    expandedNodes={expandedNodes}
+                    selectedNodeId={selectedNode?.id ?? null}
+                    onToggleNode={toggleNode}
+                    onSelectNode={(id, type, data) =>
+                      setSelectedNode({
+                        id,
+                        type,
+                        name: (data as { name: string }).name,
+                        data,
+                      })
+                    }
+                    onEditGrade={openEditGrade}
+                    onEditSubject={openEditSubject}
+                    onLinkSubject={openLinkSubject}
+                    onOpenAddTopic={openAddTopic}
+                    onUnlinkSubject={(curriculumId, subjectId) =>
+                      unlinkSubject.mutate({ curriculumId, subjectId })
+                    }
+                  />
+                )}
               </div>
             ))}
           </div>
