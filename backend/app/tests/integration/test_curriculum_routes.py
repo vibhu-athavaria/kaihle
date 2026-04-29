@@ -640,11 +640,11 @@ class TestListTopicSubtopics:
         assert "Quadratic Equations" in subtopic_names
         # Verify order by sequence_order
         assert data[0]["name"] == "Basic Equations"
-        assert data[0]["order"] == 1
+        assert data[0]["sequence_order"] == 1
         assert data[1]["name"] == "Linear Equations"
-        assert data[1]["order"] == 2
+        assert data[1]["sequence_order"] == 2
         assert data[2]["name"] == "Quadratic Equations"
-        assert data[2]["order"] == 3
+        assert data[2]["sequence_order"] == 3
 
 
 # =============================================================================
