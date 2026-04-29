@@ -41,6 +41,7 @@ import {
 } from "../hooks/useCurriculum";
 import {
   CurriculumSubtree,
+  SubjectDetailPanel,
   CreateCurriculumModal,
   EditCurriculumModal,
   CreateGradeModal,
@@ -221,12 +222,6 @@ export function AdminCurriculum() {
   const openEditSubtopic = (subtopic: Subtopic, topicName: string) =>
     setModalState({ type: "editSubtopic", data: { subtopic, topicName } });
 
-  // Suppress unused-variable lint — these openers are wired to topic/subtopic
-  // detail panel actions that are not yet rendered (detail panel is a stub).
-  void openEditTopic;
-  void openAddSubtopic;
-  void openEditSubtopic;
-
   return (
     <AdminLayout pageTitle="Curriculum" onLogout={logout}>
       <div className="flex h-[calc(100vh-140px)] gap-4">
@@ -330,40 +325,42 @@ export function AdminCurriculum() {
           {selectedNode ? (
             <>
               <div className="p-4 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      {selectedNode.name}
-                    </h2>
-                    <p className="text-sm text-gray-500 capitalize">
-                      {selectedNode.type}
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {selectedNode.name}
+                </h2>
+                <p className="text-sm text-gray-500 capitalize">
+                  {selectedNode.type}
+                </p>
+              </div>
+              <div className="flex-1 overflow-hidden flex flex-col">
+                {selectedNode.type === "subject" ? (
+                  (() => {
+                    const d = selectedNode.data as Subject & {
+                      curriculumId: string;
+                      gradeId: string;
+                    };
+                    return (
+                      <SubjectDetailPanel
+                        subjectId={d.id}
+                        subjectName={d.name}
+                        curriculumId={d.curriculumId}
+                        gradeId={d.gradeId}
+                        onAddTopic={() =>
+                          openAddTopic(d.curriculumId, d.gradeId, d.id)
+                        }
+                        onEditTopic={openEditTopic}
+                        onAddSubtopic={openAddSubtopic}
+                        onEditSubtopic={openEditSubtopic}
+                      />
+                    );
+                  })()
+                ) : (
+                  <div className="flex-1 flex items-center justify-center">
+                    <p className="text-gray-400 text-sm">
+                      Select a subject to view its topics and subtopics
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {selectedNode.type === "subject" && (
-                      <button
-                        onClick={() => {
-                          const subject = selectedNode.data as Subject;
-                          // Find parent curriculum and grade from selection
-                          openAddTopic(
-                            "curriculum-id", // Would need to track this properly
-                            "grade-id",
-                            subject.id,
-                          );
-                        }}
-                        className="flex items-center gap-2 px-3 py-2 bg-brand-primary text-white rounded-lg text-sm font-medium hover:bg-brand-primary/90"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Add topic
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="flex-1 p-4 overflow-y-auto">
-                <p className="text-gray-500 text-center py-8">
-                  Select a subject to view topics and subtopics
-                </p>
+                )}
               </div>
             </>
           ) : (

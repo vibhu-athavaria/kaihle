@@ -14,7 +14,7 @@ interface CurriculumSubtreeProps {
   onSelectNode: (
     id: string,
     type: "grade" | "subject",
-    data: Grade | Subject,
+    data: Grade | (Subject & Record<string, unknown>),
   ) => void;
   onEditGrade: (grade: Grade) => void;
   onEditSubject: (subject: Subject) => void;
@@ -125,7 +125,11 @@ export function CurriculumSubtree({
                     }`}
                     style={{ paddingLeft: 44 }}
                     onClick={() =>
-                      onSelectNode(subjectNodeId, "subject", subject)
+                      onSelectNode(subjectNodeId, "subject", {
+                        ...subject,
+                        curriculumId,
+                        gradeId: grade.id,
+                      })
                     }
                   >
                     {isSubjectSelected && (

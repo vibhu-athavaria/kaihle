@@ -1,4 +1,5 @@
 export { CurriculumSubtree } from "./CurriculumSubtree";
+export { SubjectDetailPanel } from "./SubjectDetailPanel";
 
 // Curriculum modals
 export { CreateCurriculumModal } from "./CreateCurriculumModal";
