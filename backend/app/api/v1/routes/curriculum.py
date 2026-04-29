@@ -16,7 +16,7 @@ from typing import NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -51,11 +51,9 @@ from app.schemas.curriculum import (
     SubjectUpdate,
     SubtopicAdminResponse,
     SubtopicCreate,
-    SubtopicResponse,
     SubtopicSimpleResponse,
     SubtopicUpdate,
     TopicAdminResponse,
-    TopicResponse,
     TopicSimpleResponse,
 )
 from app.services.curriculum_service import (
@@ -181,7 +179,7 @@ async def list_subjects(
 
 @router.get(
     "/subjects/{subject_id}/topics",
-    response_model=list[TopicResponse],
+    response_model=list[TopicAdminResponse],
 )
 async def list_subject_topics(
     subject_id: UUID,
@@ -195,7 +193,7 @@ async def list_subject_topics(
     ),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> list[TopicResponse]:
+) -> list[TopicAdminResponse]:
     """List topics for a subject.
 
     Used by the teacher assessment creation wizard (Step 2: Select Topics).
@@ -206,8 +204,15 @@ async def list_subject_topics(
 
     Results are ordered by sequence_order within each grade.
     """
+    subtopic_count_subq = (
+        select(func.count(Subtopic.id))
+        .where(Subtopic.curriculum_topic_id == CurriculumTopic.id)
+        .correlate(CurriculumTopic)
+        .scalar_subquery()
+    )
+
     query = (
-        select(Topic, CurriculumTopic)
+        select(Topic, CurriculumTopic, subtopic_count_subq.label("subtopic_count"))
         .join(CurriculumTopic, CurriculumTopic.topic_id == Topic.id)
         .where(CurriculumTopic.subject_id == subject_id)
     )
@@ -220,20 +225,26 @@ async def list_subject_topics(
     rows = (await db.execute(query)).all()
 
     return [
-        TopicResponse(
-            id=topic.id,
+        TopicAdminResponse(
+            curriculum_topic_id=ct.id,
+            topic_id=topic.id,
             name=topic.name,
-            subject_id=subject_id,
-            grade_id=ct.grade_id,
-            order=ct.sequence_order or 0,
+            canonical_code=topic.canonical_code,
+            standard_code=ct.standard_code,
+            sequence_order=ct.sequence_order,
+            learning_objectives=ct.learning_objectives or [],
+            recommended_weeks=ct.recommended_weeks,
+            is_required=ct.is_required,
+            is_active=ct.is_active,
+            subtopic_count=subtopic_count or 0,
         )
-        for topic, ct in rows
+        for topic, ct, subtopic_count in rows
     ]
 
 
 @router.get(
     "/topics/{topic_id}/subtopics",
-    response_model=list[SubtopicResponse],
+    response_model=list[SubtopicAdminResponse],
 )
 async def list_topic_subtopics(
     topic_id: UUID,
@@ -241,7 +252,7 @@ async def list_topic_subtopics(
     grade_id: UUID | None = Query(None),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> list[SubtopicResponse]:
+) -> list[SubtopicAdminResponse]:
     """List subtopics for a topic.
 
     Optionally filter by curriculum_id and grade_id to get subtopics for
@@ -261,15 +272,7 @@ async def list_topic_subtopics(
     query = query.order_by(Subtopic.sequence_order, Subtopic.name)
     rows = await db.scalars(query)
 
-    return [
-        SubtopicResponse(
-            id=s.id,
-            name=s.name,
-            topic_id=topic_id,
-            order=s.sequence_order or 0,
-        )
-        for s in rows
-    ]
+    return [SubtopicAdminResponse.model_validate(s) for s in rows]
 
 
 @router.get("/topics", response_model=list[TopicSimpleResponse])
