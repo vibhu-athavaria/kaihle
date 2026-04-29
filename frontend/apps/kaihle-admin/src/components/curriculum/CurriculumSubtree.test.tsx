@@ -1,36 +1,35 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CurriculumSubtree } from "./CurriculumSubtree";
 import * as hooks from "../../hooks/useCurriculum";
 
 jest.mock("../../hooks/useCurriculum", () => ({
   ...jest.requireActual("../../hooks/useCurriculum"),
-  useGrades: jest.fn(),
   useSubjects: jest.fn(),
 }));
 
-const mockUseGrades = hooks.useGrades as jest.Mock;
 const mockUseSubjects = hooks.useSubjects as jest.Mock;
 
-const AS_LEVEL_ID = "as-level-id";
-const LOWER_ID = "lower-id";
+const CURRICULUM_ID = "curr-igcse";
 
-const ALL_GRADES = [
-  { id: "g5", name: "Grade 5", level: 5, description: null, is_active: true },
-  { id: "g6", name: "Grade 6", level: 6, description: null, is_active: true },
+const SUBJECTS = [
   {
-    id: "g11",
-    name: "Grade 11",
-    level: 11,
+    id: "sub-math",
+    name: "Mathematics",
+    code: "MATH",
     description: null,
+    icon: null,
+    color: null,
     is_active: true,
   },
   {
-    id: "g12",
-    name: "Grade 12",
-    level: 12,
+    id: "sub-bio",
+    name: "Biology",
+    code: "BIO",
     description: null,
+    icon: null,
+    color: null,
     is_active: true,
   },
 ];
@@ -46,94 +45,118 @@ function wrapper({ children }: { children: React.ReactNode }) {
 function noopHandler() {}
 
 describe("CurriculumSubtree", () => {
-  beforeEach(() => {
+  test("shows loading skeleton while subjects are loading", () => {
+    mockUseSubjects.mockReturnValue({ data: [], isLoading: true });
+
+    render(
+      <CurriculumSubtree
+        curriculumId={CURRICULUM_ID}
+        selectedSubjectId={null}
+        onSelectSubject={noopHandler}
+        onEditSubject={noopHandler}
+        onAddTopic={noopHandler}
+        onUnlinkSubject={noopHandler}
+      />,
+      { wrapper },
+    );
+
+    expect(document.querySelector(".animate-pulse")).toBeInTheDocument();
+  });
+
+  test("renders subjects directly under curriculum without grade layer", () => {
+    mockUseSubjects.mockReturnValue({ data: SUBJECTS, isLoading: false });
+
+    render(
+      <CurriculumSubtree
+        curriculumId={CURRICULUM_ID}
+        selectedSubjectId={null}
+        onSelectSubject={noopHandler}
+        onEditSubject={noopHandler}
+        onAddTopic={noopHandler}
+        onUnlinkSubject={noopHandler}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByText("Mathematics")).toBeInTheDocument();
+    expect(screen.getByText("Biology")).toBeInTheDocument();
+  });
+
+  test("does not show grade rows in the tree", () => {
+    mockUseSubjects.mockReturnValue({ data: SUBJECTS, isLoading: false });
+
+    render(
+      <CurriculumSubtree
+        curriculumId={CURRICULUM_ID}
+        selectedSubjectId={null}
+        onSelectSubject={noopHandler}
+        onEditSubject={noopHandler}
+        onAddTopic={noopHandler}
+        onUnlinkSubject={noopHandler}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.queryByText(/grade \d+/i)).not.toBeInTheDocument();
+  });
+
+  test("calls useSubjects with curriculumId so only linked subjects are shown", () => {
     mockUseSubjects.mockReturnValue({ data: [], isLoading: false });
-  });
-
-  test("shows only grades 11 and 12 under Cambridge AS Level, not grade 5 or 6", () => {
-    mockUseGrades.mockImplementation((curriculumId?: string) => {
-      if (curriculumId === AS_LEVEL_ID) {
-        return {
-          data: ALL_GRADES.filter((g) => g.level === 11 || g.level === 12),
-          isLoading: false,
-        };
-      }
-      return { data: ALL_GRADES, isLoading: false };
-    });
 
     render(
       <CurriculumSubtree
-        curriculumId={AS_LEVEL_ID}
-        expandedNodes={new Set([AS_LEVEL_ID])}
-        selectedNodeId={null}
-        onToggleNode={noopHandler}
-        onSelectNode={noopHandler}
-        onEditGrade={noopHandler}
+        curriculumId={CURRICULUM_ID}
+        selectedSubjectId={null}
+        onSelectSubject={noopHandler}
         onEditSubject={noopHandler}
-        onLinkSubject={noopHandler}
-        onOpenAddTopic={noopHandler}
+        onAddTopic={noopHandler}
         onUnlinkSubject={noopHandler}
       />,
       { wrapper },
     );
 
-    expect(screen.getByText("Grade 11")).toBeInTheDocument();
-    expect(screen.getByText("Grade 12")).toBeInTheDocument();
-    expect(screen.queryByText("Grade 5")).not.toBeInTheDocument();
-    expect(screen.queryByText("Grade 6")).not.toBeInTheDocument();
+    expect(mockUseSubjects).toHaveBeenCalledWith(CURRICULUM_ID);
   });
 
-  test("shows grades 6, 7, 8 under Cambridge Lower Secondary", () => {
-    mockUseGrades.mockImplementation((curriculumId?: string) => {
-      if (curriculumId === LOWER_ID) {
-        return {
-          data: ALL_GRADES.filter((g) => g.level >= 6 && g.level <= 8),
-          isLoading: false,
-        };
-      }
-      return { data: ALL_GRADES, isLoading: false };
-    });
+  test("calls onSelectSubject with subject and curriculumId when subject row is clicked", () => {
+    mockUseSubjects.mockReturnValue({ data: SUBJECTS, isLoading: false });
+    const onSelectSubject = jest.fn();
 
     render(
       <CurriculumSubtree
-        curriculumId={LOWER_ID}
-        expandedNodes={new Set([LOWER_ID])}
-        selectedNodeId={null}
-        onToggleNode={noopHandler}
-        onSelectNode={noopHandler}
-        onEditGrade={noopHandler}
+        curriculumId={CURRICULUM_ID}
+        selectedSubjectId={null}
+        onSelectSubject={onSelectSubject}
         onEditSubject={noopHandler}
-        onLinkSubject={noopHandler}
-        onOpenAddTopic={noopHandler}
+        onAddTopic={noopHandler}
         onUnlinkSubject={noopHandler}
       />,
       { wrapper },
     );
 
-    expect(screen.getByText("Grade 6")).toBeInTheDocument();
-    expect(screen.queryByText("Grade 11")).not.toBeInTheDocument();
-    expect(screen.queryByText("Grade 5")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Mathematics"));
+
+    expect(onSelectSubject).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "sub-math", curriculumId: CURRICULUM_ID }),
+    );
   });
 
-  test("passes curriculumId to useGrades so filtering happens at API level", () => {
-    mockUseGrades.mockReturnValue({ data: [], isLoading: false });
+  test("highlights the currently selected subject", () => {
+    mockUseSubjects.mockReturnValue({ data: SUBJECTS, isLoading: false });
 
     render(
       <CurriculumSubtree
-        curriculumId={AS_LEVEL_ID}
-        expandedNodes={new Set([AS_LEVEL_ID])}
-        selectedNodeId={null}
-        onToggleNode={noopHandler}
-        onSelectNode={noopHandler}
-        onEditGrade={noopHandler}
+        curriculumId={CURRICULUM_ID}
+        selectedSubjectId="sub-math"
+        onSelectSubject={noopHandler}
         onEditSubject={noopHandler}
-        onLinkSubject={noopHandler}
-        onOpenAddTopic={noopHandler}
+        onAddTopic={noopHandler}
         onUnlinkSubject={noopHandler}
       />,
       { wrapper },
     );
 
-    expect(mockUseGrades).toHaveBeenCalledWith(AS_LEVEL_ID);
+    const mathRow = screen.getByText("Mathematics").closest("[data-selected]");
+    expect(mathRow).toBeInTheDocument();
   });
 });

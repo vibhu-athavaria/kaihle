@@ -11,7 +11,6 @@ interface SubjectDetailPanelProps {
   subjectId: string;
   subjectName: string;
   curriculumId: string;
-  gradeId: string;
   onAddTopic: () => void;
   onEditTopic: (topic: Topic) => void;
   onAddSubtopic: (ctId: string, topicName: string) => void;
@@ -58,7 +57,6 @@ function SubtopicRow({
 function TopicRow({
   topic,
   curriculumId,
-  gradeId,
   isExpanded,
   onToggle,
   onEdit,
@@ -67,7 +65,6 @@ function TopicRow({
 }: {
   topic: Topic;
   curriculumId: string;
-  gradeId: string;
   isExpanded: boolean;
   onToggle: () => void;
   onEdit: () => void;
@@ -77,7 +74,6 @@ function TopicRow({
   const { data: subtopics = [], isLoading } = useSubtopics(
     topic.topic_id,
     curriculumId,
-    gradeId,
   );
 
   return (
@@ -170,18 +166,13 @@ export function SubjectDetailPanel({
   subjectId,
   subjectName: _subjectName,
   curriculumId,
-  gradeId,
   onAddTopic,
   onEditTopic,
   onAddSubtopic,
   onEditSubtopic,
 }: SubjectDetailPanelProps) {
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
-  const { data: topics = [], isLoading } = useTopics(
-    subjectId,
-    curriculumId,
-    gradeId,
-  );
+  const { data: topics = [], isLoading } = useTopics(subjectId, curriculumId);
 
   const toggleTopic = (topicId: string) => {
     const next = new Set(expandedTopics);
@@ -216,10 +207,24 @@ export function SubjectDetailPanel({
     );
   }
 
+  // Group topics by grade
+  const gradeGroups: { gradeId: string; gradeName: string; topics: Topic[] }[] =
+    [];
+  for (const topic of topics) {
+    const gid = topic.grade_id ?? "unknown";
+    const gname = topic.grade_name ?? "Unknown grade";
+    const existing = gradeGroups.find((g) => g.gradeId === gid);
+    if (existing) {
+      existing.topics.push(topic);
+    } else {
+      gradeGroups.push({ gradeId: gid, gradeName: gname, topics: [topic] });
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
-        <span className="text-xs font-bold uppercase tracking-widest text-gray-400">
+        <span className="font-['Inter'] text-xs font-bold uppercase tracking-widest text-gray-400">
           Topics
         </span>
         <button
@@ -232,20 +237,28 @@ export function SubjectDetailPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {topics.map((topic) => (
-          <TopicRow
-            key={topic.curriculum_topic_id}
-            topic={topic}
-            curriculumId={curriculumId}
-            gradeId={gradeId}
-            isExpanded={expandedTopics.has(topic.topic_id)}
-            onToggle={() => toggleTopic(topic.topic_id)}
-            onEdit={() => onEditTopic(topic)}
-            onAddSubtopic={() =>
-              onAddSubtopic(topic.curriculum_topic_id, topic.name)
-            }
-            onEditSubtopic={(st) => onEditSubtopic(st, topic.name)}
-          />
+        {gradeGroups.map(({ gradeId, gradeName, topics: gradeTopics }) => (
+          <div key={gradeId}>
+            <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100">
+              <span className="font-['Inter'] text-xs font-bold uppercase tracking-widest text-gray-400">
+                {gradeName}
+              </span>
+            </div>
+            {gradeTopics.map((topic) => (
+              <TopicRow
+                key={topic.curriculum_topic_id}
+                topic={topic}
+                curriculumId={curriculumId}
+                isExpanded={expandedTopics.has(topic.topic_id)}
+                onToggle={() => toggleTopic(topic.topic_id)}
+                onEdit={() => onEditTopic(topic)}
+                onAddSubtopic={() =>
+                  onAddSubtopic(topic.curriculum_topic_id, topic.name)
+                }
+                onEditSubtopic={(st) => onEditSubtopic(st, topic.name)}
+              />
+            ))}
+          </div>
         ))}
       </div>
     </div>

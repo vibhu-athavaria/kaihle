@@ -8,6 +8,7 @@
 import { useState, useMemo } from "react";
 import { Modal } from "@kaihle/ui";
 import { Loader2, ChevronLeft, Search } from "lucide-react";
+import { useGrades } from "../../hooks/useCurriculum";
 
 type Step = "choose" | "placement";
 type TopicChoice = "existing" | "new";
@@ -20,7 +21,6 @@ interface Topic {
 
 interface AddTopicModalProps {
   curriculumId: string | null;
-  gradeId: string | null;
   subjectId: string | null;
   availableTopics: Topic[];
   isOpen: boolean;
@@ -48,7 +48,6 @@ interface AddTopicModalProps {
 
 export function AddTopicModal({
   curriculumId,
-  gradeId,
   subjectId,
   availableTopics,
   isOpen,
@@ -57,8 +56,10 @@ export function AddTopicModal({
   isSubmitting = false,
   error,
 }: AddTopicModalProps) {
+  const { data: grades = [] } = useGrades();
   const [step, setStep] = useState<Step>("choose");
   const [choice, setChoice] = useState<TopicChoice | null>(null);
+  const [selectedGradeId, setSelectedGradeId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
 
   // Step 1: Existing topic selection
@@ -82,6 +83,7 @@ export function AddTopicModal({
   const resetForm = () => {
     setStep("choose");
     setChoice(null);
+    setSelectedGradeId("");
     setSearchQuery("");
     setSelectedTopicId("");
     setNewTopicName("");
@@ -116,6 +118,10 @@ export function AddTopicModal({
 
   const validateStep1 = (): boolean => {
     const errors: Record<string, string> = {};
+
+    if (!selectedGradeId) {
+      errors.grade = "Please select a grade";
+    }
 
     if (!choice) {
       errors.choice = "Please select an option";
@@ -169,7 +175,7 @@ export function AddTopicModal({
     e.preventDefault();
     if (
       !curriculumId ||
-      !gradeId ||
+      !selectedGradeId ||
       !subjectId ||
       !validateStep2() ||
       isSubmitting
@@ -178,7 +184,7 @@ export function AddTopicModal({
 
     const data: Parameters<typeof onSubmit>[0] = {
       curriculumId,
-      gradeId,
+      gradeId: selectedGradeId,
       subjectId,
       learningObjectives: learningObjectives
         .split("\n")
@@ -256,6 +262,32 @@ export function AddTopicModal({
       >
         {step === "choose" ? (
           <div className="space-y-4">
+            {/* Grade selector */}
+            <div>
+              <label
+                htmlFor="add-topic-grade"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Grade <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="add-topic-grade"
+                value={selectedGradeId}
+                onChange={(e) => setSelectedGradeId(e.target.value)}
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+              >
+                <option value="">Select a grade...</option>
+                {grades.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.grade && (
+                <p className="mt-1 text-xs text-red-500">{fieldErrors.grade}</p>
+              )}
+            </div>
+
             {/* Choice buttons */}
             <div className="grid grid-cols-2 gap-4">
               <button

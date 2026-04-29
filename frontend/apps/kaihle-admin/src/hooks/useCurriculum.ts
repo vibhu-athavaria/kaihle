@@ -61,6 +61,8 @@ export interface Topic {
   is_required: boolean;
   is_active: boolean;
   subtopic_count: number;
+  grade_id: string | null;
+  grade_name: string | null;
 }
 
 export interface Subtopic {

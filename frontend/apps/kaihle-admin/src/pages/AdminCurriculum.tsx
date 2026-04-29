@@ -24,7 +24,6 @@ import {
   useCreateCurriculum,
   useUpdateCurriculum,
   useCreateGrade,
-  useUpdateGrade,
   useCreateSubject,
   useUpdateSubject,
   useLinkSubject,
@@ -34,7 +33,6 @@ import {
   useCreateSubtopic,
   useUpdateSubtopic,
   Curriculum,
-  Grade,
   Subject,
   Topic,
   Subtopic,
@@ -45,7 +43,6 @@ import {
   CreateCurriculumModal,
   EditCurriculumModal,
   CreateGradeModal,
-  EditGradeModal,
   CreateSubjectModal,
   EditSubjectModal,
   LinkSubjectModal,
@@ -55,13 +52,13 @@ import {
   EditSubtopicModal,
 } from "../components/curriculum";
 
-type TreeNodeType = "curriculum" | "grade" | "subject" | "topic" | null;
+type TreeNodeType = "curriculum" | "subject" | null;
 
 interface TreeNode {
   id: string;
   type: TreeNodeType;
   name: string;
-  data: Curriculum | Grade | Subject | Topic | null;
+  data: Curriculum | (Subject & { curriculumId: string }) | null;
 }
 
 function TreeItem({
@@ -85,7 +82,7 @@ function TreeItem({
   onAddChild?: (e: React.MouseEvent) => void;
   level?: number;
 }) {
-  const hasChildren = node.type === "curriculum" || node.type === "grade";
+  const hasChildren = node.type === "curriculum";
   const paddingLeft = level * 16 + 12;
 
   return (
@@ -169,7 +166,6 @@ export function AdminCurriculum() {
   const createCurriculum = useCreateCurriculum();
   const updateCurriculum = useUpdateCurriculum();
   const createGrade = useCreateGrade();
-  const updateGrade = useUpdateGrade();
   const createSubject = useCreateSubject();
   const updateSubject = useUpdateSubject();
   const linkSubject = useLinkSubject();
@@ -199,21 +195,15 @@ export function AdminCurriculum() {
   const openEditCurriculum = (curriculum: Curriculum) =>
     setModalState({ type: "editCurriculum", data: curriculum });
   const openCreateGrade = () => setModalState({ type: "createGrade" });
-  const openEditGrade = (grade: Grade) =>
-    setModalState({ type: "editGrade", data: grade });
   const openCreateSubject = () => setModalState({ type: "createSubject" });
   const openEditSubject = (subject: Subject) =>
     setModalState({ type: "editSubject", data: subject });
   const openLinkSubject = (curriculumId: string) =>
     setModalState({ type: "linkSubject", data: { curriculumId } });
-  const openAddTopic = (
-    curriculumId: string,
-    gradeId: string,
-    subjectId: string,
-  ) =>
+  const openAddTopic = (curriculumId: string, subjectId: string) =>
     setModalState({
       type: "addTopic",
-      data: { curriculumId, gradeId, subjectId },
+      data: { curriculumId, subjectId },
     });
   const openEditTopic = (topic: Topic) =>
     setModalState({ type: "editTopic", data: topic });
@@ -273,27 +263,34 @@ export function AdminCurriculum() {
                   }}
                 />
 
-                {/* Grades and subjects under curriculum — filtered per curriculum */}
+                {/* Subjects directly under curriculum */}
                 {expandedNodes.has(curriculum.id) && (
                   <CurriculumSubtree
                     curriculumId={curriculum.id}
-                    expandedNodes={expandedNodes}
-                    selectedNodeId={selectedNode?.id ?? null}
-                    onToggleNode={toggleNode}
-                    onSelectNode={(id, type, data) =>
+                    selectedSubjectId={
+                      selectedNode?.type === "subject"
+                        ? (
+                            selectedNode.data as Subject & {
+                              curriculumId: string;
+                            }
+                          ).id
+                        : null
+                    }
+                    onSelectSubject={(subject) =>
                       setSelectedNode({
-                        id,
-                        type,
-                        name: (data as { name: string }).name,
-                        data,
+                        id: subject.id,
+                        type: "subject",
+                        name: subject.name,
+                        data: subject,
                       })
                     }
-                    onEditGrade={openEditGrade}
                     onEditSubject={openEditSubject}
-                    onLinkSubject={openLinkSubject}
-                    onOpenAddTopic={openAddTopic}
-                    onUnlinkSubject={(curriculumId, subjectId) =>
-                      unlinkSubject.mutate({ curriculumId, subjectId })
+                    onAddTopic={(cid, sid) => openAddTopic(cid, sid)}
+                    onUnlinkSubject={(cid, sid) =>
+                      unlinkSubject.mutate({
+                        curriculumId: cid,
+                        subjectId: sid,
+                      })
                     }
                   />
                 )}
@@ -337,17 +334,13 @@ export function AdminCurriculum() {
                   (() => {
                     const d = selectedNode.data as Subject & {
                       curriculumId: string;
-                      gradeId: string;
                     };
                     return (
                       <SubjectDetailPanel
                         subjectId={d.id}
                         subjectName={d.name}
                         curriculumId={d.curriculumId}
-                        gradeId={d.gradeId}
-                        onAddTopic={() =>
-                          openAddTopic(d.curriculumId, d.gradeId, d.id)
-                        }
+                        onAddTopic={() => openAddTopic(d.curriculumId, d.id)}
                         onEditTopic={openEditTopic}
                         onAddSubtopic={openAddSubtopic}
                         onEditSubtopic={openEditSubtopic}
@@ -410,19 +403,6 @@ export function AdminCurriculum() {
         isSubmitting={createGrade.isPending}
       />
 
-      <EditGradeModal
-        grade={
-          modalState.type === "editGrade" ? (modalState.data as Grade) : null
-        }
-        isOpen={modalState.type === "editGrade"}
-        onClose={closeModal}
-        onSubmit={async ({ id, ...fields }) => {
-          await updateGrade.mutateAsync({ id, data: fields });
-          closeModal();
-        }}
-        isSubmitting={updateGrade.isPending}
-      />
-
       <CreateSubjectModal
         isOpen={modalState.type === "createSubject"}
         onClose={closeModal}
@@ -475,11 +455,6 @@ export function AdminCurriculum() {
         curriculumId={
           modalState.type === "addTopic"
             ? (modalState.data as { curriculumId: string }).curriculumId
-            : null
-        }
-        gradeId={
-          modalState.type === "addTopic"
-            ? (modalState.data as { gradeId: string }).gradeId
             : null
         }
         subjectId={

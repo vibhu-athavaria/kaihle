@@ -139,6 +139,8 @@ class TopicAdminResponse(BaseModel):
     is_required: bool
     is_active: bool
     subtopic_count: int = 0
+    grade_id: UUID | None = None
+    grade_name: str | None = None
 
 
 class SubtopicAdminResponse(BaseModel):

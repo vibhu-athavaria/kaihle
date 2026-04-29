@@ -212,8 +212,9 @@ async def list_subject_topics(
     )
 
     query = (
-        select(Topic, CurriculumTopic, subtopic_count_subq.label("subtopic_count"))
+        select(Topic, CurriculumTopic, subtopic_count_subq.label("subtopic_count"), Grade)
         .join(CurriculumTopic, CurriculumTopic.topic_id == Topic.id)
+        .join(Grade, Grade.id == CurriculumTopic.grade_id)
         .where(CurriculumTopic.subject_id == subject_id)
     )
     if curriculum_id:
@@ -221,7 +222,7 @@ async def list_subject_topics(
     if grade_id:
         query = query.where(CurriculumTopic.grade_id == grade_id)
 
-    query = query.order_by(CurriculumTopic.sequence_order, Topic.name)
+    query = query.order_by(Grade.level, CurriculumTopic.sequence_order, Topic.name)
     rows = (await db.execute(query)).all()
 
     return [
@@ -237,8 +238,10 @@ async def list_subject_topics(
             is_required=ct.is_required,
             is_active=ct.is_active,
             subtopic_count=subtopic_count or 0,
+            grade_id=grade.id,
+            grade_name=grade.name,
         )
-        for topic, ct, subtopic_count in rows
+        for topic, ct, subtopic_count, grade in rows
     ]
 
 

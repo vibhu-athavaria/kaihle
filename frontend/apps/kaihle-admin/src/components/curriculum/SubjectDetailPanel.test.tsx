@@ -15,9 +15,8 @@ const mockUseSubtopics = hooks.useSubtopics as jest.Mock;
 
 const SUBJECT_ID = "sub-math";
 const CURRICULUM_ID = "curr-igcse";
-const GRADE_ID = "grade-9";
 
-const TOPICS = [
+const TOPICS_SINGLE_GRADE = [
   {
     curriculum_topic_id: "ct-1",
     topic_id: "t-1",
@@ -30,6 +29,8 @@ const TOPICS = [
     is_required: true,
     is_active: true,
     subtopic_count: 2,
+    grade_id: "grade-9",
+    grade_name: "Grade 9",
   },
   {
     curriculum_topic_id: "ct-2",
@@ -43,6 +44,41 @@ const TOPICS = [
     is_required: true,
     is_active: true,
     subtopic_count: 1,
+    grade_id: "grade-9",
+    grade_name: "Grade 9",
+  },
+];
+
+const TOPICS_MULTI_GRADE = [
+  {
+    curriculum_topic_id: "ct-1",
+    topic_id: "t-1",
+    name: "Number",
+    canonical_code: null,
+    standard_code: null,
+    sequence_order: 1,
+    learning_objectives: [],
+    recommended_weeks: null,
+    is_required: true,
+    is_active: true,
+    subtopic_count: 0,
+    grade_id: "grade-9",
+    grade_name: "Grade 9",
+  },
+  {
+    curriculum_topic_id: "ct-3",
+    topic_id: "t-3",
+    name: "Statistics",
+    canonical_code: null,
+    standard_code: null,
+    sequence_order: 1,
+    learning_objectives: [],
+    recommended_weeks: null,
+    is_required: true,
+    is_active: true,
+    subtopic_count: 0,
+    grade_id: "grade-10",
+    grade_name: "Grade 10",
   },
 ];
 
@@ -84,7 +120,6 @@ describe("SubjectDetailPanel", () => {
         subjectId={SUBJECT_ID}
         subjectName="Mathematics"
         curriculumId={CURRICULUM_ID}
-        gradeId={GRADE_ID}
         onAddTopic={() => {}}
         onEditTopic={() => {}}
         onAddSubtopic={() => {}}
@@ -105,7 +140,6 @@ describe("SubjectDetailPanel", () => {
         subjectId={SUBJECT_ID}
         subjectName="Mathematics"
         curriculumId={CURRICULUM_ID}
-        gradeId={GRADE_ID}
         onAddTopic={() => {}}
         onEditTopic={() => {}}
         onAddSubtopic={() => {}}
@@ -117,15 +151,17 @@ describe("SubjectDetailPanel", () => {
     expect(screen.getByText(/no topics yet/i)).toBeInTheDocument();
   });
 
-  test("renders topic list for the selected subject", () => {
-    mockUseTopics.mockReturnValue({ data: TOPICS, isLoading: false });
+  test("renders topics grouped under grade headers", () => {
+    mockUseTopics.mockReturnValue({
+      data: TOPICS_MULTI_GRADE,
+      isLoading: false,
+    });
 
     render(
       <SubjectDetailPanel
         subjectId={SUBJECT_ID}
         subjectName="Mathematics"
         curriculumId={CURRICULUM_ID}
-        gradeId={GRADE_ID}
         onAddTopic={() => {}}
         onEditTopic={() => {}}
         onAddSubtopic={() => {}}
@@ -134,11 +170,13 @@ describe("SubjectDetailPanel", () => {
       { wrapper },
     );
 
-    expect(screen.getByText("Algebra")).toBeInTheDocument();
-    expect(screen.getByText("Geometry")).toBeInTheDocument();
+    expect(screen.getByText("Grade 9")).toBeInTheDocument();
+    expect(screen.getByText("Grade 10")).toBeInTheDocument();
+    expect(screen.getByText("Number")).toBeInTheDocument();
+    expect(screen.getByText("Statistics")).toBeInTheDocument();
   });
 
-  test("calls useTopics with correct subjectId, curriculumId and gradeId", () => {
+  test("calls useTopics with subjectId and curriculumId but no gradeId", () => {
     mockUseTopics.mockReturnValue({ data: [], isLoading: false });
 
     render(
@@ -146,7 +184,6 @@ describe("SubjectDetailPanel", () => {
         subjectId={SUBJECT_ID}
         subjectName="Mathematics"
         curriculumId={CURRICULUM_ID}
-        gradeId={GRADE_ID}
         onAddTopic={() => {}}
         onEditTopic={() => {}}
         onAddSubtopic={() => {}}
@@ -155,15 +192,14 @@ describe("SubjectDetailPanel", () => {
       { wrapper },
     );
 
-    expect(mockUseTopics).toHaveBeenCalledWith(
-      SUBJECT_ID,
-      CURRICULUM_ID,
-      GRADE_ID,
-    );
+    expect(mockUseTopics).toHaveBeenCalledWith(SUBJECT_ID, CURRICULUM_ID);
   });
 
   test("expands a topic to show its subtopics on click", () => {
-    mockUseTopics.mockReturnValue({ data: TOPICS, isLoading: false });
+    mockUseTopics.mockReturnValue({
+      data: TOPICS_SINGLE_GRADE,
+      isLoading: false,
+    });
     mockUseSubtopics.mockImplementation((topicId: string) => {
       if (topicId === "t-1") return { data: SUBTOPICS, isLoading: false };
       return { data: [], isLoading: false };
@@ -174,7 +210,6 @@ describe("SubjectDetailPanel", () => {
         subjectId={SUBJECT_ID}
         subjectName="Mathematics"
         curriculumId={CURRICULUM_ID}
-        gradeId={GRADE_ID}
         onAddTopic={() => {}}
         onEditTopic={() => {}}
         onAddSubtopic={() => {}}
@@ -183,10 +218,8 @@ describe("SubjectDetailPanel", () => {
       { wrapper },
     );
 
-    // Subtopics not visible before expand
     expect(screen.queryByText("Linear equations")).not.toBeInTheDocument();
 
-    // Click the Algebra row to expand
     fireEvent.click(screen.getByText("Algebra"));
 
     expect(screen.getByText("Linear equations")).toBeInTheDocument();
@@ -201,7 +234,6 @@ describe("SubjectDetailPanel", () => {
         subjectId={SUBJECT_ID}
         subjectName="Mathematics"
         curriculumId={CURRICULUM_ID}
-        gradeId={GRADE_ID}
         onAddTopic={onAddTopic}
         onEditTopic={() => {}}
         onAddSubtopic={() => {}}
