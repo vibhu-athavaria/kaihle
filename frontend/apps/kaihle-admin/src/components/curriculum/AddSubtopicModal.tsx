@@ -5,13 +5,19 @@
  * Bloom's taxonomy level, Difficulty level (1-5), Estimated minutes, Sequence order
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Modal } from "@kaihle/ui";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
+
+interface ExistingSubtopic {
+  id: string;
+  name: string;
+}
 
 interface AddSubtopicModalProps {
   curriculumTopicId: string | null;
   topicName: string;
+  existingSubtopics?: ExistingSubtopic[];
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: {
@@ -50,12 +56,14 @@ const BLOOM_LEVELS = [
 export function AddSubtopicModal({
   curriculumTopicId,
   topicName,
+  existingSubtopics = [],
   isOpen,
   onClose,
   onSubmit,
   isSubmitting = false,
   error,
 }: AddSubtopicModalProps) {
+  const [reuseSearch, setReuseSearch] = useState("");
   const [name, setName] = useState("");
   const [learningObjective, setLearningObjective] = useState("");
   const [canonicalCode, setCanonicalCode] = useState("");
@@ -67,7 +75,16 @@ export function AddSubtopicModal({
   const [sequenceOrder, setSequenceOrder] = useState<string>("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  const matchingSubtopics = useMemo(() => {
+    if (!reuseSearch.trim() || existingSubtopics.length === 0) return [];
+    const q = reuseSearch.toLowerCase();
+    return existingSubtopics
+      .filter((s) => s.name.toLowerCase().includes(q))
+      .slice(0, 5);
+  }, [reuseSearch, existingSubtopics]);
+
   const resetForm = () => {
+    setReuseSearch("");
     setName("");
     setLearningObjective("");
     setCanonicalCode("");
@@ -175,6 +192,43 @@ export function AddSubtopicModal({
       maxWidth="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+        {/* Reuse search */}
+        {existingSubtopics.length > 0 && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-2">
+            <p className="text-xs font-medium text-amber-800">
+              Search existing subtopics to avoid duplicates
+            </p>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-amber-600 pointer-events-none" />
+              <input
+                type="text"
+                value={reuseSearch}
+                onChange={(e) => setReuseSearch(e.target.value)}
+                placeholder="e.g., Linear Equations..."
+                className="w-full bg-white border border-amber-300 rounded-lg pl-8 pr-3 py-1.5 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 outline-none"
+              />
+            </div>
+            {matchingSubtopics.length > 0 && (
+              <ul className="space-y-1">
+                {matchingSubtopics.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-center gap-2 text-xs text-amber-900 px-1"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                    {s.name} — already exists in this topic
+                  </li>
+                ))}
+              </ul>
+            )}
+            {reuseSearch.trim() && matchingSubtopics.length === 0 && (
+              <p className="text-xs text-amber-700">
+                No matches — safe to create new.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Name */}
         <div>
           <label

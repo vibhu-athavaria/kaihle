@@ -13,7 +13,11 @@ interface SubjectDetailPanelProps {
   curriculumId: string;
   onAddTopic: () => void;
   onEditTopic: (topic: Topic) => void;
-  onAddSubtopic: (ctId: string, topicName: string) => void;
+  onAddSubtopic: (
+    ctId: string,
+    topicName: string,
+    existingSubtopics: Subtopic[],
+  ) => void;
   onEditSubtopic: (subtopic: Subtopic, topicName: string) => void;
 }
 
@@ -68,7 +72,7 @@ function TopicRow({
   isExpanded: boolean;
   onToggle: () => void;
   onEdit: () => void;
-  onAddSubtopic: () => void;
+  onAddSubtopic: (existingSubtopics: Subtopic[]) => void;
   onEditSubtopic: (subtopic: Subtopic) => void;
 }) {
   const { data: subtopics = [], isLoading } = useSubtopics(
@@ -115,7 +119,7 @@ function TopicRow({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onAddSubtopic();
+              onAddSubtopic(subtopics);
             }}
             className="p-1.5 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700"
             title="Add subtopic"
@@ -252,8 +256,12 @@ export function SubjectDetailPanel({
                 isExpanded={expandedTopics.has(topic.topic_id)}
                 onToggle={() => toggleTopic(topic.topic_id)}
                 onEdit={() => onEditTopic(topic)}
-                onAddSubtopic={() =>
-                  onAddSubtopic(topic.curriculum_topic_id, topic.name)
+                onAddSubtopic={(existingSubtopics) =>
+                  onAddSubtopic(
+                    topic.curriculum_topic_id,
+                    topic.name,
+                    existingSubtopics,
+                  )
                 }
                 onEditSubtopic={(st) => onEditSubtopic(st, topic.name)}
               />

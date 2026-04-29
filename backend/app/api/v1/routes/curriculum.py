@@ -617,3 +617,20 @@ async def update_subtopic(
         return await service.update_subtopic(subtopic_id, data)
     except (NotFoundError, ValidationError) as e:
         _handle_service_error(e)
+
+
+@router.delete(
+    "/subtopics/{subtopic_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_subtopic(
+    subtopic_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete a subtopic. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        await service.delete_subtopic(subtopic_id)
+    except NotFoundError as e:
+        _handle_service_error(e)

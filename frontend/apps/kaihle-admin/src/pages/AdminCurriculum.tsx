@@ -32,6 +32,8 @@ import {
   useUpdateCurriculumTopic,
   useCreateSubtopic,
   useUpdateSubtopic,
+  useDeleteCurriculumTopic,
+  useDeleteSubtopic,
   Curriculum,
   Subject,
   Topic,
@@ -174,6 +176,8 @@ export function AdminCurriculum() {
   const updateTopic = useUpdateCurriculumTopic();
   const createSubtopic = useCreateSubtopic();
   const updateSubtopic = useUpdateSubtopic();
+  const deleteTopic = useDeleteCurriculumTopic();
+  const deleteSubtopic = useDeleteSubtopic();
 
   // Toggle expand/collapse
   const toggleNode = (id: string) => {
@@ -207,8 +211,15 @@ export function AdminCurriculum() {
     });
   const openEditTopic = (topic: Topic) =>
     setModalState({ type: "editTopic", data: topic });
-  const openAddSubtopic = (ctId: string, topicName: string) =>
-    setModalState({ type: "addSubtopic", data: { ctId, topicName } });
+  const openAddSubtopic = (
+    ctId: string,
+    topicName: string,
+    existingSubtopics: Subtopic[] = [],
+  ) =>
+    setModalState({
+      type: "addSubtopic",
+      data: { ctId, topicName, existingSubtopics },
+    });
   const openEditSubtopic = (subtopic: Subtopic, topicName: string) =>
     setModalState({ type: "editSubtopic", data: { subtopic, topicName } });
 
@@ -505,7 +516,12 @@ export function AdminCurriculum() {
           });
           closeModal();
         }}
+        onDelete={async (ctId) => {
+          await deleteTopic.mutateAsync(ctId);
+          closeModal();
+        }}
         isSubmitting={updateTopic.isPending}
+        isDeleting={deleteTopic.isPending}
       />
 
       <AddSubtopicModal
@@ -518,6 +534,12 @@ export function AdminCurriculum() {
           modalState.type === "addSubtopic"
             ? (modalState.data as { topicName: string }).topicName
             : ""
+        }
+        existingSubtopics={
+          modalState.type === "addSubtopic"
+            ? (modalState.data as { existingSubtopics: Subtopic[] })
+                .existingSubtopics
+            : []
         }
         isOpen={modalState.type === "addSubtopic"}
         onClose={closeModal}
@@ -564,7 +586,12 @@ export function AdminCurriculum() {
           });
           closeModal();
         }}
+        onDelete={async (subtopicId) => {
+          await deleteSubtopic.mutateAsync(subtopicId);
+          closeModal();
+        }}
         isSubmitting={updateSubtopic.isPending}
+        isDeleting={deleteSubtopic.isPending}
       />
     </AdminLayout>
   );

@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@kaihle/ui";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 
 interface Topic {
   curriculum_topic_id: string;
@@ -34,7 +34,9 @@ interface EditTopicModalProps {
     isRequired?: boolean;
     isActive?: boolean;
   }) => Promise<void>;
+  onDelete?: (ctId: string) => Promise<void>;
   isSubmitting?: boolean;
+  isDeleting?: boolean;
   error?: string | null;
 }
 
@@ -43,7 +45,9 @@ export function EditTopicModal({
   isOpen,
   onClose,
   onSubmit,
+  onDelete,
   isSubmitting = false,
+  isDeleting = false,
   error,
 }: EditTopicModalProps) {
   const [standardCode, setStandardCode] = useState("");
@@ -53,6 +57,7 @@ export function EditTopicModal({
   const [isRequired, setIsRequired] = useState(true);
   const [isActive, setIsActive] = useState(true);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (topic) {
@@ -63,6 +68,7 @@ export function EditTopicModal({
       setIsRequired(topic.is_required);
       setIsActive(topic.is_active);
       setFieldErrors({});
+      setShowDeleteConfirm(false);
     }
   }, [topic]);
 
@@ -275,19 +281,67 @@ export function EditTopicModal({
           </div>
         )}
 
+        {/* Danger Zone */}
+        {onDelete && (
+          <div className="pt-4 border-t border-gray-100">
+            {!showDeleteConfirm ? (
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={isSubmitting || isDeleting}
+                className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 font-medium font-['Inter'] disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                Remove topic from curriculum
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-700 font-['Inter']">
+                  Remove this topic placement? This deletes it from the
+                  curriculum but keeps the topic itself.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    disabled={isDeleting}
+                    className="flex-1 border border-gray-200 text-gray-700 rounded-full px-3 py-1.5 text-sm font-medium font-['Inter'] hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (topic) await onDelete(topic.curriculum_topic_id);
+                    }}
+                    disabled={isDeleting}
+                    className="flex-1 bg-red-600 text-white rounded-full px-3 py-1.5 text-sm font-medium font-['Inter'] hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Remove"
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex gap-3 justify-end pt-4 border-t border-gray-100">
           <button
             type="button"
             onClick={handleClose}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isDeleting}
             className="px-4 py-2 border border-gray-200 text-gray-700 rounded-full text-sm font-medium font-['Inter'] hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isDeleting}
             className="px-4 py-2 bg-brand-primary text-white rounded-full text-sm font-medium font-['Inter'] hover:bg-brand-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {isSubmitting ? (
