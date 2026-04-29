@@ -684,9 +684,16 @@ class UserService:
                 | (User.last_name.ilike(search_pattern))
             )
 
-        # Apply role filter
+        # Apply role filter — ignore sentinel values like "ALL" or unknown roles
+        role_filter: UserRole | None = None
         if role:
-            stmt = stmt.where(User.role == role)
+            try:
+                role_filter = UserRole(role)
+            except ValueError:
+                pass
+
+        if role_filter:
+            stmt = stmt.where(User.role == role_filter)
 
         # Get total count before pagination
         count_stmt = select(func.count()).select_from(User)
@@ -697,8 +704,8 @@ class UserService:
                 | (User.first_name.ilike(search_pattern))
                 | (User.last_name.ilike(search_pattern))
             )
-        if role:
-            count_stmt = count_stmt.where(User.role == role)
+        if role_filter:
+            count_stmt = count_stmt.where(User.role == role_filter)
 
         total = await self.db.scalar(count_stmt) or 0
 
