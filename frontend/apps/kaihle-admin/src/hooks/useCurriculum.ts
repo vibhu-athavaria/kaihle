@@ -70,7 +70,7 @@ export interface Subtopic {
   canonical_code: string | null;
   learning_objective: string;
   description: string | null;
-  keywords: string[];
+  keywords: string[] | null;
   bloom_taxonomy_level: string | null;
   difficulty_level: number | null;
   estimated_minutes: number | null;

@@ -152,7 +152,7 @@ class SubtopicAdminResponse(BaseModel):
     canonical_code: str | None = None
     learning_objective: str
     description: str | None = None
-    keywords: list[str] = []
+    keywords: list[str] | None = None
     bloom_taxonomy_level: str | None = None
     difficulty_level: int | None = None
     estimated_minutes: int | None = None

@@ -13,7 +13,7 @@ interface Subtopic {
   canonical_code: string | null;
   learning_objective: string;
   description: string | null;
-  keywords: string[];
+  keywords: string[] | null;
   bloom_taxonomy_level: string | null;
   difficulty_level: number | null;
   estimated_minutes: number | null;
@@ -87,7 +87,7 @@ export function EditSubtopicModal({
       setLearningObjective(subtopic.learning_objective);
       setCanonicalCode(subtopic.canonical_code ?? "");
       setDescription(subtopic.description ?? "");
-      setKeywords(subtopic.keywords.join(", "));
+      setKeywords((subtopic.keywords ?? []).join(", "));
       setBloomTaxonomyLevel(subtopic.bloom_taxonomy_level ?? "");
       setDifficultyLevel(subtopic.difficulty_level?.toString() ?? "");
       setEstimatedMinutes(subtopic.estimated_minutes?.toString() ?? "");
@@ -163,7 +163,9 @@ export function EditSubtopicModal({
     if (description.trim() !== (subtopic.description ?? "")) {
       data.description = description.trim() || undefined;
     }
-    if (JSON.stringify(newKeywords) !== JSON.stringify(subtopic.keywords)) {
+    if (
+      JSON.stringify(newKeywords) !== JSON.stringify(subtopic.keywords ?? [])
+    ) {
       data.keywords = newKeywords;
     }
     if (bloomTaxonomyLevel !== (subtopic.bloom_taxonomy_level ?? "")) {
@@ -197,243 +199,248 @@ export function EditSubtopicModal({
       onOpenChange={handleClose}
       title="Edit subtopic"
       description={topicName ? `Under: ${topicName}` : "Edit subtopic details"}
-      maxWidth="lg"
+      maxWidth="xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-        {/* Name */}
-        <div>
-          <label
-            htmlFor="edit-subtopic-name"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            id="edit-subtopic-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Solving Linear Equations"
-            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
-            disabled={isSubmitting}
-          />
-          {fieldErrors.name && (
-            <p className="mt-1 text-xs text-red-500">{fieldErrors.name}</p>
-          )}
-        </div>
-
-        {/* Learning Objective */}
-        <div>
-          <label
-            htmlFor="edit-learning-objective"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Learning objective <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            id="edit-learning-objective"
-            value={learningObjective}
-            onChange={(e) => setLearningObjective(e.target.value)}
-            rows={2}
-            placeholder="Students will be able to... (minimum 10 characters)"
-            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none resize-none"
-            disabled={isSubmitting}
-          />
-          {fieldErrors.learningObjective && (
-            <p className="mt-1 text-xs text-red-500">
-              {fieldErrors.learningObjective}
-            </p>
-          )}
-        </div>
-
-        {/* Two column layout */}
-        <div className="grid grid-cols-2 gap-4">
+      <form
+        onSubmit={handleSubmit}
+        className="flex flex-col mt-4"
+        style={{ maxHeight: "65vh" }}
+      >
+        <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+          {/* Name */}
           <div>
             <label
-              htmlFor="edit-canonical-code"
+              htmlFor="edit-subtopic-name"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Canonical code
+              Name <span className="text-red-500">*</span>
             </label>
             <input
-              id="edit-canonical-code"
+              id="edit-subtopic-name"
               type="text"
-              value={canonicalCode}
-              onChange={(e) => setCanonicalCode(e.target.value.toUpperCase())}
-              placeholder="e.g., 7Ma1.2"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Solving Linear Equations"
               className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
               disabled={isSubmitting}
             />
+            {fieldErrors.name && (
+              <p className="mt-1 text-xs text-red-500">{fieldErrors.name}</p>
+            )}
           </div>
+
+          {/* Learning Objective */}
           <div>
             <label
-              htmlFor="edit-subtopic-sequence"
+              htmlFor="edit-learning-objective"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Sequence order
+              Learning objective <span className="text-red-500">*</span>
             </label>
-            <input
-              id="edit-subtopic-sequence"
-              type="number"
-              min={1}
-              value={sequenceOrder}
-              onChange={(e) => setSequenceOrder(e.target.value)}
-              placeholder="Auto"
-              className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+            <textarea
+              id="edit-learning-objective"
+              value={learningObjective}
+              onChange={(e) => setLearningObjective(e.target.value)}
+              rows={2}
+              placeholder="Students will be able to... (minimum 10 characters)"
+              className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none resize-none"
               disabled={isSubmitting}
             />
-            {fieldErrors.sequenceOrder && (
+            {fieldErrors.learningObjective && (
               <p className="mt-1 text-xs text-red-500">
-                {fieldErrors.sequenceOrder}
+                {fieldErrors.learningObjective}
               </p>
             )}
           </div>
-        </div>
 
-        {/* Description */}
-        <div>
-          <label
-            htmlFor="edit-subtopic-description"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Description
-          </label>
-          <textarea
-            id="edit-subtopic-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            placeholder="Optional detailed description"
-            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none resize-none"
-            disabled={isSubmitting}
-          />
-        </div>
-
-        {/* Keywords */}
-        <div>
-          <label
-            htmlFor="edit-subtopic-keywords"
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Keywords
-          </label>
-          <input
-            id="edit-subtopic-keywords"
-            type="text"
-            value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
-            placeholder="e.g., linear, equation, variable (comma-separated)"
-            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
-            disabled={isSubmitting}
-          />
-        </div>
-
-        {/* Bloom's Taxonomy */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Bloom&apos;s taxonomy level
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {BLOOM_LEVELS.map((level) => (
-              <button
-                key={level.value}
-                type="button"
-                onClick={() => setBloomTaxonomyLevel(level.value)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  bloomTaxonomyLevel === level.value
-                    ? level.color + " ring-2 ring-offset-1 ring-gray-400"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                disabled={isSubmitting}
+          {/* Two column layout */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="edit-canonical-code"
+                className="block text-sm font-medium text-gray-700 mb-1"
               >
-                {level.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Two column: Difficulty and Time */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label
-              htmlFor="edit-difficulty-level"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Difficulty (1-5)
-            </label>
-            <div className="flex items-center gap-2">
+                Canonical code
+              </label>
               <input
-                id="edit-difficulty-level"
-                type="range"
-                min={1}
-                max={5}
-                value={difficultyLevel || 3}
-                onChange={(e) => setDifficultyLevel(e.target.value)}
-                className="flex-1"
+                id="edit-canonical-code"
+                type="text"
+                value={canonicalCode}
+                onChange={(e) => setCanonicalCode(e.target.value.toUpperCase())}
+                placeholder="e.g., 7Ma1.2"
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
                 disabled={isSubmitting}
               />
-              <span className="w-8 text-center font-medium text-gray-700">
-                {difficultyLevel || "-"}
-              </span>
             </div>
-            {fieldErrors.difficultyLevel && (
-              <p className="mt-1 text-xs text-red-500">
-                {fieldErrors.difficultyLevel}
-              </p>
-            )}
+            <div>
+              <label
+                htmlFor="edit-subtopic-sequence"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Sequence order
+              </label>
+              <input
+                id="edit-subtopic-sequence"
+                type="number"
+                min={1}
+                value={sequenceOrder}
+                onChange={(e) => setSequenceOrder(e.target.value)}
+                placeholder="Auto"
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+                disabled={isSubmitting}
+              />
+              {fieldErrors.sequenceOrder && (
+                <p className="mt-1 text-xs text-red-500">
+                  {fieldErrors.sequenceOrder}
+                </p>
+              )}
+            </div>
           </div>
+
+          {/* Description */}
           <div>
             <label
-              htmlFor="edit-estimated-minutes"
+              htmlFor="edit-subtopic-description"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Estimated minutes
+              Description
+            </label>
+            <textarea
+              id="edit-subtopic-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="Optional detailed description"
+              className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none resize-none"
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Keywords */}
+          <div>
+            <label
+              htmlFor="edit-subtopic-keywords"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Keywords
             </label>
             <input
-              id="edit-estimated-minutes"
-              type="number"
-              min={1}
-              value={estimatedMinutes}
-              onChange={(e) => setEstimatedMinutes(e.target.value)}
-              placeholder="e.g., 45"
+              id="edit-subtopic-keywords"
+              type="text"
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+              placeholder="e.g., linear, equation, variable (comma-separated)"
               className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
               disabled={isSubmitting}
             />
-            {fieldErrors.estimatedMinutes && (
-              <p className="mt-1 text-xs text-red-500">
-                {fieldErrors.estimatedMinutes}
-              </p>
-            )}
           </div>
-        </div>
 
-        {/* Active Toggle */}
-        <div className="flex items-center gap-3">
-          <input
-            id="edit-subtopic-active"
-            type="checkbox"
-            checked={isActive}
-            onChange={(e) => setIsActive(e.target.checked)}
-            className="w-4 h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary"
-            disabled={isSubmitting}
-          />
-          <label
-            htmlFor="edit-subtopic-active"
-            className="text-sm font-medium text-gray-700"
-          >
-            Active
-          </label>
-        </div>
-
-        {/* Error from API */}
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-600">{error}</p>
+          {/* Bloom's Taxonomy */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Bloom&apos;s taxonomy level
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {BLOOM_LEVELS.map((level) => (
+                <button
+                  key={level.value}
+                  type="button"
+                  onClick={() => setBloomTaxonomyLevel(level.value)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                    bloomTaxonomyLevel === level.value
+                      ? level.color + " ring-2 ring-offset-1 ring-gray-400"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
+                  disabled={isSubmitting}
+                >
+                  {level.label}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
 
+          {/* Two column: Difficulty and Time */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label
+                htmlFor="edit-difficulty-level"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Difficulty (1-5)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="edit-difficulty-level"
+                  type="range"
+                  min={1}
+                  max={5}
+                  value={difficultyLevel || 3}
+                  onChange={(e) => setDifficultyLevel(e.target.value)}
+                  className="flex-1"
+                  disabled={isSubmitting}
+                />
+                <span className="w-8 text-center font-medium text-gray-700">
+                  {difficultyLevel || "-"}
+                </span>
+              </div>
+              {fieldErrors.difficultyLevel && (
+                <p className="mt-1 text-xs text-red-500">
+                  {fieldErrors.difficultyLevel}
+                </p>
+              )}
+            </div>
+            <div>
+              <label
+                htmlFor="edit-estimated-minutes"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Estimated minutes
+              </label>
+              <input
+                id="edit-estimated-minutes"
+                type="number"
+                min={1}
+                value={estimatedMinutes}
+                onChange={(e) => setEstimatedMinutes(e.target.value)}
+                placeholder="e.g., 45"
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+                disabled={isSubmitting}
+              />
+              {fieldErrors.estimatedMinutes && (
+                <p className="mt-1 text-xs text-red-500">
+                  {fieldErrors.estimatedMinutes}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Active Toggle */}
+          <div className="flex items-center gap-3">
+            <input
+              id="edit-subtopic-active"
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+              className="w-4 h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary"
+              disabled={isSubmitting}
+            />
+            <label
+              htmlFor="edit-subtopic-active"
+              className="text-sm font-medium text-gray-700"
+            >
+              Active
+            </label>
+          </div>
+
+          {/* Error from API */}
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-600">{error}</p>
+            </div>
+          )}
+        </div>
         {/* Actions */}
-        <div className="flex gap-3 justify-end pt-4 border-t border-gray-100">
+        <div className="flex gap-3 justify-end pt-4 border-t border-gray-100 flex-shrink-0">
           <button
             type="button"
             onClick={handleClose}

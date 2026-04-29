@@ -2,7 +2,7 @@ import React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
-type ModalMaxWidth = "sm" | "md" | "lg";
+type ModalMaxWidth = "sm" | "md" | "lg" | "xl" | "2xl";
 
 interface ModalProps {
   open: boolean;
@@ -19,6 +19,8 @@ const maxWidthMap: Record<ModalMaxWidth, string> = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
+  xl: "max-w-xl",
+  "2xl": "max-w-2xl",
 };
 
 export function Modal({
