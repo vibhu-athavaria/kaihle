@@ -1,3 +1,3 @@
-import base from '@kaihle/eslint-config';
+import base from "@kaihle/eslint-config";
 
 export default base;

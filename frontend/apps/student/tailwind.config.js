@@ -1,9 +1,6 @@
-import baseConfig from '@kaihle/ui/tailwind.config.js'
+import baseConfig from "@kaihle/ui/tailwind.config.js";
 
 export default {
   ...baseConfig,
-  content: [
-    './src/**/*.{ts,tsx}',
-    '../../packages/ui/src/**/*.{ts,tsx}',
-  ],
-}
+  content: ["./src/**/*.{ts,tsx}", "../../packages/ui/src/**/*.{ts,tsx}"],
+};

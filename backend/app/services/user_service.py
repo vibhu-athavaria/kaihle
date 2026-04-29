@@ -648,3 +648,89 @@ class UserService:
             )
             for enrollment, class_, subject, grade, teacher in rows
         ]
+
+    async def list_platform_users(
+        self,
+        q: str | None = None,
+        role: str | None = None,
+        page: int = 1,
+        page_size: int = 25,
+    ) -> tuple[list[User], int]:
+        """List all platform users with optional filters.
+
+        KAIHLE_ADMIN bypass — returns users from ALL schools (Rule 12 explicit).
+        LEFT JOIN schools for school_name.
+
+        Args:
+            q: Search query for name or email (case-insensitive ILIKE)
+            role: Filter by user role
+            page: Page number (1-indexed)
+            page_size: Items per page
+
+        Returns:
+            Tuple of (list of users, total count)
+        """
+        from app.models.school import School
+
+        # Build base query with school join
+        stmt = select(User, School.name.label("school_name")).outerjoin(School, User.school_id == School.id)
+
+        # Apply search filter
+        if q:
+            search_pattern = f"%{q}%"
+            stmt = stmt.where(
+                (User.email.ilike(search_pattern))
+                | (User.first_name.ilike(search_pattern))
+                | (User.last_name.ilike(search_pattern))
+            )
+
+        # Apply role filter — ignore sentinel values like "ALL" or unknown roles
+        role_filter: UserRole | None = None
+        if role:
+            try:
+                role_filter = UserRole(role)
+            except ValueError:
+                pass
+
+        if role_filter:
+            stmt = stmt.where(User.role == role_filter)
+
+        # Get total count before pagination
+        count_stmt = select(func.count()).select_from(User)
+        if q:
+            search_pattern = f"%{q}%"
+            count_stmt = count_stmt.where(
+                (User.email.ilike(search_pattern))
+                | (User.first_name.ilike(search_pattern))
+                | (User.last_name.ilike(search_pattern))
+            )
+        if role_filter:
+            count_stmt = count_stmt.where(User.role == role_filter)
+
+        total = await self.db.scalar(count_stmt) or 0
+
+        # Apply pagination and ordering
+        offset = (page - 1) * page_size
+        stmt = stmt.order_by(User.created_at.desc()).offset(offset).limit(page_size)
+
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        # Attach school_name to user objects for convenience
+        users = []
+        for user, school_name in rows:
+            # Store school_name as a dynamic attribute for response mapping
+            user.school_name = school_name  # type: ignore[attr-defined]
+            users.append(user)
+
+        logger.info(
+            "platform_users_listed",
+            q=q,
+            role=role,
+            page=page,
+            page_size=page_size,
+            total=total,
+            returned=len(users),
+        )
+
+        return users, total
