@@ -4,6 +4,7 @@ import { ErrorBoundary } from "@kaihle/ui";
 import { LoginPage } from "./pages/LoginPage";
 import { PasswordSetupPage } from "./pages/PasswordSetupPage";
 import { AdminOverview } from "./pages/AdminOverview";
+import { AdminCurriculum } from "./pages/AdminCurriculum";
 import { AdminBilling } from "./pages/AdminBilling";
 import { AdminLogs } from "./pages/AdminLogs";
 import { AdminSchools } from "./pages/AdminSchools";
@@ -45,6 +46,7 @@ export default function App() {
                       />
                       <Route path="config" element={<AdminConfig />} />
                       <Route path="users" element={<AdminUsers />} />
+                      <Route path="curriculum" element={<AdminCurriculum />} />
                       <Route
                         path="question-bank"
                         element={<AdminQuestionReview />}

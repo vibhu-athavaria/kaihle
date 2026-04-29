@@ -3,10 +3,13 @@
 import structlog
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models.user import UserRole
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/platform", tags=["platform"])
 logger = structlog.get_logger()
@@ -69,14 +72,16 @@ async def get_platform_stats(
 @router.get("/users")
 async def get_platform_users(
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
-    q: str | None = Query(None, description="Search query"),
+    q: str | None = Query(None, description="Search query (name or email)"),
     role: str | None = Query(None, description="Filter by role"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(25, ge=1, le=100, description="Page size"),
+    db: AsyncSession = Depends(get_db),
 ) -> PlatformUsersResponse:
     """Get paginated list of platform users.
 
     Returns a list of all users across all schools with optional filtering.
+    KAIHLE_ADMIN bypass - no school_id filter applied (Rule 12 explicit).
     """
     logger.info(
         "platform.users.requested",
@@ -86,9 +91,26 @@ async def get_platform_users(
         page=page,
         page_size=page_size,
     )
+
+    service = UserService(db)
+    users, total = await service.list_platform_users(q, role, page, page_size)
+
     return PlatformUsersResponse(
-        users=[],
-        total=0,
+        users=[
+            PlatformUserSummary(
+                id=str(user.id),
+                school_id=str(user.school_id) if user.school_id else None,
+                first_name=user.first_name or "",
+                last_name=user.last_name or "",
+                email=user.email,
+                role=user.role,
+                is_active=user.is_active,
+                last_active=user.last_login_at.isoformat() if user.last_login_at else None,
+                school_name=user.school_name if hasattr(user, "school_name") else None,  # type: ignore[attr-defined]
+            )
+            for user in users
+        ],
+        total=total,
         page=page,
         page_size=page_size,
     )

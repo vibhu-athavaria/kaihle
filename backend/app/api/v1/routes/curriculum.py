@@ -1,25 +1,26 @@
-"""Curriculum API routes — global read-only data.
+"""Curriculum API routes — read and write operations.
 
 These endpoints expose the curriculum hierarchy that was seeded by
-seed_curriculum_graph.py (M1-2-T1). All authenticated users can read
-curriculum data regardless of role — it is school-agnostic.
+seed_curriculum_graph.py (M1-2-T1).
 
-No school_id filtering. No pagination on small lists (curricula, grades,
-subjects). Pagination applied to topics and subtopics which can be larger.
+Read endpoints: All authenticated users can read curriculum data
+regardless of role — it is school-agnostic.
 
-These are fully implemented routes — not stubs. The data is static and
-seeded once. If the tables are empty (seed script not yet run), the
-endpoints correctly return empty lists.
+Write endpoints: Restricted to KAIHLE_ADMIN role only.
+
+No school_id filtering on reads. No pagination on small lists (curricula,
+grades, subjects). Pagination applied to topics and subtopics which can be larger.
 """
 
+from typing import NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, get_current_user
+from app.core.deps import CurrentUser, get_current_user, require_role
 from app.models.curriculum import (
     Curriculum,
     CurriculumSubject,
@@ -29,15 +30,39 @@ from app.models.curriculum import (
     Subtopic,
     Topic,
 )
+from app.models.user import UserRole
 from app.schemas.curriculum import (
+    CurriculumAdminResponse,
+    CurriculumCreate,
     CurriculumResponse,
+    CurriculumSubjectResponse,
+    CurriculumTopicCreate,
     CurriculumTopicSimpleResponse,
+    CurriculumTopicUpdate,
+    CurriculumUpdate,
+    GradeAdminResponse,
+    GradeCreate,
     GradeResponse,
+    GradeUpdate,
+    LinkSubjectRequest,
+    SubjectAdminResponse,
+    SubjectCreate,
     SubjectResponse,
+    SubjectUpdate,
+    SubtopicAdminResponse,
+    SubtopicCreate,
     SubtopicResponse,
     SubtopicSimpleResponse,
+    SubtopicUpdate,
+    TopicAdminResponse,
     TopicResponse,
     TopicSimpleResponse,
+)
+from app.services.curriculum_service import (
+    CurriculumService,
+    DuplicateError,
+    NotFoundError,
+    ValidationError,
 )
 
 router = APIRouter(tags=["curriculum"])
@@ -71,7 +96,6 @@ async def get_curriculum(
     db: AsyncSession = Depends(get_db),
 ) -> CurriculumResponse:
     """Get a single curriculum by ID."""
-    from fastapi import HTTPException, status
 
     curriculum = await db.scalar(select(Curriculum).where(Curriculum.id == curriculum_id))
     if not curriculum:
@@ -299,3 +323,291 @@ async def list_curriculum_topics(
         )
         for ct, cur_name, grade_name, subj_name, topic_name in rows
     ]
+
+
+# =============================================================================
+# Write Endpoints (KAIHLE_ADMIN only)
+# =============================================================================
+
+
+def _handle_service_error(e: Exception) -> NoReturn:
+    """Convert service exceptions to HTTPExceptions."""
+    if isinstance(e, NotFoundError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    if isinstance(e, DuplicateError):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    if isinstance(e, ValidationError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    raise e
+
+
+# ------------------------------------------------------------------------------
+# Curriculum Write Routes
+# ------------------------------------------------------------------------------
+
+
+@router.post(
+    "/curricula",
+    response_model=CurriculumAdminResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_curriculum(
+    data: CurriculumCreate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> CurriculumAdminResponse:
+    """Create a new curriculum board. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        return await service.create_curriculum(data)
+    except (DuplicateError, ValidationError) as e:
+        _handle_service_error(e)
+
+
+@router.patch(
+    "/curricula/{curriculum_id}",
+    response_model=CurriculumAdminResponse,
+)
+async def update_curriculum(
+    curriculum_id: UUID,
+    data: CurriculumUpdate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> CurriculumAdminResponse:
+    """Update an existing curriculum. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        return await service.update_curriculum(curriculum_id, data)
+    except (NotFoundError, DuplicateError, ValidationError) as e:
+        _handle_service_error(e)
+
+
+# ------------------------------------------------------------------------------
+# Grade Write Routes
+# ------------------------------------------------------------------------------
+
+
+@router.post(
+    "/grades",
+    response_model=GradeAdminResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_grade(
+    data: GradeCreate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> GradeAdminResponse:
+    """Create a new grade level. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        return await service.create_grade(data)
+    except (DuplicateError, ValidationError) as e:
+        _handle_service_error(e)
+
+
+@router.patch(
+    "/grades/{grade_id}",
+    response_model=GradeAdminResponse,
+)
+async def update_grade(
+    grade_id: UUID,
+    data: GradeUpdate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> GradeAdminResponse:
+    """Update an existing grade. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        return await service.update_grade(grade_id, data)
+    except (NotFoundError, DuplicateError, ValidationError) as e:
+        _handle_service_error(e)
+
+
+# ------------------------------------------------------------------------------
+# Subject Write Routes
+# ------------------------------------------------------------------------------
+
+
+@router.post(
+    "/subjects",
+    response_model=SubjectAdminResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_subject(
+    data: SubjectCreate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> SubjectAdminResponse:
+    """Create a new subject. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        return await service.create_subject(data)
+    except (DuplicateError, ValidationError) as e:
+        _handle_service_error(e)
+
+
+@router.patch(
+    "/subjects/{subject_id}",
+    response_model=SubjectAdminResponse,
+)
+async def update_subject(
+    subject_id: UUID,
+    data: SubjectUpdate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> SubjectAdminResponse:
+    """Update an existing subject. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        return await service.update_subject(subject_id, data)
+    except (NotFoundError, DuplicateError, ValidationError) as e:
+        _handle_service_error(e)
+
+
+# ------------------------------------------------------------------------------
+# CurriculumSubject Link Routes
+# ------------------------------------------------------------------------------
+
+
+@router.post(
+    "/curricula/{curriculum_id}/subjects",
+    response_model=CurriculumSubjectResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def link_subject_to_curriculum(
+    curriculum_id: UUID,
+    data: LinkSubjectRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> CurriculumSubjectResponse:
+    """Link a subject to a curriculum. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        return await service.link_subject_to_curriculum(curriculum_id, data)
+    except (NotFoundError, DuplicateError) as e:
+        _handle_service_error(e)
+
+
+@router.delete(
+    "/curricula/{curriculum_id}/subjects/{subject_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def unlink_subject_from_curriculum(
+    curriculum_id: UUID,
+    subject_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Unlink a subject from a curriculum. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        await service.unlink_subject_from_curriculum(curriculum_id, subject_id)
+    except NotFoundError as e:
+        _handle_service_error(e)
+
+
+# ------------------------------------------------------------------------------
+# CurriculumTopic Write Routes
+# ------------------------------------------------------------------------------
+
+
+@router.post(
+    "/curricula/{curriculum_id}/grades/{grade_id}/subjects/{subject_id}/topics",
+    response_model=TopicAdminResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_topic_to_curriculum(
+    curriculum_id: UUID,
+    grade_id: UUID,
+    subject_id: UUID,
+    data: CurriculumTopicCreate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> TopicAdminResponse:
+    """Add a topic to a curriculum/grade/subject placement. KAIHLE_ADMIN only.
+
+    Accepts either topic_id (existing topic) or topic_data (create new).
+    Returns 400 if neither or both are provided.
+    """
+    service = CurriculumService(db)
+    try:
+        return await service.add_topic_to_curriculum(curriculum_id, grade_id, subject_id, data)
+    except (NotFoundError, DuplicateError, ValidationError) as e:
+        _handle_service_error(e)
+
+
+@router.patch(
+    "/curriculum-topics/{ct_id}",
+    response_model=TopicAdminResponse,
+)
+async def update_curriculum_topic(
+    ct_id: UUID,
+    data: CurriculumTopicUpdate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> TopicAdminResponse:
+    """Update a curriculum topic placement. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        return await service.update_curriculum_topic(ct_id, data)
+    except NotFoundError as e:
+        _handle_service_error(e)
+
+
+@router.delete(
+    "/curriculum-topics/{ct_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_curriculum_topic(
+    ct_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove a topic from a curriculum (deletes placement, not topic). KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        await service.delete_curriculum_topic(ct_id)
+    except NotFoundError as e:
+        _handle_service_error(e)
+
+
+# ------------------------------------------------------------------------------
+# Subtopic Write Routes
+# ------------------------------------------------------------------------------
+
+
+@router.post(
+    "/curriculum-topics/{ct_id}/subtopics",
+    response_model=SubtopicAdminResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_subtopic(
+    ct_id: UUID,
+    data: SubtopicCreate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> SubtopicAdminResponse:
+    """Create a subtopic under a curriculum topic. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        return await service.create_subtopic(ct_id, data)
+    except (NotFoundError, ValidationError) as e:
+        _handle_service_error(e)
+
+
+@router.patch(
+    "/subtopics/{subtopic_id}",
+    response_model=SubtopicAdminResponse,
+)
+async def update_subtopic(
+    subtopic_id: UUID,
+    data: SubtopicUpdate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> SubtopicAdminResponse:
+    """Update a subtopic. KAIHLE_ADMIN only."""
+    service = CurriculumService(db)
+    try:
+        return await service.update_subtopic(subtopic_id, data)
+    except (NotFoundError, ValidationError) as e:
+        _handle_service_error(e)

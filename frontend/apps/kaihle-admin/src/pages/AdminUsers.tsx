@@ -8,7 +8,7 @@ import {
   UserRole,
   PlatformUser,
 } from "../components/users/PlatformUserTable";
-import { DeactivateUserModal } from "../components/users/DeactivateUserModal";
+import { EditUserDrawer } from "../components/users/EditUserDrawer";
 
 interface PlatformUsersResponse {
   users: PlatformUser[];
@@ -34,6 +34,38 @@ function usePlatformUsers(params: {
   });
 }
 
+function useUpdateUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      userId: string;
+      schoolId: string;
+      firstName: string;
+      lastName: string;
+      role: UserRole;
+      password?: string;
+    }) => {
+      const data: Record<string, string> = {
+        first_name: payload.firstName,
+        last_name: payload.lastName,
+        role: payload.role,
+      };
+      if (payload.password) {
+        data.password = payload.password;
+      }
+      const response = await apiClient.patch(
+        `/api/v1/schools/${payload.schoolId}/users/${payload.userId}`,
+        data,
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["platform", "users"] });
+    },
+  });
+}
+
 function useDeactivateUser() {
   const queryClient = useQueryClient();
 
@@ -55,7 +87,7 @@ export function AdminUsers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole | "ALL">("ALL");
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedUser, setSelectedUser] = useState<PlatformUser | null>(null);
+  const [editingUser, setEditingUser] = useState<PlatformUser | null>(null);
 
   const pageSize = 25;
 
@@ -66,29 +98,36 @@ export function AdminUsers() {
     page_size: pageSize,
   });
 
+  const updateMutation = useUpdateUser();
   const deactivateMutation = useDeactivateUser();
 
   const users = data?.users ?? [];
   const totalUsers = data?.total ?? 0;
   const totalPages = Math.ceil(totalUsers / pageSize);
 
-  const handleDeactivateClick = (user: PlatformUser) => {
-    setSelectedUser(user);
+  const handleRowClick = (user: PlatformUser) => {
+    setEditingUser(user);
   };
 
-  const handleDeactivateClose = () => {
-    setSelectedUser(null);
+  const handleCloseDrawer = () => {
+    setEditingUser(null);
   };
 
-  const handleDeactivateConfirm = async () => {
-    if (!selectedUser) return;
+  const handleSave = async (data: {
+    userId: string;
+    schoolId: string;
+    firstName: string;
+    lastName: string;
+    role: UserRole;
+    password?: string;
+  }) => {
+    await updateMutation.mutateAsync(data);
+    setEditingUser(null);
+  };
 
-    const schoolId = selectedUser.school_id || "platform";
-    await deactivateMutation.mutateAsync({
-      schoolId,
-      userId: selectedUser.id,
-    });
-    setSelectedUser(null);
+  const handleDeactivate = async (userId: string, schoolId: string) => {
+    await deactivateMutation.mutateAsync({ userId, schoolId });
+    setEditingUser(null);
   };
 
   return (
@@ -103,23 +142,20 @@ export function AdminUsers() {
           setRoleFilter(role);
           setCurrentPage(1);
         }}
-        onDeactivateClick={handleDeactivateClick}
+        onRowClick={handleRowClick}
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setCurrentPage}
       />
 
-      <DeactivateUserModal
-        isOpen={!!selectedUser}
-        onClose={handleDeactivateClose}
-        onConfirm={handleDeactivateConfirm}
-        userName={
-          selectedUser
-            ? `${selectedUser.first_name} ${selectedUser.last_name}`
-            : ""
-        }
-        userEmail={selectedUser?.email ?? ""}
-        isLoading={deactivateMutation.isPending}
+      <EditUserDrawer
+        user={editingUser}
+        isOpen={!!editingUser}
+        onClose={handleCloseDrawer}
+        onSave={handleSave}
+        onDeactivate={handleDeactivate}
+        isSaving={updateMutation.isPending}
+        isDeactivating={deactivateMutation.isPending}
       />
     </AdminLayout>
   );

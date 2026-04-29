@@ -683,3 +683,640 @@ class TestCurriculumAuthRequired:
             if method == "GET":
                 response = await client.get(url)
             assert response.status_code == 401, f"Expected 401 for {url}, got {response.status_code}"
+
+
+# =============================================================================
+# Write Endpoint Tests (Admin Only)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_post_curricula_when_kaihle_admin_then_201(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Test that KAIHLE_ADMIN can create curriculum."""
+    # Arrange - Create KAIHLE_ADMIN
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    payload = {
+        "name": f"Test Curriculum {uuid.uuid4().hex[:8]}",
+        "code": f"TEST-{uuid.uuid4().hex[:6]}",
+        "description": "Test description",
+        "country": "UK",
+        "is_active": True,
+    }
+
+    # Act
+    response = await client.post("/api/v1/curricula", json=payload, headers=headers)
+
+    # Assert
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == payload["name"]
+    assert data["code"] == payload["code"]
+
+
+@pytest.mark.asyncio
+async def test_post_curricula_when_school_admin_then_403(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Test that SCHOOL_ADMIN cannot create curriculum."""
+    # Arrange
+    school = School(
+        id=uuid.uuid4(),
+        name="Test School",
+        slug=f"test-{uuid.uuid4().hex[:8]}",
+        status="active",
+    )
+    db_session.add(school)
+
+    school_admin = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"sadmin-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="School",
+        last_name="Admin",
+        role=UserRole.SCHOOL_ADMIN,
+        is_active=True,
+    )
+    db_session.add(school_admin)
+    await db_session.commit()
+
+    headers = make_auth_header(school_admin)
+    payload = {
+        "name": "Test Curriculum",
+        "code": f"TEST-{uuid.uuid4().hex[:6]}",
+        "is_active": True,
+    }
+
+    # Act
+    response = await client.post("/api/v1/curricula", json=payload, headers=headers)
+
+    # Assert
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_post_curricula_when_duplicate_code_then_409(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test that duplicate code returns 409."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    existing_code = curriculum_graph["lower"].code
+    payload = {
+        "name": "New Name",
+        "code": existing_code,
+        "is_active": True,
+    }
+
+    # Act
+    response = await client.post("/api/v1/curricula", json=payload, headers=headers)
+
+    # Assert
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_patch_curriculum_when_valid_then_200(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test updating a curriculum."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    payload = {"name": "Updated Curriculum Name"}
+
+    # Act
+    response = await client.patch(
+        f"/api/v1/curricula/{curriculum_graph['lower'].id}",
+        json=payload,
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "Updated Curriculum Name"
+
+
+@pytest.mark.asyncio
+async def test_post_grades_when_level_14_then_422(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Test that level outside 1-13 returns 422."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    payload = {
+        "name": "Invalid Grade",
+        "level": 14,
+        "is_active": True,
+    }
+
+    # Act
+    response = await client.post("/api/v1/grades", json=payload, headers=headers)
+
+    # Assert
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_post_subjects_when_valid_then_201(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Test creating a subject."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    unique_suffix = uuid.uuid4().hex[:8]
+    payload = {
+        "name": f"Test Subject {unique_suffix}",
+        "code": f"TS{unique_suffix[:4].upper()}",
+        "description": "Test subject description",
+        "icon": "book",
+        "color": "#1a5c38",
+        "is_active": True,
+    }
+
+    # Act
+    response = await client.post("/api/v1/subjects", json=payload, headers=headers)
+
+    # Assert
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == payload["name"]
+    assert data["icon"] == "book"
+    assert data["color"] == "#1a5c38"
+
+
+@pytest.mark.asyncio
+async def test_post_curriculum_subjects_when_valid_then_201(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test linking subject to curriculum."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    lower_id = curriculum_graph["lower"].id
+    math_id = curriculum_graph["subjects"]["MATH"].id
+
+    # First unlink existing
+    await client.delete(
+        f"/api/v1/curricula/{lower_id}/subjects/{math_id}",
+        headers=headers,
+    )
+
+    payload = {
+        "subject_id": str(math_id),
+        "is_core": True,
+        "sort_order": 1,
+    }
+
+    # Act
+    response = await client.post(
+        f"/api/v1/curricula/{lower_id}/subjects",
+        json=payload,
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == 201
+    data = response.json()
+    assert data["curriculum_id"] == str(lower_id)
+    assert data["subject_id"] == str(math_id)
+
+
+@pytest.mark.asyncio
+async def test_delete_curriculum_subjects_when_valid_then_204(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test unlinking subject from curriculum."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    lower_id = curriculum_graph["lower"].id
+    math_id = curriculum_graph["subjects"]["MATH"].id
+
+    # Act
+    response = await client.delete(
+        f"/api/v1/curricula/{lower_id}/subjects/{math_id}",
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_post_curriculum_topics_when_new_topic_data_then_201_and_topic_created(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test creating new topic and adding to curriculum."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    lower_id = curriculum_graph["lower"].id
+    g6_id = curriculum_graph["grades"][6].id
+    math_id = curriculum_graph["subjects"]["MATH"].id
+
+    payload = {
+        "topic_data": {
+            "name": "New Integration Test Topic",
+            "canonical_code": "INT-TEST-01",
+            "description": "Test topic",
+            "keywords": ["test", "integration"],
+        },
+        "standard_code": "6Ma1",
+        "sequence_order": 1,
+        "learning_objectives": ["Learn integration testing"],
+        "recommended_weeks": 2,
+        "is_required": True,
+    }
+
+    # Act
+    response = await client.post(
+        f"/api/v1/curricula/{lower_id}/grades/{g6_id}/subjects/{math_id}/topics",
+        json=payload,
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == "New Integration Test Topic"
+    assert data["standard_code"] == "6Ma1"
+
+
+@pytest.mark.asyncio
+async def test_post_curriculum_topics_when_existing_topic_id_then_201(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test adding existing topic to curriculum placement."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    igcse_id = curriculum_graph["igcse"].id
+    g9_id = curriculum_graph["grades"][9].id
+    math_id = curriculum_graph["subjects"]["MATH"].id
+    geometry_id = curriculum_graph["topics"]["geometry"].id
+
+    payload = {
+        "topic_id": str(geometry_id),
+        "standard_code": "9Ma3",
+        "is_required": True,
+    }
+
+    # Act
+    response = await client.post(
+        f"/api/v1/curricula/{igcse_id}/grades/{g9_id}/subjects/{math_id}/topics",
+        json=payload,
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == 201
+    data = response.json()
+    assert data["topic_id"] == str(geometry_id)
+    assert data["name"] == "Geometry"
+
+
+@pytest.mark.asyncio
+async def test_post_curriculum_topics_when_duplicate_placement_then_409(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test that duplicate placement returns 409."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    lower_id = curriculum_graph["lower"].id
+    g6_id = curriculum_graph["grades"][6].id
+    math_id = curriculum_graph["subjects"]["MATH"].id
+    algebra_id = curriculum_graph["topics"]["algebra"].id
+
+    payload = {
+        "topic_id": str(algebra_id),
+        "is_required": True,
+    }
+
+    # Act
+    response = await client.post(
+        f"/api/v1/curricula/{lower_id}/grades/{g6_id}/subjects/{math_id}/topics",
+        json=payload,
+        headers=headers,
+    )
+
+    # Assert - Algebra is already placed in Grade 6 Lower Secondary Math
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_patch_curriculum_topics_when_valid_then_200(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test updating curriculum topic placement."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    ct_id = curriculum_graph["curriculum_topics"]["lower_math_g6"][0].id
+
+    payload = {
+        "standard_code": "6Ma-UPDATED",
+        "sequence_order": 99,
+        "is_required": False,
+    }
+
+    # Act
+    response = await client.patch(
+        f"/api/v1/curriculum-topics/{ct_id}",
+        json=payload,
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert data["standard_code"] == "6Ma-UPDATED"
+    assert data["sequence_order"] == 99
+    assert data["is_required"] is False
+
+
+@pytest.mark.asyncio
+async def test_post_subtopics_when_missing_learning_objective_then_422(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test that missing learning_objective returns 422."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    ct_id = curriculum_graph["curriculum_topics"]["lower_math_g6"][0].id
+
+    payload = {
+        "name": "Subtopic without LO",
+        # Missing learning_objective
+    }
+
+    # Act
+    response = await client.post(
+        f"/api/v1/curriculum-topics/{ct_id}/subtopics",
+        json=payload,
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_post_subtopics_when_valid_then_201(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test creating a subtopic."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    ct_id = curriculum_graph["curriculum_topics"]["lower_math_g6"][0].id
+
+    payload = {
+        "name": "Linear Equations",
+        "learning_objective": "Students will be able to solve linear equations with one variable using algebraic methods",
+        "canonical_code": "6Ma1.1",
+        "bloom_taxonomy_level": "Apply",
+        "difficulty_level": 3,
+        "estimated_minutes": 45,
+        "keywords": ["algebra", "equations"],
+    }
+
+    # Act
+    response = await client.post(
+        f"/api/v1/curriculum-topics/{ct_id}/subtopics",
+        json=payload,
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == "Linear Equations"
+    assert data["bloom_taxonomy_level"] == "Apply"
+    assert data["difficulty_level"] == 3
+
+
+@pytest.mark.asyncio
+async def test_patch_subtopics_when_valid_then_200(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    curriculum_graph: dict,
+) -> None:
+    """Test updating a subtopic."""
+    # Arrange
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+
+    # Create a subtopic to update
+    ct_id = curriculum_graph["curriculum_topics"]["lower_math_g6"][1].id  # Algebra
+    subtopic = Subtopic(
+        id=uuid.uuid4(),
+        curriculum_topic_id=ct_id,
+        name="Old Name",
+        learning_objective="Students will be able to demonstrate understanding of old content",
+        difficulty_level=2,
+        is_active=True,
+    )
+    db_session.add(subtopic)
+    await db_session.commit()
+
+    headers = make_auth_header(admin)
+    payload = {
+        "name": "Updated Subtopic Name",
+        "difficulty_level": 4,
+    }
+
+    # Act
+    response = await client.patch(
+        f"/api/v1/subtopics/{subtopic.id}",
+        json=payload,
+        headers=headers,
+    )
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "Updated Subtopic Name"
+    assert data["difficulty_level"] == 4

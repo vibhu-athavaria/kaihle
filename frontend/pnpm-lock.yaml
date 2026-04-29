@@ -60,12 +60,18 @@ importers:
       '@kaihle/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@radix-ui/react-dialog':
+        specifier: ^1.0.5
+        version: 1.1.15(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tanstack/react-query':
         specifier: ^5.0.0
         version: 5.97.0(react@18.3.1)
       axios:
         specifier: ^1.7.0
         version: 1.15.0
+      lucide-react:
+        specifier: ^0.383.0
+        version: 0.383.0(react@18.3.1)
       react:
         specifier: ^18.3.0
         version: 18.3.1

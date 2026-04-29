@@ -13,6 +13,7 @@ import {
   BarChart3,
   BadgeDollarSign,
   BookOpen,
+  Library,
 } from "lucide-react";
 import { NavItem } from "./NavItem";
 
@@ -101,6 +102,11 @@ const adminSections: NavSection[] = [
   {
     section: "CONTENT",
     items: [
+      {
+        label: "Curriculum",
+        href: "/kaihle-admin/curriculum",
+        icon: Library,
+      },
       {
         label: "Assessment Questions",
         href: "/kaihle-admin/question-bank",

@@ -27,7 +27,7 @@ interface PlatformUserTableProps {
   roleFilter: UserRole | "ALL";
   onSearchChange: (query: string) => void;
   onRoleFilterChange: (role: UserRole | "ALL") => void;
-  onDeactivateClick: (user: PlatformUser) => void;
+  onRowClick?: (user: PlatformUser) => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -62,7 +62,7 @@ export function PlatformUserTable({
   roleFilter,
   onSearchChange,
   onRoleFilterChange,
-  onDeactivateClick,
+  onRowClick,
   currentPage,
   totalPages,
   onPageChange,
@@ -170,7 +170,10 @@ export function PlatformUserTable({
               filteredUsers.map((user) => (
                 <tr
                   key={user.id}
-                  className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                  onClick={() => onRowClick?.(user)}
+                  className={`border-b border-gray-50 transition-colors ${
+                    onRowClick ? "cursor-pointer hover:bg-gray-50" : ""
+                  }`}
                 >
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-3">
@@ -218,13 +221,10 @@ export function PlatformUserTable({
                     </span>
                   </td>
                   <td className="py-3 px-4">
-                    {user.is_active && (
-                      <button
-                        onClick={() => onDeactivateClick(user)}
-                        className="text-red-500 text-xs hover:text-red-700 font-['Inter'] min-h-[44px] px-2 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded"
-                      >
-                        Deactivate
-                      </button>
+                    {onRowClick && (
+                      <span className="text-brand-primary text-sm font-medium font-['Inter']">
+                        Edit →
+                      </span>
                     )}
                   </td>
                 </tr>
