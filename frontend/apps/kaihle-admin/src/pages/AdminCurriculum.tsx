@@ -20,10 +20,12 @@ import {
 } from "lucide-react";
 import {
   useCurricula,
+  useGrades,
   useSubjects,
   useCreateCurriculum,
   useUpdateCurriculum,
   useCreateGrade,
+  useUpdateGrade,
   useCreateSubject,
   useUpdateSubject,
   useLinkSubject,
@@ -35,6 +37,7 @@ import {
   useDeleteCurriculumTopic,
   useDeleteSubtopic,
   Curriculum,
+  Grade,
   Subject,
   Topic,
   Subtopic,
@@ -45,6 +48,7 @@ import {
   CreateCurriculumModal,
   EditCurriculumModal,
   CreateGradeModal,
+  EditGradeModal,
   CreateSubjectModal,
   EditSubjectModal,
   LinkSubjectModal,
@@ -162,12 +166,14 @@ export function AdminCurriculum() {
 
   // API hooks
   const { data: curricula = [] } = useCurricula();
+  const { data: grades = [] } = useGrades();
   const { data: subjects = [] } = useSubjects(); // used for LinkSubjectModal available subjects list
 
   // Mutations
   const createCurriculum = useCreateCurriculum();
   const updateCurriculum = useUpdateCurriculum();
   const createGrade = useCreateGrade();
+  const updateGrade = useUpdateGrade();
   const createSubject = useCreateSubject();
   const updateSubject = useUpdateSubject();
   const linkSubject = useLinkSubject();
@@ -199,6 +205,8 @@ export function AdminCurriculum() {
   const openEditCurriculum = (curriculum: Curriculum) =>
     setModalState({ type: "editCurriculum", data: curriculum });
   const openCreateGrade = () => setModalState({ type: "createGrade" });
+  const openEditGrade = (grade: Grade) =>
+    setModalState({ type: "editGrade", data: grade });
   const openCreateSubject = () => setModalState({ type: "createSubject" });
   const openEditSubject = (subject: Subject) =>
     setModalState({ type: "editSubject", data: subject });
@@ -355,6 +363,10 @@ export function AdminCurriculum() {
                         onEditTopic={openEditTopic}
                         onAddSubtopic={openAddSubtopic}
                         onEditSubtopic={openEditSubtopic}
+                        onEditGrade={(gradeId) => {
+                          const grade = grades.find((g) => g.id === gradeId);
+                          if (grade) openEditGrade(grade);
+                        }}
                       />
                     );
                   })()
@@ -412,6 +424,19 @@ export function AdminCurriculum() {
           closeModal();
         }}
         isSubmitting={createGrade.isPending}
+      />
+
+      <EditGradeModal
+        grade={
+          modalState.type === "editGrade" ? (modalState.data as Grade) : null
+        }
+        isOpen={modalState.type === "editGrade"}
+        onClose={closeModal}
+        onSubmit={async ({ id, ...fields }) => {
+          await updateGrade.mutateAsync({ id, data: fields });
+          closeModal();
+        }}
+        isSubmitting={updateGrade.isPending}
       />
 
       <CreateSubjectModal
