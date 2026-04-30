@@ -7,7 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
-from app.models.school import School
+from app.models.curriculum import Curriculum
+from app.models.school import Class, School, SchoolCurriculum
 from app.models.user import User, UserRole
 from app.schemas.school import SchoolCreate, SchoolUpdate
 
@@ -167,3 +168,169 @@ class SchoolService:
 
         await self.db.flush()
         return school
+
+    # -------------------------------------------------------------------------
+    # Curriculum subscription methods
+    # -------------------------------------------------------------------------
+
+    async def list_school_curricula(self, school_id: uuid.UUID) -> list[tuple[SchoolCurriculum, Curriculum]]:
+        """Return all curricula a school is subscribed to, paired with curriculum detail.
+
+        Args:
+            school_id: The school UUID
+
+        Returns:
+            List of (SchoolCurriculum, Curriculum) tuples ordered by adopted_at desc
+        """
+        result = await self.db.execute(
+            select(SchoolCurriculum, Curriculum)
+            .join(Curriculum, SchoolCurriculum.curriculum_id == Curriculum.id)
+            .where(SchoolCurriculum.school_id == school_id)
+            .order_by(SchoolCurriculum.adopted_at.desc())
+        )
+        return [(row[0], row[1]) for row in result.all()]
+
+    async def add_school_curriculum(
+        self, school_id: uuid.UUID, curriculum_id: uuid.UUID, is_primary: bool
+    ) -> tuple[SchoolCurriculum, Curriculum]:
+        """Subscribe a school to a curriculum.
+
+        Args:
+            school_id: The school UUID
+            curriculum_id: The curriculum UUID
+            is_primary: Whether this is the school's primary curriculum
+
+        Returns:
+            Tuple of (SchoolCurriculum, Curriculum)
+
+        Raises:
+            ValueError: School not found, curriculum not found, or already subscribed
+        """
+        school = await self.db.get(School, school_id)
+        if not school:
+            raise ValueError("School not found")
+
+        curriculum = await self.db.scalar(select(Curriculum).where(Curriculum.id == curriculum_id))
+        if not curriculum:
+            raise ValueError("Curriculum not found")
+
+        existing = await self.db.scalar(
+            select(SchoolCurriculum).where(
+                SchoolCurriculum.school_id == school_id,
+                SchoolCurriculum.curriculum_id == curriculum_id,
+            )
+        )
+        if existing:
+            raise ValueError("School is already subscribed to this curriculum")
+
+        if is_primary:
+            # Clear the current primary before setting the new one
+            current_primary = await self.db.scalar(
+                select(SchoolCurriculum).where(
+                    SchoolCurriculum.school_id == school_id,
+                    SchoolCurriculum.is_primary.is_(True),
+                )
+            )
+            if current_primary:
+                current_primary.is_primary = False
+
+        sc = SchoolCurriculum(school_id=school_id, curriculum_id=curriculum_id, is_primary=is_primary)
+        self.db.add(sc)
+        await self.db.flush()
+
+        logger.info(
+            "add_school_curriculum",
+            school_id=str(school_id),
+            curriculum_id=str(curriculum_id),
+            is_primary=is_primary,
+        )
+        return sc, curriculum
+
+    async def remove_school_curriculum(self, school_id: uuid.UUID, curriculum_id: uuid.UUID) -> None:
+        """Remove a school's subscription to a curriculum.
+
+        Args:
+            school_id: The school UUID
+            curriculum_id: The curriculum UUID
+
+        Raises:
+            ValueError: Not subscribed, or has active classes using this curriculum
+        """
+        sc = await self.db.scalar(
+            select(SchoolCurriculum).where(
+                SchoolCurriculum.school_id == school_id,
+                SchoolCurriculum.curriculum_id == curriculum_id,
+            )
+        )
+        if not sc:
+            raise ValueError("School is not subscribed to this curriculum")
+
+        active_class_count = await self.db.scalar(
+            select(func.count())
+            .select_from(Class)
+            .where(
+                Class.school_id == school_id,
+                Class.curriculum_id == curriculum_id,
+                Class.is_active.is_(True),
+            )
+        )
+        if active_class_count and active_class_count > 0:
+            raise ValueError(f"Cannot remove curriculum: {active_class_count} active classes still use it")
+
+        await self.db.delete(sc)
+        await self.db.flush()
+
+        logger.info(
+            "remove_school_curriculum",
+            school_id=str(school_id),
+            curriculum_id=str(curriculum_id),
+        )
+
+    async def set_primary_curriculum(
+        self, school_id: uuid.UUID, curriculum_id: uuid.UUID
+    ) -> tuple[SchoolCurriculum, Curriculum]:
+        """Set a curriculum as the school's primary curriculum.
+
+        Clears any existing primary flag first. Idempotent if already primary.
+
+        Args:
+            school_id: The school UUID
+            curriculum_id: The curriculum UUID
+
+        Returns:
+            Tuple of (SchoolCurriculum, Curriculum)
+
+        Raises:
+            ValueError: School is not subscribed to this curriculum
+        """
+        sc = await self.db.scalar(
+            select(SchoolCurriculum).where(
+                SchoolCurriculum.school_id == school_id,
+                SchoolCurriculum.curriculum_id == curriculum_id,
+            )
+        )
+        if not sc:
+            raise ValueError("School is not subscribed to this curriculum")
+
+        current_primary = await self.db.scalar(
+            select(SchoolCurriculum).where(
+                SchoolCurriculum.school_id == school_id,
+                SchoolCurriculum.is_primary.is_(True),
+            )
+        )
+        if current_primary and current_primary.curriculum_id != curriculum_id:
+            current_primary.is_primary = False
+
+        sc.is_primary = True
+        await self.db.flush()
+
+        curriculum = await self.db.get(Curriculum, curriculum_id)
+        if not curriculum:
+            raise ValueError("Curriculum not found")
+
+        logger.info(
+            "set_primary_curriculum",
+            school_id=str(school_id),
+            curriculum_id=str(curriculum_id),
+        )
+        return sc, curriculum

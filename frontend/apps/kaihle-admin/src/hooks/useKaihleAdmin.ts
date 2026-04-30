@@ -179,6 +179,104 @@ export function useUpdateSchoolAdminPassword() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// School curriculum hooks
+// ---------------------------------------------------------------------------
+
+export interface SchoolCurriculum {
+  curriculum_id: string;
+  curriculum_name: string;
+  curriculum_code: string;
+  curriculum_description: string | null;
+  is_primary: boolean;
+  adopted_at: string;
+}
+
+export interface GlobalCurriculum {
+  id: string;
+  name: string;
+  code: string;
+  description: string | null;
+  is_active: boolean;
+}
+
+export function useSchoolCurricula(schoolId: string) {
+  return useQuery({
+    queryKey: ["admin", "school", schoolId, "curricula"],
+    queryFn: async () => {
+      const response = await apiClient.get(
+        `/api/v1/schools/${schoolId}/curricula`,
+      );
+      return response.data as SchoolCurriculum[];
+    },
+    enabled: !!schoolId,
+  });
+}
+
+export function useAllCurricula() {
+  return useQuery({
+    queryKey: ["curricula"],
+    queryFn: async () => {
+      const response = await apiClient.get("/api/v1/curricula");
+      return response.data as GlobalCurriculum[];
+    },
+  });
+}
+
+export function useAddSchoolCurriculum(schoolId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      curriculum_id: string;
+      is_primary: boolean;
+    }) => {
+      const response = await apiClient.post(
+        `/api/v1/schools/${schoolId}/curricula`,
+        data,
+      );
+      return response.data as SchoolCurriculum;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "school", schoolId, "curricula"],
+      });
+    },
+  });
+}
+
+export function useRemoveSchoolCurriculum(schoolId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (curriculumId: string) => {
+      await apiClient.delete(
+        `/api/v1/schools/${schoolId}/curricula/${curriculumId}`,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "school", schoolId, "curricula"],
+      });
+    },
+  });
+}
+
+export function useSetPrimarySchoolCurriculum(schoolId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (curriculumId: string) => {
+      const response = await apiClient.patch(
+        `/api/v1/schools/${schoolId}/curricula/${curriculumId}/primary`,
+      );
+      return response.data as SchoolCurriculum;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "school", schoolId, "curricula"],
+      });
+    },
+  });
+}
+
 export function useExtendTrial() {
   const queryClient = useQueryClient();
 

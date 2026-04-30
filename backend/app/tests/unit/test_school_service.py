@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.school import School
+from app.models.curriculum import Curriculum
+from app.models.school import School, SchoolCurriculum
 from app.schemas.school import SchoolCreate, SchoolUpdate
 from app.services.school_service import SchoolService
 
@@ -281,3 +282,264 @@ class TestUpdateSchool:
         # Act & Assert
         with pytest.raises(ValueError, match="School not found"):
             await school_service.update_school(school_id, data)
+
+
+# =============================================================================
+# Curriculum subscription tests
+# =============================================================================
+
+
+def _make_curriculum(name: str = "Cambridge Lower Secondary", code: str = "CAM-LS") -> Curriculum:
+    c = Curriculum(id=uuid.uuid4(), name=name, code=code, is_active=True)
+    return c
+
+
+def _make_school_curriculum(school_id: uuid.UUID, curriculum: Curriculum, is_primary: bool = False) -> SchoolCurriculum:
+    sc = SchoolCurriculum(school_id=school_id, curriculum_id=curriculum.id, is_primary=is_primary)
+    return sc
+
+
+class TestListSchoolCurricula:
+    """Tests for SchoolService.list_school_curricula method."""
+
+    @pytest.mark.asyncio
+    async def test_list_school_curricula_when_school_has_curricula_then_returns_pairs(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Returns list of (SchoolCurriculum, Curriculum) tuples for the school."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum = _make_curriculum()
+        sc = _make_school_curriculum(school_id, curriculum, is_primary=True)
+        mock_result = MagicMock()
+        mock_result.all.return_value = [(sc, curriculum)]
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        # Act
+        result = await school_service.list_school_curricula(school_id)
+
+        # Assert
+        assert len(result) == 1
+        returned_sc, returned_c = result[0]
+        assert returned_sc.school_id == school_id
+        assert returned_sc.is_primary is True
+        assert returned_c.code == "CAM-LS"
+
+    @pytest.mark.asyncio
+    async def test_list_school_curricula_when_no_curricula_then_returns_empty_list(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Returns empty list when school has no curriculum subscriptions."""
+        # Arrange
+        school_id = uuid.uuid4()
+        mock_result = MagicMock()
+        mock_result.all.return_value = []
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        # Act
+        result = await school_service.list_school_curricula(school_id)
+
+        # Assert
+        assert result == []
+
+
+class TestAddSchoolCurriculum:
+    """Tests for SchoolService.add_school_curriculum method."""
+
+    @pytest.mark.asyncio
+    async def test_add_school_curriculum_when_valid_then_creates_record(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Creates a SchoolCurriculum record when school and curriculum exist."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum = _make_curriculum()
+        school = School(id=school_id, name="Test School", slug="test-school")
+
+        # scalar calls: school lookup, curriculum lookup, existing subscription check
+        mock_db.get = AsyncMock(return_value=school)
+        mock_db.scalar = AsyncMock(side_effect=[curriculum, None])  # curriculum found, not yet subscribed
+
+        # Act
+        sc, c = await school_service.add_school_curriculum(school_id, curriculum.id, is_primary=False)
+
+        # Assert
+        assert sc.school_id == school_id
+        assert sc.curriculum_id == curriculum.id
+        assert sc.is_primary is False
+        mock_db.add.assert_called_once()
+        mock_db.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_add_school_curriculum_when_curriculum_not_found_then_raises_value_error(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Raises ValueError when the curriculum ID does not exist."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum_id = uuid.uuid4()
+        school = School(id=school_id, name="Test School", slug="test-school")
+
+        mock_db.get = AsyncMock(return_value=school)
+        mock_db.scalar = AsyncMock(return_value=None)  # curriculum not found
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="Curriculum not found"):
+            await school_service.add_school_curriculum(school_id, curriculum_id, is_primary=False)
+
+    @pytest.mark.asyncio
+    async def test_add_school_curriculum_when_already_subscribed_then_raises_value_error(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Raises ValueError when school is already subscribed to this curriculum."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum = _make_curriculum()
+        school = School(id=school_id, name="Test School", slug="test-school")
+        existing_sc = _make_school_curriculum(school_id, curriculum)
+
+        mock_db.get = AsyncMock(return_value=school)
+        mock_db.scalar = AsyncMock(side_effect=[curriculum, existing_sc])  # curriculum found, already subscribed
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="already subscribed"):
+            await school_service.add_school_curriculum(school_id, curriculum.id, is_primary=False)
+
+    @pytest.mark.asyncio
+    async def test_add_school_curriculum_when_is_primary_true_then_clears_existing_primary(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Clears any existing primary flag before setting the new curriculum as primary."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum = _make_curriculum()
+        old_primary_curriculum = _make_curriculum("Old Primary", "OLD")
+        old_sc = _make_school_curriculum(school_id, old_primary_curriculum, is_primary=True)
+        school = School(id=school_id, name="Test School", slug="test-school")
+
+        mock_db.get = AsyncMock(return_value=school)
+        # curriculum found, not yet subscribed, existing primary found
+        mock_db.scalar = AsyncMock(side_effect=[curriculum, None, old_sc])
+
+        # Act
+        sc, _ = await school_service.add_school_curriculum(school_id, curriculum.id, is_primary=True)
+
+        # Assert
+        assert old_sc.is_primary is False  # cleared
+        assert sc.is_primary is True
+
+
+class TestRemoveSchoolCurriculum:
+    """Tests for SchoolService.remove_school_curriculum method."""
+
+    @pytest.mark.asyncio
+    async def test_remove_school_curriculum_when_no_active_classes_then_removes(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Removes the SchoolCurriculum record when no active classes use it."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum = _make_curriculum()
+        sc = _make_school_curriculum(school_id, curriculum)
+
+        mock_db.scalar = AsyncMock(side_effect=[sc, 0])  # subscription found, zero active classes
+        mock_db.delete = AsyncMock()
+
+        # Act
+        await school_service.remove_school_curriculum(school_id, curriculum.id)
+
+        # Assert
+        mock_db.delete.assert_called_once_with(sc)
+        mock_db.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_remove_school_curriculum_when_active_classes_exist_then_raises_value_error(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Raises ValueError when active classes still use this curriculum."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum = _make_curriculum()
+        sc = _make_school_curriculum(school_id, curriculum)
+
+        mock_db.scalar = AsyncMock(side_effect=[sc, 3])  # 3 active classes
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="active classes"):
+            await school_service.remove_school_curriculum(school_id, curriculum.id)
+
+    @pytest.mark.asyncio
+    async def test_remove_school_curriculum_when_not_subscribed_then_raises_value_error(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Raises ValueError when school is not subscribed to the curriculum."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum_id = uuid.uuid4()
+
+        mock_db.scalar = AsyncMock(return_value=None)  # subscription not found
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="not subscribed"):
+            await school_service.remove_school_curriculum(school_id, curriculum_id)
+
+
+class TestSetPrimarySchoolCurriculum:
+    """Tests for SchoolService.set_primary_curriculum method."""
+
+    @pytest.mark.asyncio
+    async def test_set_primary_curriculum_when_valid_then_updates_primary(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Clears old primary and sets the specified curriculum as primary."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum = _make_curriculum()
+        old_curriculum = _make_curriculum("Old", "OLD")
+        sc = _make_school_curriculum(school_id, curriculum, is_primary=False)
+        old_sc = _make_school_curriculum(school_id, old_curriculum, is_primary=True)
+
+        # target subscription, existing primary
+        mock_db.scalar = AsyncMock(side_effect=[sc, old_sc])
+
+        # Act
+        result_sc, result_c = await school_service.set_primary_curriculum(school_id, curriculum.id)
+
+        # Assert
+        assert old_sc.is_primary is False
+        assert result_sc.is_primary is True
+        mock_db.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_set_primary_curriculum_when_already_primary_then_no_change(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """No-ops cleanly when the curriculum is already the primary."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum = _make_curriculum()
+        sc = _make_school_curriculum(school_id, curriculum, is_primary=True)
+
+        # target subscription found, it IS the existing primary (same sc)
+        mock_db.scalar = AsyncMock(side_effect=[sc, sc])
+
+        # Act
+        result_sc, _ = await school_service.set_primary_curriculum(school_id, curriculum.id)
+
+        # Assert
+        assert result_sc.is_primary is True
+
+    @pytest.mark.asyncio
+    async def test_set_primary_curriculum_when_not_subscribed_then_raises_value_error(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Raises ValueError when school is not subscribed to the target curriculum."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum_id = uuid.uuid4()
+
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="not subscribed"):
+            await school_service.set_primary_curriculum(school_id, curriculum_id)
