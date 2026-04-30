@@ -317,40 +317,6 @@ export function AdminCurriculum() {
             ))}
           </div>
 
-          {/* Grades list */}
-          {grades.length > 0 && (
-            <div className="border-t border-gray-200">
-              <p className="px-3 pt-3 pb-1 text-[9px] font-bold uppercase tracking-[0.8px] text-role-admin-muted">
-                Grades
-              </p>
-              {grades
-                .slice()
-                .sort((a, b) => a.level - b.level)
-                .map((grade) => (
-                  <div
-                    key={grade.id}
-                    className="group flex items-center gap-1 py-1.5 px-3 hover:bg-gray-50 transition-colors"
-                  >
-                    <span className="flex-1 text-sm text-gray-700 truncate">
-                      {grade.name}
-                    </span>
-                    {!grade.is_active && (
-                      <span className="text-xs text-gray-400 mr-1">
-                        (inactive)
-                      </span>
-                    )}
-                    <button
-                      onClick={() => openEditGrade(grade)}
-                      className="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-opacity"
-                      title="Edit grade"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-            </div>
-          )}
-
           {/* Quick actions */}
           <div className="p-3 border-t border-gray-200 space-y-2">
             <button
@@ -397,6 +363,10 @@ export function AdminCurriculum() {
                         onEditTopic={openEditTopic}
                         onAddSubtopic={openAddSubtopic}
                         onEditSubtopic={openEditSubtopic}
+                        onEditGrade={(gradeId) => {
+                          const grade = grades.find((g) => g.id === gradeId);
+                          if (grade) openEditGrade(grade);
+                        }}
                       />
                     );
                   })()
