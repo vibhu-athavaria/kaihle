@@ -257,6 +257,9 @@ export function useRemoveSchoolCurriculum(schoolId: string) {
         queryKey: ["admin", "school", schoolId, "curricula"],
       });
     },
+    onError: (error) => {
+      console.error("Failed to remove curriculum:", error);
+    },
   });
 }
 
@@ -273,6 +276,9 @@ export function useSetPrimarySchoolCurriculum(schoolId: string) {
       queryClient.invalidateQueries({
         queryKey: ["admin", "school", schoolId, "curricula"],
       });
+    },
+    onError: (error) => {
+      console.error("Failed to set primary curriculum:", error);
     },
   });
 }
