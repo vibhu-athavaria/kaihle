@@ -131,7 +131,7 @@ export function CreateClassModal({
   // Data hooks
   const { data: subscribedCurricula, isLoading: curriculaLoading } =
     useMySchoolCurricula();
-  const { data: grades } = useGrades();
+  const { data: grades } = useGrades(curriculumId || undefined);
   const { data: allSubjects } = useSubjects(curriculumId || undefined);
   const { data: teachers, isLoading: teachersLoading } = useSchoolUsers(
     UserRole.TEACHER,
@@ -355,7 +355,6 @@ export function CreateClassModal({
             {subscribedCurricula?.map((c) => (
               <option key={c.curriculum_id} value={c.curriculum_id}>
                 {c.curriculum_name}
-                {c.is_primary ? " (Primary)" : ""}
               </option>
             ))}
           </select>

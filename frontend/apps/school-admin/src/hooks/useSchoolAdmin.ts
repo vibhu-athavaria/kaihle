@@ -350,11 +350,14 @@ export function useCurricula() {
   });
 }
 
-export function useGrades() {
+export function useGrades(curriculumId?: string) {
   return useQuery({
-    queryKey: ["grades"],
+    queryKey: ["grades", curriculumId ?? "all"],
     queryFn: async () => {
-      const res = await apiClient.get("/api/v1/grades");
+      const url = curriculumId
+        ? `/api/v1/grades?curriculum_id=${curriculumId}`
+        : "/api/v1/grades";
+      const res = await apiClient.get(url);
       return res.data as Grade[];
     },
     staleTime: Infinity,
