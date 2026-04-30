@@ -200,11 +200,14 @@ class CurriculumService:
         if existing:
             raise DuplicateError(f"Level {data.level} already taken by {existing.name}")
 
+        # Deduplicate while preserving insertion order
+        unique_curriculum_ids = list(dict.fromkeys(data.curriculum_ids))
+
         # Validate all curriculum_ids exist before any writes
-        if data.curriculum_ids:
-            found = await self.db.scalars(select(Curriculum.id).where(Curriculum.id.in_(data.curriculum_ids)))
+        if unique_curriculum_ids:
+            found = await self.db.scalars(select(Curriculum.id).where(Curriculum.id.in_(unique_curriculum_ids)))
             found_ids = set(found.all())
-            missing = [str(cid) for cid in data.curriculum_ids if cid not in found_ids]
+            missing = [str(cid) for cid in unique_curriculum_ids if cid not in found_ids]
             if missing:
                 raise NotFoundError(f"Curricula not found: {', '.join(missing)}")
 
@@ -218,7 +221,7 @@ class CurriculumService:
         await self.db.flush()
 
         # Associate curricula
-        for idx, curriculum_id in enumerate(data.curriculum_ids):
+        for idx, curriculum_id in enumerate(unique_curriculum_ids):
             self.db.add(
                 CurriculumGrade(
                     curriculum_id=curriculum_id,
@@ -228,7 +231,10 @@ class CurriculumService:
             )
 
         logger.info(
-            "grade_created", grade_id=str(grade.id), level=data.level, curriculum_count=len(data.curriculum_ids)
+            "grade_created",
+            grade_id=str(grade.id),
+            level=data.level,
+            curriculum_count=len(unique_curriculum_ids),
         )
 
         from app.schemas.curriculum import GradeAdminResponse
@@ -239,7 +245,7 @@ class CurriculumService:
             level=grade.level,
             description=grade.description,
             is_active=grade.is_active,
-            curriculum_ids=list(data.curriculum_ids),
+            curriculum_ids=unique_curriculum_ids,
         )
 
     async def update_grade(
@@ -273,6 +279,9 @@ class CurriculumService:
         # Handle curriculum associations (full replace when provided)
         new_curriculum_ids = update_data.pop("curriculum_ids", None)
         if new_curriculum_ids is not None:
+            # Deduplicate while preserving insertion order
+            new_curriculum_ids = list(dict.fromkeys(new_curriculum_ids))
+
             # Validate all provided curriculum_ids exist
             if new_curriculum_ids:
                 found = await self.db.scalars(select(Curriculum.id).where(Curriculum.id.in_(new_curriculum_ids)))
@@ -300,8 +309,10 @@ class CurriculumService:
 
         await self.db.flush()
 
-        # Fetch current curriculum_ids for response
-        current_rows = await self.db.scalars(select(CurriculumGrade).where(CurriculumGrade.grade_id == grade_id))
+        # Fetch current curriculum_ids for response — ordered for deterministic output
+        current_rows = await self.db.scalars(
+            select(CurriculumGrade).where(CurriculumGrade.grade_id == grade_id).order_by(CurriculumGrade.sort_order)
+        )
         curriculum_ids = [row.curriculum_id for row in current_rows.all()]
 
         logger.info("grade_updated", grade_id=str(grade_id), curriculum_count=len(curriculum_ids))

@@ -94,7 +94,7 @@ class GradeAdminResponse(BaseModel):
     level: int
     description: str | None = None
     is_active: bool
-    curriculum_ids: list[UUID] = []
+    curriculum_ids: list[UUID] = Field(default_factory=list)
 
 
 class SubjectAdminResponse(BaseModel):

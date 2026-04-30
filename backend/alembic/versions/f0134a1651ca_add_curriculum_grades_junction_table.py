@@ -34,14 +34,19 @@ def upgrade() -> None:
 
     # Backfill from curriculum_topics — derives existing grade–curriculum associations
     # from real topic placements. Pure SQL, no service calls (Constitution Rule 9).
+    # Subquery deduplicates (curriculum_id, grade_id) pairs first so ROW_NUMBER()
+    # is applied to the clean distinct set, not to individual topic rows.
     op.execute("""
         INSERT INTO curriculum_grades (curriculum_id, grade_id, sort_order)
-        SELECT DISTINCT
-            ct.curriculum_id,
-            ct.grade_id,
-            ROW_NUMBER() OVER (PARTITION BY ct.curriculum_id ORDER BY g.level)
-        FROM curriculum_topics ct
-        JOIN grades g ON g.id = ct.grade_id
+        SELECT
+            curriculum_id,
+            grade_id,
+            ROW_NUMBER() OVER (PARTITION BY curriculum_id ORDER BY grade_level) AS sort_order
+        FROM (
+            SELECT DISTINCT ct.curriculum_id, ct.grade_id, g.level AS grade_level
+            FROM curriculum_topics ct
+            JOIN grades g ON g.id = ct.grade_id
+        ) distinct_pairs
         ON CONFLICT DO NOTHING
     """)
 
