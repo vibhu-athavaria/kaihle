@@ -131,9 +131,9 @@ export function EditGradeModal({
       onOpenChange={handleClose}
       title="Edit grade"
       description="Update grade level details."
-      maxWidth="md"
+      maxWidth="xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+      <form onSubmit={handleSubmit} className="space-y-3 mt-2">
         {/* Name */}
         <div>
           <label
@@ -230,7 +230,7 @@ export function EditGradeModal({
             id="edit-grade-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            rows={3}
+            rows={2}
             placeholder="Optional description"
             className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-['Inter'] text-gray-900 placeholder-gray-400 focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none resize-none"
             disabled={isSubmitting}
@@ -263,7 +263,7 @@ export function EditGradeModal({
         )}
 
         {/* Actions */}
-        <div className="flex gap-3 justify-end pt-4 border-t border-gray-100">
+        <div className="flex gap-3 justify-end pt-3 border-t border-gray-100">
           <button
             type="button"
             onClick={handleClose}
