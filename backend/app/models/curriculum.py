@@ -41,6 +41,12 @@ class Curriculum(Base, UUIDMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     curriculum_topics: Mapped[list["CurriculumTopic"]] = relationship("CurriculumTopic", back_populates="curriculum")
+    grades: Mapped[list["Grade"]] = relationship(
+        "Grade",
+        secondary="curriculum_grades",
+        back_populates="curricula",
+        order_by="CurriculumGrade.sort_order",
+    )
 
 
 class Subject(Base, UUIDMixin, TimestampMixin):
@@ -71,6 +77,11 @@ class Grade(Base, UUIDMixin, TimestampMixin):
     __table_args__ = (CheckConstraint("level BETWEEN 1 AND 13", name="grades_level_range"),)
 
     curriculum_topics: Mapped[list["CurriculumTopic"]] = relationship("CurriculumTopic", back_populates="grade")
+    curricula: Mapped[list["Curriculum"]] = relationship(
+        "Curriculum",
+        secondary="curriculum_grades",
+        back_populates="grades",
+    )
 
 
 class Topic(Base, UUIDMixin, TimestampMixin):
@@ -101,6 +112,24 @@ class CurriculumSubject(Base, TimestampMixin):
         primary_key=True,
     )
     is_core: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sort_order: Mapped[int | None]
+
+
+class CurriculumGrade(Base):
+    """Which grades belong to a curriculum. Mirrors CurriculumSubject pattern."""
+
+    __tablename__ = "curriculum_grades"
+
+    curriculum_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("curricula.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    grade_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("grades.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
     sort_order: Mapped[int | None]
 
 

@@ -28,6 +28,7 @@ export interface Grade {
   level: number;
   description: string | null;
   is_active: boolean;
+  curriculum_ids: string[];
 }
 
 export interface Subject {
@@ -102,6 +103,7 @@ export interface GradeCreate {
   level: number;
   description?: string;
   is_active?: boolean;
+  curriculum_ids?: string[];
 }
 
 export interface GradeUpdate {
@@ -109,6 +111,7 @@ export interface GradeUpdate {
   level?: number;
   description?: string;
   is_active?: boolean;
+  curriculum_ids?: string[];
 }
 
 export interface SubjectCreate {

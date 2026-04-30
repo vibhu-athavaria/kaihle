@@ -223,6 +223,27 @@ COMMENT ON TABLE curriculum_subjects IS
      Used to validate that a class curriculum+subject combination is valid.';
 
 -- ---------------------------------------------------------------------------
+-- curriculum_grades: declares which grades belong to a curriculum.
+-- Mirrors curriculum_subjects pattern.
+-- Allows admin to declare grade coverage before any topics are added.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE curriculum_grades (
+    curriculum_id   UUID    NOT NULL REFERENCES curricula (id) ON DELETE CASCADE,
+    grade_id        UUID    NOT NULL REFERENCES grades (id)    ON DELETE CASCADE,
+    sort_order      INT,
+    PRIMARY KEY (curriculum_id, grade_id)
+);
+
+CREATE INDEX idx_curriculum_grades_grade_id ON curriculum_grades (grade_id);
+
+COMMENT ON TABLE curriculum_grades IS
+    'Which grades belong to a curriculum.
+     Mirrors curriculum_subjects pattern.
+     Allows admin to declare grade coverage before topics are added.
+     e.g. Cambridge Lower Secondary covers Grades 6, 7, 8.';
+
+-- ---------------------------------------------------------------------------
 -- curriculum_topics: THE pivot table.
 -- Binds curriculum + subject + grade + topic into one teachable unit.
 -- This is your proposed design and it is correct.
