@@ -499,8 +499,12 @@ class TestSetPrimarySchoolCurriculum:
         sc = _make_school_curriculum(school_id, curriculum, is_primary=False)
         old_sc = _make_school_curriculum(school_id, old_curriculum, is_primary=True)
 
-        # target subscription, existing primary
-        mock_db.scalar = AsyncMock(side_effect=[sc, old_sc])
+        # First query uses execute().one_or_none() (joined fetch with FOR UPDATE)
+        execute_result = MagicMock()
+        execute_result.one_or_none = MagicMock(return_value=(sc, curriculum))
+        mock_db.execute = AsyncMock(return_value=execute_result)
+        # Second query uses scalar() (current primary lookup)
+        mock_db.scalar = AsyncMock(return_value=old_sc)
 
         # Act
         result_sc, result_c = await school_service.set_primary_curriculum(school_id, curriculum.id)
@@ -520,8 +524,11 @@ class TestSetPrimarySchoolCurriculum:
         curriculum = _make_curriculum()
         sc = _make_school_curriculum(school_id, curriculum, is_primary=True)
 
-        # target subscription found, it IS the existing primary (same sc)
-        mock_db.scalar = AsyncMock(side_effect=[sc, sc])
+        execute_result = MagicMock()
+        execute_result.one_or_none = MagicMock(return_value=(sc, curriculum))
+        mock_db.execute = AsyncMock(return_value=execute_result)
+        # Same sc is the current primary — same curriculum_id, so no clear needed
+        mock_db.scalar = AsyncMock(return_value=sc)
 
         # Act
         result_sc, _ = await school_service.set_primary_curriculum(school_id, curriculum.id)
@@ -538,7 +545,9 @@ class TestSetPrimarySchoolCurriculum:
         school_id = uuid.uuid4()
         curriculum_id = uuid.uuid4()
 
-        mock_db.scalar = AsyncMock(return_value=None)
+        execute_result = MagicMock()
+        execute_result.one_or_none = MagicMock(return_value=None)
+        mock_db.execute = AsyncMock(return_value=execute_result)
 
         # Act & Assert
         with pytest.raises(ValueError, match="not subscribed"):

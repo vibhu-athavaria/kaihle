@@ -211,4 +211,7 @@ async def set_primary_curriculum(
         sc, curriculum = await service.set_primary_curriculum(school_id, curriculum_id)
         return _sc_to_response(sc, curriculum)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        msg = str(e)
+        if "not subscribed" in msg:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=msg)

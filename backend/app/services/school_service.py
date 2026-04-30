@@ -215,10 +215,12 @@ class SchoolService:
             raise ValueError("Curriculum not found")
 
         existing = await self.db.scalar(
-            select(SchoolCurriculum).where(
+            select(SchoolCurriculum)
+            .where(
                 SchoolCurriculum.school_id == school_id,
                 SchoolCurriculum.curriculum_id == curriculum_id,
             )
+            .with_for_update()
         )
         if existing:
             raise ValueError("School is already subscribed to this curriculum")
@@ -303,30 +305,33 @@ class SchoolService:
         Raises:
             ValueError: School is not subscribed to this curriculum
         """
-        sc = await self.db.scalar(
-            select(SchoolCurriculum).where(
+        result = await self.db.execute(
+            select(SchoolCurriculum, Curriculum)
+            .join(Curriculum, SchoolCurriculum.curriculum_id == Curriculum.id)
+            .where(
                 SchoolCurriculum.school_id == school_id,
                 SchoolCurriculum.curriculum_id == curriculum_id,
             )
+            .with_for_update()
         )
-        if not sc:
+        row = result.one_or_none()
+        if not row:
             raise ValueError("School is not subscribed to this curriculum")
+        sc, curriculum = row[0], row[1]
 
         current_primary = await self.db.scalar(
-            select(SchoolCurriculum).where(
+            select(SchoolCurriculum)
+            .where(
                 SchoolCurriculum.school_id == school_id,
                 SchoolCurriculum.is_primary.is_(True),
             )
+            .with_for_update()
         )
         if current_primary and current_primary.curriculum_id != curriculum_id:
             current_primary.is_primary = False
 
         sc.is_primary = True
         await self.db.flush()
-
-        curriculum = await self.db.get(Curriculum, curriculum_id)
-        if not curriculum:
-            raise ValueError("Curriculum not found")
 
         logger.info(
             "set_primary_curriculum",

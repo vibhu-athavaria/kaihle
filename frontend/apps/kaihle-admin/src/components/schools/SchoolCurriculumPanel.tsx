@@ -146,15 +146,25 @@ function CurriculumRow({ sc, schoolId }: CurriculumRowProps) {
   const remove = useRemoveSchoolCurriculum(schoolId);
   const [confirming, setConfirming] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [setPrimaryError, setSetPrimaryError] = useState<string | null>(null);
+
+  const handleSetPrimary = async () => {
+    setSetPrimaryError(null);
+    try {
+      await setPrimary.mutateAsync(sc.curriculum_id);
+    } catch {
+      setSetPrimaryError("Failed to set primary. Please try again.");
+    }
+  };
 
   const handleRemove = async () => {
     setRemoveError(null);
     try {
       await remove.mutateAsync(sc.curriculum_id);
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response
+      const httpStatus = (err as { response?: { status?: number } })?.response
         ?.status;
-      if (status === 409) {
+      if (httpStatus === 409) {
         setRemoveError("Cannot remove: this curriculum has active classes.");
       } else {
         setRemoveError("Failed to remove curriculum.");
@@ -190,6 +200,11 @@ function CurriculumRow({ sc, schoolId }: CurriculumRowProps) {
               {removeError}
             </p>
           )}
+          {setPrimaryError && (
+            <p className="font-['Inter'] text-xs text-red-600 mt-1">
+              {setPrimaryError}
+            </p>
+          )}
         </div>
       </div>
 
@@ -197,12 +212,12 @@ function CurriculumRow({ sc, schoolId }: CurriculumRowProps) {
         {!sc.is_primary && (
           <button
             type="button"
-            onClick={() => setPrimary.mutate(sc.curriculum_id)}
+            onClick={handleSetPrimary}
             disabled={setPrimary.isPending}
             title="Set as primary"
             className="text-role-admin-subtle hover:text-brand-primary font-['Inter'] text-xs underline min-h-[44px] px-1 focus-visible:ring-2 focus-visible:ring-brand-primary rounded disabled:opacity-60"
           >
-            Set primary
+            {setPrimary.isPending ? "Saving…" : "Set primary"}
           </button>
         )}
 
