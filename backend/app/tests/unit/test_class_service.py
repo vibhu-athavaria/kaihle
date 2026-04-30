@@ -52,20 +52,17 @@ class TestCreateClass:
             academic_year="2026",
         )
 
-        # Mock teacher lookup
-        teacher = User(
-            id=teacher_id,
-            school_id=school_id,
-            role=UserRole.TEACHER,
-        )
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = teacher
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        # Mock teacher lookup then curriculum subscription check
+        from app.models.school import SchoolCurriculum
 
-        async def flush_and_record() -> None:
-            pass
-
-        mock_db.flush = flush_and_record
+        teacher = User(id=teacher_id, school_id=school_id, role=UserRole.TEACHER)
+        sc = SchoolCurriculum(school_id=school_id, curriculum_id=curriculum_id)
+        teacher_result = MagicMock()
+        teacher_result.scalar_one_or_none.return_value = teacher
+        subscription_result = MagicMock()
+        subscription_result.scalar_one_or_none.return_value = sc
+        mock_db.execute = AsyncMock(side_effect=[teacher_result, subscription_result])
+        mock_db.flush = AsyncMock()
 
         # Act
         class_ = await class_service.create_class(school_id, data)
@@ -104,6 +101,64 @@ class TestCreateClass:
         # Act & Assert
         with pytest.raises(ValueError, match="Teacher not found in this school"):
             await class_service.create_class(school_id, data)
+
+    @pytest.mark.asyncio
+    async def test_create_class_when_curriculum_not_subscribed_then_raises(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Raises ValueError when school is not subscribed to the curriculum."""
+        school_id = uuid.uuid4()
+        teacher_id = uuid.uuid4()
+        curriculum_id = uuid.uuid4()
+        data = ClassCreate(
+            name="Math 7A",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=curriculum_id,
+            teacher_id=teacher_id,
+            academic_year="2026",
+        )
+        teacher = User(id=teacher_id, school_id=school_id, role=UserRole.TEACHER)
+        teacher_result = MagicMock()
+        teacher_result.scalar_one_or_none.return_value = teacher
+        subscription_result = MagicMock()
+        subscription_result.scalar_one_or_none.return_value = None  # not subscribed
+        mock_db.execute = AsyncMock(side_effect=[teacher_result, subscription_result])
+
+        with pytest.raises(ValueError, match="not subscribed"):
+            await class_service.create_class(school_id, data)
+
+    @pytest.mark.asyncio
+    async def test_create_class_when_curriculum_subscribed_then_class_created(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Creates class when school is subscribed to the curriculum."""
+        from app.models.school import SchoolCurriculum
+
+        school_id = uuid.uuid4()
+        teacher_id = uuid.uuid4()
+        curriculum_id = uuid.uuid4()
+        data = ClassCreate(
+            name="Math 7A",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=curriculum_id,
+            teacher_id=teacher_id,
+            academic_year="2026",
+        )
+        teacher = User(id=teacher_id, school_id=school_id, role=UserRole.TEACHER)
+        sc = SchoolCurriculum(school_id=school_id, curriculum_id=curriculum_id)
+        teacher_result = MagicMock()
+        teacher_result.scalar_one_or_none.return_value = teacher
+        subscription_result = MagicMock()
+        subscription_result.scalar_one_or_none.return_value = sc
+        mock_db.execute = AsyncMock(side_effect=[teacher_result, subscription_result])
+        mock_db.flush = AsyncMock()
+
+        class_ = await class_service.create_class(school_id, data)
+
+        assert class_.name == "Math 7A"
+        assert class_.curriculum_id == curriculum_id
 
 
 class TestListClasses:

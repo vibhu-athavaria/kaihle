@@ -5,7 +5,7 @@ import { Button, Input, Modal } from "@kaihle/ui";
 import { UserRole } from "@kaihle/types";
 import { apiClient } from "@kaihle/auth";
 import {
-  useCurricula,
+  useMySchoolCurricula,
   useGrades,
   useSubjects,
   useSchoolUsers,
@@ -88,22 +88,6 @@ function StepBar({ current }: StepBarProps) {
   );
 }
 
-// ── Curriculum detection ──────────────────────────────────────────────────────
-
-function detectCurriculumKeyword(gradeLevel: number): string {
-  if (gradeLevel <= 5) return "primary";
-  if (gradeLevel <= 8) return "lower";
-  if (gradeLevel <= 10) return "igcse";
-  return "a level";
-}
-
-function detectCurriculumLabel(gradeLevel: number): string {
-  if (gradeLevel <= 5) return "Cambridge Primary";
-  if (gradeLevel <= 8) return "Cambridge Lower Secondary";
-  if (gradeLevel <= 10) return "Cambridge IGCSE";
-  return "Cambridge AS & A Level";
-}
-
 function currentAcademicYear(): string {
   const year = new Date().getFullYear();
   const month = new Date().getMonth() + 1;
@@ -121,6 +105,7 @@ export function CreateClassModal({
 
   // Step 1 state
   const [name, setName] = useState("");
+  const [curriculumId, setCurriculumId] = useState("");
   const [gradeId, setGradeId] = useState("");
   const [subjectId, setSubjectId] = useState("");
   const [academicYear, setAcademicYear] = useState(currentAcademicYear);
@@ -144,20 +129,9 @@ export function CreateClassModal({
   const queryClient = useQueryClient();
 
   // Data hooks
-  const { data: curricula } = useCurricula();
-  const { data: grades } = useGrades();
-  const selectedGrade = useMemo(
-    () => grades?.find((g) => g.id === gradeId),
-    [grades, gradeId],
-  );
-  const curriculumId = useMemo(() => {
-    if (!selectedGrade || !curricula) return "";
-    const keyword = detectCurriculumKeyword(selectedGrade.level);
-    return (
-      curricula.find((c) => c.name.toLowerCase().includes(keyword))?.id ?? ""
-    );
-  }, [selectedGrade, curricula]);
-
+  const { data: subscribedCurricula, isLoading: curriculaLoading } =
+    useMySchoolCurricula();
+  const { data: grades } = useGrades(curriculumId || undefined);
   const { data: allSubjects } = useSubjects(curriculumId || undefined);
   const { data: teachers, isLoading: teachersLoading } = useSchoolUsers(
     UserRole.TEACHER,
@@ -201,6 +175,7 @@ export function CreateClassModal({
   const resetAll = useCallback(() => {
     setStep(1);
     setName("");
+    setCurriculumId("");
     setGradeId("");
     setSubjectId("");
     setAcademicYear(currentAcademicYear());
@@ -225,6 +200,7 @@ export function CreateClassModal({
   function validateStep1(): boolean {
     const errs: Record<string, string> = {};
     if (!name.trim()) errs.name = "Class name is required";
+    if (!curriculumId) errs.curriculum = "Curriculum is required";
     if (!subjectId) errs.subject = "Subject is required";
     if (!gradeId) errs.grade = "Grade is required";
     if (!ACADEMIC_YEAR_REGEX.test(academicYear)) {
@@ -320,6 +296,33 @@ export function CreateClassModal({
   // ── Render helpers ──────────────────────────────────────────────────────────
 
   function renderStep1() {
+    const noCurricula =
+      !curriculaLoading &&
+      subscribedCurricula !== undefined &&
+      subscribedCurricula.length === 0;
+
+    if (noCurricula) {
+      return (
+        <div className="py-8 text-center space-y-3">
+          <p className="text-sm font-semibold text-brand-ink">
+            No curricula assigned to this school yet.
+          </p>
+          <p className="text-xs text-brand-body">
+            Contact your Kaihle administrator to assign a curriculum before
+            creating classes.
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleClose}
+            className="mt-4"
+          >
+            Close
+          </Button>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4">
         <Input
@@ -334,17 +337,50 @@ export function CreateClassModal({
 
         <div>
           <label className="block text-sm font-semibold text-brand-ink mb-1.5">
+            Curriculum <span className="text-brand-red">*</span>
+          </label>
+          <select
+            value={curriculumId}
+            onChange={(e) => {
+              setCurriculumId(e.target.value);
+              setGradeId("");
+              setSubjectId("");
+            }}
+            disabled={curriculaLoading}
+            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary disabled:opacity-60"
+          >
+            <option value="">
+              {curriculaLoading ? "Loading…" : "Select curriculum"}
+            </option>
+            {subscribedCurricula?.map((c) => (
+              <option key={c.curriculum_id} value={c.curriculum_id}>
+                {c.curriculum_name}
+              </option>
+            ))}
+          </select>
+          {step1Errors.curriculum && (
+            <p className="mt-1 text-xs text-brand-red">
+              {step1Errors.curriculum}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-brand-ink mb-1.5">
             Grade <span className="text-brand-red">*</span>
           </label>
           <select
             value={gradeId}
             onChange={(e) => {
               setGradeId(e.target.value);
-              setSubjectId(""); // reset subject when grade changes
+              setSubjectId("");
             }}
-            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+            disabled={!curriculumId}
+            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary disabled:opacity-60"
           >
-            <option value="">Select grade</option>
+            <option value="">
+              {curriculumId ? "Select grade" : "Select curriculum first"}
+            </option>
             {grades?.map((g) => (
               <option key={g.id} value={g.id}>
                 Grade {g.level}
@@ -355,13 +391,6 @@ export function CreateClassModal({
             <p className="mt-1 text-xs text-brand-red">{step1Errors.grade}</p>
           )}
         </div>
-
-        {gradeId && selectedGrade && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-brand-border text-sm text-brand-body">
-            <span className="font-semibold text-brand-ink">Curriculum:</span>
-            <span>{detectCurriculumLabel(selectedGrade.level)}</span>
-          </div>
-        )}
 
         <div>
           <label className="block text-sm font-semibold text-brand-ink mb-2">

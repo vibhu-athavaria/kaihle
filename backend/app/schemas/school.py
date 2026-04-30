@@ -53,3 +53,29 @@ class SchoolListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class SchoolCurriculumCreate(BaseModel):
+    """Schema for subscribing a school to a curriculum."""
+
+    curriculum_id: uuid.UUID
+    is_primary: bool = False
+
+
+class SchoolCurriculumSetPrimary(BaseModel):
+    """Schema for setting a curriculum as the school's primary."""
+
+    pass
+
+
+class SchoolCurriculumResponse(BaseModel):
+    """Schema for a school's curriculum subscription."""
+
+    curriculum_id: uuid.UUID
+    curriculum_name: str
+    curriculum_code: str
+    curriculum_description: str | None
+    is_primary: bool
+    adopted_at: str
+
+    model_config = ConfigDict(from_attributes=True)

@@ -4,7 +4,7 @@ import { apiClient } from "@kaihle/auth";
 import { useAuth } from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { DashboardLayout } from "@kaihle/ui";
-import { Info } from "lucide-react";
+import { Info, BookOpen, Star } from "lucide-react";
 
 interface User {
   id: string;
@@ -22,6 +22,15 @@ interface School {
   city: string;
   timezone: string;
   slug: string;
+}
+
+interface SchoolCurriculum {
+  curriculum_id: string;
+  curriculum_name: string;
+  curriculum_code: string;
+  curriculum_description: string | null;
+  is_primary: boolean;
+  adopted_at: string;
 }
 
 function MyAccountSection({
@@ -461,6 +470,88 @@ function SchoolProfileSection({ school }: { school: School | undefined }) {
   );
 }
 
+function CurriculaSection({ schoolId }: { schoolId: string | null }) {
+  const { data: curricula, isLoading } = useQuery<SchoolCurriculum[]>({
+    queryKey: ["school-admin", "settings", "curricula"],
+    queryFn: async () => {
+      if (!schoolId) throw new Error("No school_id");
+      const response = await apiClient.get<SchoolCurriculum[]>(
+        `/api/v1/schools/${schoolId}/curricula`,
+      );
+      return response.data;
+    },
+    enabled: !!schoolId,
+  });
+
+  return (
+    <div className="bg-white border border-role-school-border rounded-2xl p-5">
+      <h2 className="font-display text-base text-brand-ink pb-3 border-b border-role-school-border">
+        CURRICULA
+      </h2>
+
+      {isLoading ? (
+        <div className="animate-pulse space-y-3 mt-4">
+          <div className="h-4 bg-brand-border rounded-full w-3/4" />
+          <div className="h-4 bg-brand-border rounded-full w-1/2" />
+        </div>
+      ) : curricula && curricula.length > 0 ? (
+        <div className="space-y-3 mt-4">
+          {curricula.map((sc) => (
+            <div key={sc.curriculum_id} className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-brand-light flex items-center justify-center flex-shrink-0">
+                <BookOpen
+                  className="w-3.5 h-3.5 text-brand-primary"
+                  aria-hidden="true"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-sans text-sm text-brand-ink">
+                    {sc.curriculum_name}
+                  </span>
+                  {sc.is_primary && (
+                    <span
+                      className="inline-flex items-center gap-1 bg-brand-light text-brand-primary text-xs font-bold rounded-full px-2 py-0.5"
+                      aria-label="Primary curriculum"
+                    >
+                      <Star className="w-3 h-3" aria-hidden="true" />
+                      Primary
+                    </span>
+                  )}
+                </div>
+                <p className="font-sans text-xs text-role-school-muted">
+                  {sc.curriculum_code}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-4 text-center py-6">
+          <BookOpen
+            className="w-6 h-6 text-role-school-muted mx-auto mb-2"
+            aria-hidden="true"
+          />
+          <p className="font-sans text-sm text-role-school-muted">
+            No curricula subscribed yet.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-4 bg-blue-50 border border-blue-100 rounded-lg p-3 flex gap-2">
+        <Info
+          className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5"
+          aria-hidden="true"
+        />
+        <p className="font-sans text-xs text-blue-700">
+          Curriculum subscriptions are managed by Kaihle. Contact
+          support@kaihle.com to request changes.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function AccountActionsSection({ onLogout }: { onLogout: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -588,6 +679,7 @@ export function SchoolAdminSettingsPage() {
               onNameUpdated={() => {}}
             />
             <SchoolProfileSection school={schoolData} />
+            <CurriculaSection schoolId={user?.school_id ?? null} />
             <AccountActionsSection onLogout={logout} />
           </div>
         )}

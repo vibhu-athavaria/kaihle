@@ -11,6 +11,8 @@ from app.core.deps import CurrentUser, _check_school_access, require_role
 from app.models.user import UserRole
 from app.schemas.school import (
     SchoolCreate,
+    SchoolCurriculumCreate,
+    SchoolCurriculumResponse,
     SchoolListResponse,
     SchoolResponse,
     SchoolUpdate,
@@ -121,3 +123,95 @@ async def update_school(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+
+
+# ---------------------------------------------------------------------------
+# Curriculum subscription endpoints
+# ---------------------------------------------------------------------------
+
+
+def _sc_to_response(sc: Any, curriculum: Any) -> SchoolCurriculumResponse:
+    """Map a (SchoolCurriculum, Curriculum) pair to the response schema."""
+    return SchoolCurriculumResponse(
+        curriculum_id=sc.curriculum_id,
+        curriculum_name=curriculum.name,
+        curriculum_code=curriculum.code,
+        curriculum_description=curriculum.description,
+        is_primary=sc.is_primary,
+        adopted_at=sc.adopted_at.isoformat(),
+    )
+
+
+@router.get("/{school_id}/curricula", response_model=list[SchoolCurriculumResponse])
+async def list_school_curricula(
+    school_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> list[SchoolCurriculumResponse]:
+    """List curricula a school is subscribed to. KaihleAdmin sees any school; SchoolAdmin sees own only."""
+    _check_school_access(school_id, current_user)
+    service = SchoolService(db)
+    pairs = await service.list_school_curricula(school_id)
+    return [_sc_to_response(sc, c) for sc, c in pairs]
+
+
+@router.post(
+    "/{school_id}/curricula",
+    response_model=SchoolCurriculumResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_school_curriculum(
+    school_id: uuid.UUID,
+    body: SchoolCurriculumCreate,
+    _: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> SchoolCurriculumResponse:
+    """Subscribe a school to a curriculum. KaihleAdmin only."""
+    service = SchoolService(db)
+    try:
+        sc, curriculum = await service.add_school_curriculum(school_id, body.curriculum_id, body.is_primary)
+        return _sc_to_response(sc, curriculum)
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        if "already subscribed" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+
+
+@router.delete("/{school_id}/curricula/{curriculum_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_school_curriculum(
+    school_id: uuid.UUID,
+    curriculum_id: uuid.UUID,
+    _: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove a school's curriculum subscription. KaihleAdmin only."""
+    service = SchoolService(db)
+    try:
+        await service.remove_school_curriculum(school_id, curriculum_id)
+    except ValueError as e:
+        msg = str(e)
+        if "not subscribed" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+
+
+@router.patch("/{school_id}/curricula/{curriculum_id}/primary", response_model=SchoolCurriculumResponse)
+async def set_primary_curriculum(
+    school_id: uuid.UUID,
+    curriculum_id: uuid.UUID,
+    _: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> SchoolCurriculumResponse:
+    """Set a curriculum as the school's primary. KaihleAdmin only."""
+    service = SchoolService(db)
+    try:
+        sc, curriculum = await service.set_primary_curriculum(school_id, curriculum_id)
+        return _sc_to_response(sc, curriculum)
+    except ValueError as e:
+        msg = str(e)
+        if "not subscribed" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=msg)

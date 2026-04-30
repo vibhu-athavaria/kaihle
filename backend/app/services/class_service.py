@@ -6,7 +6,7 @@ from typing import TypedDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.school import Class, ClassEnrollment
+from app.models.school import Class, ClassEnrollment, SchoolCurriculum
 from app.models.user import User, UserRole
 from app.schemas.class_enrollment import (
     ClassCreate,
@@ -57,6 +57,16 @@ class ClassService:
         teacher = result.scalar_one_or_none()
         if not teacher:
             raise ValueError("Teacher not found in this school")
+
+        # Verify the school is subscribed to the requested curriculum
+        sub_result = await self.db.execute(
+            select(SchoolCurriculum).where(
+                SchoolCurriculum.school_id == school_id,
+                SchoolCurriculum.curriculum_id == data.curriculum_id,
+            )
+        )
+        if not sub_result.scalar_one_or_none():
+            raise ValueError("School is not subscribed to this curriculum")
 
         class_ = Class(
             school_id=school_id,
