@@ -1,12 +1,14 @@
 /**
  * CreateGradeModal - Modal for creating a new grade level.
  *
- * Fields: Name (required, max 50), Level (required, 1-13), Description (optional), Active toggle
+ * Fields: Name (required, max 50), Level (required, 1-13), Curricula (multi-select),
+ *         Description (optional), Active toggle
  */
 
 import { useState } from "react";
 import { Modal } from "@kaihle/ui";
 import { Loader2 } from "lucide-react";
+import { useCurricula } from "../../hooks/useCurriculum";
 
 interface CreateGradeModalProps {
   isOpen: boolean;
@@ -16,6 +18,7 @@ interface CreateGradeModalProps {
     level: number;
     description?: string;
     is_active: boolean;
+    curriculum_ids: string[];
   }) => Promise<void>;
   isSubmitting?: boolean;
   error?: string | null;
@@ -32,13 +35,19 @@ export function CreateGradeModal({
   const [level, setLevel] = useState<string>("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [selectedCurriculumIds, setSelectedCurriculumIds] = useState<string[]>(
+    [],
+  );
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const { data: curricula = [] } = useCurricula();
 
   const resetForm = () => {
     setName("");
     setLevel("");
     setDescription("");
     setIsActive(true);
+    setSelectedCurriculumIds([]);
     setFieldErrors({});
   };
 
@@ -47,6 +56,12 @@ export function CreateGradeModal({
       resetForm();
       onClose();
     }
+  };
+
+  const toggleCurriculum = (id: string) => {
+    setSelectedCurriculumIds((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
+    );
   };
 
   const validate = (): boolean => {
@@ -80,6 +95,7 @@ export function CreateGradeModal({
       level: parseInt(level, 10),
       description: description.trim() || undefined,
       is_active: isActive,
+      curriculum_ids: selectedCurriculumIds,
     });
 
     resetForm();
@@ -151,6 +167,40 @@ export function CreateGradeModal({
             <p className="mt-1 text-xs text-red-500">{fieldErrors.level}</p>
           )}
         </div>
+
+        {/* Curricula multi-select */}
+        {curricula.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Curricula
+            </label>
+            <div className="space-y-2">
+              {curricula.map((c) => (
+                <label
+                  key={c.id}
+                  className="flex items-center gap-3 cursor-pointer group"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedCurriculumIds.includes(c.id)}
+                    onChange={() => toggleCurriculum(c.id)}
+                    disabled={isSubmitting}
+                    className="w-4 h-4 text-brand-primary border-gray-300 rounded focus:ring-brand-primary"
+                  />
+                  <span className="text-sm text-gray-700 group-hover:text-gray-900">
+                    {c.name}
+                  </span>
+                  {!c.is_active && (
+                    <span className="text-xs text-gray-400">(inactive)</span>
+                  )}
+                </label>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-gray-500">
+              Select all curricula this grade belongs to
+            </p>
+          </div>
+        )}
 
         {/* Description */}
         <div>

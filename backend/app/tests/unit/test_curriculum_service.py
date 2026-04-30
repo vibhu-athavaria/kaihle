@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.curriculum import (
     Curriculum,
+    CurriculumGrade,
     CurriculumSubject,
     CurriculumTopic,
     Grade,
@@ -253,6 +254,46 @@ class TestCreateGrade:
         with pytest.raises(DuplicateError, match="Level 7 already taken"):
             await curriculum_service.create_grade(data)
 
+    @pytest.mark.asyncio
+    async def test_create_grade_when_curriculum_ids_given_then_creates_associations(
+        self,
+        curriculum_service: CurriculumService,
+        mock_db: MagicMock,
+    ) -> None:
+        """Test that valid curriculum_ids create CurriculumGrade rows."""
+        # Arrange
+        curriculum_id = uuid.uuid4()
+        data = GradeCreate(name="Grade 7", level=7, is_active=True, curriculum_ids=[curriculum_id])
+        mock_db.scalar = AsyncMock(return_value=None)  # No duplicate level
+        mock_db.scalars = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[curriculum_id])))
+
+        # Act
+        result = await curriculum_service.create_grade(data)
+
+        # Assert — grade row added + CurriculumGrade row added (2 add calls)
+        assert result.name == "Grade 7"
+        assert mock_db.add.call_count == 2
+        added_objects = [call.args[0] for call in mock_db.add.call_args_list]
+        assert any(isinstance(obj, CurriculumGrade) for obj in added_objects)
+
+    @pytest.mark.asyncio
+    async def test_create_grade_when_invalid_curriculum_id_then_raises_not_found(
+        self,
+        curriculum_service: CurriculumService,
+        mock_db: MagicMock,
+    ) -> None:
+        """Test that an unrecognised curriculum_id raises NotFoundError."""
+        # Arrange
+        bad_id = uuid.uuid4()
+        data = GradeCreate(name="Grade 7", level=7, is_active=True, curriculum_ids=[bad_id])
+        mock_db.scalar = AsyncMock(return_value=None)  # No duplicate level
+        # DB returns empty set — curriculum_id not found
+        mock_db.scalars = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+
+        # Act & Assert
+        with pytest.raises(NotFoundError, match="Curricula not found"):
+            await curriculum_service.create_grade(data)
+
 
 class TestUpdateGrade:
     """Tests for CurriculumService.update_grade."""
@@ -267,6 +308,44 @@ class TestUpdateGrade:
         # GradeUpdate.level has ge=1, le=13 — Pydantic rejects at construction time
         with pytest.raises(pydantic.ValidationError):
             GradeUpdate(level=14)
+
+    @pytest.mark.asyncio
+    async def test_update_grade_when_curriculum_ids_given_then_replaces_associations(
+        self,
+        curriculum_service: CurriculumService,
+        mock_db: MagicMock,
+    ) -> None:
+        """Test that providing curriculum_ids performs a full replace of existing associations."""
+        # Arrange
+        grade_id = uuid.uuid4()
+        new_curriculum_id = uuid.uuid4()
+        existing_grade = Grade(id=grade_id, name="Grade 7", level=7, is_active=True)
+        existing_link = CurriculumGrade(curriculum_id=uuid.uuid4(), grade_id=grade_id)
+
+        mock_db.get = AsyncMock(return_value=existing_grade)
+        mock_db.scalars = AsyncMock(
+            side_effect=[
+                # First call: validate new curriculum_id exists
+                MagicMock(all=MagicMock(return_value=[new_curriculum_id])),
+                # Second call: fetch existing CurriculumGrade rows to delete
+                MagicMock(all=MagicMock(return_value=[existing_link])),
+                # Third call: fetch current curriculum_ids for response
+                MagicMock(all=MagicMock(return_value=[])),
+            ]
+        )
+
+        data = GradeUpdate(curriculum_ids=[new_curriculum_id])
+
+        # Act
+        result = await curriculum_service.update_grade(grade_id, data)
+
+        # Assert — old row deleted, new row added
+        mock_db.delete.assert_called_once_with(existing_link)
+        mock_db.add.assert_called_once()
+        added = mock_db.add.call_args.args[0]
+        assert isinstance(added, CurriculumGrade)
+        assert added.curriculum_id == new_curriculum_id
+        assert result.name == "Grade 7"
 
 
 # =============================================================================

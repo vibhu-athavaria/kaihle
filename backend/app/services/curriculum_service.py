@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.curriculum import (
     Curriculum,
+    CurriculumGrade,
     CurriculumSubject,
     CurriculumTopic,
     Grade,
@@ -189,6 +190,7 @@ class CurriculumService:
         Validates level is 1-13 and unique.
         Raises ValidationError if level out of range.
         Raises DuplicateError if level already exists.
+        Raises NotFoundError if any curriculum_id is invalid.
         """
         if data.level < 1 or data.level > 13:
             raise ValidationError("Grade level must be between 1 and 13")
@@ -197,6 +199,14 @@ class CurriculumService:
         existing = await self.db.scalar(select(Grade).where(Grade.level == data.level))
         if existing:
             raise DuplicateError(f"Level {data.level} already taken by {existing.name}")
+
+        # Validate all curriculum_ids exist before any writes
+        if data.curriculum_ids:
+            found = await self.db.scalars(select(Curriculum.id).where(Curriculum.id.in_(data.curriculum_ids)))
+            found_ids = set(found.all())
+            missing = [str(cid) for cid in data.curriculum_ids if cid not in found_ids]
+            if missing:
+                raise NotFoundError(f"Curricula not found: {', '.join(missing)}")
 
         grade = Grade(
             name=data.name,
@@ -207,7 +217,19 @@ class CurriculumService:
         self.db.add(grade)
         await self.db.flush()
 
-        logger.info("grade_created", grade_id=str(grade.id), level=data.level)
+        # Associate curricula
+        for idx, curriculum_id in enumerate(data.curriculum_ids):
+            self.db.add(
+                CurriculumGrade(
+                    curriculum_id=curriculum_id,
+                    grade_id=grade.id,
+                    sort_order=idx,
+                )
+            )
+
+        logger.info(
+            "grade_created", grade_id=str(grade.id), level=data.level, curriculum_count=len(data.curriculum_ids)
+        )
 
         from app.schemas.curriculum import GradeAdminResponse
 
@@ -217,6 +239,7 @@ class CurriculumService:
             level=grade.level,
             description=grade.description,
             is_active=grade.is_active,
+            curriculum_ids=list(data.curriculum_ids),
         )
 
     async def update_grade(
@@ -227,7 +250,8 @@ class CurriculumService:
         """Update an existing grade.
 
         Validates level constraints if changing.
-        Raises NotFoundError if grade doesn't exist.
+        Raises NotFoundError if grade or any curriculum_id doesn't exist.
+        If curriculum_ids is provided, performs a full replace of associations.
         """
         grade = await self.db.get(Grade, grade_id)
         if not grade:
@@ -246,12 +270,41 @@ class CurriculumService:
                 if existing:
                     raise DuplicateError(f"Level {new_level} already taken by {existing.name}")
 
+        # Handle curriculum associations (full replace when provided)
+        new_curriculum_ids = update_data.pop("curriculum_ids", None)
+        if new_curriculum_ids is not None:
+            # Validate all provided curriculum_ids exist
+            if new_curriculum_ids:
+                found = await self.db.scalars(select(Curriculum.id).where(Curriculum.id.in_(new_curriculum_ids)))
+                found_ids = set(found.all())
+                missing = [str(cid) for cid in new_curriculum_ids if cid not in found_ids]
+                if missing:
+                    raise NotFoundError(f"Curricula not found: {', '.join(missing)}")
+
+            # Full replace: delete existing rows, insert new ones
+            existing_rows = await self.db.scalars(select(CurriculumGrade).where(CurriculumGrade.grade_id == grade_id))
+            for row in existing_rows.all():
+                await self.db.delete(row)
+
+            for idx, curriculum_id in enumerate(new_curriculum_ids):
+                self.db.add(
+                    CurriculumGrade(
+                        curriculum_id=curriculum_id,
+                        grade_id=grade_id,
+                        sort_order=idx,
+                    )
+                )
+
         for field, value in update_data.items():
             setattr(grade, field, value)
 
         await self.db.flush()
 
-        logger.info("grade_updated", grade_id=str(grade_id))
+        # Fetch current curriculum_ids for response
+        current_rows = await self.db.scalars(select(CurriculumGrade).where(CurriculumGrade.grade_id == grade_id))
+        curriculum_ids = [row.curriculum_id for row in current_rows.all()]
+
+        logger.info("grade_updated", grade_id=str(grade_id), curriculum_count=len(curriculum_ids))
 
         from app.schemas.curriculum import GradeAdminResponse
 
@@ -261,6 +314,7 @@ class CurriculumService:
             level=grade.level,
             description=grade.description,
             is_active=grade.is_active,
+            curriculum_ids=curriculum_ids,
         )
 
     # ------------------------------------------------------------------

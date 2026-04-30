@@ -94,6 +94,7 @@ class GradeAdminResponse(BaseModel):
     level: int
     description: str | None = None
     is_active: bool
+    curriculum_ids: list[UUID] = []
 
 
 class SubjectAdminResponse(BaseModel):
@@ -194,6 +195,7 @@ class GradeCreate(BaseModel):
     level: int = Field(..., ge=1, le=13, description="Numeric level 1-13")
     description: str | None = Field(None, description="Optional description")
     is_active: bool = Field(True, description="Whether the grade is active")
+    curriculum_ids: list[UUID] = Field(default_factory=list, description="Curricula this grade belongs to")
 
 
 class GradeUpdate(BaseModel):
@@ -203,6 +205,9 @@ class GradeUpdate(BaseModel):
     level: int | None = Field(None, ge=1, le=13)
     description: str | None = None
     is_active: bool | None = None
+    curriculum_ids: list[UUID] | None = Field(
+        None, description="Full-replace curriculum associations; omit to leave unchanged"
+    )
 
 
 class SubjectCreate(BaseModel):
