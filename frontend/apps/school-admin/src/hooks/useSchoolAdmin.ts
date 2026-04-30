@@ -317,6 +317,28 @@ export function useStudentStudyPlans(studentId: string | undefined) {
   });
 }
 
+export interface SchoolCurriculumItem {
+  curriculum_id: string;
+  curriculum_name: string;
+  curriculum_code: string;
+  curriculum_description: string | null;
+  is_primary: boolean;
+  adopted_at: string;
+}
+
+export function useMySchoolCurricula() {
+  const schoolId = useAuthStore((state) => state.user?.school_id);
+  return useQuery({
+    queryKey: ["school", "curricula", schoolId],
+    queryFn: async () => {
+      const res = await apiClient.get(`/api/v1/schools/${schoolId}/curricula`);
+      return res.data as SchoolCurriculumItem[];
+    },
+    enabled: !!schoolId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useCurricula() {
   return useQuery({
     queryKey: ["curricula"],

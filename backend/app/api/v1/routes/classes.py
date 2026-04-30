@@ -92,7 +92,10 @@ async def create_class(
     try:
         class_ = await service.create_class(school_id, body)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        msg = str(e)
+        if "not subscribed" in msg:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
 
     # Schedule diagnostic task in the background AFTER the HTTP response is sent.
     # FastAPI runs BackgroundTasks after the route returns and get_db commits,
