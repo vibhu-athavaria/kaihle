@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.curriculum import Curriculum, Grade, Subject
-from app.models.school import Class, ClassEnrollment, School
+from app.models.school import Class, ClassEnrollment, School, SchoolCurriculum
 from app.models.user import StudentProfile, User, UserRole
 
 
@@ -129,6 +129,16 @@ async def test_create_class_when_valid_then_teacher_can_list(
     """Test that SchoolAdmin can create a class and teacher can see it via GET."""
     # Arrange
     headers = auth_header(school_admin)
+
+    # Subscribe test_school to test_curriculum
+    subscription = SchoolCurriculum(
+        school_id=test_school.id,
+        curriculum_id=test_curriculum.id,
+        is_primary=True,
+    )
+    db_session.add(subscription)
+    await db_session.flush()
+
     class_data = {
         "name": "Math 7A",
         "grade_id": str(test_grade.id),

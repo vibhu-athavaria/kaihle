@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token
 from app.models.curriculum import Curriculum, Grade, Subject
-from app.models.school import Class, School
+from app.models.school import Class, School, SchoolCurriculum
 from app.models.user import User, UserRole
 
 
@@ -530,6 +530,14 @@ async def test_kaihle_admin_can_create_class_in_any_school(
         is_active=True,
     )
     db_session.add(teacher)
+
+    # Subscribe other_school to the curriculum
+    subscription = SchoolCurriculum(
+        school_id=other_school.id,
+        curriculum_id=test_curriculum.id,
+        is_primary=True,
+    )
+    db_session.add(subscription)
     await db_session.flush()
 
     response = await client.post(
