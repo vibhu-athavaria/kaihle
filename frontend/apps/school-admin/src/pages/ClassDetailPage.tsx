@@ -33,6 +33,7 @@ function useClassGapMap(classId: string, subjectId: string | undefined) {
       return res.data as GapMapData;
     },
     enabled: !!classId && !!subjectId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -493,7 +494,7 @@ export function ClassDetailPage() {
               .join(" · ")}
           </p>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <KpiCard
               label="Students"
               value={classSummary?.student_count ?? "—"}
@@ -511,7 +512,6 @@ export function ClassDetailPage() {
                   : undefined
               }
             />
-            <KpiCard label="Diagnostic" value="—" sub="No data yet" />
             <KpiCard
               label="At Risk"
               value={classSummary?.students_below_threshold ?? "—"}

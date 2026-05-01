@@ -366,7 +366,7 @@ export function useGrades(curriculumId?: string) {
     // Only fire the curriculum-filtered query once a curriculum is actually selected.
     // Without this guard the hook immediately fetches ALL grades on mount (curriculumId=undefined)
     // and the curriculum-specific fetch fires correctly on selection anyway.
-    enabled: curriculumId !== undefined ? !!curriculumId : true,
+    enabled: curriculumId ? !!curriculumId : true,
   });
 }
 
@@ -516,9 +516,43 @@ export function useClassDetail(classId: string) {
     queryKey: ["class", classId, "detail"],
     queryFn: async () => {
       const res = await apiClient.get(`/api/v1/classes/${classId}`);
-      return res.data as ClassDetail;
+      const data = res.data;
+      // The /api/v1/classes/{id} endpoint returns ClassResponse (IDs only).
+      // We need to enrich it with display names by fetching the related data.
+      if (!data.subject_name || !data.grade_name) {
+        const [subjectsRes, gradesRes, teacherRes] = await Promise.all([
+          apiClient.get("/api/v1/subjects"),
+          apiClient.get("/api/v1/grades"),
+          data.teacher_id
+            ? apiClient
+                .get(`/api/v1/teachers/${data.teacher_id}`)
+                .catch(() => null)
+            : null,
+        ]);
+        const subjects = subjectsRes.data as Array<{
+          id: string;
+          name: string;
+          code: string;
+        }>;
+        const grades = gradesRes.data as Array<{ id: string; level: number }>;
+        const subject = subjects.find((s) => s.id === data.subject_id);
+        const grade = grades.find((g) => g.id === data.grade_id);
+        return {
+          id: data.id,
+          name: data.name,
+          subject_id: data.subject_id,
+          subject_name: subject?.name ?? data.subject_name ?? "",
+          grade_name: grade ? `Grade ${grade.level}` : (data.grade_name ?? ""),
+          teacher_name: teacherRes
+            ? `${teacherRes.data.first_name} ${teacherRes.data.last_name}`.trim()
+            : null,
+          academic_year: data.academic_year,
+        } as ClassDetail;
+      }
+      return data as ClassDetail;
     },
     enabled: !!classId,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
