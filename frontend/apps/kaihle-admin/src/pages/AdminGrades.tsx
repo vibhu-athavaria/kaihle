@@ -41,7 +41,8 @@ export function AdminGrades() {
       g.level.toString().includes(searchQuery);
 
     const matchesCurriculum =
-      curriculumFilter === "ALL" || g.curriculum_ids.includes(curriculumFilter);
+      curriculumFilter === "ALL" ||
+      (g.curriculum_ids ?? []).includes(curriculumFilter);
 
     const matchesStatus =
       statusFilter === "ALL" ||
@@ -60,7 +61,7 @@ export function AdminGrades() {
 
   const gradeRows: GradeRow[] = pagedGrades.map((g) => ({
     ...g,
-    curriculum_names: g.curriculum_ids.map(
+    curriculum_names: (g.curriculum_ids ?? []).map(
       (id) => curriculumNameById[id] ?? id,
     ),
   }));
