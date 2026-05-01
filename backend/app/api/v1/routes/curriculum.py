@@ -140,6 +140,7 @@ async def list_grades(
             id=g.id,
             name=g.name,
             level=g.level,
+            description=g.description,
             is_active=g.is_active,
             curriculum_ids=[c.id for c in g.curricula],
         )

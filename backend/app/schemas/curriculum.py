@@ -18,6 +18,7 @@ class GradeResponse(BaseModel):
     id: UUID
     name: str  # e.g. "Grade 9"
     level: int  # e.g. 9
+    description: str | None = None
     is_active: bool
     curriculum_ids: list[UUID] = Field(default_factory=list)
 
