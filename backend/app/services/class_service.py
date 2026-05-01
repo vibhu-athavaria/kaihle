@@ -1,11 +1,13 @@
 """Class management and enrollment service layer."""
 
 import uuid
+from collections import defaultdict
 from typing import TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment, SchoolCurriculum
 from app.models.user import User, UserRole
 from app.schemas.class_enrollment import (
@@ -238,8 +240,12 @@ class ClassService:
         # First verify class exists
         await self.get_class(class_id)
 
+        # Get all active enrollments for this class with student details
         query = (
-            select(User)
+            select(
+                User,
+                ClassEnrollment.onboarding_diagnostic_status,
+            )
             .join(ClassEnrollment, ClassEnrollment.student_id == User.id)
             .where(
                 ClassEnrollment.class_id == class_id,
@@ -248,16 +254,42 @@ class ClassService:
             .order_by(User.last_name, User.first_name)
         )
         result = await self.db.execute(query)
-        students = result.scalars().all()
+        rows = result.all()
+
+        student_ids = [row.User.id for row in rows]
+
+        # Get worst mastery scores from gap states for these students in this class
+        worst_mastery_map: dict[uuid.UUID, float | None] = {}
+        if student_ids:
+            # Get all gap states for these students in this class
+            gap_query = select(GapState.student_id, GapState.mastery_score).where(
+                GapState.student_id.in_(student_ids),
+                GapState.class_id == class_id,
+            )
+            gap_result = await self.db.execute(gap_query)
+            gap_rows = gap_result.all()
+
+            # Group by student and find worst (minimum) mastery
+            mastery_by_student = defaultdict(list)
+            for student_id, mastery in gap_rows:
+                if mastery is not None:
+                    mastery_by_student[student_id].append(mastery)
+
+            for student_id in student_ids:
+                scores = mastery_by_student.get(student_id, [])
+                worst_mastery_map[student_id] = min(scores) if scores else None
 
         return [
             StudentSummary(
-                id=student.id,
-                email=student.email,
-                first_name=student.first_name,
-                last_name=student.last_name,
+                id=row.User.id,
+                email=row.User.email,
+                first_name=row.User.first_name,
+                last_name=row.User.last_name,
+                worst_mastery=worst_mastery_map.get(row.User.id),
+                diagnostic_completed=row.onboarding_diagnostic_status == "COMPLETED",
+                grade_level=None,  # Grade level comes from User.grade_level if needed
             )
-            for student in students
+            for row in rows
         ]
 
     async def get_teacher_students(

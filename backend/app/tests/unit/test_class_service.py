@@ -502,9 +502,15 @@ class TestGetClassStudents:
         )
 
         mock_db.get = AsyncMock(return_value=class_)
+        row1 = MagicMock()
+        row1.User = student1
+        row1.onboarding_diagnostic_status = None
+        row2 = MagicMock()
+        row2.User = student2
+        row2.onboarding_diagnostic_status = None
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [student2, student1]
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_result.all.return_value = [row2, row1]
+        mock_db.execute = AsyncMock(side_effect=[mock_result, MagicMock(all=MagicMock(return_value=[]))])
 
         result = await class_service.get_class_students(class_id)
 
@@ -530,8 +536,8 @@ class TestGetClassStudents:
         )
         mock_db.get = AsyncMock(return_value=class_)
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_result.all.return_value = []
+        mock_db.execute = AsyncMock(side_effect=[mock_result, MagicMock(all=MagicMock(return_value=[]))])
 
         result = await class_service.get_class_students(class_id)
 
