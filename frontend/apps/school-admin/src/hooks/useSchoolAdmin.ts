@@ -68,7 +68,8 @@ export interface ClassSummary {
   id: string;
   name: string;
   subject_name: string;
-  grade_level: number;
+  grade_name: string;
+  grade_level: number | null;
   teacher_id: string | null;
   teacher_name: string | null;
   student_count: number;
@@ -89,6 +90,7 @@ export interface StudentListItem {
   class_count: number;
   needs_work_class_count: number;
   diagnostic_completed: boolean;
+  grade_level: number | null;
 }
 
 export interface Curriculum {
@@ -361,6 +363,10 @@ export function useGrades(curriculumId?: string) {
       return res.data as Grade[];
     },
     staleTime: Infinity,
+    // Only fire the curriculum-filtered query once a curriculum is actually selected.
+    // Without this guard the hook immediately fetches ALL grades on mount (curriculumId=undefined)
+    // and the curriculum-specific fetch fires correctly on selection anyway.
+    enabled: curriculumId !== undefined ? !!curriculumId : true,
   });
 }
 
@@ -492,6 +498,46 @@ export function useUpdateUser() {
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["school", "users"] }),
+  });
+}
+
+export interface ClassDetail {
+  id: string;
+  name: string;
+  subject_id: string;
+  subject_name: string;
+  grade_name: string;
+  teacher_name: string | null;
+  academic_year: string;
+}
+
+export function useClassDetail(classId: string) {
+  return useQuery({
+    queryKey: ["class", classId, "detail"],
+    queryFn: async () => {
+      const res = await apiClient.get(`/api/v1/classes/${classId}`);
+      return res.data as ClassDetail;
+    },
+    enabled: !!classId,
+  });
+}
+
+export interface EnrolledStudent {
+  id: string;
+  first_name: string;
+  last_name: string;
+  worst_mastery: number | null;
+  diagnostic_completed: boolean;
+}
+
+export function useClassEnrollments(classId: string) {
+  return useQuery({
+    queryKey: ["class", classId, "enrollments"],
+    queryFn: async () => {
+      const res = await apiClient.get(`/api/v1/classes/${classId}/enrollments`);
+      return res.data as EnrolledStudent[];
+    },
+    enabled: !!classId,
   });
 }
 
