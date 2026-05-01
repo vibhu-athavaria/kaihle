@@ -1,5 +1,5 @@
 # Frontend Design and Accessibility Rules
-
+Before creating any UI mockup, directly read every source file being referenced or matched — never build from a subagent summary. Summaries lose the exact class names, dimensions, and structure that make mockups accurate.
 These rules summarise the non-negotiable parts of:
 
 - docs/design/DESIGN_SYSTEM.md

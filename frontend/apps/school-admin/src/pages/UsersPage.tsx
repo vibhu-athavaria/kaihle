@@ -14,6 +14,7 @@ import CreateParentModal from "./CreateParentModal";
 
 type Tab = "students" | "teachers" | "parents";
 type StudentFilter = "all" | "attention" | "pending" | "not_logged_in";
+type GradeFilter = number | null;
 
 function statusBadge(status: "ACTIVE" | "INVITED" | "INACTIVE") {
   if (status === "ACTIVE")
@@ -51,6 +52,7 @@ export function UsersPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("students");
   const [filter, setFilter] = useState<StudentFilter>("all");
+  const [gradeFilter, setGradeFilter] = useState<GradeFilter>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [teacherSearchQuery, setTeacherSearchQuery] = useState("");
   const [studentModalOpen, setStudentModalOpen] = useState(false);
@@ -75,6 +77,12 @@ export function UsersPage() {
   ).length;
   const notLoggedIn = students.filter((s) => !s.last_login_at).length;
 
+  const availableGrades = [
+    ...new Set(
+      students.map((s) => s.grade_level).filter((g): g is number => g !== null),
+    ),
+  ].sort((a, b) => a - b);
+
   const filtered = students
     .filter((s) => {
       if (filter === "attention")
@@ -84,6 +92,7 @@ export function UsersPage() {
       if (filter === "not_logged_in") return !s.last_login_at;
       return true;
     })
+    .filter((s) => gradeFilter === null || s.grade_level === gradeFilter)
     .filter(
       (s) =>
         !searchQuery ||
@@ -203,6 +212,23 @@ export function UsersPage() {
                 aria-label="Search students"
               />
             </div>
+            {availableGrades.length > 0 && (
+              <select
+                value={gradeFilter ?? ""}
+                onChange={(e) =>
+                  setGradeFilter(e.target.value ? Number(e.target.value) : null)
+                }
+                className="px-3 py-[5px] rounded-full text-xs font-semibold border border-role-school-border bg-white text-brand-body outline-none"
+                aria-label="Filter by grade"
+              >
+                <option value="">All grades</option>
+                {availableGrades.map((g) => (
+                  <option key={g} value={g}>
+                    Grade {g}
+                  </option>
+                ))}
+              </select>
+            )}
             {[
               { key: "all" as StudentFilter, label: "All students" },
               {
@@ -251,6 +277,7 @@ export function UsersPage() {
                   <tr className="bg-[#fafcfa] border-b border-role-school-border">
                     {[
                       "Student",
+                      "Grade",
                       "Classes",
                       "Lowest mastery",
                       "Diagnostic",
@@ -309,6 +336,11 @@ export function UsersPage() {
                               {nameDisplay(s.first_name, s.last_name)}
                             </div>
                           </div>
+                        </td>
+                        <td className="px-4 py-[10px] text-xs text-brand-muted">
+                          {s.grade_level !== null && s.grade_level !== undefined
+                            ? `Grade ${s.grade_level}`
+                            : "—"}
                         </td>
                         <td className="px-4 py-[10px]">
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-brand-body">

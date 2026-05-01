@@ -67,6 +67,8 @@ class StudentListItem(BaseModel):
     class_count: int
     needs_work_class_count: int
     diagnostic_completed: bool
+    # NULL when student has no grade assigned yet
+    grade_level: int | None = None
 
 
 class StudentListResponse(BaseModel):

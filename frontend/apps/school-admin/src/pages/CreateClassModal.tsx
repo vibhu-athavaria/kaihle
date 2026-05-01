@@ -131,7 +131,9 @@ export function CreateClassModal({
   // Data hooks
   const { data: subscribedCurricula, isLoading: curriculaLoading } =
     useMySchoolCurricula();
-  const { data: grades } = useGrades(curriculumId || undefined);
+  const { data: grades, isLoading: gradesLoading } = useGrades(
+    curriculumId || undefined,
+  );
   const { data: allSubjects } = useSubjects(curriculumId || undefined);
   const { data: teachers, isLoading: teachersLoading } = useSchoolUsers(
     UserRole.TEACHER,
@@ -375,11 +377,15 @@ export function CreateClassModal({
               setGradeId(e.target.value);
               setSubjectId("");
             }}
-            disabled={!curriculumId}
+            disabled={!curriculumId || gradesLoading}
             className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary disabled:opacity-60"
           >
             <option value="">
-              {curriculumId ? "Select grade" : "Select curriculum first"}
+              {!curriculumId
+                ? "Select curriculum first"
+                : gradesLoading
+                  ? "Loading grades…"
+                  : "Select grade"}
             </option>
             {grades?.map((g) => (
               <option key={g.id} value={g.id}>
