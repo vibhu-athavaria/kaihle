@@ -14,6 +14,7 @@ import {
   BadgeDollarSign,
   BookOpen,
   Library,
+  GraduationCap,
 } from "lucide-react";
 import { NavItem } from "./NavItem";
 
@@ -106,6 +107,11 @@ const adminSections: NavSection[] = [
         label: "Curriculum",
         href: "/kaihle-admin/curriculum",
         icon: Library,
+      },
+      {
+        label: "Grades",
+        href: "/kaihle-admin/grades",
+        icon: GraduationCap,
       },
       {
         label: "Assessment Questions",

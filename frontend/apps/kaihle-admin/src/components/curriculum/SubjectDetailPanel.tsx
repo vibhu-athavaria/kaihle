@@ -19,7 +19,6 @@ interface SubjectDetailPanelProps {
     existingSubtopics: Subtopic[],
   ) => void;
   onEditSubtopic: (subtopic: Subtopic, topicName: string) => void;
-  onEditGrade: (gradeId: string) => void;
 }
 
 function SubtopicRow({
@@ -175,7 +174,6 @@ export function SubjectDetailPanel({
   onEditTopic,
   onAddSubtopic,
   onEditSubtopic,
-  onEditGrade,
 }: SubjectDetailPanelProps) {
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
   const { data: topics = [], isLoading } = useTopics(subjectId, curriculumId);
@@ -245,17 +243,10 @@ export function SubjectDetailPanel({
       <div className="flex-1 overflow-y-auto">
         {gradeGroups.map(({ gradeId, gradeName, topics: gradeTopics }) => (
           <div key={gradeId}>
-            <div className="group flex items-center gap-2 px-4 py-1.5 bg-gray-50 border-b border-gray-100">
+            <div className="flex items-center gap-2 px-4 py-1.5 bg-gray-50 border-b border-gray-100">
               <span className="flex-1 font-['Inter'] text-xs font-bold uppercase tracking-widest text-gray-400">
                 {gradeName}
               </span>
-              <button
-                onClick={() => onEditGrade(gradeId)}
-                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-opacity"
-                title={`Edit ${gradeName}`}
-              >
-                <Edit2 className="w-3 h-3" />
-              </button>
             </div>
             {gradeTopics.map((topic) => (
               <TopicRow

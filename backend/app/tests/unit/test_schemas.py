@@ -486,13 +486,17 @@ class TestSchemaInstantiation:
         assert p.total_active_students == 500
 
     def test_grade_response(self):
+        cid = uuid.uuid4()
         g = GradeResponse(
             id=uuid.uuid4(),
             name="Grade 9",
             level=9,
-            curriculum_id=uuid.uuid4(),
+            is_active=True,
+            curriculum_ids=[cid],
         )
         assert g.level == 9
+        assert g.is_active is True
+        assert cid in g.curriculum_ids
 
     def test_subject_response(self):
         s = SubjectResponse(

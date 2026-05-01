@@ -11,6 +11,7 @@ import { AdminSchools } from "./pages/AdminSchools";
 import { AdminSchoolDetail } from "./pages/AdminSchoolDetail";
 import { AdminConfig } from "./pages/AdminConfig";
 import { AdminUsers } from "./pages/AdminUsers";
+import { AdminGrades } from "./pages/AdminGrades";
 import { AdminQuestionReview } from "./pages/AdminQuestionReview";
 import { VideoReviewQueue } from "./pages/content/VideoReviewQueue";
 import { VideoReviewDetail } from "./pages/content/VideoReviewDetail";
@@ -47,6 +48,7 @@ export default function App() {
                       <Route path="config" element={<AdminConfig />} />
                       <Route path="users" element={<AdminUsers />} />
                       <Route path="curriculum" element={<AdminCurriculum />} />
+                      <Route path="grades" element={<AdminGrades />} />
                       <Route
                         path="question-bank"
                         element={<AdminQuestionReview />}
