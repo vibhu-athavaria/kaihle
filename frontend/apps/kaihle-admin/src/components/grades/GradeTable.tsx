@@ -1,10 +1,6 @@
-export interface GradeRow {
-  id: string;
-  name: string;
-  level: number;
-  description: string | null;
-  is_active: boolean;
-  curriculum_ids: string[];
+import type { Grade } from "../../hooks/useCurriculum";
+
+export interface GradeRow extends Grade {
   curriculum_names: string[];
 }
 
