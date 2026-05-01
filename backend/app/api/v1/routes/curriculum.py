@@ -18,6 +18,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user, require_role
@@ -123,26 +124,24 @@ async def list_grades(
     Without filter: returns all 7 grades (6–12).
     With curriculum_id: returns only grades that have content in that curriculum.
     """
+    base_query = select(Grade).options(selectinload(Grade.curricula)).order_by(Grade.level)
+
     if curriculum_id:
-        # Return only grades that have curriculum_topics rows for this curriculum
-        rows = await db.scalars(
-            select(Grade)
-            .join(
-                CurriculumTopic,
-                CurriculumTopic.grade_id == Grade.id,
-            )
+        # Filter to grades that have content in the requested curriculum
+        base_query = (
+            base_query.join(CurriculumTopic, CurriculumTopic.grade_id == Grade.id)
             .where(CurriculumTopic.curriculum_id == curriculum_id)
             .distinct()
-            .order_by(Grade.level)
         )
-    else:
-        rows = await db.scalars(select(Grade).order_by(Grade.level))
+
+    rows = await db.scalars(base_query)
     return [
         GradeResponse(
             id=g.id,
             name=g.name,
             level=g.level,
-            curriculum_id=curriculum_id,  # None if no filter applied
+            is_active=g.is_active,
+            curriculum_ids=[c.id for c in g.curricula],
         )
         for g in rows
     ]
