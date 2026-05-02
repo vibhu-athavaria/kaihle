@@ -173,7 +173,7 @@ export function useSchoolClasses() {
 export function useSchoolStudents() {
   const schoolId = useAuthStore((state) => state.user?.school_id);
   return useQuery({
-    queryKey: ["school", "users", "STUDENT", schoolId],
+    queryKey: ["school", "students-list", schoolId],
     queryFn: async () => {
       const res = await apiClient.get(
         `/api/v1/schools/${schoolId}/users?role=STUDENT`,
