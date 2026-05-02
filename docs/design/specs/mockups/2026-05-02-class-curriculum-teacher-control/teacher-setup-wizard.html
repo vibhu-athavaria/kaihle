@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teacher Setup Wizard — Approved</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #f5f7f1; padding: 32px; color: #374151; }
+  h1 { font-family: Georgia, serif; font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 8px; }
+  .approved-badge { display: inline-block; background: #f0fdf4; border: 1px solid #d4e4d8; color: #1a5c38; font-size: 11px; font-weight: 700; border-radius: 99px; padding: 3px 12px; margin-bottom: 32px; }
+  .screen-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #9ca3af; margin-bottom: 10px; }
+  .screen { background: white; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; margin-bottom: 40px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+
+  /* Top bar */
+  .class-topbar { background: white; border-bottom: 1px solid #e5e7eb; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .class-topbar .class-name { font-family: Georgia, serif; font-size: 17px; font-weight: 700; color: #111827; }
+  .class-topbar .meta { font-size: 11px; color: #a0a8a0; margin-top: 2px; }
+  .class-topbar .pill { font-size: 11px; color: #6b7280; background: #f3f4f6; border-radius: 99px; padding: 4px 12px; }
+
+  /* Setup banner */
+  .setup-banner { background: #fffbeb; border-bottom: 2px solid #fcd34d; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .setup-banner .icon { width: 34px; height: 34px; border-radius: 50%; background: #c9932a; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: white; font-size: 15px; }
+  .setup-banner .text { margin-left: 12px; }
+  .setup-banner .text strong { display: block; font-size: 13px; font-weight: 700; color: #92400e; }
+  .setup-banner .text span { font-size: 11px; color: #b45309; }
+  .setup-banner .btn { background: #c9932a; color: white; border: none; border-radius: 99px; padding: 8px 18px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+
+  /* Tabs */
+  .tabs { background: white; border-bottom: 1px solid #e5e7eb; padding: 0 24px; display: flex; }
+  .tab { padding: 13px 16px; font-size: 12px; font-weight: 700; color: #c9932a; border-bottom: 2px solid #c9932a; }
+  .tab.inactive { font-weight: 400; color: #d1d5db; border-bottom: 2px solid transparent; }
+
+  /* Wizard body */
+  .wizard-body { background: #f5f7f1; padding: 28px; }
+
+  /* Steps indicator */
+  .steps { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  .step-dot { width: 26px; height: 26px; border-radius: 50%; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-dot.active { background: #c9932a; color: white; }
+  .step-dot.done { background: #1a5c38; color: white; }
+  .step-dot.pending { background: #e5e7eb; color: #9ca3af; }
+  .step-label { font-size: 12px; font-weight: 700; }
+  .step-label.active { color: #c9932a; }
+  .step-label.done { color: #1a5c38; }
+  .step-label.pending { color: #9ca3af; }
+  .step-line { flex: 1; height: 2px; }
+
+  /* Topic list */
+  .page-title { font-family: Georgia, serif; font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 4px; }
+  .page-desc { font-size: 12px; color: #6b7280; margin-bottom: 20px; }
+  .topic-list { background: white; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+  .section-band { padding: 8px 14px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; border-bottom-width: 1px; border-bottom-style: solid; }
+  .section-band.covered { background: #f0fdf4; border-color: #d4e4d8; color: #1a5c38; }
+  .section-band.upcoming { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+  .topic-row { padding: 12px 14px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f3f4f6; }
+  .topic-row:last-child { border-bottom: none; }
+  .drag-handle { color: #d1d5db; font-size: 16px; cursor: grab; }
+  .drag-handle.gold { color: #c9932a; }
+  .topic-name { font-size: 13px; font-weight: 600; color: #374151; }
+  .topic-meta { font-size: 11px; color: #9ca3af; margin-top: 1px; }
+  .badge-covered { background: #f0fdf4; border: 1px solid #d4e4d8; border-radius: 99px; padding: 3px 10px; font-size: 10px; font-weight: 700; color: #1a5c38; white-space: nowrap; }
+  .btn-mark { background: white; border: 1px solid #e5e7eb; border-radius: 99px; padding: 4px 10px; font-size: 10px; font-weight: 600; color: #6b7280; cursor: pointer; white-space: nowrap; }
+  .btn-remove { width: 28px; height: 28px; border-radius: 6px; background: #fee2e2; display: flex; align-items: center; justify-content: center; color: #dc2626; font-size: 13px; cursor: pointer; flex-shrink: 0; border: none; }
+  .add-topic-btn { border: 2px dashed #e5e7eb; border-radius: 8px; padding: 13px; text-align: center; font-size: 12px; color: #9ca3af; cursor: pointer; margin-bottom: 20px; }
+  .actions { display: flex; justify-content: flex-end; }
+  .btn-next { background: #c9932a; color: white; border: none; border-radius: 99px; padding: 9px 22px; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .btn-back { background: white; border: 1px solid #e5e7eb; color: #374151; border-radius: 99px; padding: 9px 22px; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+  /* Diagnostic builder */
+  .warning-box { font-size: 11px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 9px 12px; color: #92400e; margin-bottom: 20px; }
+  .diag-list { background: white; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 20px; }
+  .diag-header { padding: 10px 14px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+  .diag-header span { font-size: 11px; font-weight: 700; color: #374151; }
+  .diag-header .est { font-size: 11px; color: #9ca3af; }
+  .diag-row { padding: 12px 14px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f3f4f6; }
+  .diag-row:last-child { border-bottom: none; }
+  .checkbox-on { width: 16px; height: 16px; border-radius: 4px; background: #c9932a; flex-shrink: 0; }
+  .checkbox-off { width: 16px; height: 16px; border-radius: 4px; border: 2px solid #e5e7eb; flex-shrink: 0; }
+  .diag-footer { display: flex; justify-content: space-between; align-items: center; }
+</style>
+</head>
+<body>
+<h1>Teacher Setup Wizard</h1>
+<p class="subtitle">Triggered by a banner on the class page. Two-step flow: Topics → Diagnostic.</p>
+<div class="approved-badge">✓ Approved</div>
+
+<!-- SCREEN 1 -->
+<div class="screen-label">Screen 1 — Class page with setup banner</div>
+<div class="screen">
+  <div class="class-topbar">
+    <div>
+      <div class="class-name">Grade 7 Mathematics A</div>
+      <div class="meta">Cambridge Lower Secondary · Grade 7 · 2025–2026</div>
+    </div>
+    <div class="pill">18 students</div>
+  </div>
+  <div class="setup-banner">
+    <div style="display:flex;align-items:center">
+      <div class="icon">✦</div>
+      <div class="text">
+        <strong>This class needs setup before students can begin</strong>
+        <span>Choose your topics and design the Tier 1 diagnostic — takes about 5 minutes</span>
+      </div>
+    </div>
+    <button class="btn">Set up class →</button>
+  </div>
+  <div class="tabs">
+    <div class="tab">Overview</div>
+    <div class="tab inactive">Gap Map</div>
+    <div class="tab inactive">Assessments</div>
+    <div class="tab inactive">Study Plans</div>
+    <div class="tab inactive">Lesson Plans</div>
+  </div>
+  <div style="padding:32px;text-align:center;font-size:13px;color:#d1d5db">
+    Class content visible after setup is complete
+  </div>
+</div>
+
+<!-- SCREEN 2 -->
+<div class="screen-label">Screen 2 — Step 1: Topics</div>
+<div class="screen">
+  <div class="wizard-body">
+    <div class="steps">
+      <div class="step-dot active">1</div>
+      <div class="step-label active">Topics</div>
+      <div class="step-line" style="background:#e5e7eb"></div>
+      <div class="step-dot pending">2</div>
+      <div class="step-label pending">Diagnostic</div>
+    </div>
+
+    <div class="page-title">Choose and order your topics</div>
+    <div class="page-desc">Select all topics you'll cover this year. Drag to reorder. Mark any you've already taught as covered — they'll appear first.</div>
+
+    <div class="topic-list">
+      <div class="section-band covered">Already covered (2)</div>
+      <div class="topic-row" style="background:#fafffe">
+        <div class="drag-handle">⋮⋮</div>
+        <div style="flex:1">
+          <div class="topic-name">Number and Calculation</div>
+          <div class="topic-meta">8 subtopics · Seq. 1</div>
+        </div>
+        <div class="badge-covered">✓ Covered</div>
+        <button class="btn-remove">✕</button>
+      </div>
+      <div class="topic-row" style="background:#fafffe">
+        <div class="drag-handle">⋮⋮</div>
+        <div style="flex:1">
+          <div class="topic-name">Fractions, Decimals and Percentages</div>
+          <div class="topic-meta">6 subtopics · Seq. 2</div>
+        </div>
+        <div class="badge-covered">✓ Covered</div>
+        <button class="btn-remove">✕</button>
+      </div>
+
+      <div class="section-band upcoming">To be taught (3)</div>
+      <div class="topic-row">
+        <div class="drag-handle gold">⋮⋮</div>
+        <div style="flex:1">
+          <div class="topic-name">Algebra and Sequences</div>
+          <div class="topic-meta">10 subtopics · Seq. 3</div>
+        </div>
+        <button class="btn-mark">Mark covered</button>
+        <button class="btn-remove">✕</button>
+      </div>
+      <div class="topic-row">
+        <div class="drag-handle gold">⋮⋮</div>
+        <div style="flex:1">
+          <div class="topic-name">Geometry and Shapes</div>
+          <div class="topic-meta">7 subtopics · Seq. 4</div>
+        </div>
+        <button class="btn-mark">Mark covered</button>
+        <button class="btn-remove">✕</button>
+      </div>
+      <div class="topic-row">
+        <div class="drag-handle gold">⋮⋮</div>
+        <div style="flex:1">
+          <div class="topic-name">Statistics and Probability</div>
+          <div class="topic-meta">5 subtopics · Seq. 5</div>
+        </div>
+        <button class="btn-mark">Mark covered</button>
+        <button class="btn-remove">✕</button>
+      </div>
+    </div>
+
+    <div class="add-topic-btn">+ Add topic from curriculum</div>
+
+    <div class="actions">
+      <button class="btn-next">Next: Design Diagnostic →</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 3 -->
+<div class="screen-label">Screen 3 — Step 2: Tier 1 Diagnostic Builder</div>
+<div class="screen">
+  <div class="wizard-body">
+    <div class="steps">
+      <div class="step-dot done">✓</div>
+      <div class="step-label done">Topics</div>
+      <div class="step-line" style="background:#c9932a"></div>
+      <div class="step-dot active">2</div>
+      <div class="step-label active">Diagnostic</div>
+    </div>
+
+    <div class="page-title">Design your Tier 1 diagnostic</div>
+    <div class="page-desc">Select the topics to test. The system picks ~10 questions per topic across difficulty levels. Covered topics are included by default — good for knowledge refresh.</div>
+
+    <div class="warning-box">⚠ Once a student submits an attempt, this diagnostic is locked and cannot be edited.</div>
+
+    <div class="diag-list">
+      <div class="diag-header">
+        <span>Topics to include in diagnostic</span>
+        <span class="est">Est. ~50 questions total</span>
+      </div>
+
+      <div class="section-band covered">Covered topics (refresh knowledge)</div>
+      <div class="diag-row">
+        <div class="checkbox-on"></div>
+        <div style="flex:1">
+          <div class="topic-name">Number and Calculation</div>
+          <div class="topic-meta">~10 questions · Mixed difficulty</div>
+        </div>
+        <div class="badge-covered">Covered</div>
+      </div>
+      <div class="diag-row">
+        <div class="checkbox-on"></div>
+        <div style="flex:1">
+          <div class="topic-name">Fractions, Decimals and Percentages</div>
+          <div class="topic-meta">~10 questions · Mixed difficulty</div>
+        </div>
+        <div class="badge-covered">Covered</div>
+      </div>
+
+      <div class="section-band upcoming">Upcoming topics</div>
+      <div class="diag-row">
+        <div class="checkbox-on"></div>
+        <div style="flex:1">
+          <div class="topic-name">Algebra and Sequences</div>
+          <div class="topic-meta">~10 questions · Mixed difficulty</div>
+        </div>
+      </div>
+      <div class="diag-row">
+        <div class="checkbox-on"></div>
+        <div style="flex:1">
+          <div class="topic-name">Geometry and Shapes</div>
+          <div class="topic-meta">~10 questions · Mixed difficulty</div>
+        </div>
+      </div>
+      <div class="diag-row">
+        <div class="checkbox-off"></div>
+        <div style="flex:1">
+          <div class="topic-name" style="color:#9ca3af">Statistics and Probability</div>
+          <div class="topic-meta" style="color:#d1d5db">~10 questions · Mixed difficulty</div>
+        </div>
+        <span style="font-size:10px;color:#9ca3af">Unselected</span>
+      </div>
+    </div>
+
+    <div class="diag-footer">
+      <button class="btn-back">← Back to Topics</button>
+      <button class="btn-next">Publish Diagnostic &amp; Finish Setup</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
