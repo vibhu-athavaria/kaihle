@@ -1,10 +1,13 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { StudentLayout } from "@kaihle/ui";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import { useStudentGapMap } from "../../hooks/useStudentGapMap";
+import { useMyClasses } from "../../hooks/useMyClasses";
 import { TopicSection } from "../../components/my-progress/TopicSection";
 import { ConceptGuideProvider } from "../../context/ConceptGuideContext";
 import { ConceptGuideDrawer } from "../../components/ai/ConceptGuideDrawer";
+import { ClipboardList } from "lucide-react";
 
 interface SubjectEntry {
   subjectId: string;
@@ -32,6 +35,24 @@ export function MyProgress() {
 
   const { data: gapMapData, isLoading: isGapMapLoading } = useStudentGapMap(
     selectedSubjectId ?? undefined,
+  );
+
+  const { data: myClasses = [] } = useMyClasses();
+
+  // Find classes for the selected subject to determine diagnostic status
+  const subjectClasses = useMemo(
+    () =>
+      myClasses.filter((c) => c.subjectId === selectedSubjectId && c.isActive),
+    [myClasses, selectedSubjectId],
+  );
+
+  // At least one class for this subject has a pending/in-progress diagnostic
+  const diagnosticPending = subjectClasses.some(
+    (c) => c.onboardingDiagnosticStatus !== "COMPLETED",
+  );
+  // Find the first class with a pending diagnostic to link to its assessments page
+  const pendingDiagnosticClass = subjectClasses.find(
+    (c) => c.onboardingDiagnosticStatus !== "COMPLETED",
   );
 
   const topics = useMemo(() => {
@@ -125,12 +146,42 @@ export function MyProgress() {
                   ))}
                 </div>
               ) : topics.length === 0 ? (
-                <div className="bg-brand-amber-light border border-brand-amber/30 rounded-xl p-4 mt-6">
-                  <p className="font-sans text-sm text-brand-amber">
-                    Take your first assessment to start seeing topic-by-topic
-                    progress here.
-                  </p>
-                </div>
+                diagnosticPending ? (
+                  <div className="flex items-start gap-4 bg-white border border-role-student-border rounded-xl p-5 mt-6">
+                    <div className="w-10 h-10 rounded-full bg-brand-green-light flex items-center justify-center flex-shrink-0">
+                      <ClipboardList
+                        className="w-5 h-5 text-brand-primary"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm text-brand-ink mb-1">
+                        Diagnostic pending
+                      </p>
+                      <p className="text-xs text-brand-body leading-relaxed">
+                        Your progress map will appear here once you complete the
+                        Tier 1 diagnostic for{" "}
+                        <strong>{selectedSubject?.subjectName}</strong>. You can
+                        access content in the meantime.
+                      </p>
+                      {pendingDiagnosticClass && (
+                        <Link
+                          to={`/student/classes/${pendingDiagnosticClass.id}/diagnostic`}
+                          className="inline-block mt-3 text-xs font-semibold text-brand-primary hover:text-brand-primary/80 transition-colors"
+                        >
+                          Take diagnostic →
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-brand-amber-light border border-brand-amber/30 rounded-xl p-4 mt-6">
+                    <p className="font-sans text-sm text-brand-amber">
+                      Take your first assessment to start seeing topic-by-topic
+                      progress here.
+                    </p>
+                  </div>
+                )
               ) : (
                 <div className="space-y-4">
                   <h2 className="font-sans text-section-label font-bold uppercase tracking-[0.8px] text-brand-body">

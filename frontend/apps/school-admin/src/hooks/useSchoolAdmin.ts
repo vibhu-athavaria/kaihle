@@ -13,6 +13,7 @@ export interface User {
   last_name: string;
   role: UserRoleType;
   status: "ACTIVE" | "INVITED" | "INACTIVE";
+  grade_level?: number | null;
 }
 
 export interface Class {
@@ -207,6 +208,7 @@ export function useSchoolUsers(
           last_name: string;
           role: string;
           is_active: boolean;
+          grade_level?: number | null;
         }) => ({
           id: user.id,
           email: user.email,
@@ -214,6 +216,7 @@ export function useSchoolUsers(
           last_name: user.last_name,
           role: user.role,
           status: user.is_active ? ("ACTIVE" as const) : ("INACTIVE" as const),
+          grade_level: user.grade_level ?? null,
         }),
       );
 
@@ -449,6 +452,7 @@ export function useCreateClass() {
       curriculum_id: string;
       teacher_id: string;
       academic_year: string;
+      student_ids?: string[];
     }) => {
       if (!schoolId) throw new Error("No school_id for current user");
       const res = await apiClient.post(

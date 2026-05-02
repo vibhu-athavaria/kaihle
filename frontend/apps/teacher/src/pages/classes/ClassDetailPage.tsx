@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   getMasteryStyle,
@@ -7,14 +8,25 @@ import {
 import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { useMyStudents } from "../../hooks/useMyStudents";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
+import { useClassTopics } from "../../hooks/useClassTopics";
 import { useAuth } from "@kaihle/auth";
 import { statusBadge } from "../../utils/assessment";
-import { ArrowLeft, Users, BarChart2, FileText, BookOpen } from "lucide-react";
+import {
+  ArrowLeft,
+  Users,
+  BarChart2,
+  FileText,
+  BookOpen,
+  BookMarked,
+  ChevronRight,
+} from "lucide-react";
+import { ClassSetupWizard } from "./ClassSetupWizard";
 
 export function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
   const { user } = useAuth();
   const schoolId = user?.school_id ?? null;
+
   const { data: dashboardData, isLoading: dashboardLoading } =
     useTeacherDashboard(schoolId);
   const { data: assessments, isLoading: assessmentsLoading } =
@@ -23,6 +35,11 @@ export function ClassDetailPage() {
     classId ? [classId] : [],
     [],
   );
+  const { data: classTopics = [], isLoading: topicsLoading } =
+    useClassTopics(classId);
+
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardInitialStep, setWizardInitialStep] = useState<1 | 2>(1);
 
   const cls = dashboardData?.classes.find((c) => c.id === classId);
 
@@ -54,6 +71,16 @@ export function ClassDetailPage() {
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     )
     .slice(0, 3);
+
+  const topicsConfigured = !topicsLoading && classTopics.length > 0;
+  const hasDiagnostic = recentAssessments.some(
+    (a) => a.assessment_type === "DIAGNOSTIC",
+  );
+
+  function openWizardAtStep(step: 1 | 2) {
+    setWizardInitialStep(step);
+    setWizardOpen(true);
+  }
 
   return (
     <div className="p-6">
@@ -89,6 +116,66 @@ export function ClassDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Setup banners ─────────────────────────────────────────────────── */}
+
+      {!topicsLoading && !topicsConfigured && (
+        <button
+          type="button"
+          onClick={() => openWizardAtStep(1)}
+          className="w-full text-left flex items-center justify-between gap-4 bg-brand-gold/10 border border-brand-gold/30 rounded-xl px-5 py-4 mb-6 hover:bg-brand-gold/15 transition-colors"
+        >
+          <div className="flex items-start gap-3">
+            <BookMarked
+              className="w-5 h-5 text-brand-gold mt-0.5 flex-shrink-0"
+              aria-hidden="true"
+            />
+            <div>
+              <p className="font-semibold text-sm text-brand-ink">
+                Set up your curriculum for this class
+              </p>
+              <p className="text-xs text-brand-body mt-0.5">
+                Pick which topics to teach and design your Tier 1 diagnostic —
+                takes about 2 minutes.
+              </p>
+            </div>
+          </div>
+          <ChevronRight
+            className="w-4 h-4 text-brand-gold flex-shrink-0"
+            aria-hidden="true"
+          />
+        </button>
+      )}
+
+      {topicsConfigured && !hasDiagnostic && (
+        <button
+          type="button"
+          onClick={() => openWizardAtStep(2)}
+          className="w-full text-left flex items-center justify-between gap-4 bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 mb-6 hover:bg-blue-100 transition-colors"
+        >
+          <div className="flex items-start gap-3">
+            <BarChart2
+              className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0"
+              aria-hidden="true"
+            />
+            <div>
+              <p className="font-semibold text-sm text-brand-ink">
+                Create your Tier 1 diagnostic
+              </p>
+              <p className="text-xs text-brand-body mt-0.5">
+                Topics are configured. Design the diagnostic assessment for
+                students.
+              </p>
+            </div>
+          </div>
+          <ChevronRight
+            className="w-4 h-4 text-blue-600 flex-shrink-0"
+            aria-hidden="true"
+          />
+        </button>
+      )}
+
+      {/* ── Quick-access cards ─────────────────────────────────────────────── */}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <Link
@@ -136,6 +223,31 @@ export function ClassDetailPage() {
           </div>
         </Link>
       </div>
+
+      {/* Topics summary strip (once configured) */}
+      {topicsConfigured && (
+        <div className="bg-white rounded-xl border border-brand-border px-5 py-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <BookMarked
+              className="w-4 h-4 text-brand-primary"
+              aria-hidden="true"
+            />
+            <span className="text-sm font-semibold text-brand-ink">
+              {classTopics.length} topic
+              {classTopics.length !== 1 ? "s" : ""} configured
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => openWizardAtStep(1)}
+            className="text-xs font-semibold text-brand-gold hover:text-brand-gold-dark transition-colors"
+          >
+            Edit topics →
+          </button>
+        </div>
+      )}
+
+      {/* ── Students at risk + Recent assessments ─────────────────────────── */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
@@ -235,6 +347,16 @@ export function ClassDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Wizard */}
+      {classId && (
+        <ClassSetupWizard
+          classId={classId}
+          isOpen={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+          initialStep={wizardInitialStep}
+        />
+      )}
     </div>
   );
 }
