@@ -94,10 +94,13 @@ export default {
 
           // Surfaces
           bg: "#f5f7f1", // page background (Teacher, School Admin)
+          "surface-subtle": "#fafcfa", // table header tint, footer stripe
+          "green-pale": "#f0fdf4", // very light green tint (badges, highlights)
 
           // Borders
           border: "#e5e7eb", // default border (Teacher, Student)
           "border-soft": "#f3f4f6", // subtle separator
+          "row-divider": "#f0f5ee", // table row separator (green-tinted)
         },
 
         // ── KAIHLE ADMIN TOKENS ──────────────────────────────

@@ -208,7 +208,7 @@ async def list_enrollments(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only view students in your own classes",
         )
-    return await service.get_class_students(class_id)
+    return await service.get_class_students(class_id, class_.school_id)
 
 
 @router.post("/classes/{class_id}/enrollments", response_model=EnrollResponse)

@@ -466,14 +466,8 @@ class TestVerifyClassSchool:
 class TestGetClassStudents:
     """Tests for ClassService.get_class_students method."""
 
-    @pytest.mark.asyncio
-    async def test_get_class_students_when_students_enrolled_then_returns_list(
-        self, class_service: ClassService, mock_db: MagicMock
-    ) -> None:
-        """Test that get_class_students returns enrolled students ordered by name."""
-        class_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        class_ = Class(
+    def _make_class(self, class_id: uuid.UUID, school_id: uuid.UUID) -> Class:
+        return Class(
             id=class_id,
             school_id=school_id,
             name="Test",
@@ -483,6 +477,22 @@ class TestGetClassStudents:
             teacher_id=uuid.uuid4(),
             academic_year="2026",
         )
+
+    def _make_row(self, user: User, status: str | None = None, grade_level: int | None = None) -> MagicMock:
+        row = MagicMock()
+        row.User = user
+        row.onboarding_diagnostic_status = status
+        row.grade_level = grade_level
+        return row
+
+    @pytest.mark.asyncio
+    async def test_get_class_students_when_students_enrolled_then_returns_sorted_list(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that get_class_students returns enrolled students in the order provided."""
+        class_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+        class_ = self._make_class(class_id, school_id)
 
         student1 = User(
             id=uuid.uuid4(),
@@ -502,15 +512,161 @@ class TestGetClassStudents:
         )
 
         mock_db.get = AsyncMock(return_value=class_)
+        rows = [self._make_row(student2), self._make_row(student1)]
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [student2, student1]
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_result.all.return_value = rows
+        mock_db.execute = AsyncMock(side_effect=[mock_result, MagicMock(all=MagicMock(return_value=[]))])
 
-        result = await class_service.get_class_students(class_id)
+        result = await class_service.get_class_students(class_id, school_id)
 
         assert len(result) == 2
         assert result[0].first_name == "Bob"
         assert result[1].first_name == "Alice"
+
+    @pytest.mark.asyncio
+    async def test_get_class_students_when_diagnostic_completed_then_flag_is_true(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that diagnostic_completed is True only when status is COMPLETED."""
+        class_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+        class_ = self._make_class(class_id, school_id)
+
+        student_done = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            email="done@test.com",
+            first_name="Done",
+            last_name="Student",
+            role=UserRole.STUDENT,
+        )
+        student_pending = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            email="pending@test.com",
+            first_name="Pending",
+            last_name="Student",
+            role=UserRole.STUDENT,
+        )
+
+        mock_db.get = AsyncMock(return_value=class_)
+        rows = [
+            self._make_row(student_done, status="COMPLETED"),
+            self._make_row(student_pending, status=None),
+        ]
+        mock_result = MagicMock()
+        mock_result.all.return_value = rows
+        mock_db.execute = AsyncMock(side_effect=[mock_result, MagicMock(all=MagicMock(return_value=[]))])
+
+        result = await class_service.get_class_students(class_id, school_id)
+
+        assert result[0].diagnostic_completed is True
+        assert result[1].diagnostic_completed is False
+
+    @pytest.mark.asyncio
+    async def test_get_class_students_when_gap_states_exist_then_worst_mastery_is_minimum(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that worst_mastery is the minimum mastery score across all subtopics."""
+        class_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+        class_ = self._make_class(class_id, school_id)
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            email="s@test.com",
+            first_name="S",
+            last_name="T",
+            role=UserRole.STUDENT,
+        )
+
+        mock_db.get = AsyncMock(return_value=class_)
+        enrollment_result = MagicMock()
+        enrollment_result.all.return_value = [self._make_row(student)]
+        # Gap states: scores 0.8, 0.3, 0.6 → worst = 0.3
+        gap_rows = [
+            (student.id, 0.8),
+            (student.id, 0.3),
+            (student.id, 0.6),
+        ]
+        gap_result = MagicMock()
+        gap_result.all.return_value = gap_rows
+        mock_db.execute = AsyncMock(side_effect=[enrollment_result, gap_result])
+
+        result = await class_service.get_class_students(class_id, school_id)
+
+        assert len(result) == 1
+        assert result[0].worst_mastery == pytest.approx(0.3)
+
+    @pytest.mark.asyncio
+    async def test_get_class_students_when_no_gap_states_then_worst_mastery_is_none(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that worst_mastery is None when no gap states exist for the student."""
+        class_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+        class_ = self._make_class(class_id, school_id)
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            email="s@test.com",
+            first_name="S",
+            last_name="T",
+            role=UserRole.STUDENT,
+        )
+
+        mock_db.get = AsyncMock(return_value=class_)
+        enrollment_result = MagicMock()
+        enrollment_result.all.return_value = [self._make_row(student)]
+        gap_result = MagicMock()
+        gap_result.all.return_value = []
+        mock_db.execute = AsyncMock(side_effect=[enrollment_result, gap_result])
+
+        result = await class_service.get_class_students(class_id, school_id)
+
+        assert result[0].worst_mastery is None
+
+    @pytest.mark.asyncio
+    async def test_get_class_students_when_grade_level_in_profile_then_populated(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that grade_level is populated from the StudentProfile→Grade join."""
+        class_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+        class_ = self._make_class(class_id, school_id)
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            email="s@test.com",
+            first_name="S",
+            last_name="T",
+            role=UserRole.STUDENT,
+        )
+
+        mock_db.get = AsyncMock(return_value=class_)
+        enrollment_result = MagicMock()
+        enrollment_result.all.return_value = [self._make_row(student, grade_level=8)]
+        mock_db.execute = AsyncMock(side_effect=[enrollment_result, MagicMock(all=MagicMock(return_value=[]))])
+
+        result = await class_service.get_class_students(class_id, school_id)
+
+        assert result[0].grade_level == 8
+
+    @pytest.mark.asyncio
+    async def test_get_class_students_when_different_school_then_raises(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that get_class_students raises ValueError when class belongs to a different school."""
+        class_id = uuid.uuid4()
+        class_ = self._make_class(class_id, school_id=uuid.uuid4())  # class belongs to school A
+
+        mock_db.get = AsyncMock(return_value=class_)
+
+        with pytest.raises(ValueError):
+            await class_service.get_class_students(class_id, school_id=uuid.uuid4())  # caller is school B
 
     @pytest.mark.asyncio
     async def test_get_class_students_when_no_students_then_returns_empty_list(
@@ -518,22 +674,15 @@ class TestGetClassStudents:
     ) -> None:
         """Test that get_class_students returns empty list when no students enrolled."""
         class_id = uuid.uuid4()
-        class_ = Class(
-            id=class_id,
-            school_id=uuid.uuid4(),
-            name="Test",
-            grade_id=uuid.uuid4(),
-            subject_id=uuid.uuid4(),
-            curriculum_id=uuid.uuid4(),
-            teacher_id=uuid.uuid4(),
-            academic_year="2026",
-        )
+        school_id = uuid.uuid4()
+        class_ = self._make_class(class_id, school_id)
+
         mock_db.get = AsyncMock(return_value=class_)
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_result.all.return_value = []
+        mock_db.execute = AsyncMock(side_effect=[mock_result, MagicMock(all=MagicMock(return_value=[]))])
 
-        result = await class_service.get_class_students(class_id)
+        result = await class_service.get_class_students(class_id, school_id)
 
         assert result == []
 
@@ -546,7 +695,7 @@ class TestGetClassStudents:
         mock_db.get = AsyncMock(return_value=None)
 
         with pytest.raises(ValueError, match="Class not found"):
-            await class_service.get_class_students(class_id)
+            await class_service.get_class_students(class_id, school_id=uuid.uuid4())
 
 
 class TestGetTeacherStudents:

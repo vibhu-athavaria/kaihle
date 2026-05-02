@@ -3,11 +3,13 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, _check_school_access, require_full_access, require_role
-from app.models.user import UserRole
+from app.models.curriculum import Grade
+from app.models.user import StudentProfile, UserRole
 from app.schemas.user import (
     MeResponse,
     StudentListItem,
@@ -142,6 +144,20 @@ async def list_users(
         summaries = await analytics.get_student_mastery_summaries(school_id, student_ids=student_ids)
         summary_map = {s.student_id: s for s in summaries}
         completed_ids = await analytics.get_diagnostic_completed_student_ids(school_id, student_ids)
+
+        # Bulk-fetch grade levels via StudentProfile → Grade join (single query, no N+1)
+        grade_level_map: dict[uuid.UUID, int] = {}
+        if student_ids:
+            profile_rows = (
+                await db.execute(
+                    select(StudentProfile.user_id, Grade.level)
+                    .join(Grade, Grade.id == StudentProfile.grade_id)
+                    .where(StudentProfile.user_id.in_(student_ids))
+                )
+            ).all()
+            for user_id, level in profile_rows:
+                grade_level_map[user_id] = level
+
         return StudentListResponse(
             users=[
                 StudentListItem(
@@ -155,6 +171,7 @@ async def list_users(
                     class_count=summary_map[u.id].class_count if u.id in summary_map else 0,
                     needs_work_class_count=summary_map[u.id].needs_work_class_count if u.id in summary_map else 0,
                     diagnostic_completed=u.id in completed_ids,
+                    grade_level=grade_level_map.get(u.id),
                 )
                 for u in users
             ],

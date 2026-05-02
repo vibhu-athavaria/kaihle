@@ -9,7 +9,7 @@ export function ClassManagement() {
   const navigate = useNavigate();
   const { data: classes = [], isLoading, isError } = useSchoolClasses();
   const [filter, setFilter] = useState<"all" | "attention">("all");
-  const [gradeFilter, setGradeFilter] = useState<number | null>(null);
+  const [gradeFilter, setGradeFilter] = useState<string | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -23,7 +23,7 @@ export function ClassManagement() {
       if (filter === "attention") return c.diagnostic_status !== "has_data";
       return true;
     })
-    .filter((c) => gradeFilter === null || c.grade_level === gradeFilter)
+    .filter((c) => gradeFilter === null || c.grade_name === gradeFilter)
     .filter((c) => subjectFilter === null || c.subject_name === subjectFilter)
     .filter(
       (c) =>
@@ -31,7 +31,9 @@ export function ClassManagement() {
         c.name.toLowerCase().includes(searchQuery.toLowerCase()),
     );
 
-  const grades = [...new Set(classes.map((c) => c.grade_level))].sort();
+  const grades = [
+    ...new Set(classes.map((c) => c.grade_name).filter(Boolean)),
+  ].sort();
   const subjects = [...new Set(classes.map((c) => c.subject_name))].sort();
 
   if (isLoading)
@@ -90,15 +92,13 @@ export function ClassManagement() {
             Needs attention {attentionCount > 0 && `(${attentionCount})`}
           </button>
           <select
-            onChange={(e) =>
-              setGradeFilter(e.target.value ? Number(e.target.value) : null)
-            }
+            onChange={(e) => setGradeFilter(e.target.value || null)}
             className="px-3 py-[5px] rounded-full text-xs font-semibold border border-role-school-border bg-white text-brand-body outline-none"
           >
             <option value="">All grades</option>
             {grades.map((g) => (
               <option key={g} value={g}>
-                Grade {g}
+                {g}
               </option>
             ))}
           </select>
@@ -139,15 +139,7 @@ export function ClassManagement() {
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-[#fafcfa] border-b border-role-school-border">
-              {[
-                "Class",
-                "Subject",
-                "Grade",
-                "Teacher",
-                "Mastery",
-                "Students",
-                "",
-              ].map((h) => (
+              {["Class", "Teacher", "Mastery", "Students", ""].map((h) => (
                 <th
                   key={h}
                   className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
@@ -162,9 +154,7 @@ export function ClassManagement() {
               <ClassRow
                 key={c.id}
                 cls={c}
-                onClick={() =>
-                  navigate(`/school-admin/classes/${c.id}/gap-map`)
-                }
+                onClick={() => navigate(`/school-admin/classes/${c.id}`)}
               />
             ))}
           </tbody>
@@ -234,17 +224,17 @@ function ClassRow({
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="button"
-      aria-label={`View gap map for ${cls.name}`}
+      aria-label={`View details for ${cls.name}`}
       className={`border-b border-[#f0f5ee] cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-inset ${
         isSetup ? "bg-[#fffbeb] hover:bg-[#fef9c3]" : "hover:bg-[#fafcfa]"
       }`}
     >
-      <td className="px-4 py-3 font-bold text-sm text-brand-ink">{cls.name}</td>
-      <td className="px-4 py-3 text-xs font-semibold text-brand-body">
-        {cls.subject_name}
-      </td>
-      <td className="px-4 py-3 text-xs text-brand-muted">
-        Grade {cls.grade_level}
+      <td className="px-4 py-3">
+        <div className="font-bold text-sm text-brand-ink">{cls.name}</div>
+        <div className="text-xs text-brand-muted mt-0.5">
+          {cls.subject_name}
+          {cls.grade_name ? ` · ${cls.grade_name}` : ""}
+        </div>
       </td>
       <td className="px-4 py-3">
         {isSetup ? (

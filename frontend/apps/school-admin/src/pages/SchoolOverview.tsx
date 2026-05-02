@@ -219,7 +219,7 @@ export function SchoolOverview() {
                             {subjectShortLabel(c.subject_name)}
                           </span>
                           <span className="text-[10px] text-brand-muted">
-                            Grade {c.grade_level} · {c.student_count} students
+                            Grade {c.grade_name} · {c.student_count} students
                           </span>
                           <span
                             className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${badgeClasses}`}
@@ -236,7 +236,9 @@ export function SchoolOverview() {
                         )}
                         <button
                           onClick={() =>
-                            navigate(`/school-admin/classes/${c.id}/gap-map`)
+                            navigate(
+                              `/school-admin/classes/${c.id}?tab=gap-map`,
+                            )
                           }
                           className="text-[10px] font-bold text-brand-primary hover:underline focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 rounded whitespace-nowrap"
                         >

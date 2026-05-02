@@ -68,7 +68,8 @@ export interface ClassSummary {
   id: string;
   name: string;
   subject_name: string;
-  grade_level: number;
+  grade_name: string;
+  grade_level: number | null;
   teacher_id: string | null;
   teacher_name: string | null;
   student_count: number;
@@ -89,6 +90,7 @@ export interface StudentListItem {
   class_count: number;
   needs_work_class_count: number;
   diagnostic_completed: boolean;
+  grade_level: number | null;
 }
 
 export interface Curriculum {
@@ -361,6 +363,10 @@ export function useGrades(curriculumId?: string) {
       return res.data as Grade[];
     },
     staleTime: Infinity,
+    // Only fire the curriculum-filtered query once a curriculum is actually selected.
+    // Without this guard the hook immediately fetches ALL grades on mount (curriculumId=undefined)
+    // and the curriculum-specific fetch fires correctly on selection anyway.
+    enabled: curriculumId ? !!curriculumId : true,
   });
 }
 
@@ -492,6 +498,99 @@ export function useUpdateUser() {
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["school", "users"] }),
+  });
+}
+
+export interface ClassDetail {
+  id: string;
+  name: string;
+  subject_id: string;
+  subject_name: string;
+  grade_name: string;
+  teacher_name: string | null;
+  academic_year: string;
+}
+
+export function useClassDetail(
+  classId: string,
+  // When provided, display names are taken from the already-cached list summary
+  // and no extra API calls are needed. Falls back to fetching subjects/grades/teacher
+  // on direct navigation where the list cache may not be populated.
+  cachedSummary?: Pick<
+    ClassSummary,
+    "subject_name" | "grade_name" | "teacher_name"
+  >,
+) {
+  return useQuery({
+    queryKey: ["class", classId, "detail"],
+    queryFn: async () => {
+      const res = await apiClient.get(`/api/v1/classes/${classId}`);
+      const data = res.data;
+
+      if (cachedSummary?.subject_name && cachedSummary?.grade_name) {
+        return {
+          id: data.id,
+          name: data.name,
+          subject_id: data.subject_id,
+          subject_name: cachedSummary.subject_name,
+          grade_name: cachedSummary.grade_name,
+          teacher_name: cachedSummary.teacher_name ?? null,
+          academic_year: data.academic_year,
+        } as ClassDetail;
+      }
+
+      // Fallback: enrich with display names via parallel fetches (direct navigation)
+      // TODO: remove once /api/v1/classes/{id} returns display names directly
+      const [subjectsRes, gradesRes, teacherRes] = await Promise.all([
+        apiClient.get("/api/v1/subjects"),
+        apiClient.get("/api/v1/grades"),
+        data.teacher_id
+          ? apiClient
+              .get(`/api/v1/teachers/${data.teacher_id}`)
+              .catch(() => null)
+          : null,
+      ]);
+      const subjects = subjectsRes.data as Array<{
+        id: string;
+        name: string;
+        code: string;
+      }>;
+      const grades = gradesRes.data as Array<{ id: string; level: number }>;
+      const subject = subjects.find((s) => s.id === data.subject_id);
+      const grade = grades.find((g) => g.id === data.grade_id);
+      return {
+        id: data.id,
+        name: data.name,
+        subject_id: data.subject_id,
+        subject_name: subject?.name ?? data.subject_name ?? "",
+        grade_name: grade ? `Grade ${grade.level}` : (data.grade_name ?? ""),
+        teacher_name: teacherRes
+          ? `${teacherRes.data.first_name} ${teacherRes.data.last_name}`.trim()
+          : null,
+        academic_year: data.academic_year,
+      } as ClassDetail;
+    },
+    enabled: !!classId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export interface EnrolledStudent {
+  id: string;
+  first_name: string;
+  last_name: string;
+  worst_mastery: number | null;
+  diagnostic_completed: boolean;
+}
+
+export function useClassEnrollments(classId: string) {
+  return useQuery({
+    queryKey: ["class", classId, "enrollments"],
+    queryFn: async () => {
+      const res = await apiClient.get(`/api/v1/classes/${classId}/enrollments`);
+      return res.data as EnrolledStudent[];
+    },
+    enabled: !!classId,
   });
 }
 

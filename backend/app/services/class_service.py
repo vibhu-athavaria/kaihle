@@ -1,13 +1,16 @@
 """Class management and enrollment service layer."""
 
 import uuid
+from collections import defaultdict
 from typing import TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.curriculum import Grade
+from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment, SchoolCurriculum
-from app.models.user import User, UserRole
+from app.models.user import StudentProfile, User, UserRole
 from app.schemas.class_enrollment import (
     ClassCreate,
     EnrollResponse,
@@ -226,21 +229,29 @@ class ClassService:
     async def get_class_students(
         self,
         class_id: uuid.UUID,
+        school_id: uuid.UUID,
     ) -> list[StudentSummary]:
         """Get list of students enrolled in a class.
 
         Args:
             class_id: The class UUID
+            school_id: The school UUID — enforces tenant isolation at service layer
 
         Returns:
             List of StudentSummary
         """
-        # First verify class exists
-        await self.get_class(class_id)
+        await self.verify_class_school(class_id, school_id)
 
+        # Fetch enrollments joined with StudentProfile→Grade for grade_level
         query = (
-            select(User)
+            select(
+                User,
+                ClassEnrollment.onboarding_diagnostic_status,
+                Grade.level.label("grade_level"),
+            )
             .join(ClassEnrollment, ClassEnrollment.student_id == User.id)
+            .outerjoin(StudentProfile, StudentProfile.user_id == User.id)
+            .outerjoin(Grade, Grade.id == StudentProfile.grade_id)
             .where(
                 ClassEnrollment.class_id == class_id,
                 ClassEnrollment.is_active.is_(True),
@@ -248,16 +259,40 @@ class ClassService:
             .order_by(User.last_name, User.first_name)
         )
         result = await self.db.execute(query)
-        students = result.scalars().all()
+        rows = result.all()
+
+        student_ids = [row.User.id for row in rows]
+
+        # Get worst mastery scores from gap states for these students in this class
+        worst_mastery_map: dict[uuid.UUID, float | None] = {}
+        if student_ids:
+            gap_query = select(GapState.student_id, GapState.mastery_score).where(
+                GapState.student_id.in_(student_ids),
+                GapState.class_id == class_id,
+            )
+            gap_result = await self.db.execute(gap_query)
+            gap_rows = gap_result.all()
+
+            mastery_by_student: dict[uuid.UUID, list[float]] = defaultdict(list)
+            for student_id, mastery in gap_rows:
+                if mastery is not None:
+                    mastery_by_student[student_id].append(mastery)
+
+            for student_id in student_ids:
+                scores = mastery_by_student.get(student_id, [])
+                worst_mastery_map[student_id] = min(scores) if scores else None
 
         return [
             StudentSummary(
-                id=student.id,
-                email=student.email,
-                first_name=student.first_name,
-                last_name=student.last_name,
+                id=row.User.id,
+                email=row.User.email,
+                first_name=row.User.first_name,
+                last_name=row.User.last_name,
+                worst_mastery=worst_mastery_map.get(row.User.id),
+                diagnostic_completed=row.onboarding_diagnostic_status == "COMPLETED",
+                grade_level=row.grade_level,
             )
-            for student in students
+            for row in rows
         ]
 
     async def get_teacher_students(

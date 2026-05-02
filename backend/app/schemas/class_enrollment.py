@@ -76,6 +76,9 @@ class StudentSummary(BaseModel):
     email: str
     first_name: str
     last_name: str
+    worst_mastery: float | None
+    diagnostic_completed: bool
+    grade_level: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

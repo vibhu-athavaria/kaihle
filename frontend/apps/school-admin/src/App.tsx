@@ -11,7 +11,7 @@ import { StudentDetailPage } from "./pages/StudentDetailPage";
 import { TeacherDetailPage } from "./pages/TeacherDetailPage";
 import { ParentDetailPage } from "./pages/ParentDetailPage";
 import { ClassManagement } from "./pages/ClassManagement";
-import { AdminGapMapPage } from "./pages/AdminGapMapPage";
+import { ClassDetailPage } from "./pages/ClassDetailPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { BillingPage } from "./pages/BillingPage";
 import { SchoolAdminSettingsPage } from "./pages/settings/SchoolAdminSettingsPage";
@@ -60,8 +60,8 @@ export default function App() {
                       <Route path="users/legacy" element={<UserManagement />} />
                       <Route path="classes" element={<ClassManagement />} />
                       <Route
-                        path="classes/:classId/gap-map"
-                        element={<AdminGapMapPage />}
+                        path="classes/:classId"
+                        element={<ClassDetailPage />}
                       />
                       <Route
                         path="settings"
