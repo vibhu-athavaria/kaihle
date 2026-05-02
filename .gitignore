@@ -12,6 +12,8 @@ venv
 CLAUDE.local.md
 .superpowers/
 docs/superpowers/*
+docs/design/specs/*
+docs/design/mockups/*
 # Node
 node_modules/
 dist/
