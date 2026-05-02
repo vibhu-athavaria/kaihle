@@ -57,9 +57,12 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    # Reverse lesson_plans changes (re-add constraint requires no NULL rows)
-    op.create_unique_constraint("lp_class_week_unique", "lesson_plans", ["class_id", "week_start"])
+    # Purge rows with NULL week_start before restoring the NOT NULL constraint and
+    # unique index. Rows created after this migration have no valid week_start and
+    # cannot be preserved under the old schema.
+    op.execute("DELETE FROM lesson_plans WHERE week_start IS NULL")
     op.alter_column("lesson_plans", "week_start", existing_type=sa.DATE(), nullable=False)
+    op.create_unique_constraint("lp_class_week_unique", "lesson_plans", ["class_id", "week_start"])
 
     # Drop diagnostic_topic_ids
     op.drop_column("assessments", "diagnostic_topic_ids")

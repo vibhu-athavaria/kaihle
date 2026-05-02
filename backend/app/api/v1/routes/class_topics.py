@@ -41,11 +41,23 @@ async def _verify_teacher_owns_class(
     current_user: CurrentUser,
     db: AsyncSession,
 ) -> None:
-    """Raise 403 if the current teacher does not own this class."""
+    """Raise 403 if the caller is not authorised to manage this class's topics.
+
+    - KAIHLE_ADMIN: bypass (cross-school access, per Rule 12).
+    - SCHOOL_ADMIN: must belong to the same school as the class.
+    - TEACHER: must be the assigned teacher of the class.
+    """
     if current_user.role == UserRole.KAIHLE_ADMIN:
         return
     service = ClassService(db)
     class_ = await service.get_class(class_id)
+    if current_user.role == UserRole.SCHOOL_ADMIN:
+        if current_user.school_id != class_.school_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this class",
+            )
+        return
     if current_user.role == UserRole.TEACHER and class_.teacher_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
