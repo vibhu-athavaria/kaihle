@@ -70,7 +70,7 @@ export default function CreateTeacherModal({ open, onOpenChange }: Props) {
   const filteredClasses = useMemo(
     () =>
       allClasses.filter((c) =>
-        `${c.name} ${c.subject_name || ""} ${c.grade_level || ""}`
+        `${c.name} ${c.subject_name || ""} ${c.grade_name || ""}`
           .toLowerCase()
           .includes(classSearch.toLowerCase()),
       ),

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout, GapMapCell } from "@kaihle/ui";
@@ -129,7 +130,7 @@ function OverviewTab({
           <div className="bg-white border border-role-school-border rounded-xl overflow-hidden">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-[#fafcfa] border-b border-role-school-border">
+                <tr className="bg-brand-surface-subtle border-b border-role-school-border">
                   {["Name", "Mastery"].map((h) => (
                     <th
                       key={h}
@@ -146,7 +147,7 @@ function OverviewTab({
                   return (
                     <tr
                       key={s.id}
-                      className="border-b border-[#f0f5ee] last:border-0"
+                      className="border-b border-brand-row-divider last:border-0"
                     >
                       <td className="px-4 py-3 text-sm font-semibold text-brand-ink">
                         {s.first_name} {s.last_name}
@@ -174,7 +175,7 @@ function OverviewTab({
               </tbody>
             </table>
             {showMore && (
-              <div className="px-4 py-3 border-t border-role-school-border bg-[#fafcfa]">
+              <div className="px-4 py-3 border-t border-role-school-border bg-brand-surface-subtle">
                 <button
                   onClick={onViewAllStudents}
                   className="text-xs font-semibold text-brand-primary hover:underline"
@@ -217,7 +218,7 @@ function StudentsTab({
     <div className="bg-white border border-role-school-border rounded-xl overflow-hidden">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="bg-[#fafcfa] border-b border-role-school-border">
+          <tr className="bg-brand-surface-subtle border-b border-role-school-border">
             {["Name", "Mastery", "Diagnostic"].map((h) => (
               <th
                 key={h}
@@ -244,7 +245,7 @@ function StudentsTab({
               return (
                 <tr
                   key={s.id}
-                  className="border-b border-[#f0f5ee] last:border-0"
+                  className="border-b border-brand-row-divider last:border-0"
                 >
                   <td className="px-4 py-3 text-sm font-semibold text-brand-ink">
                     {s.first_name} {s.last_name}
@@ -324,10 +325,16 @@ function GapMapTab({
   const subtopics = data.subtopics ?? [];
   const cells = data.cells ?? [];
 
+  const scoreMap = useMemo(() => {
+    const map = new Map<string, number | null>();
+    for (const c of cells) {
+      map.set(`${c.student_id}:${c.subtopic_id}`, c.mastery_score);
+    }
+    return map;
+  }, [cells]);
+
   const getScore = (studentId: string, subtopicId: string) =>
-    cells.find(
-      (c) => c.student_id === studentId && c.subtopic_id === subtopicId,
-    )?.mastery_score ?? null;
+    scoreMap.get(`${studentId}:${subtopicId}`) ?? null;
 
   return (
     <>
@@ -383,7 +390,11 @@ function GapMapTab({
             key={label}
             className="flex items-center gap-1.5 text-xs text-brand-body font-semibold"
           >
-            <span className={`w-2.5 h-2.5 rounded-full ${dotClass}`} />
+            <span
+              className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotClass}`}
+              aria-label={label}
+              role="img"
+            />
             {label}
           </div>
         ))}
@@ -411,14 +422,14 @@ export function ClassDetailPage() {
 
   const setTab = (tab: TabKey) => setSearchParams({ tab });
 
+  const { data: allClasses } = useSchoolClasses();
+  const classSummary = allClasses?.find((c) => c.id === classId);
+
   const {
     data: classDetail,
     isLoading: detailLoading,
     isError: detailError,
-  } = useClassDetail(classId!);
-
-  const { data: allClasses } = useSchoolClasses();
-  const classSummary = allClasses?.find((c) => c.id === classId);
+  } = useClassDetail(classId!, classSummary);
 
   const { data: enrollments, isLoading: enrollmentsLoading } =
     useClassEnrollments(classId!);
@@ -445,7 +456,7 @@ export function ClassDetailPage() {
       <div className="flex items-center gap-2 text-sm mb-4">
         <button
           onClick={() => navigate("/school-admin/classes")}
-          className="text-brand-muted font-semibold hover:text-brand-primary transition-colors"
+          className="text-brand-muted font-semibold hover:text-brand-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded-sm"
         >
           Classes
         </button>
@@ -479,7 +490,7 @@ export function ClassDetailPage() {
             <h1 className="font-display font-bold text-2xl text-brand-ink">
               {classDetail?.name}
             </h1>
-            <span className="text-xs font-bold uppercase tracking-wider text-brand-primary bg-[#f0fdf4] border border-role-school-border px-3 py-1 rounded-full whitespace-nowrap ml-4">
+            <span className="text-xs font-bold uppercase tracking-wider text-brand-primary bg-brand-green-pale border border-role-school-border px-3 py-1 rounded-full whitespace-nowrap ml-4">
               Read only
             </span>
           </div>
@@ -531,7 +542,7 @@ export function ClassDetailPage() {
           <button
             key={tab.key}
             onClick={() => setTab(tab.key)}
-            className={`px-4 pb-[10px] pt-1 text-sm font-semibold transition-colors border-b-2 -mb-px ${
+            className={`px-4 pb-[10px] pt-1 text-sm font-semibold transition-colors border-b-2 -mb-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded-sm ${
               activeTab === tab.key
                 ? "border-brand-primary text-brand-primary"
                 : "border-transparent text-brand-muted hover:text-brand-body"

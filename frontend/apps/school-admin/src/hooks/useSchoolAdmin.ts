@@ -511,45 +511,64 @@ export interface ClassDetail {
   academic_year: string;
 }
 
-export function useClassDetail(classId: string) {
+export function useClassDetail(
+  classId: string,
+  // When provided, display names are taken from the already-cached list summary
+  // and no extra API calls are needed. Falls back to fetching subjects/grades/teacher
+  // on direct navigation where the list cache may not be populated.
+  cachedSummary?: Pick<
+    ClassSummary,
+    "subject_name" | "grade_name" | "teacher_name"
+  >,
+) {
   return useQuery({
     queryKey: ["class", classId, "detail"],
     queryFn: async () => {
       const res = await apiClient.get(`/api/v1/classes/${classId}`);
       const data = res.data;
-      // The /api/v1/classes/{id} endpoint returns ClassResponse (IDs only).
-      // We need to enrich it with display names by fetching the related data.
-      if (!data.subject_name || !data.grade_name) {
-        const [subjectsRes, gradesRes, teacherRes] = await Promise.all([
-          apiClient.get("/api/v1/subjects"),
-          apiClient.get("/api/v1/grades"),
-          data.teacher_id
-            ? apiClient
-                .get(`/api/v1/teachers/${data.teacher_id}`)
-                .catch(() => null)
-            : null,
-        ]);
-        const subjects = subjectsRes.data as Array<{
-          id: string;
-          name: string;
-          code: string;
-        }>;
-        const grades = gradesRes.data as Array<{ id: string; level: number }>;
-        const subject = subjects.find((s) => s.id === data.subject_id);
-        const grade = grades.find((g) => g.id === data.grade_id);
+
+      if (cachedSummary?.subject_name && cachedSummary?.grade_name) {
         return {
           id: data.id,
           name: data.name,
           subject_id: data.subject_id,
-          subject_name: subject?.name ?? data.subject_name ?? "",
-          grade_name: grade ? `Grade ${grade.level}` : (data.grade_name ?? ""),
-          teacher_name: teacherRes
-            ? `${teacherRes.data.first_name} ${teacherRes.data.last_name}`.trim()
-            : null,
+          subject_name: cachedSummary.subject_name,
+          grade_name: cachedSummary.grade_name,
+          teacher_name: cachedSummary.teacher_name ?? null,
           academic_year: data.academic_year,
         } as ClassDetail;
       }
-      return data as ClassDetail;
+
+      // Fallback: enrich with display names via parallel fetches (direct navigation)
+      // TODO: remove once /api/v1/classes/{id} returns display names directly
+      const [subjectsRes, gradesRes, teacherRes] = await Promise.all([
+        apiClient.get("/api/v1/subjects"),
+        apiClient.get("/api/v1/grades"),
+        data.teacher_id
+          ? apiClient
+              .get(`/api/v1/teachers/${data.teacher_id}`)
+              .catch(() => null)
+          : null,
+      ]);
+      const subjects = subjectsRes.data as Array<{
+        id: string;
+        name: string;
+        code: string;
+      }>;
+      const grades = gradesRes.data as Array<{ id: string; level: number }>;
+      const subject = subjects.find((s) => s.id === data.subject_id);
+      const grade = grades.find((g) => g.id === data.grade_id);
+      return {
+        id: data.id,
+        name: data.name,
+        subject_id: data.subject_id,
+        subject_name: subject?.name ?? data.subject_name ?? "",
+        grade_name: grade ? `Grade ${grade.level}` : (data.grade_name ?? ""),
+        teacher_name: teacherRes
+          ? `${teacherRes.data.first_name} ${teacherRes.data.last_name}`.trim()
+          : null,
+        academic_year: data.academic_year,
+      } as ClassDetail;
     },
     enabled: !!classId,
     staleTime: 5 * 60 * 1000,
