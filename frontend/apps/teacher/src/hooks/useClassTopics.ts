@@ -14,7 +14,7 @@ export interface ClassTopicItem {
 }
 
 export interface AvailableCurriculumTopic {
-  id: string;
+  curriculum_topic_id: string;
   topic_name: string;
   subtopic_count: number;
   sequence_order: number;
@@ -40,19 +40,7 @@ export function useAvailableCurriculumTopics(classId: string | undefined) {
       const res = await apiClient.get(
         `/api/v1/classes/${classId}/topics/available`,
       );
-      return (
-        res.data as {
-          id: string;
-          topic_name: string;
-          subtopic_count: number;
-          sequence_order: number;
-        }[]
-      ).map((t) => ({
-        id: t.id,
-        topic_name: t.topic_name,
-        subtopic_count: t.subtopic_count,
-        sequence_order: t.sequence_order,
-      }));
+      return res.data as AvailableCurriculumTopic[];
     },
     enabled: !!classId,
   });

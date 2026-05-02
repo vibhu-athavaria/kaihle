@@ -54,10 +54,10 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
   const upcoming = sorted.filter((t) => !t.is_covered);
 
   async function handleAdd(topic: AvailableCurriculumTopic) {
-    setMutating(topic.id);
+    setMutating(topic.curriculum_topic_id);
     try {
       await addTopic.mutateAsync({
-        curriculum_topic_id: topic.id,
+        curriculum_topic_id: topic.curriculum_topic_id,
         sequence_order: sorted.length,
       });
     } finally {
@@ -283,7 +283,7 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
             ) : (
               available.map((t: AvailableCurriculumTopic) => (
                 <div
-                  key={t.id}
+                  key={t.curriculum_topic_id}
                   className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50"
                 >
                   <div className="min-w-0">
@@ -297,7 +297,7 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
                   </div>
                   <button
                     type="button"
-                    disabled={mutating === t.id}
+                    disabled={mutating === t.curriculum_topic_id}
                     onClick={() => handleAdd(t)}
                     aria-label={`Add ${t.topic_name}`}
                     className="flex-shrink-0 rounded-full bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white transition-all px-3 py-1 text-[10px] font-bold disabled:opacity-50"
