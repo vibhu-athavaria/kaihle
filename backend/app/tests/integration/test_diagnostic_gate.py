@@ -1,10 +1,13 @@
-"""Integration tests for per-class diagnostic gate on student content routes.
+"""Integration tests for student content access routes.
 
 Tests that verify:
-- Students cannot access class content (topics, resources, etc.) until diagnostic is complete
-- The diagnostic endpoint itself is NOT gated
-- Teachers and admins bypass the diagnostic gate
+- Students can access class content (topics, resources, etc.) regardless of diagnostic status
+- The diagnostic endpoint itself is always accessible
+- Teachers and admins can access class content
 - Non-enrolled students get 404
+
+This reflects the soft-gate design per spec:
+2026-05-02-class-curriculum-teacher-control-design Section 5.
 
 Run with: pytest backend/app/tests/integration/test_diagnostic_gate.py -v
 """
@@ -124,13 +127,13 @@ async def student_with_completed_enrollment(
 
 
 @pytest.mark.asyncio
-async def test_class_topics_when_diagnostic_pending_then_returns_403(
+async def test_class_topics_when_diagnostic_pending_then_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
     student_with_enrollment: tuple[User, ClassEnrollment],
     test_class: Class,
 ) -> None:
-    """Student with PENDING diagnostic gets 403 when accessing class topics."""
+    """Student with PENDING diagnostic can access class topics (soft gate)."""
     student, enrollment = student_with_enrollment
     headers = make_auth_header(student)
 
@@ -139,20 +142,19 @@ async def test_class_topics_when_diagnostic_pending_then_returns_403(
         headers=headers,
     )
 
-    assert response.status_code == 403
-    data = response.json()
-    assert data["detail"]["code"] == "DIAGNOSTIC_INCOMPLETE"
-    assert data["detail"]["diagnostic_status"] == "PENDING"
+    assert response.status_code == 200
+    # Returns empty list because routes are stubs (no actual topics data)
+    assert response.json() == []
 
 
 @pytest.mark.asyncio
-async def test_class_topics_when_diagnostic_in_progress_then_returns_403(
+async def test_class_topics_when_diagnostic_in_progress_then_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
     student_with_in_progress_enrollment: tuple[User, ClassEnrollment],
     test_class: Class,
 ) -> None:
-    """Student with IN_PROGRESS diagnostic gets 403 when accessing class topics."""
+    """Student with IN_PROGRESS diagnostic can access class topics (soft gate)."""
     student, enrollment = student_with_in_progress_enrollment
     headers = make_auth_header(student)
 
@@ -161,10 +163,8 @@ async def test_class_topics_when_diagnostic_in_progress_then_returns_403(
         headers=headers,
     )
 
-    assert response.status_code == 403
-    data = response.json()
-    assert data["detail"]["code"] == "DIAGNOSTIC_INCOMPLETE"
-    assert data["detail"]["diagnostic_status"] == "IN_PROGRESS"
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 @pytest.mark.asyncio
@@ -184,7 +184,6 @@ async def test_class_topics_when_diagnostic_completed_then_returns_200(
     )
 
     assert response.status_code == 200
-    # Returns empty list because routes are stubs (no actual topics data)
     assert response.json() == []
 
 
@@ -193,7 +192,7 @@ async def test_diagnostic_endpoint_when_diagnostic_pending_then_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """Diagnostic endpoint is NOT gated - student can always access it.
+    """Diagnostic endpoint is always accessible - student can always access it.
 
     Real implementation (M1-4-T1) requires an active system-generated assessment
     and a corresponding student attempt row. This test creates a self-contained
@@ -304,13 +303,13 @@ async def test_diagnostic_endpoint_when_diagnostic_pending_then_returns_200(
 
 
 @pytest.mark.asyncio
-async def test_class_topics_when_teacher_role_then_bypasses_gate(
+async def test_class_topics_when_teacher_role_then_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
     test_teacher: User,
     test_class: Class,
 ) -> None:
-    """Teachers bypass the diagnostic gate and can access class topics."""
+    """Teachers can access class topics."""
     headers = make_auth_header(test_teacher)
 
     response = await client.get(
@@ -322,13 +321,13 @@ async def test_class_topics_when_teacher_role_then_bypasses_gate(
 
 
 @pytest.mark.asyncio
-async def test_class_topics_when_school_admin_role_then_bypasses_gate(
+async def test_class_topics_when_school_admin_role_then_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
     school_admin: User,
     test_class: Class,
 ) -> None:
-    """School admins bypass the diagnostic gate and can access class topics."""
+    """School admins can access class topics."""
     headers = make_auth_header(school_admin)
 
     response = await client.get(
@@ -371,13 +370,13 @@ async def test_class_topics_when_student_not_enrolled_then_returns_404(
 
 
 @pytest.mark.asyncio
-async def test_class_resources_when_diagnostic_pending_then_returns_403(
+async def test_class_resources_when_diagnostic_pending_then_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
     student_with_enrollment: tuple[User, ClassEnrollment],
     test_class: Class,
 ) -> None:
-    """Student with PENDING diagnostic gets 403 when accessing topic resources."""
+    """Student with PENDING diagnostic can access topic resources (soft gate)."""
     student, enrollment = student_with_enrollment
     headers = make_auth_header(student)
     topic_id = uuid.uuid4()
@@ -387,17 +386,17 @@ async def test_class_resources_when_diagnostic_pending_then_returns_403(
         headers=headers,
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_class_lesson_plan_when_diagnostic_pending_then_returns_403(
+async def test_class_lesson_plan_when_diagnostic_pending_then_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
     student_with_enrollment: tuple[User, ClassEnrollment],
     test_class: Class,
 ) -> None:
-    """Student with PENDING diagnostic gets 403 when accessing lesson plan."""
+    """Student with PENDING diagnostic can access lesson plan (soft gate)."""
     student, enrollment = student_with_enrollment
     headers = make_auth_header(student)
     topic_id = uuid.uuid4()
@@ -407,17 +406,17 @@ async def test_class_lesson_plan_when_diagnostic_pending_then_returns_403(
         headers=headers,
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_class_quizzes_when_diagnostic_pending_then_returns_403(
+async def test_class_quizzes_when_diagnostic_pending_then_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
     student_with_enrollment: tuple[User, ClassEnrollment],
     test_class: Class,
 ) -> None:
-    """Student with PENDING diagnostic gets 403 when accessing topic quizzes."""
+    """Student with PENDING diagnostic can access topic quizzes (soft gate)."""
     student, enrollment = student_with_enrollment
     headers = make_auth_header(student)
     topic_id = uuid.uuid4()
@@ -427,7 +426,7 @@ async def test_class_quizzes_when_diagnostic_pending_then_returns_403(
         headers=headers,
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -435,7 +434,7 @@ async def test_diagnostic_endpoint_always_accessible_for_in_progress_student(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """Student with IN_PROGRESS diagnostic can still access the diagnostic endpoint.
+    """Student with IN_PROGRESS diagnostic can access the diagnostic endpoint.
 
     Real implementation (M1-4-T1) requires an active system-generated assessment
     and a corresponding student attempt row. This test creates a self-contained
@@ -546,13 +545,13 @@ async def test_diagnostic_endpoint_always_accessible_for_in_progress_student(
 
 
 @pytest.mark.asyncio
-async def test_class_topics_when_kaihle_admin_role_then_bypasses_gate(
+async def test_class_topics_when_kaihle_admin_role_then_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
     kaihle_admin: User,
     test_class: Class,
 ) -> None:
-    """Kaihle admins bypass the diagnostic gate and can access class topics."""
+    """Kaihle admins can access class topics."""
     headers = make_auth_header(kaihle_admin)
 
     response = await client.get(

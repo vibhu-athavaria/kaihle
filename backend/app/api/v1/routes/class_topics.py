@@ -15,10 +15,12 @@ Routes:
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
+from app.models.school import ClassEnrollment
 from app.models.user import UserRole
 from app.schemas.class_topic import (
     ClassTopicAdd,
@@ -34,6 +36,27 @@ from app.services.class_topic_service import (
 )
 
 router = APIRouter(tags=["class-topics"])
+
+
+async def _verify_student_enrolled(
+    class_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession,
+) -> None:
+    """Raise 404 if the student is not enrolled in the class."""
+    result = await db.execute(
+        select(ClassEnrollment).where(
+            ClassEnrollment.class_id == class_id,
+            ClassEnrollment.student_id == current_user.id,
+            ClassEnrollment.is_active.is_(True),
+        )
+    )
+    enrollment = result.scalar_one_or_none()
+    if enrollment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You are not enrolled in this class",
+        )
 
 
 async def _verify_teacher_owns_class(
@@ -68,10 +91,20 @@ async def _verify_teacher_owns_class(
 @router.get("/classes/{class_id}/topics", response_model=list[ClassTopicResponse])
 async def list_class_topics(
     class_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    current_user: CurrentUser = Depends(
+        require_role(UserRole.STUDENT, UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> list[ClassTopicResponse]:
-    """List topics for a class, ordered by sequence_order."""
+    """List topics for a class, ordered by sequence_order.
+
+    Students must be enrolled in the class to view topics.
+    Teachers, admins, and Kaihle admins can view topics for their classes.
+    """
+    # Verify enrollment for students
+    if current_user.role == UserRole.STUDENT:
+        await _verify_student_enrolled(class_id, current_user, db)
+
     service = ClassTopicService(db)
     return await service.list_topics(class_id)
 
