@@ -35,10 +35,10 @@ export function useClassTopics(classId: string | undefined) {
 
 export function useAvailableCurriculumTopics(classId: string | undefined) {
   return useQuery<AvailableCurriculumTopic[]>({
-    queryKey: ["class", classId, "curriculum-topics"],
+    queryKey: ["class", classId, "topics-available"],
     queryFn: async () => {
       const res = await apiClient.get(
-        `/api/v1/classes/${classId}/curriculum-topics`,
+        `/api/v1/classes/${classId}/topics/available`,
       );
       return (
         res.data as {
@@ -76,7 +76,7 @@ export function useAddClassTopic(classId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["class", classId, "topics"] });
       queryClient.invalidateQueries({
-        queryKey: ["class", classId, "curriculum-topics"],
+        queryKey: ["class", classId, "topics-available"],
       });
     },
   });
@@ -91,8 +91,32 @@ export function useRemoveClassTopic(classId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["class", classId, "topics"] });
       queryClient.invalidateQueries({
-        queryKey: ["class", classId, "curriculum-topics"],
+        queryKey: ["class", classId, "topics-available"],
       });
+    },
+  });
+}
+
+export function useUpdateClassTopic(classId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      topicId,
+      is_covered,
+      sequence_order,
+    }: {
+      topicId: string;
+      is_covered?: boolean;
+      sequence_order?: number;
+    }) => {
+      const res = await apiClient.put(
+        `/api/v1/classes/${classId}/topics/${topicId}`,
+        { is_covered, sequence_order },
+      );
+      return res.data as ClassTopicItem;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["class", classId, "topics"] });
     },
   });
 }

@@ -7,8 +7,9 @@ import {
   useGrades,
   useSubjects,
   useSchoolUsers,
+  useSchoolStudents,
   useCreateClass,
-  type User,
+  type StudentListItem,
 } from "../hooks/useSchoolAdmin";
 
 interface CreateClassModalProps {
@@ -104,9 +105,7 @@ export function CreateClassModal({
   const { data: teachers, isLoading: teachersLoading } = useSchoolUsers(
     UserRole.TEACHER,
   );
-  const { data: allStudents, isLoading: studentsLoading } = useSchoolUsers(
-    UserRole.STUDENT,
-  );
+  const { data: allStudents, isLoading: studentsLoading } = useSchoolStudents();
 
   const createClass = useCreateClass();
 
@@ -117,9 +116,7 @@ export function CreateClassModal({
     return grades.find((g) => g.id === gradeId)?.level ?? null;
   }, [gradeId, grades]);
 
-  // Students matching the selected grade, with "in another class" detection
-  // We use class_count as a proxy — students already in at least one class get the badge.
-  const gradeStudents = useMemo<User[]>(() => {
+  const gradeStudents = useMemo<StudentListItem[]>(() => {
     if (!allStudents) return [];
     if (selectedGradeLevel === null) return [];
     return allStudents.filter((s) => s.grade_level === selectedGradeLevel);
@@ -273,7 +270,7 @@ export function CreateClassModal({
         </div>
       ) : (
         <form onSubmit={handleSubmit} noValidate className="mt-4 space-y-5">
-          {/* Row 1: Class name + Grade */}
+          {/* Row 1: Class name + Curriculum */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label
@@ -295,6 +292,32 @@ export function CreateClassModal({
               )}
             </div>
 
+            <SelectField
+              id="curriculum"
+              label="Curriculum *"
+              value={curriculumId}
+              onChange={(v) => {
+                setCurriculumId(v);
+                setGradeId("");
+                setSubjectId("");
+                setSelectedStudentIds(new Set());
+              }}
+              disabled={curriculaLoading}
+              error={errors.curriculum}
+            >
+              <option value="">
+                {curriculaLoading ? "Loading…" : "Select curriculum"}
+              </option>
+              {subscribedCurricula?.map((c) => (
+                <option key={c.curriculum_id} value={c.curriculum_id}>
+                  {c.curriculum_name}
+                </option>
+              ))}
+            </SelectField>
+          </div>
+
+          {/* Row 2: Grade + Subject */}
+          <div className="grid grid-cols-2 gap-4">
             <SelectField
               id="grade"
               label="Grade *"
@@ -318,32 +341,6 @@ export function CreateClassModal({
               {grades?.map((g) => (
                 <option key={g.id} value={g.id}>
                   Grade {g.level}
-                </option>
-              ))}
-            </SelectField>
-          </div>
-
-          {/* Row 2: Curriculum + Subject */}
-          <div className="grid grid-cols-2 gap-4">
-            <SelectField
-              id="curriculum"
-              label="Curriculum *"
-              value={curriculumId}
-              onChange={(v) => {
-                setCurriculumId(v);
-                setGradeId("");
-                setSubjectId("");
-                setSelectedStudentIds(new Set());
-              }}
-              disabled={curriculaLoading}
-              error={errors.curriculum}
-            >
-              <option value="">
-                {curriculaLoading ? "Loading…" : "Select curriculum"}
-              </option>
-              {subscribedCurricula?.map((c) => (
-                <option key={c.curriculum_id} value={c.curriculum_id}>
-                  {c.curriculum_name}
                 </option>
               ))}
             </SelectField>
@@ -371,9 +368,9 @@ export function CreateClassModal({
                 ))}
                 {!allSubjects?.length && (
                   <span className="text-sm text-brand-muted">
-                    {gradeId
+                    {curriculumId
                       ? "No subjects for this curriculum"
-                      : "Select grade first"}
+                      : "Select curriculum first"}
                   </span>
                 )}
               </div>
@@ -510,10 +507,7 @@ export function CreateClassModal({
 
                   {filteredStudents.map((s) => {
                     const checked = selectedStudentIds.has(s.id);
-                    // Use class_count from StudentListItem if available — proxy for "already in a class"
-                    // The User type from useSchoolUsers doesn't carry class_count; we fall back to
-                    // checking via allStudents cast where we can access the richer StudentListItem shape.
-                    const inAnotherClass = false; // placeholder — enriched in future task
+                    const inAnotherClass = (s.class_count ?? 0) > 0;
 
                     return (
                       <label

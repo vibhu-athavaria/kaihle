@@ -1,18 +1,12 @@
 import { useState, useMemo } from "react";
-import {
-  Check,
-  ChevronUp,
-  ChevronDown,
-  Minus,
-  Plus,
-  Search,
-} from "lucide-react";
+import { Check, X } from "lucide-react";
 import { Button, Modal } from "@kaihle/ui";
 import {
   useClassTopics,
   useAvailableCurriculumTopics,
   useAddClassTopic,
   useRemoveClassTopic,
+  useUpdateClassTopic,
   useReorderClassTopics,
   useDesignTier1Diagnostic,
   type ClassTopicItem,
@@ -29,7 +23,7 @@ interface ClassSetupWizardProps {
 
 type Step = 1 | 2;
 
-// ── Step 1: Topic picker ──────────────────────────────────────────────────────
+// ── Step 1: Topic list ────────────────────────────────────────────────────────
 
 interface Step1Props {
   classId: string;
@@ -37,7 +31,7 @@ interface Step1Props {
   onCancel: () => void;
 }
 
-function TopicPickerStep({ classId, onNext, onCancel }: Step1Props) {
+function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
   const { data: classTopics = [], isLoading: loadingTopics } =
     useClassTopics(classId);
   const { data: available = [], isLoading: loadingAvailable } =
@@ -45,70 +39,234 @@ function TopicPickerStep({ classId, onNext, onCancel }: Step1Props) {
 
   const addTopic = useAddClassTopic(classId);
   const removeTopic = useRemoveClassTopic(classId);
+  const updateTopic = useUpdateClassTopic(classId);
   const reorderTopics = useReorderClassTopics(classId);
 
-  const [search, setSearch] = useState("");
+  const [showPicker, setShowPicker] = useState(false);
   const [mutating, setMutating] = useState<string | null>(null);
 
-  const sortedClassTopics = useMemo(
+  const sorted = useMemo(
     () => [...classTopics].sort((a, b) => a.sequence_order - b.sequence_order),
     [classTopics],
   );
 
-  const filteredAvailable = useMemo(() => {
-    const q = search.toLowerCase();
-    return available.filter((t) => t.topic_name.toLowerCase().includes(q));
-  }, [available, search]);
+  const covered = sorted.filter((t) => t.is_covered);
+  const upcoming = sorted.filter((t) => !t.is_covered);
 
   async function handleAdd(topic: AvailableCurriculumTopic) {
     setMutating(topic.id);
     try {
       await addTopic.mutateAsync({
         curriculum_topic_id: topic.id,
-        sequence_order: sortedClassTopics.length,
+        sequence_order: sorted.length,
       });
     } finally {
       setMutating(null);
     }
   }
 
-  async function handleRemove(topicId: string) {
-    setMutating(topicId);
+  async function handleRemove(id: string) {
+    setMutating(id);
     try {
-      await removeTopic.mutateAsync(topicId);
+      await removeTopic.mutateAsync(id);
+    } finally {
+      setMutating(null);
+    }
+  }
+
+  async function handleMarkCovered(topic: ClassTopicItem) {
+    setMutating(topic.id);
+    try {
+      await updateTopic.mutateAsync({
+        topicId: topic.id,
+        is_covered: !topic.is_covered,
+      });
     } finally {
       setMutating(null);
     }
   }
 
   async function handleMove(index: number, direction: "up" | "down") {
-    const reordered = [...sortedClassTopics];
+    const reordered = [...sorted];
     const swapIdx = direction === "up" ? index - 1 : index + 1;
+    if (swapIdx < 0 || swapIdx >= reordered.length) return;
     [reordered[index], reordered[swapIdx]] = [
       reordered[swapIdx],
       reordered[index],
     ];
-    const items = reordered.map((t, i) => ({
-      id: t.id,
-      sequence_order: i,
-    }));
-    await reorderTopics.mutateAsync(items);
+    await reorderTopics.mutateAsync(
+      reordered.map((t, i) => ({ id: t.id, sequence_order: i })),
+    );
   }
 
   const loading = loadingTopics || loadingAvailable;
 
+  function TopicRow({
+    topic,
+    isCovered,
+    overallIndex,
+  }: {
+    topic: ClassTopicItem;
+    isCovered: boolean;
+    overallIndex: number;
+  }) {
+    return (
+      <div
+        className={[
+          "flex items-center gap-3 px-[14px] py-3 border-b border-[#f3f4f6] last:border-b-0",
+          isCovered ? "bg-[#fafffe]" : "bg-white",
+        ].join(" ")}
+      >
+        {/* Drag-handle style up/down arrows (no library needed) */}
+        <div className="flex flex-col gap-0.5 flex-shrink-0">
+          <button
+            type="button"
+            disabled={overallIndex === 0 || reorderTopics.isPending}
+            onClick={() => handleMove(overallIndex, "up")}
+            aria-label={`Move ${topic.topic_name} up`}
+            className="text-[#d1d5db] hover:text-[#c9932a] text-[10px] leading-none disabled:opacity-30 transition-colors"
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            disabled={
+              overallIndex === sorted.length - 1 || reorderTopics.isPending
+            }
+            onClick={() => handleMove(overallIndex, "down")}
+            aria-label={`Move ${topic.topic_name} down`}
+            className="text-[#d1d5db] hover:text-[#c9932a] text-[10px] leading-none disabled:opacity-30 transition-colors"
+          >
+            ▼
+          </button>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-semibold text-[#374151] truncate">
+            {topic.topic_name}
+          </p>
+          <p className="text-[11px] text-brand-muted mt-px">
+            {topic.subtopic_count} subtopic
+            {topic.subtopic_count !== 1 ? "s" : ""} · Seq.{" "}
+            {topic.sequence_order + 1}
+          </p>
+        </div>
+
+        {isCovered ? (
+          <span className="flex-shrink-0 bg-[#f0fdf4] border border-[#d4e4d8] rounded-full px-[10px] py-[3px] text-[10px] font-bold text-[#1a5c38] whitespace-nowrap">
+            ✓ Covered
+          </span>
+        ) : (
+          <button
+            type="button"
+            disabled={mutating === topic.id}
+            onClick={() => handleMarkCovered(topic)}
+            className="flex-shrink-0 bg-white border border-[#e5e7eb] rounded-full px-[10px] py-1 text-[10px] font-semibold text-[#6b7280] hover:border-brand-gold hover:text-brand-gold transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            Mark covered
+          </button>
+        )}
+
+        {isCovered && (
+          <button
+            type="button"
+            disabled={mutating === topic.id}
+            onClick={() => handleMarkCovered(topic)}
+            className="flex-shrink-0 bg-white border border-[#e5e7eb] rounded-full px-[10px] py-1 text-[10px] font-semibold text-[#6b7280] hover:border-brand-gold hover:text-brand-gold transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            Unmark
+          </button>
+        )}
+
+        <button
+          type="button"
+          disabled={mutating === topic.id}
+          onClick={() => handleRemove(topic.id)}
+          aria-label={`Remove ${topic.topic_name}`}
+          className="flex-shrink-0 w-7 h-7 rounded-[6px] bg-[#fee2e2] flex items-center justify-center text-[#dc2626] hover:bg-red-200 transition-colors disabled:opacity-50"
+        >
+          <X className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
-      <p className="text-sm text-brand-body">
-        Choose which curriculum topics this class will cover. Students will see
-        topics in the order you set here.
-      </p>
+      <div>
+        <h3 className="font-display font-bold text-lg text-brand-ink mb-1">
+          Choose and order your topics
+        </h3>
+        <p className="text-xs text-brand-body">
+          Select all topics you'll cover this year. Reorder with the arrows.
+          Mark any you've already taught as covered — they'll appear first.
+        </p>
+      </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {/* Left: available curriculum topics */}
-        <div className="border border-role-teacher-border rounded-xl overflow-hidden">
-          <div className="px-3 py-2.5 bg-gray-50 border-b border-role-teacher-border">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-role-teacher-muted">
+      {loading ? (
+        <div className="space-y-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="h-14 bg-gray-100 rounded-lg animate-pulse"
+            />
+          ))}
+        </div>
+      ) : sorted.length === 0 ? (
+        <div className="text-center py-8 text-sm text-brand-muted">
+          No topics added yet. Use the button below to add from the curriculum.
+        </div>
+      ) : (
+        <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+          {covered.length > 0 && (
+            <>
+              <div className="px-[14px] py-2 text-[10px] font-bold uppercase tracking-[0.6px] bg-[#f0fdf4] border-b border-[#d4e4d8] text-[#1a5c38]">
+                Already covered ({covered.length})
+              </div>
+              {covered.map((t) => (
+                <TopicRow
+                  key={t.id}
+                  topic={t}
+                  isCovered={true}
+                  overallIndex={sorted.indexOf(t)}
+                />
+              ))}
+            </>
+          )}
+          {upcoming.length > 0 && (
+            <>
+              <div className="px-[14px] py-2 text-[10px] font-bold uppercase tracking-[0.6px] bg-[#fffbeb] border-b border-[#fde68a] text-[#92400e]">
+                To be taught ({upcoming.length})
+              </div>
+              {upcoming.map((t) => (
+                <TopicRow
+                  key={t.id}
+                  topic={t}
+                  isCovered={false}
+                  overallIndex={sorted.indexOf(t)}
+                />
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Dashed add-topic button */}
+      <button
+        type="button"
+        onClick={() => setShowPicker((v) => !v)}
+        className="w-full border-2 border-dashed border-[#e5e7eb] rounded-lg py-[13px] text-xs text-brand-muted hover:border-brand-gold hover:text-brand-gold transition-colors"
+      >
+        {showPicker
+          ? "↑ Hide curriculum topics"
+          : "+ Add topic from curriculum"}
+      </button>
+
+      {/* Expandable curriculum picker */}
+      {showPicker && (
+        <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+          <div className="px-3 py-2.5 bg-gray-50 border-b border-[#e5e7eb]">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">
               Curriculum Topics
               {available.length > 0 && (
                 <span className="ml-1.5 font-medium normal-case tracking-normal text-gray-400">
@@ -117,43 +275,13 @@ function TopicPickerStep({ classId, onNext, onCancel }: Step1Props) {
               )}
             </p>
           </div>
-
-          <div className="p-2">
-            <div className="relative mb-2">
-              <Search
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400"
-                aria-hidden="true"
-              />
-              <input
-                type="text"
-                placeholder="Search topics…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-brand-border bg-white text-brand-ink font-sans text-xs focus:outline-none focus:ring-2 focus:ring-brand-primary/30"
-              />
-            </div>
-
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {loading && (
-                <div className="space-y-1.5 p-1">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div
-                      key={i}
-                      className="h-9 rounded-lg bg-gray-100 animate-pulse"
-                    />
-                  ))}
-                </div>
-              )}
-
-              {!loading && filteredAvailable.length === 0 && (
-                <p className="text-center py-6 text-xs text-brand-muted">
-                  {available.length === 0
-                    ? "All topics added to class."
-                    : "No topics match your search."}
-                </p>
-              )}
-
-              {filteredAvailable.map((t) => (
+          <div className="p-2 space-y-1 max-h-48 overflow-y-auto">
+            {available.length === 0 ? (
+              <p className="text-center py-4 text-xs text-brand-muted">
+                All curriculum topics already added.
+              </p>
+            ) : (
+              available.map((t: AvailableCurriculumTopic) => (
                 <div
                   key={t.id}
                   className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50"
@@ -172,104 +300,31 @@ function TopicPickerStep({ classId, onNext, onCancel }: Step1Props) {
                     disabled={mutating === t.id}
                     onClick={() => handleAdd(t)}
                     aria-label={`Add ${t.topic_name}`}
-                    className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white transition-all flex items-center justify-center disabled:opacity-50"
+                    className="flex-shrink-0 rounded-full bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white transition-all px-3 py-1 text-[10px] font-bold disabled:opacity-50"
                   >
-                    <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                    + Add
                   </button>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: class topic list (ordered) */}
-        <div className="border border-role-teacher-border rounded-xl overflow-hidden">
-          <div className="px-3 py-2.5 bg-gray-50 border-b border-role-teacher-border">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-role-teacher-muted">
-              Class Topics
-              {sortedClassTopics.length > 0 && (
-                <span className="ml-1.5 font-medium normal-case tracking-normal text-gray-400">
-                  — {sortedClassTopics.length} selected
-                </span>
-              )}
-            </p>
-          </div>
-
-          <div className="p-2 space-y-1 max-h-[296px] overflow-y-auto">
-            {!loading && sortedClassTopics.length === 0 && (
-              <p className="text-center py-8 text-xs text-brand-muted">
-                Add topics from the left panel.
-              </p>
+              ))
             )}
-
-            {sortedClassTopics.map((t, idx) => (
-              <div
-                key={t.id}
-                className="flex items-center gap-1.5 px-2 py-2 rounded-lg border border-role-teacher-border bg-white"
-              >
-                <span className="w-5 text-center text-[10px] font-bold text-brand-muted flex-shrink-0">
-                  {idx + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-brand-ink truncate">
-                    {t.topic_name}
-                  </p>
-                  <p className="text-[10px] text-brand-muted">
-                    {t.subtopic_count} subtopic
-                    {t.subtopic_count !== 1 ? "s" : ""}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-0.5 flex-shrink-0">
-                  <button
-                    type="button"
-                    disabled={idx === 0 || reorderTopics.isPending}
-                    onClick={() => handleMove(idx, "up")}
-                    aria-label={`Move ${t.topic_name} up`}
-                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-100 disabled:opacity-30 transition-colors"
-                  >
-                    <ChevronUp className="w-3 h-3" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={
-                      idx === sortedClassTopics.length - 1 ||
-                      reorderTopics.isPending
-                    }
-                    onClick={() => handleMove(idx, "down")}
-                    aria-label={`Move ${t.topic_name} down`}
-                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-100 disabled:opacity-30 transition-colors"
-                  >
-                    <ChevronDown className="w-3 h-3" aria-hidden="true" />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  disabled={mutating === t.id}
-                  onClick={() => handleRemove(t.id)}
-                  aria-label={`Remove ${t.topic_name}`}
-                  className="flex-shrink-0 w-6 h-6 rounded-full text-gray-400 hover:bg-red-50 hover:text-brand-red transition-all flex items-center justify-center disabled:opacity-50"
-                >
-                  <Minus className="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            ))}
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="flex gap-3 pt-1">
-        <Button type="button" variant="secondary" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          variant="primary"
-          onClick={onNext}
-          disabled={sortedClassTopics.length === 0}
-          className="flex-1"
-        >
-          Next: Design Diagnostic →
-        </Button>
+      <div className="flex justify-end pt-1">
+        <div className="flex gap-3">
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={onNext}
+            disabled={sorted.length === 0}
+          >
+            Next: Design Diagnostic →
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -284,25 +339,31 @@ interface Step2Props {
   onDone: () => void;
 }
 
+const QUESTIONS_PER_TOPIC = 10;
+
 function DiagnosticBuilderStep({
   classId,
   classTopics,
   onBack,
   onDone,
 }: Step2Props) {
-  const sortedTopics = useMemo(
+  const sorted = useMemo(
     () => [...classTopics].sort((a, b) => a.sequence_order - b.sequence_order),
     [classTopics],
   );
 
   const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(
-    () => new Set(sortedTopics.map((t) => t.curriculum_topic_id)),
+    () => new Set(sorted.map((t) => t.curriculum_topic_id)),
   );
-  const [questionCount, setQuestionCount] = useState(20);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const designDiagnostic = useDesignTier1Diagnostic(classId);
+
+  const totalQuestions = selectedTopicIds.size * QUESTIONS_PER_TOPIC;
+
+  const covered = sorted.filter((t) => t.is_covered);
+  const upcoming = sorted.filter((t) => !t.is_covered);
 
   function toggleTopic(curriculumTopicId: string) {
     setSelectedTopicIds((prev) => {
@@ -323,13 +384,13 @@ function DiagnosticBuilderStep({
     try {
       await designDiagnostic.mutateAsync({
         topic_ids: Array.from(selectedTopicIds),
-        question_count: questionCount,
+        question_count: totalQuestions,
       });
       onDone();
     } catch (err: unknown) {
       if (err instanceof Error && err.message.includes("422")) {
         setError(
-          "Not enough questions in the bank for these topics. Try selecting fewer topics or reducing the question count.",
+          "Not enough questions in the bank for these topics. Try selecting fewer topics.",
         );
       } else {
         setError("Something went wrong. Please try again.");
@@ -339,89 +400,110 @@ function DiagnosticBuilderStep({
     }
   }
 
+  function TopicDiagRow({
+    topic,
+    isCovered,
+  }: {
+    topic: ClassTopicItem;
+    isCovered: boolean;
+  }) {
+    const checked = selectedTopicIds.has(topic.curriculum_topic_id);
+    return (
+      <label
+        className={[
+          "flex items-center gap-3 px-[14px] py-3 border-b border-[#f3f4f6] last:border-b-0 cursor-pointer",
+          !checked ? "opacity-60" : "",
+        ].join(" ")}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={() => toggleTopic(topic.curriculum_topic_id)}
+          className="w-4 h-4 rounded border-brand-border text-brand-gold accent-[#c9932a] focus:ring-[#c9932a] flex-shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <p
+            className={[
+              "text-[13px] font-semibold truncate",
+              checked ? "text-[#374151]" : "text-[#9ca3af]",
+            ].join(" ")}
+          >
+            {topic.topic_name}
+          </p>
+          <p
+            className={[
+              "text-[11px] mt-px",
+              checked ? "text-brand-muted" : "text-[#d1d5db]",
+            ].join(" ")}
+          >
+            ~{QUESTIONS_PER_TOPIC} questions · Mixed difficulty
+          </p>
+        </div>
+        {isCovered && checked && (
+          <span className="flex-shrink-0 bg-[#f0fdf4] border border-[#d4e4d8] rounded-full px-[10px] py-[3px] text-[10px] font-bold text-[#1a5c38] whitespace-nowrap">
+            Covered
+          </span>
+        )}
+        {!checked && (
+          <span className="flex-shrink-0 text-[10px] text-brand-muted">
+            Unselected
+          </span>
+        )}
+      </label>
+    );
+  }
+
   return (
     <div className="space-y-5">
-      <p className="text-sm text-brand-body">
-        Select which topics to include in the Tier 1 diagnostic and set the
-        number of questions. The diagnostic will be created as a{" "}
-        <strong>draft</strong> — you can review and publish it from the
-        Assessments tab.
-      </p>
-
-      {/* Topic selection */}
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-role-teacher-muted mb-2">
-          Topics to assess
-          <span className="ml-1.5 font-medium normal-case tracking-normal text-gray-400">
-            — {selectedTopicIds.size} of {sortedTopics.length} selected
-          </span>
+        <h3 className="font-display font-bold text-lg text-brand-ink mb-1">
+          Design your Tier 1 diagnostic
+        </h3>
+        <p className="text-xs text-brand-body">
+          Select the topics to test. The system picks ~{QUESTIONS_PER_TOPIC}{" "}
+          questions per topic across difficulty levels. Covered topics are
+          included by default — good for knowledge refresh.
         </p>
-        <div className="space-y-1.5 max-h-56 overflow-y-auto border border-role-teacher-border rounded-xl p-2">
-          {sortedTopics.map((t) => {
-            const checked = selectedTopicIds.has(t.curriculum_topic_id);
-            return (
-              <label
-                key={t.id}
-                className={[
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
-                  checked
-                    ? "bg-brand-green-light border-brand-primary"
-                    : "border-role-teacher-border hover:border-brand-primary/40",
-                ].join(" ")}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggleTopic(t.curriculum_topic_id)}
-                  className="w-4 h-4 rounded border-brand-border text-brand-primary focus:ring-brand-primary"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-brand-ink truncate">
-                    {t.topic_name}
-                  </p>
-                  <p className="text-[10px] text-brand-muted">
-                    {t.subtopic_count} subtopic
-                    {t.subtopic_count !== 1 ? "s" : ""}
-                  </p>
-                </div>
-                {checked && (
-                  <Check
-                    className="w-4 h-4 text-brand-primary flex-shrink-0"
-                    aria-hidden="true"
-                  />
-                )}
-              </label>
-            );
-          })}
-        </div>
       </div>
 
-      {/* Question count */}
-      <div>
-        <label
-          htmlFor="questionCount"
-          className="block text-sm font-semibold text-brand-ink mb-1.5"
-        >
-          Number of questions
-        </label>
-        <div className="flex items-center gap-3">
-          <input
-            id="questionCount"
-            type="range"
-            min={5}
-            max={60}
-            step={5}
-            value={questionCount}
-            onChange={(e) => setQuestionCount(Number(e.target.value))}
-            className="flex-1 accent-brand-primary"
-          />
-          <span className="w-10 text-center font-bold text-brand-ink text-sm">
-            {questionCount}
+      {/* Warning box */}
+      <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[6px] px-3 py-[9px] text-[11px] text-[#92400e]">
+        ⚠ Once a student submits an attempt, this diagnostic is locked and
+        cannot be edited.
+      </div>
+
+      {/* Topic list */}
+      <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+        <div className="px-[14px] py-[10px] bg-[#f9fafb] border-b border-[#e5e7eb] flex items-center justify-between">
+          <span className="text-[11px] font-bold text-[#374151]">
+            Topics to include in diagnostic
+          </span>
+          <span className="text-[11px] text-brand-muted">
+            Est. ~{totalQuestions} questions total
           </span>
         </div>
-        <p className="text-[10px] text-brand-muted mt-1">
-          Questions are sampled from the bank across all selected topics.
-        </p>
+
+        {covered.length > 0 && (
+          <>
+            <div className="px-[14px] py-2 text-[10px] font-bold uppercase tracking-[0.6px] bg-[#f0fdf4] border-b border-[#d4e4d8] text-[#1a5c38]">
+              Covered topics (refresh knowledge)
+            </div>
+            {covered.map((t) => (
+              <TopicDiagRow key={t.id} topic={t} isCovered={true} />
+            ))}
+          </>
+        )}
+
+        {upcoming.length > 0 && (
+          <>
+            <div className="px-[14px] py-2 text-[10px] font-bold uppercase tracking-[0.6px] bg-[#fffbeb] border-b border-[#fde68a] text-[#92400e]">
+              Upcoming topics
+            </div>
+            {upcoming.map((t) => (
+              <TopicDiagRow key={t.id} topic={t} isCovered={false} />
+            ))}
+          </>
+        )}
       </div>
 
       {error && (
@@ -430,9 +512,9 @@ function DiagnosticBuilderStep({
         </div>
       )}
 
-      <div className="flex gap-3 pt-1">
+      <div className="flex items-center justify-between pt-1">
         <Button type="button" variant="secondary" onClick={onBack}>
-          ← Back
+          ← Back to Topics
         </Button>
         <Button
           type="button"
@@ -440,9 +522,8 @@ function DiagnosticBuilderStep({
           loading={submitting}
           disabled={submitting || selectedTopicIds.size === 0}
           onClick={handleSubmit}
-          className="flex-1"
         >
-          Create Draft Diagnostic
+          Publish Diagnostic &amp; Finish Setup
         </Button>
       </div>
     </div>
@@ -459,7 +540,6 @@ export function ClassSetupWizard({
 }: ClassSetupWizardProps) {
   const [step, setStep] = useState<Step>(initialStep);
   const { data: classTopics = [] } = useClassTopics(classId);
-
   const [done, setDone] = useState(false);
 
   function handleClose() {
@@ -467,9 +547,6 @@ export function ClassSetupWizard({
     setDone(false);
     onClose();
   }
-
-  const stepTitle =
-    step === 1 ? "Step 1 of 2 — Add Topics" : "Step 2 of 2 — Design Diagnostic";
 
   return (
     <Modal
@@ -482,37 +559,59 @@ export function ClassSetupWizard({
     >
       <div className="mt-2">
         {/* Step indicator */}
-        <div className="flex items-center gap-2 mb-5">
-          {([1, 2] as const).map((n) => (
-            <div key={n} className="flex items-center gap-2">
-              <div
-                className={[
-                  "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
-                  step === n
-                    ? "bg-brand-gold text-white"
-                    : n < step
-                      ? "bg-brand-primary text-white"
-                      : "bg-gray-100 text-gray-400",
-                ].join(" ")}
-                aria-current={step === n ? "step" : undefined}
-              >
-                {n < step ? (
-                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
-                ) : (
-                  n
-                )}
-              </div>
-              {n === 1 && (
-                <div
-                  className={[
-                    "h-0.5 w-8 rounded transition-all",
-                    step > 1 ? "bg-brand-primary" : "bg-gray-200",
-                  ].join(" ")}
-                />
-              )}
-            </div>
-          ))}
-          <span className="text-xs text-brand-muted ml-1">{stepTitle}</span>
+        <div className="flex items-center gap-3 mb-5">
+          <div
+            className={[
+              "w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0",
+              step === 1
+                ? "bg-brand-gold text-white"
+                : "bg-brand-primary text-white",
+            ].join(" ")}
+            aria-current={step === 1 ? "step" : undefined}
+          >
+            {step > 1 ? (
+              <Check className="w-3.5 h-3.5" aria-hidden="true" />
+            ) : (
+              "1"
+            )}
+          </div>
+          <span
+            className={[
+              "text-xs font-bold",
+              step === 1
+                ? "text-brand-gold"
+                : step > 1
+                  ? "text-brand-primary"
+                  : "text-brand-muted",
+            ].join(" ")}
+          >
+            Topics
+          </span>
+          <div
+            className={[
+              "flex-1 h-0.5 rounded",
+              step > 1 ? "bg-brand-gold" : "bg-gray-200",
+            ].join(" ")}
+          />
+          <div
+            className={[
+              "w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0",
+              step === 2
+                ? "bg-brand-gold text-white"
+                : "bg-gray-200 text-gray-400",
+            ].join(" ")}
+            aria-current={step === 2 ? "step" : undefined}
+          >
+            2
+          </div>
+          <span
+            className={[
+              "text-xs font-bold",
+              step === 2 ? "text-brand-gold" : "text-brand-muted",
+            ].join(" ")}
+          >
+            Diagnostic
+          </span>
         </div>
 
         {done ? (
@@ -524,11 +623,11 @@ export function ClassSetupWizard({
               />
             </div>
             <h3 className="font-display font-bold text-lg text-brand-ink">
-              Diagnostic created!
+              Diagnostic published!
             </h3>
             <p className="text-sm text-brand-body">
-              Your draft Tier 1 diagnostic is ready. Go to{" "}
-              <strong>Assessments</strong> to review and publish it to students.
+              Your Tier 1 diagnostic is live. Students will see it when they
+              open this class.
             </p>
             <Button
               type="button"
@@ -540,7 +639,7 @@ export function ClassSetupWizard({
             </Button>
           </div>
         ) : step === 1 ? (
-          <TopicPickerStep
+          <TopicListStep
             classId={classId}
             onNext={() => setStep(2)}
             onCancel={handleClose}

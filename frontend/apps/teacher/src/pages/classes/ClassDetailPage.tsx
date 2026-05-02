@@ -18,7 +18,6 @@ import {
   FileText,
   BookOpen,
   BookMarked,
-  ChevronRight,
 } from "lucide-react";
 import { ClassSetupWizard } from "./ClassSetupWizard";
 
@@ -117,62 +116,58 @@ export function ClassDetailPage() {
         </div>
       </div>
 
-      {/* ── Setup banners ─────────────────────────────────────────────────── */}
+      {/* ── Setup banner (matches approved mockup) ────────────────────────── */}
 
       {!topicsLoading && !topicsConfigured && (
-        <button
-          type="button"
-          onClick={() => openWizardAtStep(1)}
-          className="w-full text-left flex items-center justify-between gap-4 bg-brand-gold/10 border border-brand-gold/30 rounded-xl px-5 py-4 mb-6 hover:bg-brand-gold/15 transition-colors"
-        >
-          <div className="flex items-start gap-3">
-            <BookMarked
-              className="w-5 h-5 text-brand-gold mt-0.5 flex-shrink-0"
-              aria-hidden="true"
-            />
+        <div className="flex items-center justify-between bg-[#fffbeb] border-b-2 border-[#fcd34d] px-6 py-[14px] -mx-6 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-[34px] h-[34px] rounded-full bg-brand-gold flex items-center justify-center flex-shrink-0 text-white text-base">
+              ✦
+            </div>
             <div>
-              <p className="font-semibold text-sm text-brand-ink">
-                Set up your curriculum for this class
+              <p className="text-[13px] font-bold text-[#92400e]">
+                This class needs setup before students can begin
               </p>
-              <p className="text-xs text-brand-body mt-0.5">
-                Pick which topics to teach and design your Tier 1 diagnostic —
-                takes about 2 minutes.
+              <p className="text-[11px] text-[#b45309] mt-0.5">
+                Choose your topics and design the Tier 1 diagnostic — takes
+                about 5 minutes
               </p>
             </div>
           </div>
-          <ChevronRight
-            className="w-4 h-4 text-brand-gold flex-shrink-0"
-            aria-hidden="true"
-          />
-        </button>
+          <button
+            type="button"
+            onClick={() => openWizardAtStep(1)}
+            className="flex-shrink-0 ml-6 bg-brand-gold text-white rounded-full px-[18px] py-2 text-xs font-bold hover:bg-brand-gold-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+          >
+            Set up class →
+          </button>
+        </div>
       )}
 
       {topicsConfigured && !hasDiagnostic && (
-        <button
-          type="button"
-          onClick={() => openWizardAtStep(2)}
-          className="w-full text-left flex items-center justify-between gap-4 bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 mb-6 hover:bg-blue-100 transition-colors"
-        >
-          <div className="flex items-start gap-3">
-            <BarChart2
-              className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0"
-              aria-hidden="true"
-            />
+        <div className="flex items-center justify-between bg-[#fffbeb] border-b-2 border-[#fcd34d] px-6 py-[14px] -mx-6 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-[34px] h-[34px] rounded-full bg-brand-gold flex items-center justify-center flex-shrink-0 text-white text-base">
+              ✦
+            </div>
             <div>
-              <p className="font-semibold text-sm text-brand-ink">
-                Create your Tier 1 diagnostic
+              <p className="text-[13px] font-bold text-[#92400e]">
+                Topics configured — now design the Tier 1 diagnostic
               </p>
-              <p className="text-xs text-brand-body mt-0.5">
-                Topics are configured. Design the diagnostic assessment for
-                students.
+              <p className="text-[11px] text-[#b45309] mt-0.5">
+                Students will take this on first class entry to map their
+                starting knowledge
               </p>
             </div>
           </div>
-          <ChevronRight
-            className="w-4 h-4 text-blue-600 flex-shrink-0"
-            aria-hidden="true"
-          />
-        </button>
+          <button
+            type="button"
+            onClick={() => openWizardAtStep(2)}
+            className="flex-shrink-0 ml-6 bg-brand-gold text-white rounded-full px-[18px] py-2 text-xs font-bold hover:bg-brand-gold-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+          >
+            Design diagnostic →
+          </button>
+        </div>
       )}
 
       {/* ── Quick-access cards ─────────────────────────────────────────────── */}
