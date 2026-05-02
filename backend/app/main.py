@@ -12,6 +12,7 @@ from app.api.v1.routes import (
     assessments,
     attempts,
     auth,
+    class_topics,
     classes,
     curriculum,
     gap_map,
@@ -89,6 +90,7 @@ app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(assessments.router, prefix="/api/v1")
 app.include_router(attempts.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(class_topics.router, prefix="/api/v1")
 app.include_router(classes.router, prefix="/api/v1")
 app.include_router(curriculum.router, prefix="/api/v1")
 app.include_router(gap_map.router, prefix="/api/v1")

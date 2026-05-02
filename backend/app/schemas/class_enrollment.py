@@ -14,6 +14,10 @@ class ClassCreate(BaseModel):
     curriculum_id: uuid.UUID
     teacher_id: uuid.UUID
     academic_year: str = Field(..., description="e.g. '2025-2026'")
+    student_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="Students to enroll immediately. Enrolled atomically with class creation.",
+    )
 
 
 class ClassResponse(BaseModel):

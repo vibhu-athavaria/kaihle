@@ -23,7 +23,7 @@ src/**/*.js.map
 # IDE
 .vscode/
 .idea/
-
+.superpowers/
 # Misc
 *.DS_Store
 */logs/*
