@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class QuestionOption(BaseModel):
@@ -76,6 +76,19 @@ class AssessmentCreateRequest(BaseModel):
     assessment_type: str = "PROGRESS_CHECK"  # DIAGNOSTIC | TOPIC_SPECIFIC | PROGRESS_CHECK
     difficulty_min: float = 1.0
     difficulty_max: float = 5.0
+    deadline: datetime | None = None
+
+
+class DesignTier1DiagnosticRequest(BaseModel):
+    """Request body for teacher-designed Tier 1 diagnostic.
+
+    Teachers pick which curriculum topics to include (topic-level granularity).
+    Questions are sampled from the bank using the same pool logic as system-generated
+    diagnostics, but scoped to the selected topics.
+    """
+
+    topic_ids: list[UUID] = Field(..., min_length=1, description="Curriculum topic IDs to include")
+    question_count: int = Field(20, ge=5, le=60, description="Questions per attempt (student sees this many)")
     deadline: datetime | None = None
 
 

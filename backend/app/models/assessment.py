@@ -20,7 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -129,6 +129,14 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
     #   "time_limit_minutes": null
     # }
     instructions: Mapped[str | None] = mapped_column(Text)
+    diagnostic_topic_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        ARRAY(UUID(as_uuid=True)),
+        nullable=True,
+        default=None,
+        # Non-NULL for teacher-designed Tier 1 diagnostics: the curriculum_topic_ids
+        # the teacher selected. System samples questions from these topics only.
+        # NULL for legacy system-generated assessments and all Tier 2 assessments.
+    )
     # Tier 2 fields (Tier 1 system assessments leave these NULL)
     question_count: Mapped[int | None] = mapped_column(Integer)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -7,7 +7,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Date, Enum, ForeignKey, UniqueConstraint
+from sqlalchemy import Date, Enum, ForeignKey
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,7 +38,9 @@ class LessonPlan(Base, UUIDMixin):
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    week_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Originally "week start date" for weekly auto-gen. Now the generation date
+    # (informational only). Nullable because on-demand plans may not map to a week.
     focus_subtopic_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False, default=list)
     # Top 2 subtopic_ids with lowest class-average mastery this week
     gap_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
@@ -63,4 +65,4 @@ class LessonPlan(Base, UUIDMixin):
     generated_at: Mapped[datetime]
     updated_at: Mapped[datetime | None]
 
-    __table_args__ = (UniqueConstraint("class_id", "week_start", name="lp_class_week_unique"),)
+    # No unique constraint — on-demand generation; dedup handled at service layer.

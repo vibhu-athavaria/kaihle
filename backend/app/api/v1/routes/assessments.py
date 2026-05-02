@@ -29,6 +29,7 @@ from app.schemas.assessments import (
     AssessmentResponse,
     AssessmentResultsSummary,
     AssessmentWithClassResponse,
+    DesignTier1DiagnosticRequest,
     QuestionOption,
 )
 from app.schemas.common import Page
@@ -225,6 +226,50 @@ async def create_assessment(
 
     base = _assessment_to_response(assessment)
     return AssessmentCreateResponse(**base.model_dump(), questions=questions)
+
+
+@router.post(
+    "/classes/{class_id}/diagnostics/tier1",
+    response_model=AssessmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def design_tier1_diagnostic(
+    class_id: UUID,
+    body: DesignTier1DiagnosticRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> AssessmentResponse:
+    """Create (or replace DRAFT of) a teacher-designed Tier 1 diagnostic.
+
+    The teacher picks which curriculum topics to include.
+    Questions are sampled from the bank across those topics.
+    The resulting assessment is in DRAFT status — teacher must publish it separately.
+    """
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no school")
+    service = AssessmentService(db)
+    try:
+        assessment = await service.design_tier1_diagnostic(
+            class_id=class_id,
+            school_id=current_user.school_id,
+            teacher_id=current_user.id,
+            body=body,
+        )
+        await db.commit()
+    except TeacherNotClassOwnerError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this class.")
+    except InsufficientQuestionsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Insufficient questions for selected topics.",
+                "available": exc.available,
+                "requested": exc.requested,
+            },
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return _assessment_to_response(assessment)
 
 
 # ── Assessment-scoped operations ──────────────────────────────────────────────

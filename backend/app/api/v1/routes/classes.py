@@ -12,7 +12,7 @@ identifies the class.
 
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +32,6 @@ from app.schemas.class_enrollment import (
 )
 from app.services.class_service import ClassService
 from app.services.gap_service import GapService
-from app.tasks.onboarding_tasks import create_class_diagnostic_task
 
 router = APIRouter(tags=["classes"])
 
@@ -55,25 +54,6 @@ def _class_to_response(class_: Class) -> ClassResponse:
 # ── School-scoped class list + create ────────────────────────────────────────
 
 
-def _dispatch_class_diagnostic(class_id: str) -> None:
-    """Dispatch the Tier 1 diagnostic Celery task.
-
-    Wrapped so BackgroundTasks can call a plain sync function.
-    Failures are logged but not raised — the class already exists.
-    """
-    try:
-        create_class_diagnostic_task.delay(class_id)
-    except Exception:
-        import structlog
-
-        logger = structlog.get_logger()
-        logger.warning(
-            "create_class_diagnostic_task_dispatch_failed",
-            class_id=class_id,
-            exc_info=True,
-        )
-
-
 @router.post(
     "/schools/{school_id}/classes",
     response_model=ClassResponse,
@@ -82,11 +62,14 @@ def _dispatch_class_diagnostic(class_id: str) -> None:
 async def create_class(
     school_id: uuid.UUID,
     body: ClassCreate,
-    background_tasks: BackgroundTasks,
     current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> ClassResponse:
-    """Create a class for a school. SchoolAdmin or KaihleAdmin only."""
+    """Create a class for a school. SchoolAdmin or KaihleAdmin only.
+
+    Optionally enroll students immediately via body.student_ids.
+    Diagnostics are teacher-designed and NOT auto-dispatched on enrollment.
+    """
     _check_school_access(school_id, current_user)
     service = ClassService(db)
     try:
@@ -96,12 +79,6 @@ async def create_class(
         if "not subscribed" in msg:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
-
-    # Schedule diagnostic task in the background AFTER the HTTP response is sent.
-    # FastAPI runs BackgroundTasks after the route returns and get_db commits,
-    # eliminating the race condition between db.flush() and Celery dispatch.
-    background_tasks.add_task(_dispatch_class_diagnostic, str(class_.id))
-
     return _class_to_response(class_)
 
 

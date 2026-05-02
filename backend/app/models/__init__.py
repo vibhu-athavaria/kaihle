@@ -13,6 +13,7 @@ from app.models.billing import (
     SubscriptionPlan,
     TrialExtension,
 )
+from app.models.class_topic import ClassTopic
 from app.models.curriculum import (
     Curriculum,
     CurriculumChunk,
@@ -60,6 +61,7 @@ __all__ = [
     "SchoolCurriculum",
     "Class",
     "ClassEnrollment",
+    "ClassTopic",
     "User",
     "StudentProfile",
     "TeacherProfile",

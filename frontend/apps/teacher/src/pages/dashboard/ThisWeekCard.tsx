@@ -16,8 +16,8 @@ export function ThisWeekCard({ lessonPlan }: ThisWeekCardProps) {
     return (
       <div className="bg-brand-light rounded-xl border border-brand-mid p-4">
         <p className="text-sm text-brand-body">
-          Lesson plans generate every Monday at 6am. Create assessments first to
-          get started.
+          No lesson plans yet. Open a class and generate one on demand whenever
+          you're ready.
         </p>
       </div>
     );

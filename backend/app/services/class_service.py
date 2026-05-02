@@ -83,7 +83,47 @@ class ClassService:
         )
         self.db.add(class_)
         await self.db.flush()
+
+        if data.student_ids:
+            await self._enroll_students_no_diagnostic(class_.id, school_id, data.student_ids)
+
         return class_
+
+    async def _enroll_students_no_diagnostic(
+        self,
+        class_id: uuid.UUID,
+        school_id: uuid.UUID,
+        student_ids: list[uuid.UUID],
+    ) -> None:
+        """Enroll students atomically during class creation without triggering diagnostics.
+
+        Diagnostics are now teacher-designed — not auto-generated on enrollment.
+        """
+        result = await self.db.execute(
+            select(User.id).where(
+                User.id.in_(student_ids),
+                User.school_id == school_id,
+                User.role == UserRole.STUDENT,
+            )
+        )
+        valid_ids = set(result.scalars().all())
+
+        existing_result = await self.db.execute(
+            select(ClassEnrollment.student_id).where(
+                ClassEnrollment.class_id == class_id,
+                ClassEnrollment.student_id.in_(valid_ids),
+            )
+        )
+        existing = set(existing_result.scalars().all())
+
+        new_enrollments = [
+            ClassEnrollment(class_id=class_id, student_id=sid, is_active=True)
+            for sid in valid_ids
+            if sid not in existing
+        ]
+        if new_enrollments:
+            self.db.add_all(new_enrollments)
+            await self.db.flush()
 
     async def list_classes(
         self,

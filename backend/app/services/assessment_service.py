@@ -32,7 +32,12 @@ from app.models.assessment import (
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subject, Subtopic
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
-from app.schemas.assessments import AssessmentCreateRequest, AssessmentResultsSummary, StudentAttemptSummary
+from app.schemas.assessments import (
+    AssessmentCreateRequest,
+    AssessmentResultsSummary,
+    DesignTier1DiagnosticRequest,
+    StudentAttemptSummary,
+)
 
 logger = structlog.get_logger()
 
@@ -313,6 +318,117 @@ class AssessmentService:
             assessment_id=str(assessment.id),
             pool_size=len(question_ids),
             max_per_attempt=MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT,
+        )
+        return assessment
+
+    async def design_tier1_diagnostic(
+        self,
+        class_id: uuid.UUID,
+        school_id: uuid.UUID,
+        teacher_id: uuid.UUID,
+        body: DesignTier1DiagnosticRequest,
+    ) -> Assessment:
+        """Create a teacher-designed Tier 1 diagnostic for a class.
+
+        Replaces any previously created teacher-designed diagnostic for this class
+        (idempotent replace — deletes DRAFT predecessor). Only one teacher-designed
+        Tier 1 per class at a time; ACTIVE/CLOSED ones cannot be replaced.
+
+        Raises:
+            TeacherNotClassOwnerError: If teacher does not own the class.
+            ValueError: If class not found or existing diagnostic is not DRAFT.
+            InsufficientQuestionsError: If question bank has too few questions.
+        """
+        class_ = (
+            await self.db.execute(select(Class).where(Class.id == class_id, Class.school_id == school_id))
+        ).scalar_one_or_none()
+        if class_ is None:
+            raise ValueError(f"Class not found: class_id={class_id}")
+        if class_.teacher_id != teacher_id:
+            raise TeacherNotClassOwnerError(f"Teacher {teacher_id} does not own class {class_id}")
+
+        # Remove any existing DRAFT teacher-designed diagnostic for this class
+        existing = (
+            await self.db.execute(
+                select(Assessment).where(
+                    Assessment.class_id == class_id,
+                    Assessment.is_system_generated.is_(False),
+                    Assessment.assessment_type == AssessmentType.DIAGNOSTIC,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            if existing.status != AssessmentStatus.DRAFT:
+                raise ValueError(
+                    f"Cannot replace diagnostic: existing assessment is {existing.status}. "
+                    "Only DRAFT diagnostics can be replaced."
+                )
+            await self.db.execute(
+                delete(AssessmentSelectedQuestion.__table__).where(  # type: ignore
+                    AssessmentSelectedQuestion.assessment_id == existing.id
+                )
+            )
+            await self.db.delete(existing)
+            await self.db.flush()
+
+        # Sample questions scoped to selected topics
+        q = (
+            select(QuestionBank.id, Subtopic.curriculum_topic_id, QuestionBank.difficulty_level)
+            .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
+            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .where(
+                CurriculumTopic.id.in_(body.topic_ids),
+                QuestionBank.is_active.is_(True),
+            )
+        )
+        rows = (await self.db.execute(q)).all()
+        pool_size = min(MAX_DIAGNOSTIC_POOL, len(rows))
+        if pool_size < body.question_count:
+            raise InsufficientQuestionsError(
+                requested=body.question_count,
+                available=pool_size,
+                criteria={"topic_ids": [str(t) for t in body.topic_ids]},
+            )
+
+        rng = random.Random(str(class_id) + str(sorted(str(t) for t in body.topic_ids)))  # noqa: S311
+        selected_ids = _sample_pool_with_difficulty_distribution(
+            [(r[0], r[1], r[2]) for r in rows],
+            pool_size,
+            rng,
+        )
+
+        assessment = Assessment(
+            school_id=school_id,
+            class_id=class_id,
+            created_by=teacher_id,
+            title=f"Tier 1 Diagnostic — {class_.name}",
+            assessment_type=AssessmentType.DIAGNOSTIC,
+            is_system_generated=False,
+            status=AssessmentStatus.DRAFT,
+            question_count=body.question_count,
+            diagnostic_topic_ids=body.topic_ids,
+            deadline=body.deadline,
+            created_at=datetime.now(UTC),
+            instructions=None,
+        )
+        self.db.add(assessment)
+        await self.db.flush()
+
+        for order_index, question_id in enumerate(selected_ids):
+            self.db.add(
+                AssessmentSelectedQuestion(
+                    assessment_id=assessment.id,
+                    question_id=question_id,
+                    order_index=order_index,
+                )
+            )
+
+        logger.info(
+            "tier1_diagnostic_designed",
+            class_id=str(class_id),
+            assessment_id=str(assessment.id),
+            topic_count=len(body.topic_ids),
+            pool_size=len(selected_ids),
         )
         return assessment
 

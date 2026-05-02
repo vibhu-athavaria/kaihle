@@ -1,6 +1,7 @@
 """FastAPI dependencies for authentication and authorization guards."""
 
 import uuid
+import warnings
 from collections.abc import Callable
 from typing import Annotated, Any, TypeVar, cast
 
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import InvalidTokenError, decode_token, get_token_scope
 from app.models.school import ClassEnrollment
-from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
+from app.models.user import StudentProfile, User, UserRole
 
 # HTTPBearer for extracting Bearer token
 security = HTTPBearer()
@@ -233,15 +234,24 @@ async def require_diagnostic_complete(
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ClassEnrollment | None:
-    """Gate class content access behind Tier 1 diagnostic completion.
+    """DEPRECATED: This dependency is deprecated and will be removed.
 
-    Checks class_enrollments.onboarding_diagnostic_status for the specific
-    (student_id, class_id) pair. Returns the enrollment row on success.
-    Raises 403 with a structured error body if diagnostic is not yet COMPLETED.
+    As per spec 2026-05-02-class-curriculum-teacher-control-design, the
+    diagnostic gate has been removed. Students can now access all class
+    content regardless of onboarding_diagnostic_status.
 
-    Only applies to STUDENT role. Teachers and admins bypass this gate.
+    This function now only verifies enrollment (returns 404 if not enrolled).
+    Use require_class_enrollment instead for new code.
     """
-    # Teachers, admins, and parents bypass the gate entirely
+    warnings.warn(
+        "require_diagnostic_complete is deprecated. "
+        "Diagnostic gate removed per 2026-05-02-class-curriculum-teacher-control-design spec. "
+        "Use require_class_enrollment for enrollment checks only.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    # Teachers, admins, and parents bypass the enrollment check entirely
     if current_user.role in (UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN, UserRole.PARENT):
         return None
 
@@ -258,17 +268,6 @@ async def require_diagnostic_complete(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="You are not enrolled in this class",
-        )
-
-    if enrollment.onboarding_diagnostic_status != OnboardingStatus.COMPLETED:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "code": "DIAGNOSTIC_INCOMPLETE",
-                "message": "Complete the diagnostic assessment to access class content.",
-                "class_id": str(class_id),
-                "diagnostic_status": enrollment.onboarding_diagnostic_status,
-            },
         )
 
     return enrollment

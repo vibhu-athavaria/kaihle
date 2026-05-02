@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   getMasteryStyle,
@@ -7,14 +8,24 @@ import {
 import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { useMyStudents } from "../../hooks/useMyStudents";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
+import { useClassTopics } from "../../hooks/useClassTopics";
 import { useAuth } from "@kaihle/auth";
 import { statusBadge } from "../../utils/assessment";
-import { ArrowLeft, Users, BarChart2, FileText, BookOpen } from "lucide-react";
+import {
+  ArrowLeft,
+  Users,
+  BarChart2,
+  FileText,
+  BookOpen,
+  BookMarked,
+} from "lucide-react";
+import { ClassSetupWizard } from "./ClassSetupWizard";
 
 export function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
   const { user } = useAuth();
   const schoolId = user?.school_id ?? null;
+
   const { data: dashboardData, isLoading: dashboardLoading } =
     useTeacherDashboard(schoolId);
   const { data: assessments, isLoading: assessmentsLoading } =
@@ -23,6 +34,11 @@ export function ClassDetailPage() {
     classId ? [classId] : [],
     [],
   );
+  const { data: classTopics = [], isLoading: topicsLoading } =
+    useClassTopics(classId);
+
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardInitialStep, setWizardInitialStep] = useState<1 | 2>(1);
 
   const cls = dashboardData?.classes.find((c) => c.id === classId);
 
@@ -54,6 +70,16 @@ export function ClassDetailPage() {
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     )
     .slice(0, 3);
+
+  const topicsConfigured = !topicsLoading && classTopics.length > 0;
+  const hasDiagnostic = recentAssessments.some(
+    (a) => a.assessment_type === "DIAGNOSTIC",
+  );
+
+  function openWizardAtStep(step: 1 | 2) {
+    setWizardInitialStep(step);
+    setWizardOpen(true);
+  }
 
   return (
     <div className="p-6">
@@ -89,6 +115,62 @@ export function ClassDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Setup banner (matches approved mockup) ────────────────────────── */}
+
+      {!topicsLoading && !topicsConfigured && (
+        <div className="flex items-center justify-between bg-[#fffbeb] border-b-2 border-[#fcd34d] px-6 py-[14px] -mx-6 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-[34px] h-[34px] rounded-full bg-brand-gold flex items-center justify-center flex-shrink-0 text-white text-base">
+              ✦
+            </div>
+            <div>
+              <p className="text-[13px] font-bold text-[#92400e]">
+                This class needs setup before students can begin
+              </p>
+              <p className="text-[11px] text-[#b45309] mt-0.5">
+                Choose your topics and design the Tier 1 diagnostic — takes
+                about 5 minutes
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => openWizardAtStep(1)}
+            className="flex-shrink-0 ml-6 bg-brand-gold text-white rounded-full px-[18px] py-2 text-xs font-bold hover:bg-brand-gold-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+          >
+            Set up class →
+          </button>
+        </div>
+      )}
+
+      {topicsConfigured && !hasDiagnostic && (
+        <div className="flex items-center justify-between bg-[#fffbeb] border-b-2 border-[#fcd34d] px-6 py-[14px] -mx-6 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-[34px] h-[34px] rounded-full bg-brand-gold flex items-center justify-center flex-shrink-0 text-white text-base">
+              ✦
+            </div>
+            <div>
+              <p className="text-[13px] font-bold text-[#92400e]">
+                Topics configured — now design the Tier 1 diagnostic
+              </p>
+              <p className="text-[11px] text-[#b45309] mt-0.5">
+                Students will take this on first class entry to map their
+                starting knowledge
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => openWizardAtStep(2)}
+            className="flex-shrink-0 ml-6 bg-brand-gold text-white rounded-full px-[18px] py-2 text-xs font-bold hover:bg-brand-gold-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+          >
+            Design diagnostic →
+          </button>
+        </div>
+      )}
+
+      {/* ── Quick-access cards ─────────────────────────────────────────────── */}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <Link
@@ -136,6 +218,31 @@ export function ClassDetailPage() {
           </div>
         </Link>
       </div>
+
+      {/* Topics summary strip (once configured) */}
+      {topicsConfigured && (
+        <div className="bg-white rounded-xl border border-brand-border px-5 py-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <BookMarked
+              className="w-4 h-4 text-brand-primary"
+              aria-hidden="true"
+            />
+            <span className="text-sm font-semibold text-brand-ink">
+              {classTopics.length} topic
+              {classTopics.length !== 1 ? "s" : ""} configured
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => openWizardAtStep(1)}
+            className="text-xs font-semibold text-brand-gold hover:text-brand-gold-dark transition-colors"
+          >
+            Edit topics →
+          </button>
+        </div>
+      )}
+
+      {/* ── Students at risk + Recent assessments ─────────────────────────── */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
@@ -235,6 +342,16 @@ export function ClassDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Wizard */}
+      {classId && (
+        <ClassSetupWizard
+          classId={classId}
+          isOpen={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+          initialStep={wizardInitialStep}
+        />
+      )}
     </div>
   );
 }
