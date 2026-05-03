@@ -207,23 +207,6 @@ async def seed_test_data() -> None:
         log.info("teacher_profile_created")
 
         # -------------------------------------------------------------------
-        # 4. Create student profile
-        # -------------------------------------------------------------------
-        # Use ON CONFLICT DO UPDATE to set is_learning_profile_complete = true
-        # when re-running the seed script after creating a learning profile
-        await db.execute(
-            text("""
-                INSERT INTO student_profiles (id, user_id, grade_id, age, is_learning_profile_complete)
-                VALUES (gen_random_uuid(), :user_id, NULL, 14, true)
-                ON CONFLICT (user_id) DO UPDATE SET is_learning_profile_complete = true
-            """),
-            {
-                "user_id": str(student_id),
-            },
-        )
-        log.info("student_profile_created")
-
-        # -------------------------------------------------------------------
         # 4b. Create student learning profile (required for dashboard API)
         # -------------------------------------------------------------------
         await db.execute(
@@ -278,6 +261,24 @@ async def seed_test_data() -> None:
         # Get grade IDs
         result = await db.execute(text("SELECT id, level FROM grades ORDER BY level"))
         grades = {row.level: str(row.id) for row in result.fetchall()}
+
+        # -------------------------------------------------------------------
+        # 4. Create student profile (deferred here so grades[9] is available)
+        # -------------------------------------------------------------------
+        await db.execute(
+            text("""
+                INSERT INTO student_profiles (id, user_id, grade_id, age, is_learning_profile_complete)
+                VALUES (gen_random_uuid(), :user_id, :grade_id, 14, true)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    grade_id = EXCLUDED.grade_id,
+                    is_learning_profile_complete = true
+            """),
+            {
+                "user_id": str(student_id),
+                "grade_id": grades.get(9),
+            },
+        )
+        log.info("student_profile_created")
 
         # -------------------------------------------------------------------
         # 6. Get subject and curriculum IDs

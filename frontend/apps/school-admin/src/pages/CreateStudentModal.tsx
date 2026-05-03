@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal, toast } from "@kaihle/ui";
+import { Eye, EyeOff } from "lucide-react";
 import { useCreateUser, useGrades } from "../hooks/useSchoolAdmin";
 
 interface Props {
@@ -60,6 +61,7 @@ export default function CreateStudentModal({ open, onOpenChange }: Props) {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [age, setAge] = useState("");
   const [gradeId, setGradeId] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
@@ -185,13 +187,23 @@ export default function CreateStudentModal({ open, onOpenChange }: Props) {
           <label className="block text-[11px] font-bold uppercase tracking-wide text-brand-ink">
             Password
           </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Set a temporary password"
-            className="w-full px-3 py-2.5 border border-brand-border rounded-lg text-sm focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 outline-none"
-          />
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Set a temporary password"
+              className="w-full px-3 py-2.5 pr-10 border border-brand-border rounded-lg text-sm focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-brand-muted hover:text-brand-ink"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
+          </div>
           {password.length > 0 && <PasswordStrengthBar password={password} />}
           {errors.password && (
             <p className="text-red-500 text-xs">{errors.password}</p>

@@ -7,10 +7,13 @@ export default {
     "\\.spec\\.ts$", // Exclude Playwright specs
   ],
   transform: {
-    "^.+\\.(ts|tsx)$": ["ts-jest", {
-      tsconfig: "tsconfig.test.json",
-      diagnostics: false,
-    }],
+    "^.+\\.(ts|tsx)$": [
+      "ts-jest",
+      {
+        tsconfig: "tsconfig.test.json",
+        diagnostics: false,
+      },
+    ],
   },
   moduleNameMapper: {
     "\\.(css|less|scss|sass)$": "identity-obj-proxy",

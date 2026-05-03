@@ -301,6 +301,19 @@ function GapMapTab({
 }) {
   const { data, isLoading, isError } = useClassGapMap(classId, subjectId);
 
+  // All hooks must run unconditionally before any early return.
+  const students = data?.students ?? [];
+  const subtopics = data?.subtopics ?? [];
+  const cells = data?.cells ?? [];
+
+  const scoreMap = useMemo(() => {
+    const map = new Map<string, number | null>();
+    for (const c of cells) {
+      map.set(`${c.student_id}:${c.subtopic_id}`, c.mastery_score);
+    }
+    return map;
+  }, [cells]);
+
   if (classDetailLoading || (isLoading && !data)) {
     return (
       <div className="animate-pulse space-y-3">
@@ -320,18 +333,6 @@ function GapMapTab({
   }
 
   if (!data) return null;
-
-  const students = data.students ?? [];
-  const subtopics = data.subtopics ?? [];
-  const cells = data.cells ?? [];
-
-  const scoreMap = useMemo(() => {
-    const map = new Map<string, number | null>();
-    for (const c of cells) {
-      map.set(`${c.student_id}:${c.subtopic_id}`, c.mastery_score);
-    }
-    return map;
-  }, [cells]);
 
   const getScore = (studentId: string, subtopicId: string) =>
     scoreMap.get(`${studentId}:${subtopicId}`) ?? null;

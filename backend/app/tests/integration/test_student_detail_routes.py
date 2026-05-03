@@ -14,11 +14,12 @@ from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.curriculum import Curriculum, Grade, Subject
 from app.models.school import Class, ClassEnrollment, School
-from app.models.user import User, UserRole
+from app.models.user import StudentProfile, User, UserRole
 from app.tests.integration.conftest import make_auth_header
 
 # ---------------------------------------------------------------------------
@@ -52,6 +53,9 @@ async def _make_student(db: AsyncSession, school: School, first_name: str = "Sam
         is_active=True,
     )
     db.add(student)
+    await db.flush()
+    # grade_id set to None here; _make_class_with_enrollment updates it once the grade exists.
+    db.add(StudentProfile(user_id=student.id, grade_id=None, is_learning_profile_complete=False))
     await db.flush()
     return student
 
@@ -103,6 +107,10 @@ async def _make_class_with_enrollment(
         onboarding_diagnostic_status="PENDING",
     )
     db.add(enrollment)
+    await db.flush()
+
+    # Keep student_profiles.grade_id in sync with the class grade — mirrors production behaviour.
+    await db.execute(update(StudentProfile).where(StudentProfile.user_id == student.id).values(grade_id=grade.id))
     await db.flush()
     return class_, enrollment, grade, subject, curriculum
 

@@ -14,7 +14,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.school import School
-from app.models.user import ParentStudent, User, UserRole
+from app.models.user import ParentStudent, StudentProfile, User, UserRole
 from app.tests.integration.conftest import make_auth_header
 
 # ---------------------------------------------------------------------------
@@ -48,6 +48,8 @@ async def _make_student(db: AsyncSession, school: School, first_name: str = "Chr
         is_active=True,
     )
     db.add(student)
+    await db.flush()
+    db.add(StudentProfile(user_id=student.id, grade_id=None, is_learning_profile_complete=False))
     await db.flush()
     return student
 
