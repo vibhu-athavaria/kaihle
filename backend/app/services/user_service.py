@@ -343,10 +343,19 @@ class UserService:
         if caller_school_id is not None and student.school_id != caller_school_id:
             raise CrossSchoolAccessError("Access denied")
 
+        # Grade comes from student_profiles — the single source of truth for student grade.
+        profile_row = (
+            await self.db.execute(
+                select(Grade.level)
+                .join(StudentProfile, StudentProfile.grade_id == Grade.id)
+                .where(StudentProfile.user_id == student_id)
+            )
+        ).scalar_one_or_none()
+        grade_level: int = profile_row if profile_row is not None else 0
+
         enrollment_query = (
-            select(ClassEnrollment, Class, Grade, Curriculum, User)
+            select(ClassEnrollment, Class, Curriculum, User)
             .join(Class, Class.id == ClassEnrollment.class_id)
-            .join(Grade, Grade.id == Class.grade_id)
             .join(Curriculum, Curriculum.id == Class.curriculum_id)
             .outerjoin(User, User.id == Class.teacher_id)
             .where(
@@ -372,14 +381,11 @@ class UserService:
                 GapStateDetail(subtopic_name=subtopic.name, mastery_score=gap.mastery_score)
             )
 
-        grade_level: int = 0
         curriculum_name: str = ""
         earliest_enrolled_at: str = ""
         class_enrollments: list[ClassEnrollmentDetail] = []
 
-        for enrollment, class_, grade, curriculum, teacher in enrollment_rows:
-            if grade_level == 0 and grade:
-                grade_level = grade.level if grade.level is not None else 0
+        for enrollment, class_, curriculum, teacher in enrollment_rows:
             if curriculum_name == "" and curriculum:
                 curriculum_name = curriculum.name
             if earliest_enrolled_at == "" and enrollment.enrolled_at:

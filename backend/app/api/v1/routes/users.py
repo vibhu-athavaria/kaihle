@@ -145,7 +145,7 @@ async def list_users(
         summary_map = {s.student_id: s for s in summaries}
         completed_ids = await analytics.get_diagnostic_completed_student_ids(school_id, student_ids)
 
-        # Bulk-fetch grade levels via StudentProfile → Grade join (single query, no N+1)
+        # Bulk-fetch grade levels from student_profiles — the single source of truth for student grade.
         grade_level_map: dict[uuid.UUID, int] = {}
         if student_ids:
             profile_rows = (
