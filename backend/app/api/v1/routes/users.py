@@ -145,19 +145,19 @@ async def list_users(
         summary_map = {s.student_id: s for s in summaries}
         completed_ids = await analytics.get_diagnostic_completed_student_ids(school_id, student_ids)
 
-        # Bulk-fetch grade levels via student_profiles.grade_id (FK → grades.id).
+        # Bulk-fetch grade info via student_profiles.grade_id (FK → grades.id).
         # student_profiles is the single source of truth for a student's grade — not class enrollment.
-        grade_level_map: dict[uuid.UUID, int] = {}
+        grade_map: dict[uuid.UUID, tuple[int, str]] = {}
         if student_ids:
             profile_rows = (
                 await db.execute(
-                    select(StudentProfile.user_id, Grade.level)
+                    select(StudentProfile.user_id, Grade.level, Grade.name)
                     .join(Grade, Grade.id == StudentProfile.grade_id)
                     .where(StudentProfile.user_id.in_(student_ids))
                 )
             ).all()
-            for user_id, level in profile_rows:
-                grade_level_map[user_id] = level
+            for user_id, level, name in profile_rows:
+                grade_map[user_id] = (level, name)
 
         return StudentListResponse(
             users=[
@@ -172,7 +172,8 @@ async def list_users(
                     class_count=summary_map[u.id].class_count if u.id in summary_map else 0,
                     needs_work_class_count=summary_map[u.id].needs_work_class_count if u.id in summary_map else 0,
                     diagnostic_completed=u.id in completed_ids,
-                    grade_level=grade_level_map.get(u.id),
+                    grade_level=grade_map[u.id][0] if u.id in grade_map else None,
+                    grade_name=grade_map[u.id][1] if u.id in grade_map else None,
                 )
                 for u in users
             ],

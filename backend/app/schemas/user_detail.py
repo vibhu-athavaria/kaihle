@@ -22,6 +22,7 @@ class StudentDetailResponse(BaseModel):
     first_name: str
     last_name: str
     grade_level: int | None
+    grade_name: str | None
     curriculum_name: str
     enrolled_at: str
     last_login_at: str | None
@@ -33,6 +34,7 @@ class AssignedClassSummary(BaseModel):
     class_name: str
     subject_name: str
     grade_level: int
+    grade_name: str
     student_count: int
     avg_mastery: float | None
 

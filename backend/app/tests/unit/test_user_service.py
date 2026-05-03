@@ -909,10 +909,13 @@ class TestGetStudentDetail:
             last_login_at=None,
         )
         mock_db.scalar = AsyncMock(return_value=student)
-        # Both execute calls (enrollments + gap states) return empty results
+        # First execute: grade query — returns no row via one_or_none()
+        grade_result = MagicMock()
+        grade_result.one_or_none = MagicMock(return_value=None)
+        # Subsequent execute calls (enrollments + gap states) return empty results
         empty_result = MagicMock()
         empty_result.all = MagicMock(return_value=[])
-        mock_db.execute = AsyncMock(return_value=empty_result)
+        mock_db.execute = AsyncMock(side_effect=[grade_result, empty_result, empty_result])
 
         from app.schemas.user_detail import StudentDetailResponse
 

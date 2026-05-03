@@ -29,7 +29,8 @@ interface StudentProfile {
   id: string;
   first_name: string;
   last_name: string;
-  grade_level: number;
+  grade_level: number | null;
+  grade_name: string | null;
   curriculum_name: string;
   enrolled_at: string;
   last_login_at: string | null;
@@ -124,8 +125,11 @@ export function StudentDetailPage() {
                 .
               </div>
               <div className="text-xs text-brand-muted mt-0.5">
-                Grade {student.grade_level} · {student.curriculum_name} ·
-                Enrolled{" "}
+                {student.grade_name ??
+                  (student.grade_level !== null
+                    ? `Grade ${student.grade_level}`
+                    : "No grade")}{" "}
+                · {student.curriculum_name} · Enrolled{" "}
                 {new Date(student.enrolled_at).toLocaleDateString("en-GB", {
                   month: "short",
                   year: "numeric",
