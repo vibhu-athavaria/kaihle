@@ -275,7 +275,7 @@ async def seed_test_data() -> None:
             """),
             {
                 "user_id": str(student_id),
-                "grade_id": grades[9],
+                "grade_id": grades.get(9),
             },
         )
         log.info("student_profile_created")

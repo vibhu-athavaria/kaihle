@@ -344,14 +344,15 @@ class UserService:
             raise CrossSchoolAccessError("Access denied")
 
         # Grade comes from student_profiles — the single source of truth for student grade.
+        # outerjoin so students without a profile row (or with grade_id=NULL) return None cleanly.
         profile_row = (
             await self.db.execute(
                 select(Grade.level)
-                .join(StudentProfile, StudentProfile.grade_id == Grade.id)
+                .outerjoin(StudentProfile, StudentProfile.grade_id == Grade.id)
                 .where(StudentProfile.user_id == student_id)
             )
         ).scalar_one_or_none()
-        grade_level: int = profile_row if profile_row is not None else 0
+        grade_level: int | None = profile_row
 
         enrollment_query = (
             select(ClassEnrollment, Class, Curriculum, User)

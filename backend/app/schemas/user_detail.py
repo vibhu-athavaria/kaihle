@@ -21,7 +21,7 @@ class StudentDetailResponse(BaseModel):
     id: uuid.UUID
     first_name: str
     last_name: str
-    grade_level: int
+    grade_level: int | None
     curriculum_name: str
     enrolled_at: str
     last_login_at: str | None
