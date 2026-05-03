@@ -78,10 +78,12 @@ export function UsersPage() {
   const notLoggedIn = students.filter((s) => !s.last_login_at).length;
 
   const availableGrades = [
-    ...new Set(
-      students.map((s) => s.grade_level).filter((g): g is number => g !== null),
-    ),
-  ].sort((a, b) => a - b);
+    ...new Map(
+      students
+        .filter((s) => s.grade_level !== null)
+        .map((s) => [s.grade_level, s.grade_name ?? `Grade ${s.grade_level}`]),
+    ).entries(),
+  ].sort((a, b) => (a[0] as number) - (b[0] as number));
 
   const filtered = students
     .filter((s) => {
@@ -222,9 +224,9 @@ export function UsersPage() {
                 aria-label="Filter by grade"
               >
                 <option value="">All grades</option>
-                {availableGrades.map((g) => (
-                  <option key={g} value={g}>
-                    Grade {g}
+                {availableGrades.map(([level, name]) => (
+                  <option key={level} value={level as number}>
+                    {name}
                   </option>
                 ))}
               </select>
@@ -338,9 +340,11 @@ export function UsersPage() {
                           </div>
                         </td>
                         <td className="px-4 py-[10px] text-xs text-brand-muted">
-                          {s.grade_level !== null && s.grade_level !== undefined
-                            ? `Grade ${s.grade_level}`
-                            : "—"}
+                          {s.grade_name ??
+                            (s.grade_level !== null &&
+                            s.grade_level !== undefined
+                              ? `Grade ${s.grade_level}`
+                              : "—")}
                         </td>
                         <td className="px-4 py-[10px]">
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-brand-body">

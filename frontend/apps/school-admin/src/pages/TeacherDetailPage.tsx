@@ -168,7 +168,7 @@ export function TeacherDetailPage() {
                       </span>
                     </td>
                     <td className="px-4 py-[10px] text-xs text-brand-body">
-                      Grade {c.grade_level}
+                      {c.grade_name || `Grade ${c.grade_level}`}
                     </td>
                     <td className="px-4 py-[10px] text-xs text-brand-body">
                       {c.student_count}

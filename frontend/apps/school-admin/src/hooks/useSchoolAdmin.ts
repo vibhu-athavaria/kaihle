@@ -92,6 +92,7 @@ export interface StudentListItem {
   needs_work_class_count: number;
   diagnostic_completed: boolean;
   grade_level: number | null;
+  grade_name: string | null;
 }
 
 export interface Curriculum {
@@ -233,6 +234,7 @@ export interface AssignedClass {
   class_name: string;
   subject_name: string;
   grade_level: number;
+  grade_name: string;
   student_count: number;
   avg_mastery: number | null;
 }

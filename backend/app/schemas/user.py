@@ -69,6 +69,7 @@ class StudentListItem(BaseModel):
     diagnostic_completed: bool
     # NULL when student has no grade assigned yet
     grade_level: int | None = None
+    grade_name: str | None = None
 
 
 class StudentListResponse(BaseModel):
