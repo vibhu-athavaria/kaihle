@@ -436,8 +436,14 @@ export function useCreateUser() {
       );
       return res.data;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["school", "users"] }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["school", "users"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["school", "students-list"],
+        }),
+      ]);
+    },
   });
 }
 
