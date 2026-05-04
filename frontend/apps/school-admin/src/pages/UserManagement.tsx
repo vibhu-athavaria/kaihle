@@ -156,10 +156,13 @@ export function UserManagement() {
   };
 
   const handleToggleStatus = (user: User) => {
-    const newStatus = user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    const newIsActive = user.status !== "ACTIVE";
     updateUser.mutate({
       userId: user.id,
-      data: { is_active: newStatus === "ACTIVE" },
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      is_active: newIsActive,
     });
   };
 

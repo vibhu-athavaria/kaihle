@@ -129,6 +129,26 @@ export interface StudyPlan {
   is_active?: boolean;
 }
 
+export interface StudentProfile {
+  id: string;
+  first_name: string;
+  last_name: string;
+  grade_level: number | null;
+  grade_name: string | null;
+  curriculum_name: string;
+  enrolled_at: string;
+  last_login_at: string | null;
+  class_enrollments: Array<{
+    class_id: string;
+    class_name: string;
+    teacher_name: string;
+    gap_states: Array<{
+      subtopic_name: string;
+      mastery_score: number | null;
+    }>;
+  }>;
+}
+
 // ── queries ──────────────────────────────────────────────────────────────────
 
 export function useSchoolAnalytics(fromDate?: string, toDate?: string) {
@@ -548,19 +568,37 @@ export function useUpdateUser() {
       data,
     }: {
       userId: string;
-      data: Record<string, unknown>;
+      first_name?: string;
+      last_name?: string;
+      email?: string;
+      grade_id?: string;
+      is_active?: boolean;
+      password?: string;
     }) => {
       if (!schoolId) throw new Error("No school_id for current user");
+      const { userId, ...updateData } = data;
       const res = await apiClient.patch(
         `/api/v1/schools/${schoolId}/users/${userId}`,
-        data,
+        updateData,
       );
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["school", "users"] });
-      queryClient.invalidateQueries({ queryKey: ["teacher"] });
-      queryClient.invalidateQueries({ queryKey: ["student"] });
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["school", "users"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["school", "students-list"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["student", variables.userId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["student", variables.userId, "detail"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["teacher", variables.userId],
+        }),
+      ]);
     },
   });
 }
