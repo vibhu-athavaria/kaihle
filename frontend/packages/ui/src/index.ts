@@ -30,4 +30,3 @@ export { Toaster } from "sonner";
 export { Modal } from "./components/Modal";
 export { SlideOverPanel } from "./components/SlideOverPanel";
 export { GapMapCell, type GapMapCellProps } from "./components/GapMapCell";
-export { SlideOverPanel } from "./components/SlideOverPanel";

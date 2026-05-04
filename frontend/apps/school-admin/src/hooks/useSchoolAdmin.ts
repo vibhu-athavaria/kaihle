@@ -574,6 +574,7 @@ export interface ClassDetail {
   teacher_id: string | null;
   teacher_name: string | null;
   academic_year: string;
+  is_active: boolean;
 }
 
 export function useClassDetail(
@@ -602,6 +603,7 @@ export function useClassDetail(
           teacher_id: data.teacher_id ?? null,
           teacher_name: cachedSummary.teacher_name ?? null,
           academic_year: data.academic_year,
+          is_active: data.is_active ?? true,
         } as ClassDetail;
       }
 
@@ -635,6 +637,7 @@ export function useClassDetail(
           ? `${teacherRes.data.first_name} ${teacherRes.data.last_name}`.trim()
           : null,
         academic_year: data.academic_year,
+        is_active: data.is_active ?? true,
       } as ClassDetail;
     },
     enabled: !!classId,

@@ -2,7 +2,7 @@
 
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -43,12 +43,8 @@ async def test_update_user_when_email_provided_and_unique_then_updates_email(
         hashed_password="hashed",
     )
 
-    # No conflict found
-    empty_result = MagicMock()
-    empty_result.scalar_one_or_none.return_value = None
-
     mock_db = AsyncMock()
-    mock_db.execute = AsyncMock(return_value=empty_result)
+    mock_db.scalar = AsyncMock(return_value=None)  # no conflict
 
     service = UserService(db=mock_db)
 
@@ -86,12 +82,8 @@ async def test_update_user_when_email_already_taken_then_raises_value_error(
 
     other_user = SimpleNamespace(id=uuid.uuid4(), email="taken@school.edu")
 
-    # Conflict found - another user has this email
-    conflict_result = MagicMock()
-    conflict_result.scalar_one_or_none.return_value = other_user
-
     mock_db = AsyncMock()
-    mock_db.execute = AsyncMock(return_value=conflict_result)
+    mock_db.scalar = AsyncMock(return_value=other_user)  # conflict found
 
     service = UserService(db=mock_db)
 
@@ -136,6 +128,6 @@ async def test_update_user_when_email_same_as_current_then_no_conflict_check(
         result = await service.update_user(school_id, user_id, data)
 
     assert result.email == "same@school.edu"
-    # execute should NOT be called (no conflict check when email unchanged)
-    mock_db.execute.assert_not_called()
+    # scalar should NOT be called (no conflict check when email unchanged)
+    mock_db.scalar.assert_not_called()
     mock_db.flush.assert_called_once()

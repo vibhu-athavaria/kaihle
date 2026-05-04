@@ -244,6 +244,19 @@ class UserService:
         # Extract grade_id separately - requires student profile update
         grade_id = update_data.pop("grade_id", None)
 
+        # Email uniqueness check — only when email is actually changing
+        new_email = update_data.get("email")
+        if new_email is not None and new_email != user.email:
+            conflict = await self.db.scalar(
+                select(User).where(
+                    User.school_id == school_id,
+                    User.email == new_email,
+                    User.id != user_id,
+                )
+            )
+            if conflict:
+                raise ValueError(f"Email '{new_email}' is already registered at this school")
+
         for field, value in update_data.items():
             setattr(user, field, value)
 
