@@ -98,7 +98,22 @@ class TeacherStudentItem(BaseModel):
     class_names: list[str]
 
 
+class ClassUpdate(BaseModel):
+    """Schema for updating a class. All fields optional — only provided fields are changed."""
+
+    name: str | None = Field(default=None, max_length=255)
+    teacher_id: uuid.UUID | None = None
+    academic_year: str | None = None
+    is_active: bool | None = None
+
+
 class TeacherStudentsResponse(BaseModel):
     """Response for teacher's aggregated student list."""
 
     students: list[TeacherStudentItem]
+
+
+class UnenrollRequest(BaseModel):
+    """Schema for removing students from a class (soft-delete)."""
+
+    student_ids: list[uuid.UUID] = Field(min_length=1)
