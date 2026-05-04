@@ -3,33 +3,17 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { SlideOverPanel, Button } from "@kaihle/ui";
-import { useUpdateUser, useGrades } from "../hooks/useSchoolAdmin";
-
-interface StudentProfile {
-  id: string;
-  first_name: string;
-  last_name: string;
-  grade_level: number | null;
-  grade_name: string | null;
-  curriculum_name: string;
-  enrolled_at: string;
-  last_login_at: string | null;
-  class_enrollments: Array<{
-    class_id: string;
-    class_name: string;
-    teacher_name: string;
-    gap_states: Array<{
-      subtopic_name: string;
-      mastery_score: number | null;
-    }>;
-  }>;
-}
+import {
+  useUpdateUser,
+  useGrades,
+  type StudentProfile,
+} from "../hooks/useSchoolAdmin";
 
 const editStudentSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   last_name: z.string().min(1, "Last name is required"),
-  email: z.string().email("Invalid email address"),
-  grade_id: z.string().min(1, "Grade is required"),
+  email: z.string().email("Invalid email address").optional().or(z.literal("")),
+  grade_id: z.string().min(1, "Grade is required").optional().or(z.literal("")),
   is_active: z.boolean(),
   password: z
     .string()
@@ -224,7 +208,7 @@ export function EditStudentPanel({
             htmlFor="email"
             className="block text-sm font-semibold text-brand-ink mb-1.5"
           >
-            Email <span className="text-brand-red">*</span>
+            Email
           </label>
           <input
             id="email"
@@ -249,7 +233,7 @@ export function EditStudentPanel({
             htmlFor="grade"
             className="block text-sm font-semibold text-brand-ink mb-1.5"
           >
-            Grade <span className="text-brand-red">*</span>
+            Grade
           </label>
           <select
             id="grade"
