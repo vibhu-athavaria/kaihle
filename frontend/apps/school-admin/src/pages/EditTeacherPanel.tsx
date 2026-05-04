@@ -54,16 +54,17 @@ export function EditTeacherPanel({
   const isActive = watch("is_active");
 
   const onSubmit = async (values: FormValues) => {
-    const payload: Record<string, unknown> = {
+    const updateData: Parameters<typeof updateUser.mutateAsync>[0] = {
+      userId,
       first_name: values.first_name,
       last_name: values.last_name,
       email: values.email,
       is_active: values.is_active,
     };
-    if (values.password) payload.password = values.password;
+    if (values.password) updateData.password = values.password;
 
     try {
-      await updateUser.mutateAsync({ userId, data: payload });
+      await updateUser.mutateAsync(updateData);
       toast.success("Teacher updated");
       onClose();
     } catch {

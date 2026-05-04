@@ -563,10 +563,7 @@ export function useUpdateUser() {
   const schoolId = useAuthStore((state) => state.user?.school_id);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      userId,
-      data,
-    }: {
+    mutationFn: async (data: {
       userId: string;
       first_name?: string;
       last_name?: string;
