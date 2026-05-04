@@ -543,19 +543,25 @@ export function useUpdateUser() {
   const schoolId = useAuthStore((state) => state.user?.school_id);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
+    mutationFn: async ({
+      userId,
+      data,
+    }: {
       userId: string;
-      status: "ACTIVE" | "INACTIVE";
+      data: Record<string, unknown>;
     }) => {
       if (!schoolId) throw new Error("No school_id for current user");
       const res = await apiClient.patch(
-        `/api/v1/schools/${schoolId}/users/${data.userId}`,
-        { status: data.status },
+        `/api/v1/schools/${schoolId}/users/${userId}`,
+        data,
       );
       return res.data;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["school", "users"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["school", "users"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher"] });
+      queryClient.invalidateQueries({ queryKey: ["student"] });
+    },
   });
 }
 

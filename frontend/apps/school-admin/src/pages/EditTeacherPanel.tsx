@@ -3,41 +3,37 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { SlideOverPanel, toast } from "@kaihle/ui";
-import {
-  useSchoolUsers,
-  useUpdateClass,
-  type ClassDetail,
-} from "../hooks/useSchoolAdmin";
+import { useUpdateUser } from "../hooks/useSchoolAdmin";
 
 const schema = z.object({
-  name: z.string().min(1, "Class name is required").max(255),
-  academic_year: z.string().min(1, "Academic year is required"),
-  teacher_id: z.string().uuid("Select a teacher"),
+  first_name: z.string().min(1, "Required"),
+  last_name: z.string().min(1, "Required"),
+  email: z.string().email("Enter a valid email"),
   is_active: z.boolean(),
+  password: z.string().min(8, "Min 8 characters").or(z.literal("")).optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
 
-interface EditClassPanelProps {
+interface EditTeacherPanelProps {
   open: boolean;
   onClose: () => void;
-  classDetail: ClassDetail | null | undefined;
+  userId: string;
+  initialValues: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    is_active: boolean;
+  };
 }
 
-export function EditClassPanel({
+export function EditTeacherPanel({
   open,
   onClose,
-  classDetail,
-}: EditClassPanelProps) {
-  const { data: teachers = [] } = useSchoolUsers("TEACHER");
-  const updateClass = useUpdateClass();
-
-  const initialValues = {
-    name: classDetail?.name ?? "",
-    academic_year: classDetail?.academic_year ?? "",
-    teacher_id: classDetail?.teacher_id ?? "",
-    is_active: true,
-  };
+  userId,
+  initialValues,
+}: EditTeacherPanelProps) {
+  const updateUser = useUpdateUser();
 
   const {
     register,
@@ -48,30 +44,37 @@ export function EditClassPanel({
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: initialValues,
+    defaultValues: { ...initialValues, password: "" },
   });
 
   useEffect(() => {
-    if (open) reset(initialValues);
+    if (open) reset({ ...initialValues, password: "" });
   }, [open, initialValues, reset]);
 
   const isActive = watch("is_active");
 
   const onSubmit = async (values: FormValues) => {
-    if (!classDetail) return;
+    const payload: Record<string, unknown> = {
+      first_name: values.first_name,
+      last_name: values.last_name,
+      email: values.email,
+      is_active: values.is_active,
+    };
+    if (values.password) payload.password = values.password;
+
     try {
-      await updateClass.mutateAsync({ classId: classDetail.id, ...values });
-      toast.success("Class updated");
+      await updateUser.mutateAsync({ userId, data: payload });
+      toast.success("Teacher updated");
       onClose();
     } catch {
-      toast.error("Failed to update class");
+      toast.error("Failed to update teacher");
     }
   };
 
   return (
     <SlideOverPanel
       open={open}
-      title="Edit class"
+      title="Edit teacher"
       onClose={onClose}
       footer={
         <div className="flex gap-2.5">
@@ -84,7 +87,7 @@ export function EditClassPanel({
           </button>
           <button
             type="submit"
-            form="edit-class-form"
+            form="edit-teacher-form"
             disabled={isSubmitting}
             className="flex-[2] bg-brand-primary text-white rounded-full py-2.5 text-sm font-bold hover:bg-brand-primary/90 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 transition-colors"
           >
@@ -93,32 +96,33 @@ export function EditClassPanel({
         </div>
       }
     >
-      <form id="edit-class-form" onSubmit={handleSubmit(onSubmit)} noValidate>
+      <form id="edit-teacher-form" onSubmit={handleSubmit(onSubmit)} noValidate>
         <div className="grid grid-cols-2 gap-4 mb-5">
           <div>
             <label className="block text-sm font-semibold text-brand-ink mb-1.5">
-              Class name
+              First name
             </label>
             <input
-              {...register("name")}
+              {...register("first_name")}
               className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary outline-none"
             />
-            {errors.name && (
-              <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>
+            {errors.first_name && (
+              <p className="text-xs text-red-500 mt-1">
+                {errors.first_name.message}
+              </p>
             )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-brand-ink mb-1.5">
-              Academic year
+              Last name
             </label>
             <input
-              {...register("academic_year")}
-              placeholder="e.g. 2024/2025"
+              {...register("last_name")}
               className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary outline-none"
             />
-            {errors.academic_year && (
+            {errors.last_name && (
               <p className="text-xs text-red-500 mt-1">
-                {errors.academic_year.message}
+                {errors.last_name.message}
               </p>
             )}
           </div>
@@ -126,22 +130,15 @@ export function EditClassPanel({
 
         <div className="mb-5">
           <label className="block text-sm font-semibold text-brand-ink mb-1.5">
-            Teacher
+            Email address
           </label>
-          <select
-            {...register("teacher_id")}
-            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary outline-none appearance-none cursor-pointer"
-          >
-            {teachers.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.first_name} {t.last_name}
-              </option>
-            ))}
-          </select>
-          {errors.teacher_id && (
-            <p className="text-xs text-red-500 mt-1">
-              {errors.teacher_id.message}
-            </p>
+          <input
+            {...register("email")}
+            type="email"
+            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary outline-none"
+          />
+          {errors.email && (
+            <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>
           )}
         </div>
 
@@ -170,10 +167,46 @@ export function EditClassPanel({
                   : "border-brand-border text-brand-muted bg-white"
               }`}
             >
-              Archived
+              Inactive
             </button>
           </div>
         </div>
+
+        <div className="mb-5">
+          <label className="block text-sm font-semibold text-brand-ink mb-1.5">
+            Reset password
+          </label>
+          <input
+            {...register("password")}
+            type="password"
+            placeholder="Leave blank to keep current"
+            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary outline-none"
+          />
+          {errors.password ? (
+            <p className="text-xs text-red-500 mt-1">
+              {errors.password.message}
+            </p>
+          ) : (
+            <p className="text-xs text-brand-muted mt-1">
+              Teacher will use this password on next login.
+            </p>
+          )}
+        </div>
+
+        <hr className="border-t border-gray-100 my-6" />
+        <p className="text-xs font-bold uppercase tracking-wide text-red-500 mb-2">
+          Danger zone
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setValue("is_active", false);
+            handleSubmit(onSubmit)();
+          }}
+          className="w-full border border-red-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-red-500 bg-white text-left hover:bg-red-50 transition-colors focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1"
+        >
+          Deactivate teacher
+        </button>
       </form>
     </SlideOverPanel>
   );
