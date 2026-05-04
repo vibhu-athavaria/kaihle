@@ -195,12 +195,16 @@ class UserService:
         role: UserRole | None = None,
         page: int = 1,
         page_size: int = 20,
+        is_active: bool | None = None,
     ) -> tuple[list[User], int]:
-        """List active users in a school with optional role filter and pagination."""
-        stmt = select(User).where(
-            User.school_id == school_id,
-            User.is_active.is_(True),
-        )
+        """List users in a school with optional role and active-status filters, plus pagination."""
+        conditions = [User.school_id == school_id]
+        if is_active is not None:
+            conditions.append(User.is_active.is_(is_active))
+        else:
+            conditions.append(User.is_active.is_(True))
+
+        stmt = select(User).where(*conditions)
         if role:
             # User.role is Mapped[str]; SQLAlchemy serialises the enum to its .value for comparison.
             stmt = stmt.where(User.role == role.value)
@@ -209,7 +213,7 @@ class UserService:
         result = await self.db.execute(stmt.order_by(User.last_name, User.first_name).offset(offset).limit(page_size))
         users = result.scalars().all()
 
-        count_stmt = select(func.count()).select_from(User).where(User.school_id == school_id, User.is_active.is_(True))
+        count_stmt = select(func.count()).select_from(User).where(*conditions)
         if role:
             count_stmt = count_stmt.where(User.role == role.value)
         total = await self.db.scalar(count_stmt) or 0

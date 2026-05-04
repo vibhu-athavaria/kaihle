@@ -191,13 +191,15 @@ export function useSchoolClasses() {
   });
 }
 
-export function useSchoolStudents() {
+export function useSchoolStudents(showInactive: boolean = false) {
   const schoolId = useAuthStore((state) => state.user?.school_id);
   return useQuery({
-    queryKey: ["school", "students-list", schoolId],
+    queryKey: ["school", "students-list", schoolId, showInactive],
     queryFn: async () => {
+      const params = new URLSearchParams({ role: "STUDENT" });
+      if (showInactive) params.set("is_active", "false");
       const res = await apiClient.get(
-        `/api/v1/schools/${schoolId}/users?role=STUDENT`,
+        `/api/v1/schools/${schoolId}/users?${params}`,
       );
       const raw = res.data?.users ?? res.data;
       return raw as StudentListItem[];
@@ -211,13 +213,16 @@ export function useSchoolUsers(
     | typeof UserRole.TEACHER
     | typeof UserRole.STUDENT
     | typeof UserRole.PARENT,
+  showInactive: boolean = false,
 ) {
   const schoolId = useAuthStore((state) => state.user?.school_id);
   return useQuery({
-    queryKey: ["school", "users", role, schoolId],
+    queryKey: ["school", "users", role, schoolId, showInactive],
     queryFn: async () => {
+      const params = new URLSearchParams({ role });
+      if (showInactive) params.set("is_active", "false");
       const res = await apiClient.get(
-        `/api/v1/schools/${schoolId}/users?role=${role}`,
+        `/api/v1/schools/${schoolId}/users?${params}`,
       );
       const rawUsers = res.data?.users ?? res.data;
 

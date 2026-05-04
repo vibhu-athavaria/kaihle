@@ -58,16 +58,21 @@ export function UsersPage() {
   const [studentModalOpen, setStudentModalOpen] = useState(false);
   const [teacherModalOpen, setTeacherModalOpen] = useState(false);
   const [parentModalOpen, setParentModalOpen] = useState(false);
+  const [showActive, setShowActive] = useState(true);
 
   const {
     data: students = [],
     isLoading: studentsLoading,
     isError: studentsError,
-  } = useSchoolStudents();
-  const { data: teachers = [], isLoading: teachersLoading } =
-    useSchoolUsers("TEACHER");
-  const { data: parents = [], isLoading: parentsLoading } =
-    useSchoolUsers("PARENT");
+  } = useSchoolStudents(!showActive);
+  const { data: teachers = [], isLoading: teachersLoading } = useSchoolUsers(
+    "TEACHER",
+    !showActive,
+  );
+  const { data: parents = [], isLoading: parentsLoading } = useSchoolUsers(
+    "PARENT",
+    !showActive,
+  );
 
   const attentionCount = students.filter(
     (s) => s.worst_mastery !== null && s.worst_mastery < 0.4,
@@ -162,34 +167,53 @@ export function UsersPage() {
           ))}
         </div>
 
-        {/* Contextual CTA */}
-        {tab === "students" && (
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setStudentModalOpen(true)}
-            className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+            type="button"
+            onClick={() => setShowActive(!showActive)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 ${
+              showActive ? "bg-brand-primary" : "bg-gray-200"
+            }`}
           >
-            <Plus aria-hidden="true" className="w-3.5 h-3.5" />
-            New Student
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                showActive ? "translate-x-[22px]" : "translate-x-0.5"
+              }`}
+            />
           </button>
-        )}
-        {tab === "teachers" && (
-          <button
-            onClick={() => setTeacherModalOpen(true)}
-            className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-          >
-            <Plus aria-hidden="true" className="w-3.5 h-3.5" />
-            New Teacher
-          </button>
-        )}
-        {tab === "parents" && (
-          <button
-            onClick={() => setParentModalOpen(true)}
-            className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-          >
-            <Plus aria-hidden="true" className="w-3.5 h-3.5" />
-            New Parent
-          </button>
-        )}
+          <span className="text-xs text-brand-muted whitespace-nowrap">
+            {showActive ? "Active" : "Inactive"}
+          </span>
+
+          {/* Contextual CTA */}
+          {tab === "students" && (
+            <button
+              onClick={() => setStudentModalOpen(true)}
+              className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+            >
+              <Plus aria-hidden="true" className="w-3.5 h-3.5" />
+              New Student
+            </button>
+          )}
+          {tab === "teachers" && (
+            <button
+              onClick={() => setTeacherModalOpen(true)}
+              className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+            >
+              <Plus aria-hidden="true" className="w-3.5 h-3.5" />
+              New Teacher
+            </button>
+          )}
+          {tab === "parents" && (
+            <button
+              onClick={() => setParentModalOpen(true)}
+              className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+            >
+              <Plus aria-hidden="true" className="w-3.5 h-3.5" />
+              New Parent
+            </button>
+          )}
+        </div>
       </div>
 
       {tab === "students" && (
@@ -233,19 +257,23 @@ export function UsersPage() {
             )}
             {[
               { key: "all" as StudentFilter, label: "All students" },
-              {
-                key: "attention" as StudentFilter,
-                label: `Needs attention (${attentionCount})`,
-                warn: true,
-              },
-              {
-                key: "pending" as StudentFilter,
-                label: `Diagnostic pending (${pendingCount})`,
-              },
-              {
-                key: "not_logged_in" as StudentFilter,
-                label: `Not yet logged in (${notLoggedIn})`,
-              },
+              ...(showActive
+                ? [
+                    {
+                      key: "attention" as StudentFilter,
+                      label: `Needs attention (${attentionCount})`,
+                      warn: true,
+                    },
+                    {
+                      key: "pending" as StudentFilter,
+                      label: `Diagnostic pending (${pendingCount})`,
+                    },
+                    {
+                      key: "not_logged_in" as StudentFilter,
+                      label: `Not yet logged in (${notLoggedIn})`,
+                    },
+                  ]
+                : []),
             ].map(({ key, label, warn }) => (
               <button
                 key={key}

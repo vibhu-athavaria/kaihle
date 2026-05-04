@@ -137,8 +137,9 @@ export function UserManagement() {
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<RoleTab>("TEACHER");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showActive, setShowActive] = useState(true);
 
-  const { data: users, isLoading } = useSchoolUsers(activeTab);
+  const { data: users, isLoading } = useSchoolUsers(activeTab, !showActive);
   const inviteUser = useInviteUser();
   const updateUser = useUpdateUser();
 
@@ -214,6 +215,25 @@ export function UserManagement() {
           </nav>
         </div>
 
+        <div className="flex items-center gap-2 py-1">
+          <button
+            type="button"
+            onClick={() => setShowActive(!showActive)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 ${
+              showActive ? "bg-brand-primary" : "bg-gray-200"
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                showActive ? "translate-x-[22px]" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+          <span className="text-sm text-brand-muted">
+            {showActive ? "Showing active users" : "Showing inactive users"}
+          </span>
+        </div>
+
         <Card
           variant="default"
           className="bg-white border-role-school-border overflow-hidden"
@@ -250,9 +270,14 @@ export function UserManagement() {
                 </table>
               </div>
               <div className="p-4 border-t border-brand-border text-sm text-brand-muted">
-                Showing {users.length} {activeTab.toLowerCase()}s
+                Showing {users.length} {!showActive ? "inactive " : ""}
+                {activeTab.toLowerCase()}s
               </div>
             </>
+          ) : !showActive ? (
+            <div className="p-8 text-center text-brand-muted">
+              No inactive {activeTab.toLowerCase()}s found.
+            </div>
           ) : (
             <div className="p-8 text-center text-brand-muted">
               No {activeTab.toLowerCase()}s found. Invite your first{" "}
