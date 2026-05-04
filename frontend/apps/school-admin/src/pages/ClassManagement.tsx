@@ -13,12 +13,17 @@ export function ClassManagement() {
   const [subjectFilter, setSubjectFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [showActive, setShowActive] = useState(true);
 
-  const attentionCount = classes.filter(
+  const activeClasses = classes.filter((c) => c.is_active);
+
+  const attentionCount = activeClasses.filter(
     (c) => c.diagnostic_status !== "has_data",
   ).length;
 
-  const filtered = classes
+  const filtered = (
+    showActive ? activeClasses : classes.filter((c) => !c.is_active)
+  )
     .filter((c) => {
       if (filter === "attention") return c.diagnostic_status !== "has_data";
       return true;
@@ -115,6 +120,23 @@ export function ClassManagement() {
           </select>
           <span className="text-xs text-brand-muted">
             {filtered.length} classes
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setShowActive(!showActive)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 ${
+              showActive ? "bg-brand-primary" : "bg-gray-200"
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                showActive ? "translate-x-[22px]" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+          <span className="text-xs text-brand-muted">
+            {showActive ? "Active" : "Inactive"}
           </span>
         </div>
         <button

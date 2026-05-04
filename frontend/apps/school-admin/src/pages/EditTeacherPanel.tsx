@@ -52,6 +52,7 @@ export function EditTeacherPanel({
   }, [open, initialValues, reset]);
 
   const isActive = watch("is_active");
+  const initiallyActive = initialValues.is_active;
 
   const onSubmit = async (values: FormValues) => {
     const updateData: Parameters<typeof updateUser.mutateAsync>[0] = {
@@ -194,20 +195,47 @@ export function EditTeacherPanel({
           )}
         </div>
 
-        <hr className="border-t border-gray-100 my-6" />
-        <p className="text-xs font-bold uppercase tracking-wide text-red-500 mb-2">
-          Danger zone
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            setValue("is_active", false);
-            handleSubmit(onSubmit)();
-          }}
-          className="w-full border border-red-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-red-500 bg-white text-left hover:bg-red-50 transition-colors focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1"
-        >
-          Deactivate teacher
-        </button>
+        {initiallyActive ? (
+          <>
+            <hr className="border-t border-gray-100 my-6" />
+            <p className="text-xs font-bold uppercase tracking-wide text-red-500 mb-2">
+              Danger zone
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setValue("is_active", false);
+                handleSubmit(onSubmit)();
+              }}
+              className="w-full border border-red-200 rounded-xl px-4 py-2.5 text-sm font-semibold text-red-500 bg-white text-left hover:bg-red-50 transition-colors focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-1"
+            >
+              Deactivate teacher
+            </button>
+          </>
+        ) : (
+          <>
+            <hr className="border-t border-gray-100 my-6" />
+            <div className="bg-green-50 border border-green-100 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-green-700 mb-2">
+                Account Deactivated
+              </h3>
+              <p className="text-xs text-green-600 mb-3">
+                This teacher&apos;s account is currently deactivated. They
+                cannot log in. Re-activate to restore their access.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setValue("is_active", true);
+                  handleSubmit(onSubmit)();
+                }}
+                className="bg-green-600 hover:bg-green-700 text-white rounded-full px-4 py-2.5 text-sm font-semibold focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:ring-offset-1 transition-colors"
+              >
+                Re-activate teacher
+              </button>
+            </div>
+          </>
+        )}
       </form>
     </SlideOverPanel>
   );

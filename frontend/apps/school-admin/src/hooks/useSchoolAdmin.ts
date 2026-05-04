@@ -73,6 +73,7 @@ export interface ClassSummary {
   grade_level: number | null;
   teacher_id: string | null;
   teacher_name: string | null;
+  is_active: boolean;
   student_count: number;
   avg_mastery: number | null;
   students_below_threshold: number;
