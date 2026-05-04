@@ -221,7 +221,7 @@ async def class_obj(
         curriculum_id=curriculum.id,
         teacher_id=teacher_user.id,
         name="Test Class 7A",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(c)

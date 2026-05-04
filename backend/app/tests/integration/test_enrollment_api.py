@@ -104,7 +104,7 @@ async def class_with_teacher(
         curriculum_id=test_curriculum.id,
         teacher_id=teacher.id,
         name="Test Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(class_)
@@ -213,7 +213,7 @@ async def another_school_class(
         curriculum_id=test_curriculum.id,
         teacher_id=teacher.id,
         name="Other School Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(class_)

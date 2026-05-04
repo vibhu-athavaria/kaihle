@@ -244,7 +244,7 @@ async def test_diagnostic_endpoint_when_diagnostic_pending_then_returns_200(
         curriculum_id=diag_curriculum.id,
         teacher_id=diag_teacher.id,
         name="Diag Test Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(diag_class)
@@ -486,7 +486,7 @@ async def test_diagnostic_endpoint_always_accessible_for_in_progress_student(
         curriculum_id=diag_curriculum.id,
         teacher_id=diag_teacher.id,
         name="Diag InProgress Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(diag_class)

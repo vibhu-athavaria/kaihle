@@ -145,7 +145,7 @@ async def test_create_class_when_valid_then_teacher_can_list(
         "subject_id": str(test_subject.id),
         "curriculum_id": str(test_curriculum.id),
         "teacher_id": str(test_teacher.id),
-        "academic_year": "2026",
+        "academic_year": "2025-2026",
     }
 
     # Act - Create class
@@ -215,7 +215,7 @@ async def test_create_class_when_teacher_not_in_school_then_400(
         "subject_id": str(test_subject.id),
         "curriculum_id": str(test_curriculum.id),
         "teacher_id": str(other_teacher.id),
-        "academic_year": "2026",
+        "academic_year": "2025-2026",
     }
 
     # Act
@@ -269,7 +269,7 @@ async def test_list_classes_when_teacher_then_only_own_classes_returned(
         curriculum_id=test_curriculum.id,
         teacher_id=test_teacher.id,
         name="Class 1",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(class1)
@@ -283,7 +283,7 @@ async def test_list_classes_when_teacher_then_only_own_classes_returned(
         curriculum_id=test_curriculum.id,
         teacher_id=other_teacher.id,
         name="Class 2",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(class2)
@@ -570,7 +570,7 @@ async def test_create_class_when_different_school_admin_then_403(
         "subject_id": str(test_subject.id),
         "curriculum_id": str(test_curriculum.id),
         "teacher_id": str(test_teacher.id),
-        "academic_year": "2026",
+        "academic_year": "2025-2026",
     }
 
     # Act
@@ -653,7 +653,7 @@ async def test_get_class_students_when_other_teacher_then_403(
         curriculum_id=test_class.curriculum_id,
         teacher_id=other_teacher.id,
         name="Other Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(other_class)

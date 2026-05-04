@@ -340,7 +340,7 @@ class TestRemoveSchoolCurriculum:
             curriculum_id=curriculum.id,
             teacher_id=teacher.id,
             name="Active Class",
-            academic_year="2026",
+            academic_year="2025-2026",
             is_active=True,
         )
         db_session.add(cls)

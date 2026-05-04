@@ -51,7 +51,7 @@ def _make_class(school_id: uuid.UUID, teacher_id: uuid.UUID) -> SimpleNamespace:
         grade_id=uuid.uuid4(),
         curriculum_id=uuid.uuid4(),
         name="Test Class 9A",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
 

@@ -10,11 +10,11 @@ import {
   type ClassDetail,
 } from "../hooks/useSchoolAdmin";
 
-const ACADEMIC_YEAR_REGEX = /^\d{4}\/\d{4}$/;
+const ACADEMIC_YEAR_REGEX = /^\d{4}\-\d{4}$/;
 
 const editClassSchema = z.object({
   name: z.string().min(1, "Class name is required"),
-  academic_year: z.string().regex(ACADEMIC_YEAR_REGEX, "Format: YYYY/YYYY"),
+  academic_year: z.string().regex(ACADEMIC_YEAR_REGEX, "Format: YYYY-YYYY"),
   teacher_id: z.string().min(1, "Teacher is required"),
   is_active: z.boolean(),
 });
@@ -147,7 +147,7 @@ export function EditClassPanel({
             type="text"
             {...register("academic_year")}
             className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-            placeholder="2025/2026"
+            placeholder="2025-2026"
           />
           {errors.academic_year && (
             <p className="mt-1 text-xs text-brand-red">

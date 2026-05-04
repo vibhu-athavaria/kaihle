@@ -25,7 +25,7 @@ def _make_fake_class(school_id: uuid.UUID) -> SimpleNamespace:
         curriculum_id=uuid.uuid4(),
         teacher_id=uuid.uuid4(),
         name="Math 7A",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
 
@@ -87,7 +87,7 @@ async def test_create_class_when_valid_payload_then_delegates_to_service_and_ret
                     "subject_id": str(uuid.uuid4()),
                     "curriculum_id": str(uuid.uuid4()),
                     "teacher_id": str(uuid.uuid4()),
-                    "academic_year": "2026",
+                    "academic_year": "2025-2026",
                 }
                 response = await ac.post(
                     f"/api/v1/schools/{school_id}/classes",
@@ -102,4 +102,4 @@ async def test_create_class_when_valid_payload_then_delegates_to_service_and_ret
     mock_service_create.assert_called_once()
     call_args = mock_service_create.call_args
     assert call_args is not None
-    assert call_args.args[1].academic_year == "2026"
+    assert call_args.args[1].academic_year == "2025-2026"

@@ -80,7 +80,7 @@ async def test_class_with_student(  # type: ignore[no-untyped-def]
         curriculum_id=test_curriculum.id,
         teacher_id=test_teacher.id,
         name="Test Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(class_)
@@ -287,7 +287,7 @@ async def test_full_onboarding_flow(
         curriculum_id=test_curriculum.id,
         teacher_id=test_teacher.id,
         name="Test Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(test_class)

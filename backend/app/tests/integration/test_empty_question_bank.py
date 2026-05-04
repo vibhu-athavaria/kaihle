@@ -85,7 +85,7 @@ async def empty_class(
         curriculum_id=test_curriculum.id,
         teacher_id=test_teacher.id,
         name="Empty Question Bank Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(class_)

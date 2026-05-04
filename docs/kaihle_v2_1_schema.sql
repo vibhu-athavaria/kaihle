@@ -676,7 +676,7 @@ CREATE TABLE classes (
     curriculum_id   UUID        NOT NULL REFERENCES curricula (id)  ON DELETE RESTRICT,
     teacher_id      UUID        NOT NULL REFERENCES users (id)      ON DELETE RESTRICT,
     name            VARCHAR(100) NOT NULL,   -- e.g. "Grade 9 Math — Cambridge A"
-    academic_year   VARCHAR(20)  NOT NULL,   -- e.g. "2026"
+    academic_year   VARCHAR(20)  NOT NULL,   -- e.g. "2025-2026"
     is_active       BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ
