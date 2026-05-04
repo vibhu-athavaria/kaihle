@@ -122,6 +122,7 @@ async def list_users(
     role: UserRole | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    is_active: bool | None = Query(None, description="Filter by active status. None defaults to active users only."),
     # require_full_access guards against password_setup-scoped tokens (security gap fix).
     # require_role enforces that only SCHOOL_ADMIN or KAIHLE_ADMIN may list users.
     _full: CurrentUser = Depends(require_full_access),
@@ -136,7 +137,7 @@ async def list_users(
     """
     _check_school_access(school_id, current_user)
     service = UserService(db)
-    users, total = await service.list_users(school_id, role, page, page_size)
+    users, total = await service.list_users(school_id, role, page, page_size, is_active)
 
     if role == UserRole.STUDENT:
         analytics = AnalyticsService(db, request.app.state.redis)

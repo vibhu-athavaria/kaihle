@@ -202,17 +202,19 @@ export function TeacherDetailPage() {
         )}
       </div>
 
-      <EditTeacherPanel
-        open={editPanelOpen}
-        onClose={() => setEditPanelOpen(false)}
-        userId={teacherId ?? ""}
-        initialValues={{
-          first_name: teacher.first_name,
-          last_name: teacher.last_name,
-          email: teacher.email,
-          is_active: teacher.is_active,
-        }}
-      />
+      {editPanelOpen && (
+        <EditTeacherPanel
+          open={editPanelOpen}
+          onClose={() => setEditPanelOpen(false)}
+          userId={teacherId ?? ""}
+          initialValues={{
+            first_name: teacher.first_name,
+            last_name: teacher.last_name,
+            email: teacher.email,
+            is_active: teacher.is_active,
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }

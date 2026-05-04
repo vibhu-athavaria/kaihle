@@ -1,12 +1,15 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
 import { apiClient } from "@kaihle/auth";
 import {
   useStudentAttempts,
   useStudentStudyPlans,
+  type StudentProfile,
 } from "../hooks/useSchoolAdmin";
+import { EditStudentPanel } from "./EditStudentPanel";
 
 function nameDisplay(first: string, last: string) {
   return `${first} ${last.charAt(0).toUpperCase()}.`;
@@ -15,31 +18,10 @@ function initials(first: string, last: string) {
   return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
 }
 
-interface GapState {
-  subtopic_name: string;
-  mastery_score: number | null;
-}
-interface ClassEnrollment {
-  class_id: string;
-  class_name: string;
-  teacher_name: string;
-  gap_states: GapState[];
-}
-interface StudentProfile {
-  id: string;
-  first_name: string;
-  last_name: string;
-  grade_level: number | null;
-  grade_name: string | null;
-  curriculum_name: string;
-  enrolled_at: string;
-  last_login_at: string | null;
-  class_enrollments: ClassEnrollment[];
-}
-
 export function StudentDetailPage() {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
+  const [editPanelOpen, setEditPanelOpen] = useState(false);
 
   const {
     data: student,
@@ -136,44 +118,52 @@ export function StudentDetailPage() {
                 })}
               </div>
             </div>
-            <div className="ml-auto flex gap-6">
-              <div className="text-center">
-                <div className="font-display font-bold text-xl text-brand-ink">
-                  {student.class_enrollments.length}
+            <div className="ml-auto flex items-center gap-4">
+              <button
+                onClick={() => setEditPanelOpen(true)}
+                className="px-4 py-2 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-brand-primary/90 transition-colors"
+              >
+                Edit student
+              </button>
+              <div className="flex gap-6">
+                <div className="text-center">
+                  <div className="font-display font-bold text-xl text-brand-ink">
+                    {student.class_enrollments.length}
+                  </div>
+                  <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
+                    Classes
+                  </div>
                 </div>
-                <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
-                  Classes
+                <div className="text-center">
+                  <div
+                    className={`font-display font-bold text-xl ${needsWorkClassCount > 0 ? "text-brand-red" : "text-brand-ink"}`}
+                  >
+                    {needsWorkClassCount}
+                  </div>
+                  <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
+                    Needs Work
+                  </div>
                 </div>
-              </div>
-              <div className="text-center">
-                <div
-                  className={`font-display font-bold text-xl ${needsWorkClassCount > 0 ? "text-brand-red" : "text-brand-ink"}`}
-                >
-                  {needsWorkClassCount}
+                <div className="text-center">
+                  <div className="font-display font-bold text-xl text-brand-ink">
+                    {attempts.length}
+                  </div>
+                  <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
+                    Assessments
+                  </div>
                 </div>
-                <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
-                  Needs Work
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="font-display font-bold text-xl text-brand-ink">
-                  {attempts.length}
-                </div>
-                <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
-                  Assessments
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="font-display font-bold text-xl text-brand-ink">
-                  {student.last_login_at
-                    ? new Date(student.last_login_at).toLocaleDateString(
-                        "en-GB",
-                        { day: "numeric", month: "short" },
-                      )
-                    : "Never"}
-                </div>
-                <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
-                  Last active
+                <div className="text-center">
+                  <div className="font-display font-bold text-xl text-brand-ink">
+                    {student.last_login_at
+                      ? new Date(student.last_login_at).toLocaleDateString(
+                          "en-GB",
+                          { day: "numeric", month: "short" },
+                        )
+                      : "Never"}
+                  </div>
+                  <div className="text-xs font-black uppercase tracking-[0.5px] text-brand-muted">
+                    Last active
+                  </div>
                 </div>
               </div>
             </div>
@@ -357,6 +347,14 @@ export function StudentDetailPage() {
               )}
             </div>
           </div>
+
+          {editPanelOpen && (
+            <EditStudentPanel
+              open={editPanelOpen}
+              onClose={() => setEditPanelOpen(false)}
+              student={student}
+            />
+          )}
         </>
       )}
     </DashboardLayout>

@@ -590,18 +590,22 @@ export function ClassDetailPage() {
         />
       )}
 
-      <EditClassPanel
-        open={editPanelOpen}
-        onClose={() => setEditPanelOpen(false)}
-        classDetail={classDetail}
-      />
+      {editPanelOpen && (
+        <EditClassPanel
+          open={editPanelOpen}
+          onClose={() => setEditPanelOpen(false)}
+          classDetail={classDetail}
+        />
+      )}
 
-      <ManageEnrollmentsModal
-        open={enrollmentsModalOpen}
-        onOpenChange={setEnrollmentsModalOpen}
-        classId={classId!}
-        className={classDetail?.name}
-      />
+      {enrollmentsModalOpen && (
+        <ManageEnrollmentsModal
+          open={enrollmentsModalOpen}
+          onOpenChange={setEnrollmentsModalOpen}
+          classId={classId!}
+          className={classDetail?.name}
+        />
+      )}
     </DashboardLayout>
   );
 }

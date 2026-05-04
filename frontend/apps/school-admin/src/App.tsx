@@ -5,7 +5,6 @@ import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
 import { PasswordSetupPage } from "./pages/PasswordSetupPage";
 import { SchoolOverview } from "./pages/SchoolOverview";
-import { UserManagement } from "./pages/UserManagement";
 import { UsersPage } from "./pages/UsersPage";
 import { StudentDetailPage } from "./pages/StudentDetailPage";
 import { TeacherDetailPage } from "./pages/TeacherDetailPage";
@@ -57,7 +56,6 @@ export default function App() {
                         path="users/parents/:parentId"
                         element={<ParentDetailPage />}
                       />
-                      <Route path="users/legacy" element={<UserManagement />} />
                       <Route path="classes" element={<ClassManagement />} />
                       <Route
                         path="classes/:classId"

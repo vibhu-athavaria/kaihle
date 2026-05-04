@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { SlideOverPanel, Button } from "@kaihle/ui";
+import { SlideOverPanel, Button, toast } from "@kaihle/ui";
 import { UserRole } from "@kaihle/types";
 import {
   useUpdateClass,
@@ -59,7 +59,7 @@ export function EditClassPanel({
         name: classDetail.name,
         academic_year: classDetail.academic_year,
         teacher_id: classDetail.teacher_id ?? "",
-        is_active: true, // Default to active, API doesn't return this yet
+        is_active: classDetail.is_active,
       });
     }
   }, [classDetail, open, reset]);
@@ -67,15 +67,55 @@ export function EditClassPanel({
   const onSubmit = async (values: EditClassFormValues) => {
     if (!classDetail) return;
 
-    await updateClass.mutateAsync({
-      classId: classDetail.id,
-      name: values.name,
-      academic_year: values.academic_year,
-      teacher_id: values.teacher_id,
-      is_active: values.is_active,
-    });
+    try {
+      await updateClass.mutateAsync({
+        classId: classDetail.id,
+        name: values.name,
+        academic_year: values.academic_year,
+        teacher_id: values.teacher_id,
+        is_active: values.is_active,
+      });
+      toast.success("Class updated");
+      onClose();
+    } catch {
+      toast.error("Failed to update class");
+    }
+  };
 
-    onClose();
+  const handleDeactivate = async () => {
+    if (!classDetail) return;
+
+    try {
+      await updateClass.mutateAsync({
+        classId: classDetail.id,
+        name: classDetail.name,
+        academic_year: classDetail.academic_year,
+        teacher_id: classDetail.teacher_id,
+        is_active: false,
+      });
+      toast.success("Class deactivated");
+      onClose();
+    } catch {
+      toast.error("Failed to deactivate class");
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!classDetail) return;
+
+    try {
+      await updateClass.mutateAsync({
+        classId: classDetail.id,
+        name: classDetail.name,
+        academic_year: classDetail.academic_year,
+        teacher_id: classDetail.teacher_id,
+        is_active: true,
+      });
+      toast.success("Class re-activated");
+      onClose();
+    } catch {
+      toast.error("Failed to re-activate class");
+    }
   };
 
   const footer = (
@@ -205,6 +245,53 @@ export function EditClassPanel({
             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-primary" />
           </label>
         </div>
+
+        {/* Danger Zone */}
+        {classDetail?.is_active ? (
+          <div className="pt-6 border-t border-gray-100">
+            <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-red-700 mb-2">
+                Danger Zone
+              </h3>
+              <p className="text-xs text-red-600 mb-3">
+                Deactivating a class will hide it from students. Assessment and
+                enrollment data will be preserved.
+              </p>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                loading={updateClass.isPending}
+                onClick={handleDeactivate}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Deactivate class
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="pt-6 border-t border-gray-100">
+            <div className="bg-green-50 border border-green-100 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-green-700 mb-2">
+                Class Deactivated
+              </h3>
+              <p className="text-xs text-green-600 mb-3">
+                This class is currently deactivated. Students cannot see it.
+                Re-activate to make it visible again.
+              </p>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                loading={updateClass.isPending}
+                onClick={handleReactivate}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                Re-activate class
+              </Button>
+            </div>
+          </div>
+        )}
       </form>
     </SlideOverPanel>
   );

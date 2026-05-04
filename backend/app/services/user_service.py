@@ -195,12 +195,16 @@ class UserService:
         role: UserRole | None = None,
         page: int = 1,
         page_size: int = 20,
+        is_active: bool | None = None,
     ) -> tuple[list[User], int]:
-        """List active users in a school with optional role filter and pagination."""
-        stmt = select(User).where(
-            User.school_id == school_id,
-            User.is_active.is_(True),
-        )
+        """List users in a school with optional role and active-status filters, plus pagination."""
+        conditions = [User.school_id == school_id]
+        if is_active is not None:
+            conditions.append(User.is_active.is_(is_active))
+        else:
+            conditions.append(User.is_active.is_(True))
+
+        stmt = select(User).where(*conditions)
         if role:
             # User.role is Mapped[str]; SQLAlchemy serialises the enum to its .value for comparison.
             stmt = stmt.where(User.role == role.value)
@@ -209,7 +213,7 @@ class UserService:
         result = await self.db.execute(stmt.order_by(User.last_name, User.first_name).offset(offset).limit(page_size))
         users = result.scalars().all()
 
-        count_stmt = select(func.count()).select_from(User).where(User.school_id == school_id, User.is_active.is_(True))
+        count_stmt = select(func.count()).select_from(User).where(*conditions)
         if role:
             count_stmt = count_stmt.where(User.role == role.value)
         total = await self.db.scalar(count_stmt) or 0
@@ -371,13 +375,14 @@ class UserService:
         # outerjoin so students without a profile row (or with grade_id=NULL) return None cleanly.
         profile_row = (
             await self.db.execute(
-                select(Grade.level, Grade.name)
-                .outerjoin(StudentProfile, StudentProfile.grade_id == Grade.id)
+                select(StudentProfile.grade_id, Grade.level, Grade.name)
+                .outerjoin(Grade, Grade.id == StudentProfile.grade_id)
                 .where(StudentProfile.user_id == student_id)
             )
         ).one_or_none()
-        grade_level: int | None = profile_row[0] if profile_row else None
-        grade_name: str | None = profile_row[1] if profile_row else None
+        grade_id: uuid.UUID | None = profile_row[0] if profile_row else None
+        grade_level: int | None = profile_row[1] if profile_row else None
+        grade_name: str | None = profile_row[2] if profile_row else None
 
         enrollment_query = (
             select(ClassEnrollment, Class, Curriculum, User)
@@ -435,6 +440,9 @@ class UserService:
             id=student.id,
             first_name=student.first_name or "",
             last_name=student.last_name or "",
+            email=student.email or "",
+            is_active=student.is_active if student.is_active is not None else True,
+            grade_id=str(grade_id) if grade_id else None,
             grade_level=grade_level,
             grade_name=grade_name,
             curriculum_name=curriculum_name,
