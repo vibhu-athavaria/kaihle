@@ -375,13 +375,14 @@ class UserService:
         # outerjoin so students without a profile row (or with grade_id=NULL) return None cleanly.
         profile_row = (
             await self.db.execute(
-                select(Grade.level, Grade.name)
-                .outerjoin(StudentProfile, StudentProfile.grade_id == Grade.id)
+                select(StudentProfile.grade_id, Grade.level, Grade.name)
+                .outerjoin(Grade, Grade.id == StudentProfile.grade_id)
                 .where(StudentProfile.user_id == student_id)
             )
         ).one_or_none()
-        grade_level: int | None = profile_row[0] if profile_row else None
-        grade_name: str | None = profile_row[1] if profile_row else None
+        grade_id: uuid.UUID | None = profile_row[0] if profile_row else None
+        grade_level: int | None = profile_row[1] if profile_row else None
+        grade_name: str | None = profile_row[2] if profile_row else None
 
         enrollment_query = (
             select(ClassEnrollment, Class, Curriculum, User)
@@ -439,6 +440,8 @@ class UserService:
             id=student.id,
             first_name=student.first_name or "",
             last_name=student.last_name or "",
+            email=student.email or "",
+            grade_id=str(grade_id) if grade_id else None,
             grade_level=grade_level,
             grade_name=grade_name,
             curriculum_name=curriculum_name,

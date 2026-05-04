@@ -133,6 +133,8 @@ export interface StudentProfile {
   id: string;
   first_name: string;
   last_name: string;
+  email: string;
+  grade_id: string | null;
   grade_level: number | null;
   grade_name: string | null;
   curriculum_name: string;

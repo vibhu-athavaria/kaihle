@@ -62,9 +62,9 @@ export function EditStudentPanel({
       reset({
         first_name: student.first_name,
         last_name: student.last_name,
-        email: "", // Student detail doesn't include email, fetch separately if needed
-        grade_id: "", // Student detail doesn't include grade_id, fetch separately if needed
-        is_active: true, // Default to active
+        email: student.email ?? "",
+        grade_id: student.grade_id ?? "",
+        is_active: true,
         password: "",
       });
     }
