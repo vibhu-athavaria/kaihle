@@ -30,6 +30,7 @@ from app.schemas.class_enrollment import (
     EnrollResponse,
     StudentSummary,
     TeacherStudentsResponse,
+    UnenrollRequest,
 )
 from app.services.class_service import ClassService
 from app.services.gap_service import GapService
@@ -268,3 +269,27 @@ async def list_teacher_students(
         school_id=current_user.school_id,
     )
     return TeacherStudentsResponse(students=students)
+
+
+@router.delete("/classes/{class_id}/enrollments", status_code=status.HTTP_204_NO_CONTENT)
+async def unenroll_students(
+    class_id: uuid.UUID,
+    body: UnenrollRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Soft-delete enrollments. SCHOOL_ADMIN and KAIHLE_ADMIN only.
+
+    Sets ClassEnrollment.is_active = False. Assessment history is preserved.
+    """
+    if not current_user.school_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has no school associated",
+        )
+    service = ClassService(db)
+    try:
+        await service.unenroll_students(class_id, current_user.school_id, body.student_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    await db.commit()

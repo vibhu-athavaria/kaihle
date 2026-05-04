@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout, GapMapCell } from "@kaihle/ui";
@@ -10,6 +10,8 @@ import {
   useSchoolClasses,
   type EnrolledStudent,
 } from "../hooks/useSchoolAdmin";
+import { EditClassPanel } from "./EditClassPanel";
+import { ManageEnrollmentsModal } from "./ManageEnrollmentsModal";
 
 // ── Gap Map types (local to this file) ───────────────────────────────────────
 
@@ -419,6 +421,9 @@ export function ClassDetailPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const [editPanelOpen, setEditPanelOpen] = useState(false);
+  const [enrollmentsModalOpen, setEnrollmentsModalOpen] = useState(false);
+
   const activeTab = (searchParams.get("tab") as TabKey | null) ?? "overview";
 
   const setTab = (tab: TabKey) => setSearchParams({ tab });
@@ -491,9 +496,20 @@ export function ClassDetailPage() {
             <h1 className="font-display font-bold text-2xl text-brand-ink">
               {classDetail?.name}
             </h1>
-            <span className="text-xs font-bold uppercase tracking-wider text-brand-primary bg-brand-green-pale border border-role-school-border px-3 py-1 rounded-full whitespace-nowrap ml-4">
-              Read only
-            </span>
+            <div className="flex items-center gap-2 ml-4">
+              <button
+                onClick={() => setEnrollmentsModalOpen(true)}
+                className="px-3 py-1.5 text-xs font-semibold text-brand-primary bg-white border border-brand-primary rounded-lg hover:bg-brand-green-light transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+              >
+                Manage enrollments
+              </button>
+              <button
+                onClick={() => setEditPanelOpen(true)}
+                className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+              >
+                Edit class
+              </button>
+            </div>
           </div>
           <p className="font-sans text-sm text-brand-muted mb-5">
             {[
@@ -573,6 +589,19 @@ export function ClassDetailPage() {
           classDetailLoading={detailLoading}
         />
       )}
+
+      <EditClassPanel
+        open={editPanelOpen}
+        onClose={() => setEditPanelOpen(false)}
+        classDetail={classDetail}
+      />
+
+      <ManageEnrollmentsModal
+        open={enrollmentsModalOpen}
+        onOpenChange={setEnrollmentsModalOpen}
+        classId={classId!}
+        className={classDetail?.name}
+      />
     </DashboardLayout>
   );
 }
