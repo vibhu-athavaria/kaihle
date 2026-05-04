@@ -4,7 +4,7 @@ import { apiClient } from "@kaihle/auth";
 import { useAuth } from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { DashboardLayout } from "@kaihle/ui";
-import { Info, BookOpen, Star } from "lucide-react";
+import { Info, BookOpen, Star, Eye, EyeOff } from "lucide-react";
 
 interface User {
   id: string;
@@ -50,6 +50,9 @@ function MyAccountSection({
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [isLoading] = useState(false);
@@ -312,15 +315,29 @@ function MyAccountSection({
               >
                 Current password
               </label>
-              <input
-                id="currentPassword"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Enter current password"
-                className="w-full rounded-lg border border-role-school-border px-3 py-2 text-sm font-sans text-brand-ink focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
-                disabled={isLoading}
-              />
+              <div className="relative">
+                <input
+                  id="currentPassword"
+                  type={showCurrent ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  className="w-full rounded-lg border border-role-school-border px-3 py-2 pr-10 text-sm font-sans text-brand-ink focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrent(!showCurrent)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-brand-muted hover:text-brand-body"
+                  aria-label={
+                    showCurrent
+                      ? "Hide current password"
+                      : "Show current password"
+                  }
+                >
+                  {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
             <div>
               <label
@@ -329,15 +346,27 @@ function MyAccountSection({
               >
                 New password
               </label>
-              <input
-                id="newPassword"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password"
-                className="w-full rounded-lg border border-role-school-border px-3 py-2 text-sm font-sans text-brand-ink focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
-                disabled={isLoading}
-              />
+              <div className="relative">
+                <input
+                  id="newPassword"
+                  type={showNew ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  className="w-full rounded-lg border border-role-school-border px-3 py-2 pr-10 text-sm font-sans text-brand-ink focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNew(!showNew)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-brand-muted hover:text-brand-body"
+                  aria-label={
+                    showNew ? "Hide new password" : "Show new password"
+                  }
+                >
+                  {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
             <div>
               <label
@@ -346,22 +375,36 @@ function MyAccountSection({
               >
                 Confirm new password
               </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value);
-                  if (e.target.value !== newPassword) {
-                    setPasswordError("Passwords do not match");
-                  } else {
-                    setPasswordError(null);
+              <div className="relative">
+                <input
+                  id="confirmPassword"
+                  type={showConfirm ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (e.target.value !== newPassword) {
+                      setPasswordError("Passwords do not match");
+                    } else {
+                      setPasswordError(null);
+                    }
+                  }}
+                  placeholder="Confirm new password"
+                  className="w-full rounded-lg border border-role-school-border px-3 py-2 pr-10 text-sm font-sans text-brand-ink focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(!showConfirm)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-brand-muted hover:text-brand-body"
+                  aria-label={
+                    showConfirm
+                      ? "Hide confirm password"
+                      : "Show confirm password"
                   }
-                }}
-                placeholder="Confirm new password"
-                className="w-full rounded-lg border border-role-school-border px-3 py-2 text-sm font-sans text-brand-ink focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/20 outline-none"
-                disabled={isLoading}
-              />
+                >
+                  {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
           </div>
           {passwordError && (

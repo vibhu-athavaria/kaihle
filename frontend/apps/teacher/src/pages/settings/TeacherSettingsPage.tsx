@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuth, apiClient, useAuthStore } from "@kaihle/auth";
 import { Button, toast } from "@kaihle/ui";
 
@@ -45,6 +46,9 @@ export function TeacherSettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isLoadingName, setIsLoadingName] = useState(false);
@@ -319,13 +323,27 @@ export function TeacherSettingsPage() {
                   >
                     Current password
                   </label>
-                  <input
-                    id="currentPassword"
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                  />
+                  <div className="relative">
+                    <input
+                      id="currentPassword"
+                      type={showCurrent ? "text" : "password"}
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className="w-full px-3 py-2 pr-10 border border-brand-border rounded-lg text-sm text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrent(!showCurrent)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-brand-muted hover:text-brand-body"
+                      aria-label={
+                        showCurrent
+                          ? "Hide current password"
+                          : "Show current password"
+                      }
+                    >
+                      {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label
@@ -334,13 +352,25 @@ export function TeacherSettingsPage() {
                   >
                     New password
                   </label>
-                  <input
-                    id="newPassword"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-3 py-2 border border-brand-border rounded-lg text-sm text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                  />
+                  <div className="relative">
+                    <input
+                      id="newPassword"
+                      type={showNew ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full px-3 py-2 pr-10 border border-brand-border rounded-lg text-sm text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNew(!showNew)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-brand-muted hover:text-brand-body"
+                      aria-label={
+                        showNew ? "Hide new password" : "Show new password"
+                      }
+                    >
+                      {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label
@@ -349,17 +379,31 @@ export function TeacherSettingsPage() {
                   >
                     Confirm new password
                   </label>
-                  <input
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg text-sm text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent ${
-                      passwordMismatch
-                        ? "border-red-500"
-                        : "border-brand-border"
-                    }`}
-                  />
+                  <div className="relative">
+                    <input
+                      id="confirmPassword"
+                      type={showConfirm ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className={`w-full px-3 py-2 pr-10 border rounded-lg text-sm text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent ${
+                        passwordMismatch
+                          ? "border-red-500"
+                          : "border-brand-border"
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(!showConfirm)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-brand-muted hover:text-brand-body"
+                      aria-label={
+                        showConfirm
+                          ? "Hide confirm password"
+                          : "Show confirm password"
+                      }
+                    >
+                      {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
                 {passwordMismatch && (
                   <p className="text-sm text-red-600">Passwords do not match</p>
