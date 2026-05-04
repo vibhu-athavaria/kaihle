@@ -645,18 +645,24 @@ export function UsersPage() {
         </>
       )}
 
-      <CreateStudentModal
-        open={studentModalOpen}
-        onOpenChange={setStudentModalOpen}
-      />
-      <CreateTeacherModal
-        open={teacherModalOpen}
-        onOpenChange={setTeacherModalOpen}
-      />
-      <CreateParentModal
-        open={parentModalOpen}
-        onOpenChange={setParentModalOpen}
-      />
+      {studentModalOpen && (
+        <CreateStudentModal
+          open={studentModalOpen}
+          onOpenChange={setStudentModalOpen}
+        />
+      )}
+      {teacherModalOpen && (
+        <CreateTeacherModal
+          open={teacherModalOpen}
+          onOpenChange={setTeacherModalOpen}
+        />
+      )}
+      {parentModalOpen && (
+        <CreateParentModal
+          open={parentModalOpen}
+          onOpenChange={setParentModalOpen}
+        />
+      )}
     </DashboardLayout>
   );
 }

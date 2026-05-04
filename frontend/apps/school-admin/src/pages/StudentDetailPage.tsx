@@ -348,11 +348,13 @@ export function StudentDetailPage() {
             </div>
           </div>
 
-          <EditStudentPanel
-            open={editPanelOpen}
-            onClose={() => setEditPanelOpen(false)}
-            student={student}
-          />
+          {editPanelOpen && (
+            <EditStudentPanel
+              open={editPanelOpen}
+              onClose={() => setEditPanelOpen(false)}
+              student={student}
+            />
+          )}
         </>
       )}
     </DashboardLayout>

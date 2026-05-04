@@ -213,11 +213,13 @@ export function ClassManagement() {
           </div>
         ))}
       </div>
-      <CreateClassModal
-        isOpen={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        onCreated={() => setCreateModalOpen(false)}
-      />
+      {createModalOpen && (
+        <CreateClassModal
+          isOpen={createModalOpen}
+          onClose={() => setCreateModalOpen(false)}
+          onCreated={() => setCreateModalOpen(false)}
+        />
+      )}
     </DashboardLayout>
   );
 }
