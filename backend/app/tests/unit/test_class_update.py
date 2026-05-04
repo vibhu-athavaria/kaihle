@@ -5,8 +5,14 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
+from app.core.database import get_db
+from app.core.deps import get_current_user
+from app.main import app
+from app.models.user import UserRole
 from app.schemas.class_enrollment import ClassUpdate
+from app.services.class_service import ClassService
 
 
 @pytest.fixture
@@ -37,8 +43,6 @@ async def test_update_class_when_valid_data_then_updates_fields_and_returns_clas
     Assert:  class.name updated, class.teacher_id updated, academic_year unchanged,
              db.flush called once.
     """
-    from app.services.class_service import ClassService
-
     fake_class = SimpleNamespace(
         id=class_id,
         school_id=school_id,
@@ -73,8 +77,6 @@ async def test_update_class_when_class_not_found_then_raises_value_error(
     Act:     call update_class with unknown class_id.
     Assert:  ValueError raised.
     """
-    from app.services.class_service import ClassService
-
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=None)
 
@@ -96,8 +98,6 @@ async def test_update_class_when_wrong_school_then_raises_value_error(
     Act:     call update_class.
     Assert:  ValueError raised (403-equivalent — cross-school access denied).
     """
-    from app.services.class_service import ClassService
-
     fake_class = SimpleNamespace(
         id=class_id,
         school_id=uuid.uuid4(),  # different school
@@ -128,11 +128,6 @@ async def test_patch_class_route_when_valid_then_returns_200(
     Act:     PATCH /api/v1/classes/{class_id} with { name: "New Name" }.
     Assert:  200 response, service.update_class called once.
     """
-    from app.core.database import get_db
-    from app.core.deps import get_current_user
-    from app.main import app
-    from app.models.user import UserRole
-
     fake_admin = MagicMock()
     fake_admin.id = uuid.uuid4()
     fake_admin.school_id = school_id
@@ -169,8 +164,6 @@ async def test_patch_class_route_when_valid_then_returns_200(
         app.dependency_overrides[get_current_user] = _fake_user
 
         try:
-            from httpx import ASGITransport, AsyncClient
-
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.patch(
                     f"/api/v1/classes/{class_id}",

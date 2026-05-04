@@ -1,10 +1,18 @@
 """Unit tests for ClassService.unenroll_students."""
 
+import json
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.core.database import get_db
+from app.core.deps import get_current_user
+from app.main import app
+from app.models.user import UserRole
+from app.services.class_service import ClassService
 
 
 @pytest.fixture
@@ -28,8 +36,6 @@ async def test_unenroll_students_when_valid_then_sets_is_active_false(
     Act:     call unenroll_students(class_id, school_id, [student_id]).
     Assert:  matching enrollment.is_active = False; non-matching unchanged; flush called.
     """
-    from app.services.class_service import ClassService
-
     student_to_remove = uuid.uuid4()
     student_to_keep = uuid.uuid4()
 
@@ -64,8 +70,6 @@ async def test_unenroll_students_when_class_not_found_then_raises_value_error(
     Act:     call unenroll_students.
     Assert:  ValueError raised with 'Class not found'.
     """
-    from app.services.class_service import ClassService
-
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=None)
 
@@ -86,8 +90,6 @@ async def test_unenroll_students_when_wrong_school_then_raises_value_error(
     Act:     call unenroll_students.
     Assert:  ValueError raised with 'Class not found'.
     """
-    from app.services.class_service import ClassService
-
     fake_class = SimpleNamespace(id=class_id, school_id=uuid.uuid4())  # different school
 
     mock_db = AsyncMock()
@@ -110,11 +112,6 @@ async def test_delete_enrollments_route_when_valid_then_returns_204(
     Act:     DELETE /api/v1/classes/{class_id}/enrollments with { student_ids: [...] }.
     Assert:  204 response, service.unenroll_students called once.
     """
-    from app.core.database import get_db
-    from app.core.deps import get_current_user
-    from app.main import app
-    from app.models.user import UserRole
-
     student_id = uuid.uuid4()
 
     fake_admin = MagicMock()
@@ -141,15 +138,11 @@ async def test_delete_enrollments_route_when_valid_then_returns_204(
         app.dependency_overrides[get_current_user] = _fake_user
 
         try:
-            import json as json_module
-
-            from httpx import ASGITransport, AsyncClient
-
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.request(
                     "DELETE",
                     f"/api/v1/classes/{class_id}/enrollments",
-                    content=json_module.dumps({"student_ids": [str(student_id)]}),
+                    content=json.dumps({"student_ids": [str(student_id)]}),
                     headers={"Content-Type": "application/json"},
                 )
         finally:

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.schemas.user import UserUpdate
+from app.services.user_service import UserService
 
 
 @pytest.fixture
@@ -30,9 +31,6 @@ async def test_update_user_when_email_provided_and_unique_then_updates_email(
     Act:     call update_user(school_id, user_id, data).
     Assert:  user.email updated to new email; flush called.
     """
-    from app.services.user_service import UserService
-
-    # Create a mutable fake user object using SimpleNamespace
     fake_user = SimpleNamespace(
         id=user_id,
         school_id=school_id,
@@ -68,8 +66,6 @@ async def test_update_user_when_email_already_taken_then_raises_value_error(
     Act:     call update_user with that email.
     Assert:  ValueError raised containing 'already registered'.
     """
-    from app.services.user_service import UserService
-
     fake_user = SimpleNamespace(
         id=user_id,
         school_id=school_id,
@@ -106,8 +102,6 @@ async def test_update_user_when_email_same_as_current_then_no_conflict_check(
     Act:     call update_user.
     Assert:  db.execute NOT called for uniqueness check; flush called.
     """
-    from app.services.user_service import UserService
-
     fake_user = SimpleNamespace(
         id=user_id,
         school_id=school_id,
