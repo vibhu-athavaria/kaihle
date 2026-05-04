@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
 import { useTeacherDetail } from "../hooks/useSchoolAdmin";
+import { EditTeacherPanel } from "./EditTeacherPanel";
 
 function initials(first: string, last: string) {
   return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
@@ -24,6 +26,7 @@ function subjectBadgeClass(subject: string) {
 export function TeacherDetailPage() {
   const { teacherId } = useParams<{ teacherId: string }>();
   const navigate = useNavigate();
+  const [editPanelOpen, setEditPanelOpen] = useState(false);
 
   const {
     data: teacher,
@@ -120,6 +123,12 @@ export function TeacherDetailPage() {
             {teacher.assigned_classes.length}{" "}
             {teacher.assigned_classes.length === 1 ? "class" : "classes"}
           </span>
+          <button
+            onClick={() => setEditPanelOpen(true)}
+            className="mt-1 px-3 py-1 text-xs font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+          >
+            Edit teacher
+          </button>
         </div>
       </div>
 
@@ -192,6 +201,18 @@ export function TeacherDetailPage() {
           </table>
         )}
       </div>
+
+      <EditTeacherPanel
+        open={editPanelOpen}
+        onClose={() => setEditPanelOpen(false)}
+        userId={teacherId ?? ""}
+        initialValues={{
+          first_name: teacher.first_name,
+          last_name: teacher.last_name,
+          email: teacher.email,
+          is_active: teacher.is_active,
+        }}
+      />
     </DashboardLayout>
   );
 }

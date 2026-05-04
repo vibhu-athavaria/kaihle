@@ -112,7 +112,7 @@ async def _create_curriculum_setup(
         curriculum_id=curriculum.id,
         teacher_id=teacher.id,
         name="Maths 9A",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db.add(class_)

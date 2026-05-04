@@ -549,7 +549,7 @@ async def test_kaihle_admin_can_create_class_in_any_school(
             "subject_id": str(test_subject.id),
             "curriculum_id": str(test_curriculum.id),
             "teacher_id": str(teacher.id),
-            "academic_year": "2026",
+            "academic_year": "2025-2026",
         },
     )
 
@@ -593,7 +593,7 @@ async def test_kaihle_admin_can_list_classes_in_any_school(
         curriculum_id=test_curriculum.id,
         teacher_id=teacher.id,
         name="Kaihle Test Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(class_)
@@ -644,7 +644,7 @@ async def test_kaihle_admin_can_enroll_students_in_any_school(
         curriculum_id=test_curriculum.id,
         teacher_id=teacher.id,
         name="Enrollment Test Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(class_)

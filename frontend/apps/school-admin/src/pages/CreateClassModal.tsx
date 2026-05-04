@@ -24,7 +24,7 @@ function currentAcademicYear(): string {
   return month >= 8 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
 }
 
-const ACADEMIC_YEAR_REGEX = /^\d{4}\/\d{4}$/;
+const ACADEMIC_YEAR_REGEX = /^\d{4}\-\d{4}$/;
 
 function SelectField({
   id,
@@ -199,7 +199,7 @@ export function CreateClassModal({
     if (!subjectId) errs.subject = "Subject is required";
     if (!teacherId) errs.teacher = "Teacher is required";
     if (!ACADEMIC_YEAR_REGEX.test(academicYear))
-      errs.academicYear = "Format: YYYY/YYYY";
+      errs.academicYear = "Format: YYYY-YYYY";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }

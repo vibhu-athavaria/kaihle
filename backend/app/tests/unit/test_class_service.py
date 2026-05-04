@@ -49,7 +49,7 @@ class TestCreateClass:
             subject_id=subject_id,
             curriculum_id=curriculum_id,
             teacher_id=teacher_id,
-            academic_year="2026",
+            academic_year="2025-2026",
         )
 
         # Mock teacher lookup then curriculum subscription check
@@ -90,7 +90,7 @@ class TestCreateClass:
             subject_id=subject_id,
             curriculum_id=curriculum_id,
             teacher_id=teacher_id,
-            academic_year="2026",
+            academic_year="2025-2026",
         )
 
         # Mock teacher not found
@@ -116,7 +116,7 @@ class TestCreateClass:
             subject_id=uuid.uuid4(),
             curriculum_id=curriculum_id,
             teacher_id=teacher_id,
-            academic_year="2026",
+            academic_year="2025-2026",
         )
         teacher = User(id=teacher_id, school_id=school_id, role=UserRole.TEACHER)
         teacher_result = MagicMock()
@@ -144,7 +144,7 @@ class TestCreateClass:
             subject_id=uuid.uuid4(),
             curriculum_id=curriculum_id,
             teacher_id=teacher_id,
-            academic_year="2026",
+            academic_year="2025-2026",
         )
         teacher = User(id=teacher_id, school_id=school_id, role=UserRole.TEACHER)
         sc = SchoolCurriculum(school_id=school_id, curriculum_id=curriculum_id)
@@ -180,7 +180,7 @@ class TestListClasses:
                 subject_id=uuid.uuid4(),
                 curriculum_id=uuid.uuid4(),
                 teacher_id=uuid.uuid4(),
-                academic_year="2026",
+                academic_year="2025-2026",
             )
             for i in range(3)
         ]
@@ -212,7 +212,7 @@ class TestListClasses:
                 subject_id=uuid.uuid4(),
                 curriculum_id=uuid.uuid4(),
                 teacher_id=teacher_id,
-                academic_year="2026",
+                academic_year="2025-2026",
             )
         ]
         mock_result = MagicMock()
@@ -248,7 +248,7 @@ class TestEnrollStudents:
             subject_id=uuid.uuid4(),
             curriculum_id=uuid.uuid4(),
             teacher_id=uuid.uuid4(),
-            academic_year="2026",
+            academic_year="2025-2026",
         )
         mock_db.get = AsyncMock(return_value=class_)
 
@@ -303,7 +303,7 @@ class TestEnrollStudents:
             subject_id=uuid.uuid4(),
             curriculum_id=uuid.uuid4(),
             teacher_id=uuid.uuid4(),
-            academic_year="2026",
+            academic_year="2025-2026",
         )
         mock_db.get = AsyncMock(return_value=class_)
 
@@ -357,7 +357,7 @@ class TestEnrollStudents:
             subject_id=uuid.uuid4(),
             curriculum_id=uuid.uuid4(),
             teacher_id=uuid.uuid4(),
-            academic_year="2026",
+            academic_year="2025-2026",
         )
         mock_db.get = AsyncMock(return_value=class_)
 
@@ -391,7 +391,7 @@ class TestGetClass:
             subject_id=uuid.uuid4(),
             curriculum_id=uuid.uuid4(),
             teacher_id=uuid.uuid4(),
-            academic_year="2026",
+            academic_year="2025-2026",
         )
         mock_db.get = AsyncMock(return_value=class_)
 
@@ -431,7 +431,7 @@ class TestVerifyClassSchool:
             subject_id=uuid.uuid4(),
             curriculum_id=uuid.uuid4(),
             teacher_id=uuid.uuid4(),
-            academic_year="2026",
+            academic_year="2025-2026",
         )
         mock_db.get = AsyncMock(return_value=class_)
 
@@ -455,7 +455,7 @@ class TestVerifyClassSchool:
             subject_id=uuid.uuid4(),
             curriculum_id=uuid.uuid4(),
             teacher_id=uuid.uuid4(),
-            academic_year="2026",
+            academic_year="2025-2026",
         )
         mock_db.get = AsyncMock(return_value=class_)
 
@@ -475,7 +475,7 @@ class TestGetClassStudents:
             subject_id=uuid.uuid4(),
             curriculum_id=uuid.uuid4(),
             teacher_id=uuid.uuid4(),
-            academic_year="2026",
+            academic_year="2025-2026",
         )
 
     def _make_row(self, user: User, status: str | None = None, grade_level: int | None = None) -> MagicMock:
@@ -717,7 +717,7 @@ class TestGetTeacherStudents:
             grade_id=uuid.uuid4(),
             subject_id=uuid.uuid4(),
             curriculum_id=uuid.uuid4(),
-            academic_year="2026",
+            academic_year="2025-2026",
         )
         class2 = Class(
             id=uuid.uuid4(),
@@ -727,7 +727,7 @@ class TestGetTeacherStudents:
             grade_id=uuid.uuid4(),
             subject_id=uuid.uuid4(),
             curriculum_id=uuid.uuid4(),
-            academic_year="2026",
+            academic_year="2025-2026",
         )
 
         student1 = User(
@@ -801,7 +801,7 @@ class TestGetTeacherStudents:
             grade_id=uuid.uuid4(),
             subject_id=uuid.uuid4(),
             curriculum_id=uuid.uuid4(),
-            academic_year="2026",
+            academic_year="2025-2026",
         )
 
         mock_classes_result = MagicMock()

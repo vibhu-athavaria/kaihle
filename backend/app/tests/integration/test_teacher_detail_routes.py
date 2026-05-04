@@ -71,7 +71,7 @@ async def _make_class_for_teacher(
         curriculum_id=curriculum.id,
         teacher_id=teacher.id,
         name=class_name,
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db.add(class_)

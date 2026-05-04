@@ -345,7 +345,7 @@ class TestModelCRUD:
             curriculum_id=test_curriculum.id,
             teacher_id=test_teacher.id,
             name="Grade 7 Math A",
-            academic_year="2026",
+            academic_year="2025-2026",
         )
         db_session.add(class_)
         await db_session.commit()

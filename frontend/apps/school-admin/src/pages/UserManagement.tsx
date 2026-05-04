@@ -157,7 +157,10 @@ export function UserManagement() {
 
   const handleToggleStatus = (user: User) => {
     const newStatus = user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    updateUser.mutate({ userId: user.id, status: newStatus });
+    updateUser.mutate({
+      userId: user.id,
+      data: { is_active: newStatus === "ACTIVE" },
+    });
   };
 
   const getTabHref = (tab: RoleTab) => {

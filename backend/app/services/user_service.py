@@ -241,12 +241,35 @@ class UserService:
         update_data = data.model_dump(exclude_unset=True)
         new_password = update_data.pop("password", None)
 
+        # Extract grade_id separately - requires student profile update
+        grade_id = update_data.pop("grade_id", None)
+
+        # Email uniqueness check — only when email is actually changing
+        new_email = update_data.get("email")
+        if new_email is not None and new_email != user.email:
+            conflict = await self.db.scalar(
+                select(User).where(
+                    User.school_id == school_id,
+                    User.email == new_email,
+                    User.id != user_id,
+                )
+            )
+            if conflict:
+                raise ValueError(f"Email '{new_email}' is already registered at this school")
+
         for field, value in update_data.items():
             setattr(user, field, value)
 
         # Handle password update - hash and store separately
         if new_password is not None:
             user.hashed_password = hash_password(new_password)
+
+        # Handle grade_id update for students
+        if grade_id is not None:
+            profile = await self.db.scalar(select(StudentProfile).where(StudentProfile.user_id == user_id))
+            if profile is None:
+                raise ValueError("Student profile not found")
+            profile.grade_id = grade_id
 
         await self.db.flush()
 
@@ -257,6 +280,7 @@ class UserService:
             previous_state=previous_state,
             new_state={"first_name": user.first_name, "last_name": user.last_name, "is_active": user.is_active},
             password_changed=new_password is not None,
+            grade_changed=grade_id is not None,
         )
 
         return user

@@ -11,6 +11,7 @@
     "lint": "eslint src"
   },
   "dependencies": {
+    "@hookform/resolvers": "^3.10.0",
     "@kaihle/api-client": "workspace:*",
     "@kaihle/auth": "workspace:*",
     "@kaihle/types": "workspace:*",

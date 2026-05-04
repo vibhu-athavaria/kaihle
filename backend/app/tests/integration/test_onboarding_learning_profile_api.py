@@ -221,7 +221,7 @@ async def teacher_with_class(
         curriculum_id=curriculum.id,
         teacher_id=teacher.id,
         name="Math 7",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(class_)

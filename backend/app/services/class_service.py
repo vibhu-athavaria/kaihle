@@ -496,10 +496,6 @@ class ClassService:
         Raises:
             ValueError: If class not found or belongs to a different school.
         """
-        from sqlalchemy import select
-
-        from app.models.school import ClassEnrollment
-
         class_ = await self.db.get(Class, class_id)
         if not class_ or class_.school_id != school_id:
             raise ValueError("Class not found")

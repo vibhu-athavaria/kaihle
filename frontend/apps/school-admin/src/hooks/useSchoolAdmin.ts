@@ -480,7 +480,9 @@ export function useUpdateClass() {
     mutationFn: async (data: {
       classId: string;
       name?: string;
-      teacher_id?: string;
+      academic_year?: string;
+      teacher_id?: string | null;
+      is_active?: boolean;
     }) => {
       const res = await apiClient.patch(
         `/api/v1/classes/${data.classId}`,
@@ -488,8 +490,52 @@ export function useUpdateClass() {
       );
       return res.data;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["school", "classes"] }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["school", "classes"] }),
+        queryClient.invalidateQueries({ queryKey: ["class"] }),
+      ]);
+    },
+  });
+}
+
+export function useUnenrollStudents(classId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (studentIds: string[]) => {
+      const res = await apiClient.delete(
+        `/api/v1/classes/${classId}/enrollments`,
+        { data: { student_ids: studentIds } },
+      );
+      return res.data;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["school", "classes"] }),
+        queryClient.invalidateQueries({ queryKey: ["class", classId] }),
+      ]);
+    },
+  });
+}
+
+export interface ClassStudent {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  grade_name: string | null;
+  worst_mastery: number | null;
+  diagnostic_completed: boolean;
+}
+
+export function useClassStudents(classId: string) {
+  return useQuery({
+    queryKey: ["class", classId, "students"],
+    queryFn: async () => {
+      const res = await apiClient.get(`/api/v1/classes/${classId}/enrollments`);
+      return res.data as ClassStudent[];
+    },
+    enabled: !!classId,
   });
 }
 
@@ -497,19 +543,25 @@ export function useUpdateUser() {
   const schoolId = useAuthStore((state) => state.user?.school_id);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: {
+    mutationFn: async ({
+      userId,
+      data,
+    }: {
       userId: string;
-      status: "ACTIVE" | "INACTIVE";
+      data: Record<string, unknown>;
     }) => {
       if (!schoolId) throw new Error("No school_id for current user");
       const res = await apiClient.patch(
-        `/api/v1/schools/${schoolId}/users/${data.userId}`,
-        { status: data.status },
+        `/api/v1/schools/${schoolId}/users/${userId}`,
+        data,
       );
       return res.data;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["school", "users"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["school", "users"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher"] });
+      queryClient.invalidateQueries({ queryKey: ["student"] });
+    },
   });
 }
 
@@ -519,8 +571,10 @@ export interface ClassDetail {
   subject_id: string;
   subject_name: string;
   grade_name: string;
+  teacher_id: string | null;
   teacher_name: string | null;
   academic_year: string;
+  is_active: boolean;
 }
 
 export function useClassDetail(
@@ -546,8 +600,10 @@ export function useClassDetail(
           subject_id: data.subject_id,
           subject_name: cachedSummary.subject_name,
           grade_name: cachedSummary.grade_name,
+          teacher_id: data.teacher_id ?? null,
           teacher_name: cachedSummary.teacher_name ?? null,
           academic_year: data.academic_year,
+          is_active: data.is_active ?? true,
         } as ClassDetail;
       }
 
@@ -576,10 +632,12 @@ export function useClassDetail(
         subject_id: data.subject_id,
         subject_name: subject?.name ?? data.subject_name ?? "",
         grade_name: grade ? `Grade ${grade.level}` : (data.grade_name ?? ""),
+        teacher_id: data.teacher_id ?? null,
         teacher_name: teacherRes
           ? `${teacherRes.data.first_name} ${teacherRes.data.last_name}`.trim()
           : null,
         academic_year: data.academic_year,
+        is_active: data.is_active ?? true,
       } as ClassDetail;
     },
     enabled: !!classId,

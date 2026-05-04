@@ -45,7 +45,7 @@ def _make_class(
         grade_id=grade_id,
         subject_id=subject_id,
         name="Test Class 7A",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
 

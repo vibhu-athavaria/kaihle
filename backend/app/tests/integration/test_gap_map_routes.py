@@ -112,7 +112,7 @@ async def class_with_teacher(
         curriculum_id=curriculum_for_enrollment.id,
         teacher_id=teacher.id,
         name="Gap Map Test Class",
-        academic_year="2026",
+        academic_year="2025-2026",
         is_active=True,
     )
     db_session.add(c)

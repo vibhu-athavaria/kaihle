@@ -97,7 +97,7 @@ describe("useStudentLayoutProps", () => {
           gradeName: "Grade 9",
           teacherName: "Ms. Smith",
           curriculumId: "curr-1",
-          academicYear: "2026",
+          academicYear: "2025-2026",
           isActive: true,
         },
       ],
