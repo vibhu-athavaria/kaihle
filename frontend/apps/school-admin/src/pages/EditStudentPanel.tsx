@@ -122,6 +122,20 @@ export function EditStudentPanel({
     onClose();
   };
 
+  const handleReactivate = async () => {
+    if (!student) return;
+
+    await updateUser.mutateAsync({
+      userId: student.id,
+      first_name: student.first_name,
+      last_name: student.last_name,
+      is_active: true,
+    });
+
+    setShowDeactivateConfirm(false);
+    onClose();
+  };
+
   const footer = (
     <div className="flex gap-3">
       <Button
@@ -304,56 +318,80 @@ export function EditStudentPanel({
         </div>
 
         {/* Danger Zone */}
-        <div className="pt-6 border-t border-gray-100">
-          <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-red-700 mb-2">
-              Danger Zone
-            </h3>
-            <p className="text-xs text-red-600 mb-3">
-              Deactivating a student will prevent them from logging in. Their
-              data will be preserved.
-            </p>
-            {showDeactivateConfirm ? (
-              <div className="space-y-3">
-                <p className="text-xs text-red-700 font-semibold">
-                  Are you sure? This will immediately prevent the student from
-                  logging in.
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setShowDeactivateConfirm(false)}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    loading={updateUser.isPending}
-                    onClick={handleDeactivate}
-                    className="flex-1 bg-red-600 hover:bg-red-700"
-                  >
-                    Deactivate
-                  </Button>
+        {student?.is_active ? (
+          <div className="pt-6 border-t border-gray-100">
+            <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-red-700 mb-2">
+                Danger Zone
+              </h3>
+              <p className="text-xs text-red-600 mb-3">
+                Deactivating a student will prevent them from logging in. Their
+                data will be preserved.
+              </p>
+              {showDeactivateConfirm ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-red-700 font-semibold">
+                    Are you sure? This will immediately prevent the student from
+                    logging in.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowDeactivateConfirm(false)}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      loading={updateUser.isPending}
+                      onClick={handleDeactivate}
+                      className="flex-1 bg-red-600 hover:bg-red-700"
+                    >
+                      Deactivate
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : (
+              ) : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowDeactivateConfirm(true)}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  Deactivate student
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="pt-6 border-t border-gray-100">
+            <div className="bg-green-50 border border-green-100 rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-green-700 mb-2">
+                Account Deactivated
+              </h3>
+              <p className="text-xs text-green-600 mb-3">
+                This student&apos;s account is currently deactivated. They
+                cannot log in. Re-activate to restore their access.
+              </p>
               <Button
                 type="button"
-                variant="secondary"
+                variant="primary"
                 size="sm"
-                onClick={() => setShowDeactivateConfirm(true)}
-                className="text-red-600 border-red-200 hover:bg-red-50"
+                loading={updateUser.isPending}
+                onClick={handleReactivate}
+                className="bg-green-600 hover:bg-green-700"
               >
-                Deactivate student
+                Re-activate student
               </Button>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </form>
     </SlideOverPanel>
   );
