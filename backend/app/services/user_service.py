@@ -441,6 +441,7 @@ class UserService:
             first_name=student.first_name or "",
             last_name=student.last_name or "",
             email=student.email or "",
+            is_active=student.is_active if student.is_active is not None else True,
             grade_id=str(grade_id) if grade_id else None,
             grade_level=grade_level,
             grade_name=grade_name,

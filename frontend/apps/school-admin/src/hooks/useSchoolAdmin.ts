@@ -134,6 +134,7 @@ export interface StudentProfile {
   first_name: string;
   last_name: string;
   email: string;
+  is_active: boolean;
   grade_id: string | null;
   grade_level: number | null;
   grade_name: string | null;

@@ -64,7 +64,7 @@ export function EditStudentPanel({
         last_name: student.last_name,
         email: student.email ?? "",
         grade_id: student.grade_id ?? "",
-        is_active: true,
+        is_active: student.is_active,
         password: "",
       });
     }
