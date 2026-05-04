@@ -1,27 +1,30 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { SlideOverPanel, toast } from "@kaihle/ui";
+import * as z from "zod";
+import { SlideOverPanel, Button } from "@kaihle/ui";
+import { UserRole } from "@kaihle/types";
 import {
-  useSchoolUsers,
   useUpdateClass,
+  useSchoolUsers,
   type ClassDetail,
 } from "../hooks/useSchoolAdmin";
 
-const schema = z.object({
-  name: z.string().min(1, "Class name is required").max(255),
-  academic_year: z.string().min(1, "Academic year is required"),
-  teacher_id: z.string().uuid("Select a teacher"),
+const ACADEMIC_YEAR_REGEX = /^\d{4}\/\d{4}$/;
+
+const editClassSchema = z.object({
+  name: z.string().min(1, "Class name is required"),
+  academic_year: z.string().regex(ACADEMIC_YEAR_REGEX, "Format: YYYY/YYYY"),
+  teacher_id: z.string().min(1, "Teacher is required"),
   is_active: z.boolean(),
 });
 
-type FormValues = z.infer<typeof schema>;
+type EditClassFormValues = z.infer<typeof editClassSchema>;
 
 interface EditClassPanelProps {
   open: boolean;
   onClose: () => void;
-  classDetail: ClassDetail | null | undefined;
+  classDetail: ClassDetail | undefined;
 }
 
 export function EditClassPanel({
@@ -29,150 +32,178 @@ export function EditClassPanel({
   onClose,
   classDetail,
 }: EditClassPanelProps) {
-  const { data: teachers = [] } = useSchoolUsers("TEACHER");
   const updateClass = useUpdateClass();
-
-  const initialValues = {
-    name: classDetail?.name ?? "",
-    academic_year: classDetail?.academic_year ?? "",
-    teacher_id: classDetail?.teacher_id ?? "",
-    is_active: true,
-  };
+  const { data: teachers, isLoading: teachersLoading } = useSchoolUsers(
+    UserRole.TEACHER,
+  );
 
   const {
     register,
     handleSubmit,
     reset,
-    watch,
-    setValue,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: initialValues,
+    formState: { errors, isDirty, isSubmitting },
+  } = useForm<EditClassFormValues>({
+    resolver: zodResolver(editClassSchema),
+    defaultValues: {
+      name: "",
+      academic_year: "",
+      teacher_id: "",
+      is_active: true,
+    },
   });
 
+  // Reset form when classDetail changes or panel opens
   useEffect(() => {
-    if (open) reset(initialValues);
-  }, [open, initialValues, reset]);
-
-  const isActive = watch("is_active");
-
-  const onSubmit = async (values: FormValues) => {
-    if (!classDetail) return;
-    try {
-      await updateClass.mutateAsync({ classId: classDetail.id, ...values });
-      toast.success("Class updated");
-      onClose();
-    } catch {
-      toast.error("Failed to update class");
+    if (classDetail && open) {
+      reset({
+        name: classDetail.name,
+        academic_year: classDetail.academic_year,
+        teacher_id: classDetail.teacher_id ?? "",
+        is_active: true, // Default to active, API doesn't return this yet
+      });
     }
+  }, [classDetail, open, reset]);
+
+  const onSubmit = async (values: EditClassFormValues) => {
+    if (!classDetail) return;
+
+    await updateClass.mutateAsync({
+      classId: classDetail.id,
+      name: values.name,
+      academic_year: values.academic_year,
+      teacher_id: values.teacher_id,
+      is_active: values.is_active,
+    });
+
+    onClose();
   };
+
+  const footer = (
+    <div className="flex gap-3">
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={onClose}
+        disabled={isSubmitting}
+        className="flex-1"
+      >
+        Cancel
+      </Button>
+      <Button
+        type="submit"
+        form="edit-class-form"
+        variant="primary"
+        loading={isSubmitting}
+        disabled={isSubmitting || !isDirty}
+        className="flex-1"
+      >
+        Save changes
+      </Button>
+    </div>
+  );
 
   return (
     <SlideOverPanel
       open={open}
-      title="Edit class"
+      title="Edit Class"
       onClose={onClose}
-      footer={
-        <div className="flex gap-2.5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 border border-role-school-border rounded-full py-2.5 text-sm font-bold text-brand-body bg-white hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            form="edit-class-form"
-            disabled={isSubmitting}
-            className="flex-[2] bg-brand-primary text-white rounded-full py-2.5 text-sm font-bold hover:bg-brand-primary/90 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 transition-colors"
-          >
-            {isSubmitting ? "Saving…" : "Save changes"}
-          </button>
-        </div>
-      }
+      footer={footer}
     >
-      <form id="edit-class-form" onSubmit={handleSubmit(onSubmit)} noValidate>
-        <div className="grid grid-cols-2 gap-4 mb-5">
-          <div>
-            <label className="block text-sm font-semibold text-brand-ink mb-1.5">
-              Class name
-            </label>
-            <input
-              {...register("name")}
-              className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary outline-none"
-            />
-            {errors.name && (
-              <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-brand-ink mb-1.5">
-              Academic year
-            </label>
-            <input
-              {...register("academic_year")}
-              placeholder="e.g. 2024/2025"
-              className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary outline-none"
-            />
-            {errors.academic_year && (
-              <p className="text-xs text-red-500 mt-1">
-                {errors.academic_year.message}
-              </p>
-            )}
-          </div>
+      <form
+        id="edit-class-form"
+        onSubmit={handleSubmit(onSubmit)}
+        className="space-y-5"
+      >
+        {/* Class Name */}
+        <div>
+          <label
+            htmlFor="class-name"
+            className="block text-sm font-semibold text-brand-ink mb-1.5"
+          >
+            Class name <span className="text-brand-red">*</span>
+          </label>
+          <input
+            id="class-name"
+            type="text"
+            {...register("name")}
+            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+            placeholder="e.g. Maths 9B"
+          />
+          {errors.name && (
+            <p className="mt-1 text-xs text-brand-red">{errors.name.message}</p>
+          )}
         </div>
 
-        <div className="mb-5">
-          <label className="block text-sm font-semibold text-brand-ink mb-1.5">
-            Teacher
+        {/* Academic Year */}
+        <div>
+          <label
+            htmlFor="academic-year"
+            className="block text-sm font-semibold text-brand-ink mb-1.5"
+          >
+            Academic Year <span className="text-brand-red">*</span>
+          </label>
+          <input
+            id="academic-year"
+            type="text"
+            {...register("academic_year")}
+            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+            placeholder="2025/2026"
+          />
+          {errors.academic_year && (
+            <p className="mt-1 text-xs text-brand-red">
+              {errors.academic_year.message}
+            </p>
+          )}
+        </div>
+
+        {/* Teacher */}
+        <div>
+          <label
+            htmlFor="teacher"
+            className="block text-sm font-semibold text-brand-ink mb-1.5"
+          >
+            Teacher <span className="text-brand-red">*</span>
           </label>
           <select
+            id="teacher"
             {...register("teacher_id")}
-            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary outline-none appearance-none cursor-pointer"
+            disabled={teachersLoading}
+            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary disabled:opacity-60"
           >
-            {teachers.map((t) => (
+            <option value="">
+              {teachersLoading ? "Loading…" : "Select teacher"}
+            </option>
+            {teachers?.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.first_name} {t.last_name}
               </option>
             ))}
           </select>
           {errors.teacher_id && (
-            <p className="text-xs text-red-500 mt-1">
+            <p className="mt-1 text-xs text-brand-red">
               {errors.teacher_id.message}
             </p>
           )}
         </div>
 
-        <div className="mb-5">
-          <label className="block text-sm font-semibold text-brand-ink mb-1.5">
-            Status
-          </label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setValue("is_active", true)}
-              className={`flex-1 border rounded-xl py-2.5 text-sm font-semibold text-center transition-colors ${
-                isActive
-                  ? "border-brand-primary text-brand-primary bg-brand-light"
-                  : "border-brand-border text-brand-muted bg-white"
-              }`}
-            >
-              Active
-            </button>
-            <button
-              type="button"
-              onClick={() => setValue("is_active", false)}
-              className={`flex-1 border rounded-xl py-2.5 text-sm font-semibold text-center transition-colors ${
-                !isActive
-                  ? "border-brand-primary text-brand-primary bg-brand-light"
-                  : "border-brand-border text-brand-muted bg-white"
-              }`}
-            >
-              Archived
-            </button>
+        {/* Active Status Toggle */}
+        <div className="flex items-center justify-between pt-2">
+          <div>
+            <span className="block text-sm font-semibold text-brand-ink">
+              Class Status
+            </span>
+            <span className="text-xs text-brand-muted">
+              Inactive classes are hidden from students
+            </span>
           </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              {...register("is_active")}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-primary" />
+          </label>
         </div>
       </form>
     </SlideOverPanel>
