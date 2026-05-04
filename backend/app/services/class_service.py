@@ -1,8 +1,10 @@
 """Class management and enrollment service layer."""
 
+from __future__ import annotations
+
 import uuid
 from collections import defaultdict
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +20,9 @@ from app.schemas.class_enrollment import (
     TeacherStudentItem,
 )
 from app.tasks.onboarding_tasks import trigger_onboarding_diagnostics
+
+if TYPE_CHECKING:
+    from app.schemas.class_enrollment import ClassUpdate
 
 
 class _StudentClassData(TypedDict):
@@ -166,6 +171,31 @@ class ClassService:
         class_ = await self.db.get(Class, class_id)
         if not class_:
             raise ValueError("Class not found")
+        return class_
+
+    async def update_class(
+        self,
+        class_id: uuid.UUID,
+        school_id: uuid.UUID,
+        data: ClassUpdate,
+    ) -> Class:
+        """Update editable fields on a class.
+
+        Locked fields (grade_id, subject_id, curriculum_id) are never touched.
+        Only fields explicitly set in data are applied.
+
+        Raises:
+            ValueError: If class not found or belongs to a different school.
+        """
+        class_ = await self.db.get(Class, class_id)
+        if not class_ or class_.school_id != school_id:
+            raise ValueError("Class not found")
+
+        update_data = data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(class_, field, value)
+
+        await self.db.flush()
         return class_
 
     async def verify_class_school(
@@ -452,3 +482,37 @@ class ClassService:
         class_.teacher_id = teacher_id
         await self.db.flush()
         return class_
+
+    async def unenroll_students(
+        self,
+        class_id: uuid.UUID,
+        school_id: uuid.UUID,
+        student_ids: list[uuid.UUID],
+    ) -> None:
+        """Soft-delete enrollments by setting is_active = False.
+
+        Preserves assessment history (gap states, diagnostic results) tied to the enrollment.
+
+        Raises:
+            ValueError: If class not found or belongs to a different school.
+        """
+        from sqlalchemy import select
+
+        from app.models.school import ClassEnrollment
+
+        class_ = await self.db.get(Class, class_id)
+        if not class_ or class_.school_id != school_id:
+            raise ValueError("Class not found")
+
+        stmt = select(ClassEnrollment).where(
+            ClassEnrollment.class_id == class_id,
+            ClassEnrollment.student_id.in_(student_ids),
+            ClassEnrollment.is_active.is_(True),
+        )
+        result = await self.db.execute(stmt)
+        enrollments = result.scalars().all()
+
+        for enrollment in enrollments:
+            enrollment.is_active = False
+
+        await self.db.flush()

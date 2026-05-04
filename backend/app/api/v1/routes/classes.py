@@ -24,6 +24,7 @@ from app.models.user import User, UserRole
 from app.schemas.class_enrollment import (
     ClassCreate,
     ClassResponse,
+    ClassUpdate,
     ClassWithSummary,
     EnrollRequest,
     EnrollResponse,
@@ -161,6 +162,32 @@ async def get_class(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
     _check_school_access(class_.school_id, current_user)
+    return _class_to_response(class_)
+
+
+@router.patch("/classes/{class_id}", response_model=ClassResponse)
+async def update_class(
+    class_id: uuid.UUID,
+    body: ClassUpdate,
+    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> ClassResponse:
+    """Update a class. SCHOOL_ADMIN and KAIHLE_ADMIN only.
+
+    Editable: name, teacher_id, academic_year, is_active.
+    Locked:   grade_id, subject_id, curriculum_id.
+    """
+    if current_user.school_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has no school associated",
+        )
+    service = ClassService(db)
+    try:
+        class_ = await service.update_class(class_id, current_user.school_id, body)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    await db.commit()
     return _class_to_response(class_)
 
 

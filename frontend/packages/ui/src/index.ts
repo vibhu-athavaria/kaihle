@@ -29,3 +29,4 @@ export { toast } from "./toast";
 export { Toaster } from "sonner";
 export { Modal } from "./components/Modal";
 export { GapMapCell, type GapMapCellProps } from "./components/GapMapCell";
+export { SlideOverPanel } from "./components/SlideOverPanel";
