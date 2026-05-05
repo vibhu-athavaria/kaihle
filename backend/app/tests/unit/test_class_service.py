@@ -225,6 +225,58 @@ class TestListClasses:
         # Assert
         assert len(result) == 1
 
+    @pytest.mark.asyncio
+    async def test_list_classes_when_include_inactive_false_then_omits_inactive_classes(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Default call excludes inactive classes — the DB query must carry the is_active filter."""
+        school_id = uuid.uuid4()
+        active_class = Class(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            name="Active Class",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            teacher_id=uuid.uuid4(),
+            academic_year="2025-2026",
+            is_active=True,
+        )
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [active_class]
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        result = await class_service.list_classes(school_id, include_inactive=False)
+
+        assert len(result) == 1
+        assert result[0].is_active is True
+
+    @pytest.mark.asyncio
+    async def test_list_classes_when_include_inactive_true_then_returns_all_classes(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """include_inactive=True must omit the is_active filter from the DB query."""
+        school_id = uuid.uuid4()
+        inactive_class = Class(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            name="Inactive Class",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            teacher_id=uuid.uuid4(),
+            academic_year="2025-2026",
+            is_active=False,
+        )
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [inactive_class]
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        result = await class_service.list_classes(school_id, include_inactive=True)
+
+        assert len(result) == 1
+        assert result[0].is_active is False
+
 
 class TestEnrollStudents:
     """Tests for ClassService.enroll_students method."""

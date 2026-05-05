@@ -43,6 +43,7 @@ export function EditStudentPanel({
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<EditStudentFormValues>({
     resolver: zodResolver(editStudentSchema),
@@ -69,6 +70,15 @@ export function EditStudentPanel({
       });
     }
   }, [student, open, reset]);
+
+  // Re-sync grade select after grades load asynchronously.
+  // RHF's uncontrolled <select> only binds the value when options exist in the DOM;
+  // if grades resolve after reset(), the select falls back to the first option.
+  useEffect(() => {
+    if (student && grades && open) {
+      setValue("grade_id", student.grade_id ?? "");
+    }
+  }, [grades, student, open, setValue]);
 
   const onSubmit = async (values: EditStudentFormValues) => {
     if (!student) return;

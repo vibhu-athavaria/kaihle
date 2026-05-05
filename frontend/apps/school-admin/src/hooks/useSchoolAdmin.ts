@@ -173,13 +173,15 @@ export function useSchoolAnalytics(fromDate?: string, toDate?: string) {
   });
 }
 
-export function useSchoolClasses() {
+export function useSchoolClasses(showActive: boolean = true) {
   const schoolId = useAuthStore((state) => state.user?.school_id);
   return useQuery({
-    queryKey: ["school", "classes", schoolId],
+    queryKey: ["school", "classes", schoolId, showActive],
     queryFn: async () => {
+      const params = new URLSearchParams({ include_summary: "true" });
+      if (!showActive) params.set("include_inactive", "true");
       const res = await apiClient.get(
-        `/api/v1/schools/${schoolId}/classes?include_summary=true`,
+        `/api/v1/schools/${schoolId}/classes?${params}`,
       );
       const raw: ClassSummary[] = res.data;
       return raw.map((c) => ({

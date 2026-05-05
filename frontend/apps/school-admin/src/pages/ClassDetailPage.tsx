@@ -604,6 +604,7 @@ export function ClassDetailPage() {
           onOpenChange={setEnrollmentsModalOpen}
           classId={classId!}
           className={classDetail?.name}
+          gradeLevel={classSummary?.grade_level ?? null}
         />
       )}
     </DashboardLayout>

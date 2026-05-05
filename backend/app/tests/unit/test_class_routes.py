@@ -103,3 +103,83 @@ async def test_create_class_when_valid_payload_then_delegates_to_service_and_ret
     call_args = mock_service_create.call_args
     assert call_args is not None
     assert call_args.args[1].academic_year == "2025-2026"
+
+
+@pytest.mark.asyncio
+async def test_list_classes_route_when_include_inactive_true_then_calls_service_with_flag(
+    school_id: uuid.UUID,
+    fake_class: SimpleNamespace,
+) -> None:
+    """GET /schools/{school_id}/classes?include_inactive=true passes flag to service.
+
+    Arrange: SCHOOL_ADMIN user; ClassService.list_classes mocked.
+    Act:     GET with include_inactive=true.
+    Assert:  service.list_classes called with include_inactive=True.
+    """
+    from app.core.database import get_db
+    from app.core.deps import get_current_user
+    from app.main import app
+
+    fake_admin = MagicMock()
+    fake_admin.id = uuid.uuid4()
+    fake_admin.school_id = school_id
+    fake_admin.role = UserRole.SCHOOL_ADMIN
+
+    with patch("app.api.v1.routes.classes.ClassService") as MockService:
+        mock_instance = MockService.return_value
+        mock_instance.list_classes = AsyncMock(return_value=[fake_class])
+
+        app.dependency_overrides[get_current_user] = lambda: fake_admin
+        app.dependency_overrides[get_db] = lambda: MagicMock()
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                response = await ac.get(
+                    f"/api/v1/schools/{school_id}/classes?include_inactive=true",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+            app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 200, response.text
+    mock_instance.list_classes.assert_called_once_with(school_id, None, include_inactive=True)
+
+
+@pytest.mark.asyncio
+async def test_list_classes_route_when_teacher_role_then_include_inactive_ignored(
+    school_id: uuid.UUID,
+    fake_class: SimpleNamespace,
+) -> None:
+    """Teacher role always gets active-only even if include_inactive=true is sent.
+
+    Arrange: TEACHER user; ClassService.list_classes mocked.
+    Act:     GET with include_inactive=true.
+    Assert:  service.list_classes called with include_inactive=False.
+    """
+    from app.core.database import get_db
+    from app.core.deps import get_current_user
+    from app.main import app
+
+    fake_teacher = MagicMock()
+    fake_teacher.id = uuid.uuid4()
+    fake_teacher.school_id = school_id
+    fake_teacher.role = UserRole.TEACHER
+
+    with patch("app.api.v1.routes.classes.ClassService") as MockService:
+        mock_instance = MockService.return_value
+        mock_instance.list_classes = AsyncMock(return_value=[fake_class])
+
+        app.dependency_overrides[get_current_user] = lambda: fake_teacher
+        app.dependency_overrides[get_db] = lambda: MagicMock()
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                response = await ac.get(
+                    f"/api/v1/schools/{school_id}/classes?include_inactive=true",
+                    headers={"Authorization": "Bearer fake-token"},
+                )
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+            app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 200, response.text
+    mock_instance.list_classes.assert_called_once_with(school_id, fake_teacher.id, include_inactive=False)

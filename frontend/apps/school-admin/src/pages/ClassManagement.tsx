@@ -7,23 +7,23 @@ import { CreateClassModal } from "./CreateClassModal";
 
 export function ClassManagement() {
   const navigate = useNavigate();
-  const { data: classes = [], isLoading, isError } = useSchoolClasses();
+  const [showActive, setShowActive] = useState(true);
+  const {
+    data: classes = [],
+    isLoading,
+    isError,
+  } = useSchoolClasses(showActive);
   const [filter, setFilter] = useState<"all" | "attention">("all");
   const [gradeFilter, setGradeFilter] = useState<string | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [showActive, setShowActive] = useState(true);
 
-  const activeClasses = classes.filter((c) => c.is_active);
-
-  const attentionCount = activeClasses.filter(
+  const attentionCount = classes.filter(
     (c) => c.diagnostic_status !== "has_data",
   ).length;
 
-  const filtered = (
-    showActive ? activeClasses : classes.filter((c) => !c.is_active)
-  )
+  const filtered = classes
     .filter((c) => {
       if (filter === "attention") return c.diagnostic_status !== "has_data";
       return true;
@@ -125,6 +125,9 @@ export function ClassManagement() {
           <button
             type="button"
             onClick={() => setShowActive(!showActive)}
+            aria-label={
+              showActive ? "Showing active classes" : "Showing inactive classes"
+            }
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 ${
               showActive ? "bg-brand-primary" : "bg-gray-200"
             }`}

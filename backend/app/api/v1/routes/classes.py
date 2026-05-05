@@ -88,6 +88,7 @@ async def create_class(
 async def list_classes(
     school_id: uuid.UUID,
     include_summary: bool = Query(False, description="Include grade/subject names and class summary"),
+    include_inactive: bool = Query(False, description="Include inactive classes (admin only; ignored for teachers)"),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
 ) -> list[ClassWithSummary] | list[ClassResponse]:
@@ -96,11 +97,14 @@ async def list_classes(
     When include_summary=true, returns enriched data including grade_name, subject_name,
     avg_mastery, student_count, and students_below_threshold. This is more efficient than
     making separate calls for each class.
+    When include_inactive=true, inactive classes are included (admin roles only).
     """
     _check_school_access(school_id, current_user)
     service = ClassService(db)
     teacher_id = current_user.id if current_user.role == UserRole.TEACHER else None
-    classes = await service.list_classes(school_id, teacher_id)
+    # Teachers always see active-only regardless of the query param
+    effective_inactive = include_inactive if current_user.role != UserRole.TEACHER else False
+    classes = await service.list_classes(school_id, teacher_id, include_inactive=effective_inactive)
 
     if include_summary:
         grades_result = await db.execute(select(Grade).where(Grade.id.in_([c.grade_id for c in classes])))
