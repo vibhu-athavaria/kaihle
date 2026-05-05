@@ -134,20 +134,22 @@ class ClassService:
         self,
         school_id: uuid.UUID,
         teacher_id: uuid.UUID | None = None,
+        include_inactive: bool = False,
     ) -> list[Class]:
         """List classes for a school.
 
         Args:
             school_id: The school UUID
             teacher_id: Optional filter - if provided, only return classes for this teacher
+            include_inactive: When True, also return inactive classes (admin use only)
 
         Returns:
             List of Class models
         """
-        query = select(Class).where(
-            Class.school_id == school_id,
-            Class.is_active.is_(True),
-        )
+        query = select(Class).where(Class.school_id == school_id)
+
+        if not include_inactive:
+            query = query.where(Class.is_active.is_(True))
 
         # Filter by teacher if provided (for teacher role)
         if teacher_id:

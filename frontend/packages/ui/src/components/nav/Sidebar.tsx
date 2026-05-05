@@ -11,7 +11,6 @@ import {
   FileText,
   Video,
   BarChart3,
-  BadgeDollarSign,
   BookOpen,
   Library,
   GraduationCap,
@@ -76,11 +75,6 @@ const schoolAdminSections: NavSection[] = [
     section: "ADMIN",
     items: [
       { label: "Analytics", href: "/school-admin/analytics", icon: BarChart3 },
-      {
-        label: "Billing",
-        href: "/school-admin/billing",
-        icon: BadgeDollarSign,
-      },
       { label: "Settings", href: "/school-admin/settings", icon: Settings },
     ],
   },

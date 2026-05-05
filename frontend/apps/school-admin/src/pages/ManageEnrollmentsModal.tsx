@@ -15,6 +15,7 @@ interface ManageEnrollmentsModalProps {
   onOpenChange: (open: boolean) => void;
   classId: string;
   className?: string;
+  gradeLevel: number | null;
 }
 
 export function ManageEnrollmentsModal({
@@ -22,6 +23,7 @@ export function ManageEnrollmentsModal({
   onOpenChange,
   classId,
   className,
+  gradeLevel,
 }: ManageEnrollmentsModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingRemovals, setPendingRemovals] = useState<Set<string>>(
@@ -51,8 +53,11 @@ export function ManageEnrollmentsModal({
 
   const availableStudents = useMemo(() => {
     if (!allStudents) return [];
-    return allStudents.filter((s) => !enrolledIds.has(s.id));
-  }, [allStudents, enrolledIds]);
+    return allStudents.filter((s) => {
+      if (gradeLevel !== null && s.grade_level !== gradeLevel) return false;
+      return !enrolledIds.has(s.id);
+    });
+  }, [allStudents, enrolledIds, gradeLevel]);
 
   // Apply search filter
   const filteredAvailable = useMemo(() => {

@@ -51,6 +51,7 @@ class ClassWithSummary(BaseModel):
     academic_year: str
     is_active: bool
     grade_name: str = ""
+    grade_level: int | None = None
     subject_name: str = ""
     avg_mastery: float | None = None
     student_count: int = 0

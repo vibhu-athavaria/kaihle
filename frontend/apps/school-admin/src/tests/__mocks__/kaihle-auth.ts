@@ -24,6 +24,11 @@ export const useAuthStore = jest.fn((selector) =>
 
 export const PrivateRoute = ({ children }: { children: React.ReactNode }) =>
   children;
+export const PasswordSetupRoute = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => children;
 export const RoleRoute = ({ children }: { children: React.ReactNode }) =>
   children;
 
