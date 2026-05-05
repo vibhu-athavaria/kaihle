@@ -41,6 +41,7 @@ export function EditClassPanel({
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<EditClassFormValues>({
     resolver: zodResolver(editClassSchema),
@@ -63,6 +64,15 @@ export function EditClassPanel({
       });
     }
   }, [classDetail, open, reset]);
+
+  // Re-sync teacher select after teachers load asynchronously.
+  // RHF's uncontrolled <select> only binds the value when options exist in the DOM;
+  // if teachers resolve after reset(), the select falls back to the first option.
+  useEffect(() => {
+    if (classDetail && teachers && open) {
+      setValue("teacher_id", classDetail.teacher_id ?? "");
+    }
+  }, [teachers, classDetail, open, setValue]);
 
   const onSubmit = async (values: EditClassFormValues) => {
     if (!classDetail) return;

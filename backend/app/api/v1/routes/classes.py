@@ -108,7 +108,9 @@ async def list_classes(
 
     if include_summary:
         grades_result = await db.execute(select(Grade).where(Grade.id.in_([c.grade_id for c in classes])))
-        grades = {g.id: g.name for g in grades_result.scalars().all()}
+        grade_objects = list(grades_result.scalars().all())
+        grades = {g.id: g.name for g in grade_objects}
+        grade_levels = {g.id: g.level for g in grade_objects}
 
         subjects_result = await db.execute(select(Subject).where(Subject.id.in_([c.subject_id for c in classes])))
         subjects = {s.id: s.name for s in subjects_result.scalars().all()}
@@ -140,6 +142,7 @@ async def list_classes(
                     academic_year=cls.academic_year,
                     is_active=cls.is_active,
                     grade_name=grades.get(cls.grade_id, ""),
+                    grade_level=grade_levels.get(cls.grade_id),
                     subject_name=subjects.get(cls.subject_id, ""),
                     avg_mastery=summary.avg_mastery if summary else None,
                     student_count=summary.student_count if summary else 0,

@@ -19,11 +19,13 @@ export function ClassManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
-  const attentionCount = classes.filter(
+  const visibleClasses = classes.filter((c) => c.is_active === showActive);
+
+  const attentionCount = visibleClasses.filter(
     (c) => c.diagnostic_status !== "has_data",
   ).length;
 
-  const filtered = classes
+  const filtered = visibleClasses
     .filter((c) => {
       if (filter === "attention") return c.diagnostic_status !== "has_data";
       return true;
@@ -37,9 +39,11 @@ export function ClassManagement() {
     );
 
   const grades = [
-    ...new Set(classes.map((c) => c.grade_name).filter(Boolean)),
+    ...new Set(visibleClasses.map((c) => c.grade_name).filter(Boolean)),
   ].sort();
-  const subjects = [...new Set(classes.map((c) => c.subject_name))].sort();
+  const subjects = [
+    ...new Set(visibleClasses.map((c) => c.subject_name)),
+  ].sort();
 
   if (isLoading)
     return (
