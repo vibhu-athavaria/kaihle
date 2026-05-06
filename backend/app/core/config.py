@@ -1,5 +1,6 @@
 import json
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -63,6 +64,28 @@ class Settings(BaseSettings):
     parent_app_url: str = "http://localhost:3003"
     school_admin_app_url: str = "http://localhost:3004"
     kaihle_admin_app_url: str = "http://localhost:3005"
+
+    @model_validator(mode="after")
+    def _validate_production_app_urls(self) -> "Settings":
+        """Fail fast at startup if any app URL still points to localhost in production."""
+        if self.environment == "production":
+            localhost_urls = [
+                name
+                for name, url in {
+                    "TEACHER_APP_URL": self.teacher_app_url,
+                    "STUDENT_APP_URL": self.student_app_url,
+                    "PARENT_APP_URL": self.parent_app_url,
+                    "SCHOOL_ADMIN_APP_URL": self.school_admin_app_url,
+                    "KAIHLE_ADMIN_APP_URL": self.kaihle_admin_app_url,
+                }.items()
+                if "localhost" in url
+            ]
+            if localhost_urls:
+                raise ValueError(
+                    f"Production deployment has localhost app URLs — emails will contain broken links. "
+                    f"Set these env vars to their public URLs: {', '.join(localhost_urls)}"
+                )
+        return self
 
     # CORS — stored as raw string, parsed at runtime via property
     # Set CORS_ORIGINS_RAW in Render as comma-separated:

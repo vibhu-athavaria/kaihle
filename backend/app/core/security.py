@@ -11,7 +11,7 @@ from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.user import AuthToken
+from app.models.user import AuthToken, AuthTokenType
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -213,7 +213,7 @@ async def store_password_reset_token(
     auth_token = AuthToken(
         user_id=user_id,
         token_hash=token_hash,
-        type="PASSWORD_RESET",
+        type=AuthTokenType.PASSWORD_RESET,
         expires_at=expires_at,
         used_at=None,
     )

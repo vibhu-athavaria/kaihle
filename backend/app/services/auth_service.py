@@ -357,7 +357,6 @@ class AuthService:
         from app.core.security import generate_refresh_token
 
         raw_token, token_hash = generate_refresh_token()
-        await store_password_reset_token(self.db, user.id, token_hash)
 
         role_url_map: dict[str, str] = {
             "TEACHER": settings.teacher_app_url,
@@ -369,6 +368,8 @@ class AuthService:
         app_url = role_url_map.get(user.role, settings.school_admin_app_url)
         reset_url = f"{app_url}/reset-password?token={raw_token}"
 
+        # Send email before persisting the token — if email fails the token never
+        # enters the DB, so the user isn't left with an unusable dead token.
         email_service = EmailService()
         try:
             await email_service.send(
@@ -383,6 +384,9 @@ class AuthService:
                 user_id=str(user.id),
                 exc_info=True,
             )
+            return
+
+        await store_password_reset_token(self.db, user.id, token_hash)
 
     async def reset_password(self, token: str, new_password: str) -> None:
         """Validate a password reset token and set the new password.

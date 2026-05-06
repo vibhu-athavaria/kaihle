@@ -322,7 +322,6 @@ class UserService:
             logger.error(
                 "failed_to_send_welcome_email",
                 user_id=str(user.id),
-                email=user.email,
                 error_type=type(e).__name__,
                 error_message=str(e),
             )
@@ -360,7 +359,6 @@ class UserService:
             logger.error(
                 "failed_to_send_credentials_email",
                 user_id=str(user.id),
-                email=user.email,
                 error_type=type(e).__name__,
                 error_message=str(e),
             )

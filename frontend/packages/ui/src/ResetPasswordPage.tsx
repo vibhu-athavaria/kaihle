@@ -36,17 +36,19 @@ const strengthColors = [
   "bg-gray-200",
   "bg-red-500",
   "bg-amber-500",
-  "bg-green-600",
+  "bg-brand-primary",
 ];
 
 export interface ResetPasswordPageProps {
   onReset: (token: string, password: string) => Promise<void>;
   appLoginPath: string;
+  forgotPasswordPath?: string;
 }
 
 export function ResetPasswordPage({
   onReset,
   appLoginPath,
+  forgotPasswordPath,
 }: ResetPasswordPageProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -86,15 +88,17 @@ export function ResetPasswordPage({
           <p className="text-sm text-gray-500 mb-6 leading-relaxed">
             Reset links are valid for 24 hours. Request a new one and try again.
           </p>
-          <a
-            href={appLoginPath.replace("/login", "/forgot-password")}
-            className="block w-full bg-teal-600 hover:bg-teal-700 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors text-center mb-4"
-          >
-            Request a new link
-          </a>
+          {forgotPasswordPath && (
+            <a
+              href={forgotPasswordPath}
+              className="block w-full bg-brand-primary hover:opacity-90 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-opacity text-center mb-4"
+            >
+              Request a new link
+            </a>
+          )}
           <a
             href={appLoginPath}
-            className="text-sm font-medium text-teal-600 hover:text-teal-700 transition-colors"
+            className="text-sm font-medium text-brand-primary hover:opacity-80 transition-opacity"
           >
             ← Back to login
           </a>
@@ -108,7 +112,7 @@ export function ResetPasswordPage({
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 w-full max-w-sm p-8">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-teal-600 rounded-xl mb-3">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-brand-primary rounded-xl mb-3">
             <span className="text-white font-bold text-xl">K</span>
           </div>
           <h1 className="text-xl font-semibold text-gray-900">
@@ -134,7 +138,7 @@ export function ResetPasswordPage({
                 type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
                 {...register("password")}
-                className="w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className="w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent"
               />
               <button
                 type="button"
@@ -179,7 +183,7 @@ export function ResetPasswordPage({
                 type={showConfirm ? "text" : "password"}
                 autoComplete="new-password"
                 {...register("confirm_password")}
-                className="w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                className="w-full px-3 py-2 pr-10 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent"
               />
               <button
                 type="button"
@@ -200,7 +204,7 @@ export function ResetPasswordPage({
           <button
             type="submit"
             disabled={formState.isSubmitting}
-            className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors"
+            className="w-full bg-brand-primary hover:opacity-90 disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-opacity"
           >
             {formState.isSubmitting ? "Resetting…" : "Reset password"}
           </button>

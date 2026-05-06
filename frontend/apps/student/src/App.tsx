@@ -70,6 +70,7 @@ export default function App() {
                 })
               }
               appLoginPath="/login"
+              forgotPasswordPath="/forgot-password"
             />
           }
         />
