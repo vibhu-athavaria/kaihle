@@ -1,3 +1,7 @@
+# Root-level empty stubs (not the real manifests — those live in frontend/)
+/package.json
+/package-lock.json
+
 # Python
 __pycache__/
 *.pyc
@@ -48,5 +52,6 @@ node_modules/.vite.worktrees/
 *.tsbuildinfo
 .brv/
 .claude/skills/byterover/
+.claude/worktrees/
 .brv/package.json
 .brv/package-lock.json
