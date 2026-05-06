@@ -6,16 +6,13 @@ Two sections:
 2. Plan-scoped operations — /lesson-plans/{plan_id}/...
    (fetch, edit, regenerate, mark status on a specific plan)
 
-Lesson plans are generated on-demand by the teacher (M4-1-T1).
+Lesson plans are generated on-demand by the teacher.
 No weekly auto-gen — teachers trigger generation per class topic.
-
-Stub implementations. Real implementation: M4-1-T3.
 """
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -23,6 +20,7 @@ from app.core.deps import CurrentUser, require_role
 from app.models.user import UserRole
 from app.schemas.common import Page
 from app.schemas.lesson_plans import (
+    GenerateLessonPlanRequest,
     LessonPlanEditRequest,
     LessonPlanResponse,
     LessonPlanStatusRequest,
@@ -31,13 +29,7 @@ from app.schemas.lesson_plans import (
 router = APIRouter(tags=["lesson-plans"])
 
 
-class GenerateLessonPlanRequest(BaseModel):
-    """Request body for on-demand lesson plan generation."""
-
-    focus_subtopic_ids: list[UUID]
-
-
-# ── Class-scoped list ─────────────────────────────────────────────────────────
+# ── Class-scoped ──────────────────────────────────────────────────────────────
 
 
 @router.post(
@@ -51,16 +43,16 @@ async def generate_lesson_plan(
     current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> LessonPlanResponse:
-    # STUB — M4-1-T3
-    # Real implementation:
-    # 1. Verify teacher owns class.
-    # 2. Build gap_summary snapshot from GapState for body.focus_subtopic_ids.
-    # 3. Dispatch Celery task: generate_lesson_plan_task.delay(class_id, subtopic_ids, gap_summary).
-    # 4. Create LessonPlan row with status=GENERATING and return it immediately (202).
-    # Cache key: (class_id, sorted(focus_subtopic_ids)).
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Lesson plan generation not yet implemented."
+    from app.services import lesson_plan_service
+
+    plan = await lesson_plan_service.generate_lesson_plan(
+        class_id=class_id,
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+        focus_subtopic_ids=body.focus_subtopic_ids,
+        db=db,
     )
+    return lesson_plan_service._to_response(plan)
 
 
 @router.get("/classes/{class_id}/lesson-plans", response_model=Page[LessonPlanResponse])
@@ -71,12 +63,19 @@ async def list_class_lesson_plans(
     current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> Page[LessonPlanResponse]:
-    # STUB — M0-10-T5 | Real implementation: M4-1-T3
-    # M4 adds: teacher-owns-class check, real lesson_plans DB query.
-    return Page(data=[], total=0, page=page, page_size=page_size)
+    from app.services import lesson_plan_service
+
+    return await lesson_plan_service.list_class_lesson_plans(
+        class_id=class_id,
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+        page=page,
+        page_size=page_size,
+        db=db,
+    )
 
 
-# ── Plan-scoped operations ────────────────────────────────────────────────────
+# ── Plan-scoped ───────────────────────────────────────────────────────────────
 
 
 @router.get("/lesson-plans/{plan_id}", response_model=LessonPlanResponse)
@@ -85,10 +84,14 @@ async def get_lesson_plan(
     current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> LessonPlanResponse:
-    # STUB — M0-10-T5 | Real implementation: M4-1-T3
-    # M4 note: response merges teacher_edits over generated_plan before returning.
-    # The merge happens in the service layer — this route just calls the service.
-    raise HTTPException(status_code=404, detail="No lesson plans generated yet.")
+    from app.services import lesson_plan_service
+
+    return await lesson_plan_service.get_lesson_plan(
+        plan_id=plan_id,
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+        db=db,
+    )
 
 
 @router.patch("/lesson-plans/{plan_id}", response_model=LessonPlanResponse)
@@ -98,10 +101,15 @@ async def edit_lesson_plan(
     current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> LessonPlanResponse:
-    # STUB — M0-10-T5 | Real implementation: M4-1-T3
-    # M4 adds: accumulate edits in teacher_edits JSONB column (never overwrite
-    # generated_plan), set status to EDITED.
-    raise HTTPException(status_code=404, detail="No lesson plans to edit yet.")
+    from app.services import lesson_plan_service
+
+    return await lesson_plan_service.edit_lesson_plan(
+        plan_id=plan_id,
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+        body=body,
+        db=db,
+    )
 
 
 @router.post("/lesson-plans/{plan_id}/regenerate", response_model=LessonPlanResponse)
@@ -110,10 +118,14 @@ async def regenerate_lesson_plan(
     current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> LessonPlanResponse:
-    # STUB — M0-10-T5 | Real implementation: M4-1-T3
-    # M4 adds: queue regeneration Celery task, clear previous generated_plan
-    # and teacher_edits, set status back to GENERATING.
-    raise HTTPException(status_code=404, detail="No lesson plans to regenerate yet.")
+    from app.services import lesson_plan_service
+
+    return await lesson_plan_service.regenerate_lesson_plan(
+        plan_id=plan_id,
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+        db=db,
+    )
 
 
 @router.patch("/lesson-plans/{plan_id}/status", response_model=LessonPlanResponse)
@@ -123,6 +135,12 @@ async def update_lesson_plan_status(
     current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> LessonPlanResponse:
-    # STUB — M0-10-T5 | Real implementation: M4-1-T3
-    # M4 adds: validate status transition (GENERATED|EDITED → USED|ARCHIVED only).
-    raise HTTPException(status_code=404, detail="No lesson plans to update yet.")
+    from app.services import lesson_plan_service
+
+    return await lesson_plan_service.update_lesson_plan_status(
+        plan_id=plan_id,
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+        new_status=body.status,
+        db=db,
+    )

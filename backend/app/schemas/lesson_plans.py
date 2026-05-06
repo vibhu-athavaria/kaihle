@@ -1,4 +1,4 @@
-"""Lesson plan schemas — AI-generated weekly plans for teachers."""
+"""Lesson plan schemas."""
 
 from datetime import date, datetime
 from typing import Any
@@ -10,11 +10,17 @@ from pydantic import BaseModel
 class LessonPlanResponse(BaseModel):
     id: UUID
     class_id: UUID
-    week_start: date
-    status: str  # "GENERATED" | "EDITED" | "USED" | "ARCHIVED"
-    generated_plan: dict[str, Any] | None  # full JSON structure from LLM
-    teacher_edits: dict[str, Any] | None  # sparse delta — only fields teacher changed
-    created_at: datetime
+    week_start: date | None
+    status: str  # "GENERATING" | "GENERATED" | "EDITED" | "USED" | "ARCHIVED"
+    generated_plan: dict[str, Any] | None
+    teacher_edits: dict[str, Any] | None
+    generated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GenerateLessonPlanRequest(BaseModel):
+    focus_subtopic_ids: list[UUID]
 
 
 class LessonPlanEditRequest(BaseModel):

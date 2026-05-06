@@ -1,7 +1,4 @@
-"""Lesson plan SQLAlchemy model.
-
-Covers: lesson_plans
-"""
+"""Lesson plan SQLAlchemy model."""
 
 import uuid
 from datetime import date, datetime
@@ -15,8 +12,7 @@ from app.models.base import Base, UUIDMixin
 
 
 class LessonPlanStatus:
-    """Lesson plan status constants."""
-
+    GENERATING = "GENERATING"
     GENERATED = "GENERATED"
     EDITED = "EDITED"
     USED = "USED"
@@ -24,7 +20,7 @@ class LessonPlanStatus:
 
 
 class LessonPlan(Base, UUIDMixin):
-    """Weekly AI-generated lesson plan per class."""
+    """On-demand AI-generated lesson plan per class."""
 
     __tablename__ = "lesson_plans"
 
@@ -39,19 +35,16 @@ class LessonPlan(Base, UUIDMixin):
         nullable=False,
     )
     week_start: Mapped[date | None] = mapped_column(Date, nullable=True)
-    # Originally "week start date" for weekly auto-gen. Now the generation date
-    # (informational only). Nullable because on-demand plans may not map to a week.
     focus_subtopic_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False, default=list)
-    # Top 2 subtopic_ids with lowest class-average mastery this week
     gap_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    # Snapshot at generation time:
-    # {"subtopic_id": {"name": "...", "class_avg": 0.32, "group_a_count": 8, ...}}
+    # {"subtopic_id": {"name": "...", "class_avg": 0.32, "student_count": 8}}
     generated_plan: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    # Full lesson plan structure
+    # {starter_10min, group_a_activity, group_b_activity, group_c_activity,
+    #  plenary_10min, homework, teacher_notes}
     teacher_edits: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    # Teacher's modifications. UI merges generated_plan + teacher_edits for display.
     status: Mapped[str] = mapped_column(
         Enum(
+            LessonPlanStatus.GENERATING,
             LessonPlanStatus.GENERATED,
             LessonPlanStatus.EDITED,
             LessonPlanStatus.USED,
@@ -60,9 +53,7 @@ class LessonPlan(Base, UUIDMixin):
             native_enum=False,
         ),
         nullable=False,
-        default=LessonPlanStatus.GENERATED,
+        default=LessonPlanStatus.GENERATING,
     )
     generated_at: Mapped[datetime]
     updated_at: Mapped[datetime | None]
-
-    # No unique constraint — on-demand generation; dedup handled at service layer.
