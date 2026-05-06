@@ -3,6 +3,8 @@ export type { MasteryLabel, MasteryStyle } from "./mastery";
 
 export { getSubjectColor, SUBJECT_COLORS } from "./subjects";
 
+export { ACADEMIC_YEAR_REGEX, currentAcademicYear } from "./academic-year";
+
 export {
   UserRole,
   RoleGroup,

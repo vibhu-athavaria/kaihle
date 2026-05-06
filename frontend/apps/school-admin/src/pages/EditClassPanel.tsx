@@ -3,14 +3,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { SlideOverPanel, Button, toast } from "@kaihle/ui";
-import { UserRole } from "@kaihle/types";
+import { UserRole, ACADEMIC_YEAR_REGEX } from "@kaihle/types";
 import {
   useUpdateClass,
   useSchoolUsers,
   type ClassDetail,
 } from "../hooks/useSchoolAdmin";
-
-const ACADEMIC_YEAR_REGEX = /^\d{4}\-\d{4}$/;
 
 const editClassSchema = z.object({
   name: z.string().min(1, "Class name is required"),
