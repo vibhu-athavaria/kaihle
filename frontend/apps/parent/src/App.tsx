@@ -1,4 +1,11 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useSearchParams,
+  useNavigate,
+} from "react-router-dom";
 import { PrivateRoute, RoleRoute, useAuthStore, apiClient } from "@kaihle/auth";
 import {
   ParentLayout,
@@ -26,6 +33,26 @@ function PrivateRouteWithPasswordCheck({
   );
 }
 
+function ResetPasswordRoute() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  return (
+    <ResetPasswordPage
+      token={searchParams.get("token") ?? ""}
+      onReset={(token, password) =>
+        apiClient.post("/api/v1/auth/reset-password", {
+          token,
+          password,
+          confirm_password: password,
+        })
+      }
+      onSuccess={() => navigate("/login", { replace: true })}
+      appLoginPath="/login"
+      forgotPasswordPath="/forgot-password"
+    />
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -42,22 +69,7 @@ export default function App() {
             />
           }
         />
-        <Route
-          path="/reset-password"
-          element={
-            <ResetPasswordPage
-              onReset={(token, password) =>
-                apiClient.post("/api/v1/auth/reset-password", {
-                  token,
-                  password,
-                  confirm_password: password,
-                })
-              }
-              appLoginPath="/login"
-              forgotPasswordPath="/forgot-password"
-            />
-          }
-        />
+        <Route path="/reset-password" element={<ResetPasswordRoute />} />
         <Route
           path="/parent/change-password"
           element={
