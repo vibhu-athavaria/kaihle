@@ -3,7 +3,6 @@
 import secrets
 import uuid
 
-import resend
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +16,7 @@ from app.core.security import (
 )
 from app.models.curriculum import Curriculum, Grade, Subject, Subtopic
 from app.models.gap import GapState
-from app.models.school import Class, ClassEnrollment
+from app.models.school import Class, ClassEnrollment, School
 from app.models.user import ParentStudent, StudentProfile, TeacherProfile, User, UserRole
 from app.schemas.students import EnrolledClassInfo, StudentClassResponse, StudentInfoResponse
 from app.schemas.user import UserDirectCreate, UserInvite, UserSelfUpdate, UserUpdate
@@ -31,6 +30,7 @@ from app.schemas.user_detail import (
     TeacherDetailResponse,
 )
 from app.services.class_service import ClassService
+from app.services.email_service import EmailService
 
 logger = structlog.get_logger()
 
@@ -150,13 +150,15 @@ class UserService:
         if result.scalar_one_or_none() is not None:
             raise ValueError(f"A user with email '{data.email}' already exists in this school")
 
+        raw_password = data.password  # captured before hashing for welcome email
+
         user = User(
             school_id=school_id,
             email=data.email,
             first_name=data.first_name,
             last_name=data.last_name,
             role=data.role,
-            hashed_password=hash_password(data.password),
+            hashed_password=hash_password(raw_password),
             is_active=True,
             must_change_password=True,
         )
@@ -187,6 +189,7 @@ class UserService:
                 for student_id in data.student_ids:
                     self.db.add(ParentStudent(parent_id=user.id, student_id=student_id))
 
+        await self._send_credentials_email(user, raw_password, school_id)
         return user
 
     async def list_users(
@@ -305,29 +308,57 @@ class UserService:
         )
 
     async def _send_welcome_email(self, user: User, token: str, base_url: str) -> None:
-        """Send welcome email with magic link to activate account."""
+        """Send magic link welcome email via EmailService."""
+        verify_url = f"{base_url}/api/v1/auth/magic-link/verify?token={token}"
+        email_service = EmailService()
         try:
-            resend.api_key = settings.resend_api_key
-            verify_url = f"{base_url}/api/v1/auth/magic-link/verify?token={token}"
-            resend.Emails.send(
-                {
-                    "from": settings.from_email,
-                    "to": user.email,
-                    "subject": "Welcome to Kaihle — activate your account",
-                    "html": f"""
-                        <p>Hi {user.first_name},</p>
-                        <p>You've been invited to Kaihle. Click the link below to set up your account.</p>
-                        <p>This link is valid for 72 hours.</p>
-                        <p><a href="{verify_url}">Activate my account</a></p>
-                    """,
-                }
+            await email_service.send(
+                to=user.email,
+                subject="Welcome to Kaihle — activate your account",
+                template="magic_link.html.jinja2",
+                ctx={"first_name": user.first_name, "verify_url": verify_url},
             )
         except Exception as e:
-            # Log the error with full details - never silently fail
             logger.error(
                 "failed_to_send_welcome_email",
                 user_id=str(user.id),
-                email=user.email,
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
+
+    async def _send_credentials_email(self, user: User, raw_password: str, school_id: uuid.UUID) -> None:
+        """Send welcome email containing login credentials to a newly created user."""
+        school = await self.db.get(School, school_id)
+        school_name = school.name if school else "your school"
+
+        role_url_map: dict[str, str] = {
+            "TEACHER": settings.teacher_app_url,
+            "STUDENT": settings.student_app_url,
+            "PARENT": settings.parent_app_url,
+            "SCHOOL_ADMIN": settings.school_admin_app_url,
+            "KAIHLE_ADMIN": settings.kaihle_admin_app_url,
+        }
+        app_url = role_url_map.get(user.role, settings.school_admin_app_url)
+        login_url = f"{app_url}/login"
+
+        email_service = EmailService()
+        try:
+            await email_service.send(
+                to=user.email,
+                subject="Your Kaihle account is ready",
+                template="welcome_credentials.html.jinja2",
+                ctx={
+                    "first_name": user.first_name,
+                    "email": user.email,
+                    "temp_password": raw_password,
+                    "login_url": login_url,
+                    "school_name": school_name,
+                },
+            )
+        except Exception as e:
+            logger.error(
+                "failed_to_send_credentials_email",
+                user_id=str(user.id),
                 error_type=type(e).__name__,
                 error_message=str(e),
             )

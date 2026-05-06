@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User, UserRole
-from app.schemas.user import UserInvite, UserSelfUpdate, UserUpdate
+from app.schemas.user import UserDirectCreate, UserInvite, UserSelfUpdate, UserUpdate
 from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
 
 
@@ -1051,3 +1051,115 @@ class TestGetParentDetail:
         assert isinstance(result, ParentDetailResponse)
         assert result.first_name == "Paul"
         assert result.linked_students == []
+
+
+class TestCreateUserDirectCredentialsEmail:
+    """Tests that create_user_direct sends credentials email for each role."""
+
+    def _make_direct_create_data(self, role: UserRole) -> UserDirectCreate:
+        from app.schemas.user import UserDirectCreate
+
+        return UserDirectCreate(
+            first_name="New",
+            last_name="User",
+            email="newuser@school.edu",
+            password="TempPass1!",
+            role=role,
+        )
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_when_teacher_then_credentials_email_sent(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """create_user_direct sends welcome_credentials email to a new teacher."""
+        mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+        mock_db.get = AsyncMock(return_value=MagicMock(name="Greenhill International"))
+
+        mock_email_send = AsyncMock()
+        with (
+            patch("app.services.user_service.hash_password", return_value="hashed"),
+            patch("app.services.user_service.EmailService") as MockEmailService,
+        ):
+            MockEmailService.return_value.send = mock_email_send
+            await user_service.create_user_direct(
+                school_id=school_id, data=self._make_direct_create_data(UserRole.TEACHER)
+            )
+
+        mock_email_send.assert_called_once()
+        call_kwargs = mock_email_send.call_args[1]
+        assert call_kwargs["template"] == "welcome_credentials.html.jinja2"
+        assert call_kwargs["ctx"]["temp_password"] == "TempPass1!"
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_when_student_then_credentials_email_sent(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """create_user_direct sends welcome_credentials email to a new student."""
+        mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+        mock_db.get = AsyncMock(return_value=MagicMock(name="Greenhill International"))
+
+        from app.schemas.user import UserDirectCreate
+
+        data = UserDirectCreate(
+            first_name="Student",
+            last_name="One",
+            email="student@school.edu",
+            password="TempPass1!",
+            role=UserRole.STUDENT,
+            age=14,
+            grade_id=uuid.uuid4(),
+        )
+
+        mock_email_send = AsyncMock()
+        with (
+            patch("app.services.user_service.hash_password", return_value="hashed"),
+            patch("app.services.user_service.EmailService") as MockEmailService,
+        ):
+            MockEmailService.return_value.send = mock_email_send
+            await user_service.create_user_direct(school_id=school_id, data=data)
+
+        mock_email_send.assert_called_once()
+        call_kwargs = mock_email_send.call_args[1]
+        assert call_kwargs["template"] == "welcome_credentials.html.jinja2"
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_when_parent_then_credentials_email_sent(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """create_user_direct sends welcome_credentials email to a new parent."""
+        mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+        mock_db.get = AsyncMock(return_value=MagicMock(name="Greenhill International"))
+
+        mock_email_send = AsyncMock()
+        with (
+            patch("app.services.user_service.hash_password", return_value="hashed"),
+            patch("app.services.user_service.EmailService") as MockEmailService,
+        ):
+            MockEmailService.return_value.send = mock_email_send
+            await user_service.create_user_direct(
+                school_id=school_id, data=self._make_direct_create_data(UserRole.PARENT)
+            )
+
+        mock_email_send.assert_called_once()
+        call_kwargs = mock_email_send.call_args[1]
+        assert call_kwargs["template"] == "welcome_credentials.html.jinja2"
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_when_email_send_fails_then_user_still_created(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """create_user_direct completes user creation even if the credentials email fails."""
+        mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+        mock_db.get = AsyncMock(return_value=MagicMock(name="School"))
+
+        with (
+            patch("app.services.user_service.hash_password", return_value="hashed"),
+            patch("app.services.user_service.EmailService") as MockEmailService,
+        ):
+            MockEmailService.return_value.send = AsyncMock(side_effect=Exception("Resend down"))
+            user = await user_service.create_user_direct(
+                school_id=school_id, data=self._make_direct_create_data(UserRole.TEACHER)
+            )
+
+        assert user is not None
+        assert user.email == "newuser@school.edu"

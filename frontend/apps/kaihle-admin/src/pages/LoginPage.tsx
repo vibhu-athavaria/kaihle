@@ -32,6 +32,7 @@ export function LoginPage() {
         onLogin={handleLogin}
         onMagicLink={sendMagicLink}
         logoLabel="Kaihle Admin"
+        forgotPasswordPath="/forgot-password"
       />
     </div>
   );

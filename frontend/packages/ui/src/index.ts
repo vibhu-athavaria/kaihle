@@ -1,5 +1,13 @@
 export { LoginForm, type LoginFormProps } from "./LoginForm";
 export {
+  ForgotPasswordPage,
+  type ForgotPasswordPageProps,
+} from "./ForgotPasswordPage";
+export {
+  ResetPasswordPage,
+  type ResetPasswordPageProps,
+} from "./ResetPasswordPage";
+export {
   PasswordSetupForm,
   type PasswordSetupFormProps,
 } from "./components/PasswordSetupForm";
