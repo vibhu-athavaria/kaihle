@@ -48,5 +48,5 @@ node_modules/.vite.worktrees/
 *.tsbuildinfo
 .brv/
 .claude/skills/byterover/
-package-lock.json
-package.json
+.brv/package.json
+.brv/package-lock.json

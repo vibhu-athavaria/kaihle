@@ -1,22 +1,12 @@
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useSearchParams,
-  useNavigate,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import {
   PrivateRoute,
   RoleRoute,
   PasswordSetupRoute,
-  apiClient,
+  ResetPasswordRoute,
+  ForgotPasswordRoute,
 } from "@kaihle/auth";
-import {
-  ErrorBoundary,
-  ForgotPasswordPage,
-  ResetPasswordPage,
-} from "@kaihle/ui";
+import { ErrorBoundary } from "@kaihle/ui";
 import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
 import { PasswordSetupPage } from "./pages/PasswordSetupPage";
@@ -30,42 +20,12 @@ import { ClassDetailPage } from "./pages/ClassDetailPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { SchoolAdminSettingsPage } from "./pages/settings/SchoolAdminSettingsPage";
 
-function ResetPasswordRoute() {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  return (
-    <ResetPasswordPage
-      token={searchParams.get("token") ?? ""}
-      onReset={(token, password) =>
-        apiClient.post("/api/v1/auth/reset-password", {
-          token,
-          password,
-          confirm_password: password,
-        })
-      }
-      onSuccess={() => navigate("/login", { replace: true })}
-      appLoginPath="/login"
-      forgotPasswordPath="/forgot-password"
-    />
-  );
-}
-
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/forgot-password"
-          element={
-            <ForgotPasswordPage
-              onSubmit={(email) =>
-                apiClient.post("/api/v1/auth/forgot-password", { email })
-              }
-              appLoginPath="/login"
-            />
-          }
-        />
+        <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
         <Route path="/reset-password" element={<ResetPasswordRoute />} />
 
         {/* Password setup — required before any other school-admin route */}
