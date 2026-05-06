@@ -5,9 +5,6 @@ Guidance for Claude Code when working in this repository.
 @docs/CONSTITUTION.md
 @docs/design/DESIGN_SYSTEM.md
 @CLAUDE.local.md
-@.claude/rules/kramer.md
-@.claude/rules/pixel.md
-@.claude/rules/vidhya.md
 ---
 
 ## What Is Kaihle?
@@ -20,18 +17,20 @@ AI-powered learning diagnostics platform for international schools (Cambridge, I
 
 ### Backend (Python)
 
+Uses `uv` — NOT pip. Always prefix with `uv run` in a live environment.
+
 ```bash
 cd backend
 uv sync --all-extras
 uvicorn app.main:app --reload
 
-pytest app/tests/unit/ -v
-pytest app/tests/integration/ -v
-pytest app/tests/unit/path/to/test_file.py::test_function_name -v
+uv run pytest app/tests/unit/ -v
+uv run pytest app/tests/integration/ -v
+uv run pytest app/tests/unit/path/to/test_file.py::test_function_name -v
 
-ruff check --fix app/
-ruff format app/
-mypy app/
+uv run ruff check --fix app/
+uv run ruff format app/
+uv run mypy app/
 
 alembic revision --autogenerate -m "description"
 alembic upgrade head
@@ -39,6 +38,8 @@ alembic downgrade -1
 ```
 
 ### Frontend (pnpm)
+
+Install from `frontend/`. Per-app commands use `pnpm --filter`.
 
 ```bash
 cd frontend
@@ -55,17 +56,41 @@ pnpm build
 pnpm lint
 pnpm test
 pnpm typecheck
+
+# Per-app typecheck (run from the app directory, e.g. frontend/apps/school-admin)
+npx tsc --noEmit
+
+# Per-app tests
+pnpm --filter "@kaihle/school-admin" exec jest --verbose
+
+# Prettier fix (must use pnpm -w exec, NOT plain prettier)
+cd frontend && pnpm -w exec prettier --write <file>
 ```
 
 ### Docker (full stack)
 
+Postgres runs on port **5433** locally. Docker must be running before any backend/frontend dev.
+
 ```bash
 docker compose up -d
-docker compose exec backend alembic upgrade head
+docker compose exec backend alembic upgrade head   # always run after up
 docker compose exec backend python -m scripts.seed_curriculum_graph
 docker compose exec backend python -m scripts.seed_test_data
-docker compose down
-docker compose down -v   # stop + wipe DB
+docker compose down       # safe — preserves postgres_data
+# docker compose down -v  # NEVER without explicit confirmation from Vibhu
+```
+
+### Pre-Commit Hooks
+
+On `git commit`, hooks run automatically:
+- **Backend:** ruff, ruff-format, mypy, pytest unit (≥80% coverage on services)
+- **Frontend:** prettier, tsc (per-app), jest (per-app)
+
+Jest hook often times out at 120s — retry the commit or run `jest --testTimeout 180000` manually. Always run the full pre-commit check manually before committing:
+
+```bash
+# Backend (from backend/)
+uv run ruff check --fix app/ && uv run ruff format app/ && uv run mypy app/ && uv run pytest app/tests/unit/ -v
 ```
 
 ---
