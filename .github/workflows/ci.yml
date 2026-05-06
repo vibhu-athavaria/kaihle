@@ -156,11 +156,11 @@ jobs:
       # pnpm MUST be installed before setup-node so the cache key can be resolved
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "pnpm"
           cache-dependency-path: "frontend/pnpm-lock.yaml"
 
@@ -196,11 +196,11 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "pnpm"
           cache-dependency-path: "frontend/pnpm-lock.yaml"
 
@@ -235,12 +235,12 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - name: Install dependencies
         working-directory: frontend

@@ -30,5 +30,6 @@
   },
   "dependencies": {
     "lucide-react": "^0.383.0"
-  }
+  },
+  "packageManager": "pnpm@10.33.0"
 }
