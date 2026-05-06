@@ -8,7 +8,7 @@
 #   cd frontend && pnpm install
 #   docker compose up frontend-teacher
 # ============================================================================
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
