@@ -57,7 +57,7 @@ export function Modal({
             "-translate-x-1/2 -translate-y-1/2",
             "w-[calc(100vw-32px)]",
             maxWidthMap[maxWidth],
-            "bg-white rounded-2xl shadow-xl p-6",
+            "bg-white rounded-2xl shadow-xl p-6 overflow-y-auto max-h-[90vh]",
             "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
             "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
             "motion-safe:transition-all motion-safe:duration-200",
