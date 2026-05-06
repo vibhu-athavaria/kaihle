@@ -200,3 +200,23 @@ async def store_magic_link_token(
     db.add(auth_token)
     await db.flush()
     return auth_token
+
+
+async def store_password_reset_token(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    token_hash: str,
+    expires_hours: int = 24,
+) -> AuthToken:
+    """Store a password reset token hash in auth_tokens table."""
+    expires_at = datetime.now(UTC) + timedelta(hours=expires_hours)
+    auth_token = AuthToken(
+        user_id=user_id,
+        token_hash=token_hash,
+        type="PASSWORD_RESET",
+        expires_at=expires_at,
+        used_at=None,
+    )
+    db.add(auth_token)
+    await db.flush()
+    return auth_token

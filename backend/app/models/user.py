@@ -47,6 +47,7 @@ class AuthTokenType:
 
     MAGIC_LINK = "MAGIC_LINK"
     REFRESH = "REFRESH"
+    PASSWORD_RESET = "PASSWORD_RESET"
 
 
 class User(Base, TimestampMixin):

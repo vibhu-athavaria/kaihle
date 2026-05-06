@@ -23,6 +23,7 @@ export interface LoginFormProps {
   isLoading?: boolean;
   error?: string; // external error message
   buttonClassName?: string; // custom button color classes (e.g. "bg-brand-gold hover:bg-brand-gold-dark")
+  forgotPasswordPath?: string; // e.g. "/school-admin/forgot-password"
 }
 
 export function LoginForm({
@@ -32,6 +33,7 @@ export function LoginForm({
   isLoading,
   error: externalError,
   buttonClassName,
+  forgotPasswordPath,
 }: LoginFormProps) {
   const [mode, setMode] = useState<"password" | "magic">("password");
   const [magicSent, setMagicSent] = useState(false);
@@ -147,12 +149,22 @@ export function LoginForm({
               )}
             </div>
             <div className="mb-6">
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Password
+                </label>
+                {forgotPasswordPath && (
+                  <a
+                    href={forgotPasswordPath}
+                    className="text-xs text-teal-600 hover:text-teal-700 font-medium transition-colors"
+                  >
+                    Forgot password?
+                  </a>
+                )}
+              </div>
               <div className="relative">
                 <input
                   id="password"

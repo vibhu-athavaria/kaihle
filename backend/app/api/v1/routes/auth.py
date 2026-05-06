@@ -11,6 +11,7 @@ from app.core.deps import CurrentUser, get_token_payload, require_full_access
 from app.core.security import InvalidTokenError
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -19,6 +20,7 @@ from app.schemas.auth import (
     RefreshRequest,
     RegisterRequest,
     RegisterResponse,
+    ResetPasswordRequest,
     SetPasswordRequest,
     TokenResponse,
 )
@@ -125,6 +127,31 @@ async def set_password(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except InvalidTokenError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    """Send a password reset link to the user's email.
+
+    Always returns 200 — never reveals whether the email is registered.
+    """
+    service = AuthService(db)
+    await service.send_password_reset_email(body.email)
+    return {"message": "If that email is registered, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    """Reset password using a valid reset token from the forgot-password email."""
+    service = AuthService(db)
+    try:
+        await service.reset_password(body.token, body.password)
+        return {"message": "Password reset successfully"}
+    except InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Reset link is invalid or has expired",
+        )
 
 
 @router.post("/logout")

@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     platform_rate_limit_requests_per_minute: int = 100
     platform_rate_limit_concurrent_users: int = 50
 
+    # Per-role frontend app URLs — used to build login/reset links in emails
+    teacher_app_url: str = "http://localhost:3001"
+    student_app_url: str = "http://localhost:3002"
+    parent_app_url: str = "http://localhost:3003"
+    school_admin_app_url: str = "http://localhost:3004"
+    kaihle_admin_app_url: str = "http://localhost:3005"
+
     # CORS — stored as raw string, parsed at runtime via property
     # Set CORS_ORIGINS_RAW in Render as comma-separated:
     # https://teacher.kaihle.com,https://admin.kaihle.com,...

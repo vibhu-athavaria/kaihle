@@ -17,12 +17,14 @@ from app.core.security import (
     hash_password,
     hash_token,
     store_magic_link_token,
+    store_password_reset_token,
     store_refresh_token,
     verify_password,
 )
 from app.models.school import School
 from app.models.user import AuthToken, AuthTokenType, User
 from app.schemas.auth import LoginResponse, RegisterResponse, TokenResponse
+from app.services.email_service import EmailService
 
 logger = structlog.get_logger()
 
@@ -327,32 +329,88 @@ class AuthService:
         return user
 
     async def _send_magic_link_email(self, email: str, first_name: str, token: str, base_url: str) -> None:
-        """Send magic link email via Resend."""
+        """Send magic link email via EmailService."""
+        verify_url = f"{base_url}/api/v1/auth/magic-link/verify?token={token}"
+        email_service = EmailService()
         try:
-            import resend
-
-            from app.core.config import settings
-
-            resend.api_key = settings.resend_api_key
-            verify_url = f"{base_url}/api/v1/auth/magic-link/verify?token={token}"
-
-            resend.Emails.send(
-                {
-                    "from": settings.from_email,
-                    "to": email,
-                    "subject": "Your Kaihle login link",
-                    "html": f"""
-                    <p>Hi {first_name},</p>
-                    <p>Click the link below to log in to Kaihle. This link expires in 10 minutes.</p>
-                    <p><a href="{verify_url}">Log in to Kaihle</a></p>
-                    <p>If you didn't request this, you can safely ignore this email.</p>
-                """,
-                }
+            await email_service.send(
+                to=email,
+                subject="Your Kaihle login link",
+                template="magic_link.html.jinja2",
+                ctx={"first_name": first_name, "verify_url": verify_url},
             )
         except Exception:
-            # In test environment or if Resend fails, we still want to succeed
-            # because the token is already stored in the database
+            # Token is already stored — email failure should not block the flow
             pass
+
+    async def send_password_reset_email(self, email: str) -> None:
+        """Generate a password reset token and email the reset link.
+
+        Always returns silently — never reveals whether the email exists.
+        """
+        from app.core.config import settings
+
+        user = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
+        if not user:
+            return
+
+        from app.core.security import generate_refresh_token
+
+        raw_token, token_hash = generate_refresh_token()
+        await store_password_reset_token(self.db, user.id, token_hash)
+
+        role_url_map: dict[str, str] = {
+            "TEACHER": settings.teacher_app_url,
+            "STUDENT": settings.student_app_url,
+            "PARENT": settings.parent_app_url,
+            "SCHOOL_ADMIN": settings.school_admin_app_url,
+            "KAIHLE_ADMIN": settings.kaihle_admin_app_url,
+        }
+        app_url = role_url_map.get(user.role, settings.school_admin_app_url)
+        reset_url = f"{app_url}/reset-password?token={raw_token}"
+
+        email_service = EmailService()
+        try:
+            await email_service.send(
+                to=user.email,
+                subject="Reset your Kaihle password",
+                template="password_reset.html.jinja2",
+                ctx={"first_name": user.first_name, "reset_url": reset_url},
+            )
+        except Exception:
+            logger.error(
+                "failed_to_send_password_reset_email",
+                user_id=str(user.id),
+                exc_info=True,
+            )
+
+    async def reset_password(self, token: str, new_password: str) -> None:
+        """Validate a password reset token and set the new password.
+
+        Raises InvalidTokenError if token is invalid, expired, or already used.
+        """
+        token_hash = hash_token(token)
+        auth_token = await self.db.scalar(
+            select(AuthToken).where(
+                AuthToken.token_hash == token_hash,
+                AuthToken.type == AuthTokenType.PASSWORD_RESET,
+                AuthToken.used_at.is_(None),
+                AuthToken.expires_at > datetime.now(UTC),
+            )
+        )
+        if not auth_token:
+            raise InvalidTokenError("Password reset link is invalid or has expired")
+
+        user = await self.db.get(User, auth_token.user_id)
+        if not user:
+            raise InvalidTokenError("User not found")
+
+        auth_token.used_at = datetime.now(UTC)
+        user.hashed_password = hash_password(new_password)
+        user.must_change_password = False
+        await self.db.flush()
+
+        logger.info("user_password_reset", user_id=str(user.id))
 
     async def change_password(self, user_id: uuid.UUID, current_password: str, new_password: str) -> None:
         """

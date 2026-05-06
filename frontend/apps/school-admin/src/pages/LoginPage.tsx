@@ -19,6 +19,7 @@ export function LoginPage() {
       onMagicLink={sendMagicLink}
       logoLabel="School Admin Portal"
       buttonClassName="bg-brand-primary hover:bg-brand-dark text-white"
+      forgotPasswordPath="/forgot-password"
     />
   );
 }

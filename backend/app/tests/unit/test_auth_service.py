@@ -1101,3 +1101,122 @@ class TestMustChangePassword:
 
         assert user.must_change_password is False
         assert user.hashed_password == "new_hash"
+
+
+class TestSendPasswordResetEmail:
+    @pytest.mark.asyncio
+    async def test_send_password_reset_email_when_valid_email_then_token_stored_and_email_sent(
+        self, auth_service: AuthService, mock_db: MagicMock
+    ) -> None:
+        """send_password_reset_email stores a PASSWORD_RESET token and sends email for active users."""
+        user = User(
+            id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            email="teacher@school.edu",
+            first_name="Rachel",
+            last_name="Morgan",
+            role="TEACHER",
+            is_active=True,
+            hashed_password="hashed",
+            must_change_password=False,
+        )
+        mock_db.scalar = AsyncMock(return_value=user)
+
+        mock_email_send = AsyncMock()
+        with (
+            patch("app.services.auth_service.store_password_reset_token", new_callable=AsyncMock),
+            patch("app.services.auth_service.EmailService") as MockEmailService,
+        ):
+            MockEmailService.return_value.send = mock_email_send
+            await auth_service.send_password_reset_email("teacher@school.edu")
+
+        mock_email_send.assert_called_once()
+        call_kwargs = mock_email_send.call_args[1]
+        assert call_kwargs["template"] == "password_reset.html.jinja2"
+        assert call_kwargs["to"] == "teacher@school.edu"
+
+    @pytest.mark.asyncio
+    async def test_send_password_reset_email_when_unknown_email_then_returns_silently(
+        self, auth_service: AuthService, mock_db: MagicMock
+    ) -> None:
+        """send_password_reset_email returns without error when email is not found."""
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        with patch("app.services.auth_service.EmailService") as MockEmailService:
+            await auth_service.send_password_reset_email("nobody@nowhere.com")
+
+        MockEmailService.return_value.send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_send_password_reset_email_when_inactive_user_then_returns_silently(
+        self, auth_service: AuthService, mock_db: MagicMock
+    ) -> None:
+        """send_password_reset_email returns without error for inactive users."""
+        mock_db.scalar = AsyncMock(return_value=None)  # active filter returns nothing
+
+        with patch("app.services.auth_service.EmailService") as MockEmailService:
+            await auth_service.send_password_reset_email("inactive@school.edu")
+
+        MockEmailService.return_value.send.assert_not_called()
+
+
+class TestResetPassword:
+    @pytest.mark.asyncio
+    async def test_reset_password_when_valid_token_then_password_updated_and_token_marked_used(
+        self, auth_service: AuthService, mock_db: MagicMock
+    ) -> None:
+        """reset_password hashes new password and marks token as used on valid token."""
+        user = User(
+            id=uuid.uuid4(),
+            email="user@school.edu",
+            first_name="Alice",
+            role="STUDENT",
+            hashed_password="old_hash",
+            must_change_password=True,
+        )
+        auth_token = AuthToken(
+            user_id=user.id,
+            token_hash="some_hash",
+            type="PASSWORD_RESET",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+            used_at=None,
+        )
+        mock_db.scalar = AsyncMock(return_value=auth_token)
+        mock_db.get = AsyncMock(return_value=user)
+
+        with patch("app.services.auth_service.hash_password", return_value="new_hash"):
+            await auth_service.reset_password("raw_token", "NewPassword1!")
+
+        assert user.hashed_password == "new_hash"
+        assert user.must_change_password is False
+        assert auth_token.used_at is not None
+
+    @pytest.mark.asyncio
+    async def test_reset_password_when_expired_token_then_raises_invalid_token_error(
+        self, auth_service: AuthService, mock_db: MagicMock
+    ) -> None:
+        """reset_password raises InvalidTokenError when token is not found (expired or used)."""
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.reset_password("bad_token", "NewPassword1!")
+
+    @pytest.mark.asyncio
+    async def test_reset_password_when_used_token_then_raises_invalid_token_error(
+        self, auth_service: AuthService, mock_db: MagicMock
+    ) -> None:
+        """reset_password raises InvalidTokenError when query finds no token (used tokens excluded by query)."""
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.reset_password("used_token", "NewPassword1!")
+
+    @pytest.mark.asyncio
+    async def test_reset_password_when_unknown_token_then_raises_invalid_token_error(
+        self, auth_service: AuthService, mock_db: MagicMock
+    ) -> None:
+        """reset_password raises InvalidTokenError for completely unknown tokens."""
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.reset_password("unknown_token", "NewPassword1!")

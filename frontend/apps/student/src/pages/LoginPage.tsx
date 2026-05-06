@@ -34,6 +34,7 @@ export function LoginPage() {
       onMagicLink={sendMagicLink}
       logoLabel="Student Portal"
       error={error || undefined}
+      forgotPasswordPath="/forgot-password"
       buttonClassName="bg-brand-primary hover:bg-brand-dark text-white"
     />
   );
