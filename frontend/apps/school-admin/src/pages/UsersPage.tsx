@@ -366,7 +366,11 @@ export function UsersPage() {
                           </div>
                         </td>
                         <td className="px-4 py-[10px] text-xs text-brand-muted">
-                          {s.grade_name ?? "—"}
+                          {s.grade_name ??
+                            (s.grade_level !== null &&
+                            s.grade_level !== undefined
+                              ? `Grade ${s.grade_level}`
+                              : "—")}
                         </td>
                         <td className="px-4 py-[10px]">
                           <div className="flex items-center gap-1.5 text-xs font-semibold text-brand-body">

@@ -107,8 +107,12 @@ export function StudentDetailPage() {
                 .
               </div>
               <div className="text-xs text-brand-muted mt-0.5">
-                {student.grade_name ?? "No grade"} · {student.curriculum_name} ·
-                Enrolled{" "}
+                {student.grade_name ??
+                  (student.grade_level !== null &&
+                  student.grade_level !== undefined
+                    ? `Grade ${student.grade_level}`
+                    : "No grade")}{" "}
+                · {student.curriculum_name} · Enrolled{" "}
                 {new Date(student.enrolled_at).toLocaleDateString("en-GB", {
                   month: "short",
                   year: "numeric",
