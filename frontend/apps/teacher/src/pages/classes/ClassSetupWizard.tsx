@@ -12,6 +12,7 @@ import {
   type ClassTopicItem,
   type AvailableCurriculumTopic,
 } from "../../hooks/useClassTopics";
+import { usePublishAssessment } from "../../hooks/useClassAssessments";
 
 interface ClassSetupWizardProps {
   classId: string;
@@ -359,6 +360,7 @@ function DiagnosticBuilderStep({
   const [error, setError] = useState("");
 
   const designDiagnostic = useDesignTier1Diagnostic(classId);
+  const publishAssessment = usePublishAssessment(classId);
 
   const totalQuestions = selectedTopicIds.size * QUESTIONS_PER_TOPIC;
 
@@ -382,10 +384,11 @@ function DiagnosticBuilderStep({
     setError("");
     setSubmitting(true);
     try {
-      await designDiagnostic.mutateAsync({
+      const assessment = await designDiagnostic.mutateAsync({
         topic_ids: Array.from(selectedTopicIds),
         question_count: totalQuestions,
       });
+      await publishAssessment.mutateAsync(String(assessment.id));
       onDone();
     } catch (err: unknown) {
       if (err instanceof Error && err.message.includes("422")) {
