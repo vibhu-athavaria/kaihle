@@ -173,6 +173,7 @@ class AuthToken(Base):
         Enum(
             AuthTokenType.MAGIC_LINK,
             AuthTokenType.REFRESH,
+            AuthTokenType.PASSWORD_RESET,
             name="auth_token_type",
             native_enum=False,
         ),
