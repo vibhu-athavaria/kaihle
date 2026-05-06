@@ -241,7 +241,7 @@ export default function CreateStudentModal({ open, onOpenChange }: Props) {
               <option value="">Select grade</option>
               {grades.map((g) => (
                 <option key={g.id} value={g.id}>
-                  Grade {g.level}
+                  {g.name}
                 </option>
               ))}
             </select>

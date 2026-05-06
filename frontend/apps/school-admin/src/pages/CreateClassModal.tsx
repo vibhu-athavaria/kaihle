@@ -1,7 +1,11 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Search } from "lucide-react";
 import { Button, Modal } from "@kaihle/ui";
-import { UserRole } from "@kaihle/types";
+import {
+  UserRole,
+  ACADEMIC_YEAR_REGEX,
+  currentAcademicYear,
+} from "@kaihle/types";
 import {
   useMySchoolCurricula,
   useGrades,
@@ -17,14 +21,6 @@ interface CreateClassModalProps {
   onClose: () => void;
   onCreated: () => void;
 }
-
-function currentAcademicYear(): string {
-  const year = new Date().getFullYear();
-  const month = new Date().getMonth() + 1;
-  return month >= 8 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
-}
-
-const ACADEMIC_YEAR_REGEX = /^\d{4}\-\d{4}$/;
 
 function SelectField({
   id,
@@ -111,10 +107,12 @@ export function CreateClassModal({
 
   // ── Derived grade level (to filter students) ────────────────────────────────
 
-  const selectedGradeLevel = useMemo(() => {
+  const selectedGrade = useMemo(() => {
     if (!gradeId || !grades) return null;
-    return grades.find((g) => g.id === gradeId)?.level ?? null;
+    return grades.find((g) => g.id === gradeId) ?? null;
   }, [gradeId, grades]);
+
+  const selectedGradeLevel = selectedGrade?.level ?? null;
 
   const gradeStudents = useMemo<StudentListItem[]>(() => {
     if (!allStudents) return [];
@@ -340,7 +338,7 @@ export function CreateClassModal({
               </option>
               {grades?.map((g) => (
                 <option key={g.id} value={g.id}>
-                  Grade {g.level}
+                  {g.name}
                 </option>
               ))}
             </SelectField>
@@ -412,7 +410,7 @@ export function CreateClassModal({
                 type="text"
                 value={academicYear}
                 onChange={(e) => setAcademicYear(e.target.value)}
-                pattern="^\d{4}/\d{4}$"
+                pattern="^\d{4}-\d{4}$"
                 className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
               />
               {errors.academicYear && (
@@ -429,8 +427,8 @@ export function CreateClassModal({
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-role-school-border">
                 <p className="text-xs font-bold text-role-school-muted uppercase tracking-wider">
-                  {selectedGradeLevel !== null
-                    ? `Grade ${selectedGradeLevel} Students`
+                  {selectedGrade !== null
+                    ? `${selectedGrade.name} Students`
                     : "Students"}
                   {gradeStudents.length > 0 && (
                     <span className="ml-2 font-medium normal-case tracking-normal text-gray-400">

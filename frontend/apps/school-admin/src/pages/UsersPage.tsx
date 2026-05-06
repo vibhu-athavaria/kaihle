@@ -14,7 +14,7 @@ import CreateParentModal from "./CreateParentModal";
 
 type Tab = "students" | "teachers" | "parents";
 type StudentFilter = "all" | "attention" | "pending" | "not_logged_in";
-type GradeFilter = number | null;
+type GradeFilter = string | null;
 
 function statusBadge(status: "ACTIVE" | "INVITED" | "INACTIVE") {
   if (status === "ACTIVE")
@@ -83,12 +83,12 @@ export function UsersPage() {
   const notLoggedIn = students.filter((s) => !s.last_login_at).length;
 
   const availableGrades = [
-    ...new Map(
+    ...new Set(
       students
-        .filter((s) => s.grade_level !== null)
-        .map((s) => [s.grade_level, s.grade_name ?? `Grade ${s.grade_level}`]),
-    ).entries(),
-  ].sort((a, b) => (a[0] as number) - (b[0] as number));
+        .filter((s) => s.grade_name !== null)
+        .map((s) => s.grade_name as string),
+    ),
+  ].sort();
 
   const filtered = students
     .filter((s) => {
@@ -99,7 +99,7 @@ export function UsersPage() {
       if (filter === "not_logged_in") return !s.last_login_at;
       return true;
     })
-    .filter((s) => gradeFilter === null || s.grade_level === gradeFilter)
+    .filter((s) => gradeFilter === null || s.grade_name === gradeFilter)
     .filter(
       (s) =>
         !searchQuery ||
@@ -241,15 +241,13 @@ export function UsersPage() {
             {availableGrades.length > 0 && (
               <select
                 value={gradeFilter ?? ""}
-                onChange={(e) =>
-                  setGradeFilter(e.target.value ? Number(e.target.value) : null)
-                }
+                onChange={(e) => setGradeFilter(e.target.value || null)}
                 className="px-3 py-[5px] rounded-full text-xs font-semibold border border-role-school-border bg-white text-brand-body outline-none"
                 aria-label="Filter by grade"
               >
                 <option value="">All grades</option>
-                {availableGrades.map(([level, name]) => (
-                  <option key={level} value={level as number}>
+                {availableGrades.map((name) => (
+                  <option key={name} value={name}>
                     {name}
                   </option>
                 ))}

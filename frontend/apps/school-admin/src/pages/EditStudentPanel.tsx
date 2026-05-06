@@ -270,7 +270,7 @@ export function EditStudentPanel({
             </option>
             {grades?.map((g) => (
               <option key={g.id} value={g.id}>
-                Grade {g.level}
+                {g.name}
               </option>
             ))}
           </select>

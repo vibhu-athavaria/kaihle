@@ -102,6 +102,7 @@ export interface Curriculum {
 }
 export interface Grade {
   id: string;
+  name: string;
   level: number;
 }
 
@@ -669,7 +670,11 @@ export function useClassDetail(
         name: string;
         code: string;
       }>;
-      const grades = gradesRes.data as Array<{ id: string; level: number }>;
+      const grades = gradesRes.data as Array<{
+        id: string;
+        name: string;
+        level: number;
+      }>;
       const subject = subjects.find((s) => s.id === data.subject_id);
       const grade = grades.find((g) => g.id === data.grade_id);
       return {
@@ -677,7 +682,7 @@ export function useClassDetail(
         name: data.name,
         subject_id: data.subject_id,
         subject_name: subject?.name ?? data.subject_name ?? "",
-        grade_name: grade ? `Grade ${grade.level}` : (data.grade_name ?? ""),
+        grade_name: grade?.name ?? data.grade_name ?? "",
         teacher_id: data.teacher_id ?? null,
         teacher_name: teacherRes
           ? `${teacherRes.data.first_name} ${teacherRes.data.last_name}`.trim()

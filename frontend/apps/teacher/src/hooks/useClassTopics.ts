@@ -140,7 +140,7 @@ export function useDesignTier1Diagnostic(classId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["class", classId, "assessments"],
+        queryKey: ["assessments", "class", classId],
       });
     },
   });
