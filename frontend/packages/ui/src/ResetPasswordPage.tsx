@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useSearchParams, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff } from "lucide-react";
@@ -40,20 +39,22 @@ const strengthColors = [
 ];
 
 export interface ResetPasswordPageProps {
+  /** Raw token extracted from the URL query string by the host app. Empty string = show expired state. */
+  token: string;
   onReset: (token: string, password: string) => Promise<void>;
+  /** Called after a successful reset — host app should navigate to login. */
+  onSuccess: () => void;
   appLoginPath: string;
   forgotPasswordPath?: string;
 }
 
 export function ResetPasswordPage({
+  token,
   onReset,
+  onSuccess,
   appLoginPath,
   forgotPasswordPath,
 }: ResetPasswordPageProps) {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const token = searchParams.get("token") ?? "";
-
   const [expired, setExpired] = useState(!token);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -69,7 +70,7 @@ export function ResetPasswordPage({
   const handleFormSubmit = async (data: Fields) => {
     try {
       await onReset(token, data.password);
-      navigate(appLoginPath, { replace: true, state: { passwordReset: true } });
+      onSuccess();
     } catch {
       setExpired(true);
     }

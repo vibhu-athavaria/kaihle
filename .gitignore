@@ -46,3 +46,7 @@ node_modules/.vite.worktrees/
 
 # TypeScript build info
 *.tsbuildinfo
+.brv/
+.claude/skills/byterover/
+.brv/package.json
+.brv/package-lock.json

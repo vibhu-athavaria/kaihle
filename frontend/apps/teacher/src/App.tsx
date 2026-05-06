@@ -9,19 +9,15 @@ import { useMemo } from "react";
 import {
   PrivateRoute,
   RoleRoute,
+  ResetPasswordRoute,
+  ForgotPasswordRoute,
   useAuth,
   useAuthStore,
-  apiClient,
 } from "@kaihle/auth";
 import { UserRole } from "@kaihle/types";
 import { LoginPage } from "./pages/LoginPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
-import {
-  DashboardLayout,
-  ErrorBoundary,
-  ForgotPasswordPage,
-  ResetPasswordPage,
-} from "@kaihle/ui";
+import { DashboardLayout, ErrorBoundary } from "@kaihle/ui";
 import { TeacherDashboard } from "./pages/dashboard/TeacherDashboard";
 import { TeacherSettingsPage } from "./pages/settings/TeacherSettingsPage";
 import { NewAssessmentPage } from "./pages/assessments/NewAssessmentPage";
@@ -149,33 +145,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/forgot-password"
-          element={
-            <ForgotPasswordPage
-              onSubmit={(email) =>
-                apiClient.post("/api/v1/auth/forgot-password", { email })
-              }
-              appLoginPath="/login"
-            />
-          }
-        />
-        <Route
-          path="/reset-password"
-          element={
-            <ResetPasswordPage
-              onReset={(token, password) =>
-                apiClient.post("/api/v1/auth/reset-password", {
-                  token,
-                  password,
-                  confirm_password: password,
-                })
-              }
-              appLoginPath="/login"
-              forgotPasswordPath="/forgot-password"
-            />
-          }
-        />
+        <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
+        <Route path="/reset-password" element={<ResetPasswordRoute />} />
         <Route
           path="/teacher/change-password"
           element={

@@ -18,8 +18,7 @@
     "@hookform/resolvers": "^3.9.0",
     "lucide-react": "^0.383.0",
     "sonner": "^1.7.4",
-    "@radix-ui/react-dialog": "^1.0.5",
-    "react-router-dom": "^6.26.0"
+    "@radix-ui/react-dialog": "^1.0.5"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.0.0",

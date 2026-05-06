@@ -1,10 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { PrivateRoute, RoleRoute, useAuthStore, apiClient } from "@kaihle/auth";
 import {
-  ParentLayout,
-  ForgotPasswordPage,
-  ResetPasswordPage,
-} from "@kaihle/ui";
+  PrivateRoute,
+  RoleRoute,
+  ResetPasswordRoute,
+  ForgotPasswordRoute,
+  useAuthStore,
+} from "@kaihle/auth";
+import { ParentLayout } from "@kaihle/ui";
 import { LoginPage } from "./pages/LoginPage";
 import { ChangePasswordPage } from "./pages/ChangePasswordPage";
 import { ParentSettings } from "./pages/settings/ParentSettings";
@@ -31,33 +33,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/forgot-password"
-          element={
-            <ForgotPasswordPage
-              onSubmit={(email) =>
-                apiClient.post("/api/v1/auth/forgot-password", { email })
-              }
-              appLoginPath="/login"
-            />
-          }
-        />
-        <Route
-          path="/reset-password"
-          element={
-            <ResetPasswordPage
-              onReset={(token, password) =>
-                apiClient.post("/api/v1/auth/reset-password", {
-                  token,
-                  password,
-                  confirm_password: password,
-                })
-              }
-              appLoginPath="/login"
-              forgotPasswordPath="/forgot-password"
-            />
-          }
-        />
+        <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
+        <Route path="/reset-password" element={<ResetPasswordRoute />} />
         <Route
           path="/parent/change-password"
           element={

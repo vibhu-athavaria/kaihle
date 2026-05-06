@@ -83,7 +83,7 @@ export function ForgotPasswordPage({
             <button
               type="submit"
               disabled={formState.isSubmitting}
-              className="w-full bg-brand-primary hover:bg-brand-primary disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors mb-4"
+              className="w-full bg-brand-primary hover:bg-brand-primary-dark disabled:opacity-50 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors mb-4"
             >
               {formState.isSubmitting ? "Sending…" : "Send reset link"}
             </button>
@@ -91,7 +91,7 @@ export function ForgotPasswordPage({
             <div className="text-center">
               <a
                 href={appLoginPath}
-                className="text-sm font-medium text-brand-primary hover:opacity-80 transition-colors"
+                className="text-sm font-medium text-brand-primary hover:text-brand-primary-dark transition-colors"
               >
                 ← Back to login
               </a>
@@ -99,7 +99,7 @@ export function ForgotPasswordPage({
           </form>
         ) : (
           <div className="text-center">
-            <div className="w-12 h-12 bg-brand-green-light rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-12 h-12 bg-brand-light rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="text-2xl">📧</span>
             </div>
             <p className="text-sm text-gray-600 mb-1">
@@ -114,14 +114,14 @@ export function ForgotPasswordPage({
             <button
               type="button"
               onClick={() => setSent(false)}
-              className="text-sm font-semibold text-brand-primary hover:opacity-80 transition-colors"
+              className="text-sm font-semibold text-brand-primary hover:text-brand-primary-dark transition-colors"
             >
               resend the email
             </button>
             <div className="mt-6 pt-5 border-t border-gray-100">
               <a
                 href={appLoginPath}
-                className="text-sm font-medium text-brand-primary hover:opacity-80 transition-colors"
+                className="text-sm font-medium text-brand-primary hover:text-brand-primary-dark transition-colors"
               >
                 ← Back to login
               </a>
