@@ -21,6 +21,8 @@ import { StudentSettings } from "./pages/settings/StudentSettings";
 import { TakeAssessmentPage } from "./pages/assessments/TakeAssessmentPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudyPlanDetail } from "./pages/study-plans/StudyPlanDetail";
+import { ClassTopicsPage } from "./pages/classes/ClassTopicsPage";
+import { TopicDetailPage } from "./pages/topics/TopicDetailPage";
 
 function PrivateRouteWithPasswordCheck({
   children,
@@ -76,6 +78,38 @@ export default function App() {
             <PrivateRouteWithPasswordCheck>
               <ErrorBoundary role="student">
                 <StudentDashboard />
+              </ErrorBoundary>
+            </PrivateRouteWithPasswordCheck>
+          }
+        />
+        <Route
+          path="/student/classes/:classId/diagnostic"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <TakeAssessmentPage />
+                </ErrorBoundary>
+              </OnboardingRoute>
+            </PrivateRouteWithPasswordCheck>
+          }
+        />
+        <Route
+          path="/student/classes/:classId/topics"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <ErrorBoundary role="student">
+                <ClassTopicsPage />
+              </ErrorBoundary>
+            </PrivateRouteWithPasswordCheck>
+          }
+        />
+        <Route
+          path="/student/classes/:classId/topics/:topicId"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <ErrorBoundary role="student">
+                <TopicDetailPage />
               </ErrorBoundary>
             </PrivateRouteWithPasswordCheck>
           }
