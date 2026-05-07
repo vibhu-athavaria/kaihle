@@ -292,4 +292,6 @@ def _to_response(plan: LessonPlan) -> LessonPlanResponse:
         generated_plan=generated if generated else None,
         teacher_edits=plan.teacher_edits,
         generated_at=plan.generated_at,
+        failure_code=plan.failure_code,
+        failure_reason=plan.failure_reason,
     )

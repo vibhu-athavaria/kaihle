@@ -42,6 +42,7 @@ class ClassTopicService:
         result = await self.db.execute(
             select(
                 ClassTopic,
+                Topic.id.label("topic_id"),
                 Topic.name.label("topic_name"),
                 func.count(Subtopic.id).label("subtopic_count"),
             )
@@ -49,7 +50,7 @@ class ClassTopicService:
             .join(Topic, Topic.id == CurriculumTopic.topic_id)
             .outerjoin(Subtopic, Subtopic.curriculum_topic_id == ClassTopic.curriculum_topic_id)
             .where(ClassTopic.class_id == class_id)
-            .group_by(ClassTopic.id, Topic.name)
+            .group_by(ClassTopic.id, Topic.id, Topic.name)
             .order_by(ClassTopic.sequence_order)
         )
         rows = result.all()
@@ -58,6 +59,7 @@ class ClassTopicService:
                 id=row.ClassTopic.id,
                 class_id=row.ClassTopic.class_id,
                 curriculum_topic_id=row.ClassTopic.curriculum_topic_id,
+                topic_id=row.topic_id,
                 sequence_order=row.ClassTopic.sequence_order,
                 is_covered=row.ClassTopic.is_covered,
                 topic_name=row.topic_name,
@@ -101,16 +103,17 @@ class ClassTopicService:
         self.db.add(class_topic)
         await self.db.flush()
 
-        # Fetch topic name + subtopic count for response
+        # Fetch topic id, name + subtopic count for response
         topic_result = await self.db.execute(
             select(
+                Topic.id.label("topic_id"),
                 Topic.name.label("topic_name"),
                 func.count(Subtopic.id).label("subtopic_count"),
             )
             .join(CurriculumTopic, CurriculumTopic.topic_id == Topic.id)
             .outerjoin(Subtopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
             .where(CurriculumTopic.id == data.curriculum_topic_id)
-            .group_by(Topic.name)
+            .group_by(Topic.id, Topic.name)
         )
         topic_row = topic_result.one()
 
@@ -123,6 +126,7 @@ class ClassTopicService:
             id=class_topic.id,
             class_id=class_topic.class_id,
             curriculum_topic_id=class_topic.curriculum_topic_id,
+            topic_id=topic_row.topic_id,
             sequence_order=class_topic.sequence_order,
             is_covered=class_topic.is_covered,
             topic_name=topic_row.topic_name,
@@ -153,16 +157,17 @@ class ClassTopicService:
         class_topic.updated_at = datetime.now(UTC)
         await self.db.flush()
 
-        # Fetch topic name + subtopic count for response
+        # Fetch topic id, name + subtopic count for response
         topic_result = await self.db.execute(
             select(
+                Topic.id.label("topic_id"),
                 Topic.name.label("topic_name"),
                 func.count(Subtopic.id).label("subtopic_count"),
             )
             .join(CurriculumTopic, CurriculumTopic.topic_id == Topic.id)
             .outerjoin(Subtopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
             .where(CurriculumTopic.id == class_topic.curriculum_topic_id)
-            .group_by(Topic.name)
+            .group_by(Topic.id, Topic.name)
         )
         topic_row = topic_result.one()
 
@@ -170,6 +175,7 @@ class ClassTopicService:
             id=class_topic.id,
             class_id=class_topic.class_id,
             curriculum_topic_id=class_topic.curriculum_topic_id,
+            topic_id=topic_row.topic_id,
             sequence_order=class_topic.sequence_order,
             is_covered=class_topic.is_covered,
             topic_name=topic_row.topic_name,

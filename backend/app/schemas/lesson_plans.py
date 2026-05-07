@@ -15,6 +15,8 @@ class LessonPlanResponse(BaseModel):
     generated_plan: dict[str, Any] | None
     teacher_edits: dict[str, Any] | None
     generated_at: datetime
+    failure_code: str | None = None
+    failure_reason: str | None = None
 
     model_config = {"from_attributes": True}
 

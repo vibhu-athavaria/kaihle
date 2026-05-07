@@ -98,6 +98,7 @@ async def _generate(
 ) -> dict:
     from app.ai.providers import router as llm_router
     from app.models.curriculum import Grade, Subject
+    from app.models.lesson_plan import LessonPlanFailureCode
     from app.models.onboarding import StudentLearningProfile
     from app.models.school import Class, ClassEnrollment
 
@@ -116,7 +117,9 @@ async def _generate(
     class_ = class_result.scalar_one_or_none()
     if not class_:
         logger.error("class_not_found", class_id=class_id)
-        await _mark_archived(plan, db, "class_not_found")
+        await _mark_archived(
+            plan, db, LessonPlanFailureCode.CLASS_NOT_FOUND, "Generation failed: class record not found."
+        )
         return {"lesson_plan_id": lesson_plan_id, "status": "error", "reason": "class_not_found"}
 
     grade_name = "Unknown Grade"
@@ -193,17 +196,69 @@ async def _generate(
     )
 
     # ---- Call LLM ----
-    response_text = await llm_router.complete(
-        task="lesson_plan",
-        messages=[{"role": "user", "content": prompt_text}],
-    )
+    import litellm
+
+    try:
+        response_text = await llm_router.complete(
+            task="lesson_plan",
+            messages=[{"role": "user", "content": prompt_text}],
+        )
+    except litellm.AuthenticationError as exc:
+        logger.error(
+            "lesson_plan_llm_auth_failed",
+            lesson_plan_id=lesson_plan_id,
+            class_id=class_id,
+            model=str(exc.model) if hasattr(exc, "model") else "unknown",
+            error=str(exc),
+            exc_info=True,
+        )
+        await _mark_archived(
+            plan,
+            db,
+            LessonPlanFailureCode.LLM_AUTH_ERROR,
+            "Generation failed: LLM provider authentication error. Check API key configuration.",
+        )
+        return {"lesson_plan_id": lesson_plan_id, "status": "error", "reason": "llm_auth_error"}
+    except litellm.RateLimitError as exc:
+        logger.error(
+            "lesson_plan_llm_rate_limited",
+            lesson_plan_id=lesson_plan_id,
+            class_id=class_id,
+            error=str(exc),
+            exc_info=True,
+        )
+        # Rate limits are transient — let the task retry
+        raise
+    except litellm.APIConnectionError as exc:
+        logger.error(
+            "lesson_plan_llm_connection_failed",
+            lesson_plan_id=lesson_plan_id,
+            class_id=class_id,
+            error=str(exc),
+            exc_info=True,
+        )
+        raise
+    except Exception as exc:
+        logger.error(
+            "lesson_plan_llm_unexpected_error",
+            lesson_plan_id=lesson_plan_id,
+            class_id=class_id,
+            error=str(exc),
+            exc_info=True,
+        )
+        await _mark_archived(
+            plan, db, LessonPlanFailureCode.LLM_UNEXPECTED_ERROR, "Generation failed due to an unexpected error."
+        )
+        return {"lesson_plan_id": lesson_plan_id, "status": "error", "reason": "llm_unexpected_error"}
 
     # ---- Parse JSON response ----
     try:
         generated_plan = json.loads(response_text.strip())
     except json.JSONDecodeError:
         logger.error("lesson_plan_json_parse_failed", lesson_plan_id=lesson_plan_id, raw=response_text[:500])
-        await _mark_archived(plan, db, "json_parse_failed")
+        await _mark_archived(
+            plan, db, LessonPlanFailureCode.JSON_PARSE_FAILED, "Generation failed: AI returned an unreadable response."
+        )
         return {"lesson_plan_id": lesson_plan_id, "status": "error", "reason": "json_parse_failed"}
 
     plan.generated_plan = generated_plan
@@ -213,7 +268,19 @@ async def _generate(
     return {"lesson_plan_id": lesson_plan_id, "status": "completed"}
 
 
-async def _mark_archived(plan: LessonPlan, db: AsyncSession, reason: str) -> None:
+async def _mark_archived(
+    plan: LessonPlan,
+    db: AsyncSession,
+    failure_code: str,
+    user_message: str | None = None,
+) -> None:
     plan.status = LessonPlanStatus.ARCHIVED
+    plan.failure_code = failure_code
+    plan.failure_reason = user_message or failure_code
     await db.commit()
-    logger.warning("lesson_plan_marked_archived", plan_id=str(plan.id), reason=reason)
+    logger.error(
+        "lesson_plan_generation_failed_permanently",
+        plan_id=str(plan.id),
+        failure_code=failure_code,
+        user_message=user_message,
+    )

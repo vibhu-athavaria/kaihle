@@ -16,6 +16,8 @@ export interface LessonPlan {
   generated_plan: Record<string, string> | null;
   teacher_edits: Record<string, string> | null;
   generated_at: string;
+  failure_code: string | null;
+  failure_reason: string | null;
 }
 
 export interface LessonPlanPage {

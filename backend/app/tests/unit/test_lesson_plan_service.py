@@ -41,6 +41,8 @@ def _make_plan(plan_id=None, class_id=None, teacher_id=None, status="GENERATED")
     p.generated_plan = {"starter_10min": "intro"}
     p.teacher_edits = None
     p.generated_at = datetime.now(UTC)
+    p.failure_code = None
+    p.failure_reason = None
     return p
 
 

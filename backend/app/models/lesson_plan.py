@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Date, Enum, ForeignKey
+from sqlalchemy import Date, DateTime, Enum, ForeignKey
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,26 @@ class LessonPlanStatus:
     EDITED = "EDITED"
     USED = "USED"
     ARCHIVED = "ARCHIVED"
+
+
+class LessonPlanFailureCode:
+    LLM_AUTH_ERROR = "llm_auth_error"
+    LLM_RATE_LIMIT_ERROR = "llm_rate_limit_error"
+    LLM_CONNECTION_ERROR = "llm_connection_error"
+    LLM_UNEXPECTED_ERROR = "llm_unexpected_error"
+    JSON_PARSE_FAILED = "json_parse_failed"
+    CLASS_NOT_FOUND = "class_not_found"
+
+
+_FAILURE_CODE_ENUM = Enum(
+    LessonPlanFailureCode.LLM_AUTH_ERROR,
+    LessonPlanFailureCode.LLM_RATE_LIMIT_ERROR,
+    LessonPlanFailureCode.LLM_CONNECTION_ERROR,
+    LessonPlanFailureCode.LLM_UNEXPECTED_ERROR,
+    LessonPlanFailureCode.JSON_PARSE_FAILED,
+    LessonPlanFailureCode.CLASS_NOT_FOUND,
+    name="lesson_plan_failure_code",
+)
 
 
 class LessonPlan(Base, UUIDMixin):
@@ -55,5 +75,7 @@ class LessonPlan(Base, UUIDMixin):
         nullable=False,
         default=LessonPlanStatus.GENERATING,
     )
-    generated_at: Mapped[datetime]
-    updated_at: Mapped[datetime | None]
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_code: Mapped[str | None] = mapped_column(_FAILURE_CODE_ENUM, nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(nullable=True)

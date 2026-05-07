@@ -22,7 +22,9 @@ function useTopicSubtopics(topicId: string | null) {
   return useQuery<Subtopic[]>({
     queryKey: ["subtopics", "topic", topicId],
     queryFn: async () => {
-      const res = await apiClient.get(`/api/v1/topics/${topicId}/subtopics`);
+      const res = await apiClient.get(`/api/v1/subtopics`, {
+        params: { topic_id: topicId },
+      });
       return res.data as Subtopic[];
     },
     enabled: !!topicId,
@@ -92,11 +94,11 @@ function GenerateLessonPlanModal({
                   key={t.curriculum_topic_id}
                   type="button"
                   onClick={() => {
-                    setSelectedTopicId(t.curriculum_topic_id);
+                    setSelectedTopicId(t.topic_id);
                     setSelectedSubtopicIds(new Set());
                   }}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                    selectedTopicId === t.curriculum_topic_id
+                    selectedTopicId === t.topic_id
                       ? "bg-brand-gold text-white font-semibold"
                       : "hover:bg-gray-50 text-brand-ink"
                   }`}
@@ -183,13 +185,15 @@ function StatusBadge({ status }: { status: LessonPlan["status"] }) {
     GENERATED: "bg-brand-green-light text-brand-green",
     EDITED: "bg-blue-50 text-blue-700",
     USED: "bg-gray-100 text-brand-muted",
-    ARCHIVED: "bg-gray-100 text-brand-muted",
+    ARCHIVED: "bg-red-50 text-red-600",
   };
   return (
     <span
       className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${map[status] ?? "bg-gray-100 text-brand-muted"}`}
     >
-      {status.charAt(0) + status.slice(1).toLowerCase()}
+      {status === "ARCHIVED"
+        ? "Failed"
+        : status.charAt(0) + status.slice(1).toLowerCase()}
     </span>
   );
 }
@@ -221,9 +225,12 @@ function LessonPlanCard({
             Lesson Plan · {date}
           </p>
           <StatusBadge status={plan.status} />
+          {plan.status === "ARCHIVED" && plan.failure_reason && (
+            <p className="text-xs text-red-500 mt-1">{plan.failure_reason}</p>
+          )}
         </div>
       </div>
-      {plan.status !== "GENERATING" && (
+      {plan.status !== "GENERATING" && plan.status !== "ARCHIVED" && (
         <Link
           to={`/teacher/classes/${classId}/lesson-plans/${plan.id}`}
           className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark flex-shrink-0 focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded transition-colors"
