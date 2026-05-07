@@ -1,53 +1,108 @@
-You are an expert curriculum designer helping a teacher prepare a lesson for {{ class_name }}.
+You are an expert lesson planning assistant helping a teacher design a practical, classroom-ready lesson plan.
 
 ## Class context
-- Subject: {{ subject_name }}
-- Grade: {{ grade_name }}
-- Class size: {{ student_count }} students
+- **Class:** {{ class_name }}
+- **Subject:** {{ subject_name }}
+- **Grade:** {{ grade_name }}
+- **Students:** {{ student_count }}
+- **Lesson duration:** {{ duration_minutes }} minutes
 
-## Focus subtopics (lowest mastery — these drive the lesson)
+## Focus subtopics
 {% for s in subtopics %}
-- **{{ s.name }}** — learning objective: {{ s.learning_objective }}
-  Class average mastery: {{ "%.0f"|format(s.class_avg * 100) }}% ({{ s.student_count }} students assessed)
+- **{{ s.name }}**{% if s.learning_objective %} — {{ s.learning_objective }}{% endif %}
+  - Class average mastery: {{ "%.0f"|format(s.class_avg * 100) }}% ({{ s.student_count }} students assessed)
 {% endfor %}
 
-## Student learning profile aggregate
-Dominant modalities across the class:
-{% for modality, score in modality_distribution.items() %}
-- {{ modality | replace("_", " ") | title }}: {{ "%.0f"|format(score * 100) }}%
+## Student profile
+{% if modality_distribution %}
+Learning modality distribution across the class:
+{% for modality, score in modality_distribution.items() | sort(attribute=1, reverse=True) %}
+- {{ modality | replace("_", " ") | capitalize }}: {{ "%.0f"|format(score * 100) }}%
 {% endfor %}
+{% else %}
+No learning profile data yet — design for a mixed-modality class.
+{% endif %}
 {% if common_interests %}
-Common student interests: {{ common_interests | join(", ") }}
+
+Top student interests (use these to ground real-world examples):
+{{ common_interests | join(", ") }}
 {% endif %}
 
-## Task
-Design a 60-minute lesson plan that addresses these knowledge gaps. The plan uses a three-group differentiation model:
-- **Group A** — students who have completed the diagnostic but score below 0.4 (Needs Work)
-- **Group B** — students scoring 0.4–0.7 (Developing)
-- **Group C** — students scoring above 0.7 (Approaching mastery / extension)
+## Ability groups
+Design differentiated activities for three groups based on current mastery:
+- **Foundation** (below 40%) — needs scaffolding, concrete examples, guided practice
+- **Core** (40–70%) — consolidating understanding, needs application with some challenge
+- **Extension** (above 70%) — ready to deepen, connect, or apply knowledge in novel contexts
 
-Structure the lesson across these five phases:
-1. **Starter (10 min)** — whole-class hook that activates prior knowledge and surfaces misconceptions
-2. **Group A activity** — targeted support for struggling students; concrete, step-by-step
-3. **Group B activity** — consolidation and application; guided practice
-4. **Group C activity** — extension and deeper application; more open-ended
-5. **Plenary (10 min)** — whole-class wrap-up; consolidate key ideas, quick check for understanding
+## Time budget
+Total lesson: **{{ duration_minutes }} minutes**
+- Starter: ~{{ (duration_minutes * 0.10) | round | int }} min
+- Introduction & key concepts: ~{{ (duration_minutes * 0.15) | round | int }} min
+- Main differentiated activity: ~{{ (duration_minutes * 0.50) | round | int }} min
+- Formative check: ~{{ (duration_minutes * 0.10) | round | int }} min
+- Plenary: ~{{ (duration_minutes * 0.15) | round | int }} min
 
-Also provide:
-- **Homework** — a short follow-up task (15–20 min) that reinforces the lesson focus
-- **Teacher notes** — 2–3 practical tips for managing the differentiated groups and common misconceptions to watch for
+## Your task
+Generate a complete, practical lesson plan a teacher can pick up and use immediately. Be specific — name actual activities, not vague suggestions. Connect activities to student interests wherever possible. Include at least two real-world applications of the subtopic(s).
 
-## Output format
-Respond ONLY with a valid JSON object. No prose before or after. No markdown fences.
+Return ONLY valid JSON — no markdown fences, no prose before or after — in this exact structure:
 
 {
-  "starter_10min": "...",
-  "group_a_activity": "...",
-  "group_b_activity": "...",
-  "group_c_activity": "...",
-  "plenary_10min": "...",
-  "homework": "...",
-  "teacher_notes": "..."
+  "learning_objectives": [
+    "Students will be able to ...",
+    "Students will be able to ..."
+  ],
+  "prior_knowledge": "Brief description of what students should already know before this lesson.",
+  "starter": {
+    "duration_minutes": <int>,
+    "activity": "Specific, named activity. E.g. 'Think-Pair-Share', 'Quick quiz', 'Real-world hook'. Connect to a student interest."
+  },
+  "key_concepts": [
+    { "term": "...", "definition": "Plain-language definition a student can understand." }
+  ],
+  "real_world_applications": [
+    {
+      "context": "Short label for the real-world context, e.g. 'Sports statistics' or 'Social media reach'",
+      "example": "Concrete 2–3 sentence explanation of how this subtopic appears in that context."
+    },
+    {
+      "context": "...",
+      "example": "..."
+    }
+  ],
+  "main_activity": {
+    "duration_minutes": <int>,
+    "group_foundation": {
+      "focus": "One sentence on what this group is working towards.",
+      "activity": "Specific activity with clear teacher instructions. What does the student do? What does the teacher do? Name any resources needed."
+    },
+    "group_core": {
+      "focus": "One sentence on what this group is working towards.",
+      "activity": "Specific activity with clear teacher instructions."
+    },
+    "group_extension": {
+      "focus": "One sentence on what this group is working towards.",
+      "activity": "Specific activity. Should stretch and challenge, not just more of the same."
+    }
+  },
+  "formative_check": {
+    "duration_minutes": <int>,
+    "type": "exit_ticket",
+    "questions": [
+      "Question testing core understanding, not rote recall.",
+      "Question applying the concept to a new situation."
+    ]
+  },
+  "plenary": {
+    "duration_minutes": <int>,
+    "activity": "Specific plenary that connects back to learning objectives and lets students articulate what they learned. E.g. '3-2-1 reflection', 'Cold call', 'Pair share summary'."
+  },
+  "homework": "Optional brief task (15–20 min). Write null if none needed.",
+  "resources_needed": [
+    "Every material the teacher needs to prepare before the lesson."
+  ],
+  "common_misconceptions": [
+    "Misconception students typically have, and how the teacher should address it."
+  ],
+  "teacher_tips": "2–3 sentences of practical advice: pacing, group transitions, what to watch for, differentiation reminders."
 }
-
-Each value should be 3–6 sentences of clear, practical, classroom-ready instruction. Write for a teacher, not a student.

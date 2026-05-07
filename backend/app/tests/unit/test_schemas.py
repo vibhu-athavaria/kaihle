@@ -266,15 +266,17 @@ class TestSchemaInstantiation:
             status="GENERATED",
             generated_plan={"starter": "intro"},
             teacher_edits=None,
+            gap_summary={},
+            focus_subtopics=[],
             generated_at=datetime.utcnow(),
         )
         assert lesson_plan.status == "GENERATED"
         assert lesson_plan.generated_plan is not None
 
     def test_lesson_plan_edit_request_partial(self):
-        e = LessonPlanEditRequest(starter_10min="New starter activity")
-        assert e.starter_10min == "New starter activity"
-        assert e.group_a_activity is None
+        e = LessonPlanEditRequest(teacher_tips="Remember to circulate during group work.")
+        assert e.teacher_tips == "Remember to circulate during group work."
+        assert e.homework is None
 
     def test_lesson_plan_status_request(self):
         s = LessonPlanStatusRequest(status="USED")

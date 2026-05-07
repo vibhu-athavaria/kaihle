@@ -47,6 +47,7 @@ function GenerateLessonPlanModal({
   const [selectedSubtopicIds, setSelectedSubtopicIds] = useState<Set<string>>(
     new Set(),
   );
+  const [durationMinutes, setDurationMinutes] = useState(45);
   const { data: subtopics = [], isLoading: subtopicsLoading } =
     useTopicSubtopics(selectedTopicId);
   const generate = useGenerateLessonPlan(classId);
@@ -64,10 +65,25 @@ function GenerateLessonPlanModal({
     await generate.mutateAsync({
       classId,
       focusSubtopicIds: Array.from(selectedSubtopicIds),
+      durationMinutes,
     });
     setSelectedTopicId(null);
     setSelectedSubtopicIds(new Set());
+    setDurationMinutes(45);
     onOpenChange(false);
+  }
+
+  const step1Done = !!selectedTopicId;
+  const step2Done = selectedSubtopicIds.size > 0;
+  const selectedTopicName = topics.find(
+    (t) => t.topic_id === selectedTopicId,
+  )?.topic_name;
+
+  function selectAll() {
+    setSelectedSubtopicIds(new Set(subtopics.map((s) => s.id)));
+  }
+  function clearAll() {
+    setSelectedSubtopicIds(new Set());
   }
 
   return (
@@ -80,16 +96,36 @@ function GenerateLessonPlanModal({
       <div className="space-y-5">
         {/* Step 1 — pick topic */}
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-brand-muted mb-2">
-            1. Choose a topic
-          </p>
-          <div className="space-y-1 max-h-40 overflow-y-auto">
+          {/* Step header */}
+          <div className="flex items-center gap-2 mb-3">
+            <span
+              className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 transition-colors ${
+                step1Done
+                  ? "bg-brand-gold text-white"
+                  : "bg-gray-100 text-brand-muted"
+              }`}
+              aria-hidden="true"
+            >
+              {step1Done ? "✓" : "1"}
+            </span>
+            <p className="text-xs font-bold uppercase tracking-wide text-brand-ink">
+              Choose a topic
+            </p>
+            {step1Done && (
+              <span className="text-xs text-brand-muted truncate">
+                — {selectedTopicName}
+              </span>
+            )}
+          </div>
+
+          {/* Topic list */}
+          <div className="rounded-lg border border-brand-border overflow-hidden max-h-44 overflow-y-auto">
             {topics.length === 0 ? (
-              <p className="text-sm text-brand-muted">
+              <p className="text-sm text-brand-muted px-4 py-3">
                 No topics added to this class yet.
               </p>
             ) : (
-              topics.map((t) => (
+              topics.map((t, i) => (
                 <button
                   key={t.curriculum_topic_id}
                   type="button"
@@ -97,9 +133,11 @@ function GenerateLessonPlanModal({
                     setSelectedTopicId(t.topic_id);
                     setSelectedSubtopicIds(new Set());
                   }}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                  className={`w-full text-left px-4 py-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-gold ${
+                    i > 0 ? "border-t border-brand-border" : ""
+                  } ${
                     selectedTopicId === t.topic_id
-                      ? "bg-brand-gold text-white font-semibold"
+                      ? "bg-amber-50 text-brand-gold-dark font-semibold"
                       : "hover:bg-gray-50 text-brand-ink"
                   }`}
                 >
@@ -111,59 +149,150 @@ function GenerateLessonPlanModal({
         </div>
 
         {/* Step 2 — pick subtopics */}
-        {selectedTopicId && (
+        {step1Done && (
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-brand-muted mb-2">
-              2. Select subtopics to focus on
-            </p>
+            {/* Step header */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 transition-colors ${
+                    step2Done
+                      ? "bg-brand-gold text-white"
+                      : "bg-gray-100 text-brand-muted"
+                  }`}
+                  aria-hidden="true"
+                >
+                  {step2Done ? "✓" : "2"}
+                </span>
+                <p className="text-xs font-bold uppercase tracking-wide text-brand-ink">
+                  Focus subtopics
+                </p>
+                {step2Done && (
+                  <span className="text-xs font-semibold text-brand-gold">
+                    {selectedSubtopicIds.size} selected
+                  </span>
+                )}
+              </div>
+              {!subtopicsLoading && subtopics.length > 0 && (
+                <button
+                  type="button"
+                  onClick={
+                    selectedSubtopicIds.size === subtopics.length
+                      ? clearAll
+                      : selectAll
+                  }
+                  className="text-xs font-semibold text-brand-gold hover:text-brand-gold-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
+                >
+                  {selectedSubtopicIds.size === subtopics.length
+                    ? "Clear all"
+                    : "Select all"}
+                </button>
+              )}
+            </div>
+
             {subtopicsLoading ? (
-              <div className="animate-pulse space-y-2">
+              <div className="animate-pulse space-y-px rounded-lg border border-brand-border overflow-hidden">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-8 bg-brand-border rounded-lg" />
+                  <div key={i} className="h-10 bg-brand-border" />
                 ))}
               </div>
             ) : subtopics.length === 0 ? (
-              <p className="text-sm text-brand-muted">
+              <p className="text-sm text-brand-muted px-1">
                 No subtopics found for this topic.
               </p>
             ) : (
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {subtopics.map((s) => (
-                  <label
-                    key={s.id}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedSubtopicIds.has(s.id)}
-                      onChange={() => toggleSubtopic(s.id)}
-                      className="w-4 h-4 rounded accent-brand-gold"
-                    />
-                    <span className="text-sm text-brand-ink">{s.name}</span>
-                  </label>
-                ))}
+              <div className="rounded-lg border border-brand-border overflow-hidden max-h-48 overflow-y-auto">
+                {subtopics.map((s, i) => {
+                  const checked = selectedSubtopicIds.has(s.id);
+                  return (
+                    <label
+                      key={s.id}
+                      className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
+                        i > 0 ? "border-t border-brand-border" : ""
+                      } ${checked ? "bg-amber-50" : "hover:bg-gray-50"}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleSubtopic(s.id)}
+                        className="w-4 h-4 rounded accent-brand-gold flex-shrink-0"
+                      />
+                      <span
+                        className={`text-sm transition-colors ${
+                          checked
+                            ? "text-brand-gold-dark font-semibold"
+                            : "text-brand-ink"
+                        }`}
+                      >
+                        {s.name}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             )}
           </div>
         )}
 
+        {/* Step 3 — duration (only visible once subtopics chosen) */}
+        {step1Done && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span
+                className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 bg-gray-100 text-brand-muted"
+                aria-hidden="true"
+              >
+                3
+              </span>
+              <p className="text-xs font-bold uppercase tracking-wide text-brand-ink">
+                Lesson duration
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[30, 45, 60, 75, 90].map((mins) => (
+                <button
+                  key={mins}
+                  type="button"
+                  onClick={() => setDurationMinutes(mins)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 ${
+                    durationMinutes === mins
+                      ? "bg-brand-gold text-white"
+                      : "border border-brand-border text-brand-ink hover:bg-gray-50"
+                  }`}
+                >
+                  {mins} min
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-1">
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="px-4 py-2 text-sm font-semibold text-brand-ink border border-brand-border rounded-full hover:bg-gray-50 transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={selectedSubtopicIds.size === 0 || generate.isPending}
-            className="px-4 py-2 text-sm font-bold text-white bg-brand-gold hover:bg-brand-gold-dark disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
-          >
-            {generate.isPending ? "Starting…" : "Generate"}
-          </button>
+        <div className="flex items-center justify-between pt-1">
+          <p className="text-xs text-brand-muted">
+            {!step1Done
+              ? "Select a topic to continue"
+              : !step2Done
+                ? "Select at least one subtopic"
+                : `${selectedSubtopicIds.size} subtopic${selectedSubtopicIds.size === 1 ? "" : "s"} · ${durationMinutes} min`}
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="px-4 py-2 text-sm font-semibold text-brand-ink border border-brand-border rounded-full hover:bg-gray-50 transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={!step2Done || generate.isPending}
+              className="px-4 py-2 text-sm font-bold text-white bg-brand-gold hover:bg-brand-gold-dark disabled:opacity-40 disabled:cursor-not-allowed rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+            >
+              {generate.isPending ? "Starting…" : "Generate"}
+            </button>
+          </div>
         </div>
       </div>
     </Modal>
@@ -213,30 +342,64 @@ function LessonPlanCard({
     year: "numeric",
   });
 
+  // Group subtopics by topic_name — preserves insertion order
+  const byTopic = (plan.focus_subtopics ?? []).reduce<
+    Record<string, typeof plan.focus_subtopics>
+  >((acc, s) => {
+    const key = s.topic_name || "Other";
+    (acc[key] ??= []).push(s);
+    return acc;
+  }, {});
+  const topicGroups = Object.entries(byTopic);
+
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-5 flex items-center justify-between gap-4">
-      <div className="flex items-start gap-3 min-w-0">
-        <BookOpen
-          className="w-5 h-5 text-brand-gold mt-0.5 flex-shrink-0"
-          aria-hidden="true"
-        />
-        <div className="min-w-0">
-          <p className="font-semibold text-brand-ink text-sm truncate">
-            Lesson Plan · {date}
-          </p>
+    <div className="bg-white rounded-xl border border-brand-border p-5">
+      {/* Top row — date, status, action */}
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <BookOpen
+            className="w-4 h-4 text-brand-gold flex-shrink-0"
+            aria-hidden="true"
+          />
+          <span className="font-semibold text-brand-ink text-sm">{date}</span>
           <StatusBadge status={plan.status} />
-          {plan.status === "ARCHIVED" && plan.failure_reason && (
-            <p className="text-xs text-red-500 mt-1">{plan.failure_reason}</p>
-          )}
         </div>
+        {plan.status !== "GENERATING" && plan.status !== "ARCHIVED" && (
+          <Link
+            to={`/teacher/classes/${classId}/lesson-plans/${plan.id}`}
+            className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark flex-shrink-0 focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded transition-colors"
+          >
+            View →
+          </Link>
+        )}
       </div>
-      {plan.status !== "GENERATING" && plan.status !== "ARCHIVED" && (
-        <Link
-          to={`/teacher/classes/${classId}/lesson-plans/${plan.id}`}
-          className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark flex-shrink-0 focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded transition-colors"
-        >
-          View →
-        </Link>
+
+      {/* Topics + subtopics grouped */}
+      {topicGroups.length > 0 && (
+        <div className="space-y-2.5">
+          {topicGroups.map(([topicName, subs]) => (
+            <div key={topicName}>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-brand-muted mb-1.5">
+                {topicName}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {subs.map((s, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center px-2.5 py-1 bg-gray-50 border border-brand-border rounded-full text-xs text-brand-ink"
+                  >
+                    {s.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Failure reason */}
+      {plan.status === "ARCHIVED" && plan.failure_reason && (
+        <p className="text-xs text-red-500 mt-2">{plan.failure_reason}</p>
       )}
     </div>
   );
@@ -309,8 +472,8 @@ export function AllLessonPlansPage() {
             No lesson plans yet.
           </h3>
           <p className="text-sm text-brand-muted max-w-sm mx-auto mb-6">
-            Generate your first plan — pick the subtopics you want to focus on
-            and the AI will build a differentiated 60-minute lesson.
+            Generate your first plan — pick the subtopics you want to focus on,
+            choose a duration, and the AI will build a differentiated lesson.
           </p>
           <button
             type="button"

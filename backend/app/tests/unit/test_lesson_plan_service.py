@@ -111,6 +111,7 @@ async def test_generate_lesson_plan_when_teacher_owns_class_then_dispatches_task
                     teacher_id=teacher_id,
                     school_id=school_id,
                     focus_subtopic_ids=[subtopic_id],
+                    duration_minutes=45,
                     db=mock_db,
                 )
 
@@ -128,6 +129,7 @@ async def test_generate_lesson_plan_when_class_not_found_then_raises_404():
             teacher_id=uuid.uuid4(),
             school_id=uuid.uuid4(),
             focus_subtopic_ids=[uuid.uuid4()],
+            duration_minutes=45,
             db=mock_db,
         )
 
@@ -148,6 +150,7 @@ async def test_generate_lesson_plan_when_wrong_teacher_then_raises_403():
             teacher_id=uuid.uuid4(),  # different teacher
             school_id=school_id,
             focus_subtopic_ids=[uuid.uuid4()],
+            duration_minutes=45,
             db=mock_db,
         )
 
@@ -260,7 +263,7 @@ async def test_edit_lesson_plan_when_generated_then_stores_edits():
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
 
-    body = LessonPlanEditRequest(starter_10min="new starter")
+    body = LessonPlanEditRequest(teacher_tips="Circulate during group work.")
     await edit_lesson_plan(
         plan_id=plan.id,
         teacher_id=teacher_id,
@@ -270,7 +273,7 @@ async def test_edit_lesson_plan_when_generated_then_stores_edits():
     )
 
     assert plan.status == "EDITED"
-    assert plan.teacher_edits.get("starter_10min") == "new starter"
+    assert plan.teacher_edits.get("teacher_tips") == "Circulate during group work."
 
 
 @pytest.mark.asyncio
@@ -372,7 +375,7 @@ def test_to_response_when_teacher_edits_present_then_merges():
     plan.generated_plan = {"starter_10min": "original", "homework": "original hw"}
     plan.teacher_edits = {"starter_10min": "edited"}
 
-    response = _to_response(plan)
+    response = _to_response(plan, focus_subtopics=[])
 
     assert response.generated_plan is not None
     assert response.generated_plan["starter_10min"] == "edited"
@@ -384,6 +387,6 @@ def test_to_response_when_no_content_then_generated_plan_is_none():
     plan.generated_plan = {}
     plan.teacher_edits = None
 
-    response = _to_response(plan)
+    response = _to_response(plan, focus_subtopics=[])
 
     assert response.generated_plan is None

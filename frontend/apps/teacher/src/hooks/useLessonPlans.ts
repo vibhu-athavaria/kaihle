@@ -8,13 +8,21 @@ export type LessonPlanStatus =
   | "USED"
   | "ARCHIVED";
 
+export interface SubtopicContext {
+  subtopic_id: string;
+  name: string;
+  topic_name: string;
+}
+
 export interface LessonPlan {
   id: string;
   class_id: string;
   week_start: string | null;
   status: LessonPlanStatus;
-  generated_plan: Record<string, string> | null;
-  teacher_edits: Record<string, string> | null;
+  generated_plan: Record<string, unknown> | null;
+  teacher_edits: Record<string, unknown> | null;
+  gap_summary: Record<string, unknown>;
+  focus_subtopics: SubtopicContext[];
   generated_at: string;
   failure_code: string | null;
   failure_reason: string | null;
@@ -42,17 +50,21 @@ async function fetchLessonPlan(planId: string): Promise<LessonPlan> {
 async function generateLessonPlan(params: {
   classId: string;
   focusSubtopicIds: string[];
+  durationMinutes: number;
 }): Promise<LessonPlan> {
   const res = await apiClient.post(
     `/api/v1/classes/${params.classId}/lesson-plans/generate`,
-    { focus_subtopic_ids: params.focusSubtopicIds },
+    {
+      focus_subtopic_ids: params.focusSubtopicIds,
+      duration_minutes: params.durationMinutes,
+    },
   );
   return res.data;
 }
 
 async function editLessonPlan(params: {
   planId: string;
-  edits: Partial<Record<string, string>>;
+  edits: Partial<Record<string, unknown>>;
 }): Promise<LessonPlan> {
   const res = await apiClient.patch(
     `/api/v1/lesson-plans/${params.planId}`,

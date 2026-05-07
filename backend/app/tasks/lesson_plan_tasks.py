@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
-from app.models.lesson_plan import LessonPlan, LessonPlanStatus
+from app.models.lesson_plan import LessonPlan, LessonPlanFailureCode, LessonPlanStatus
 from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
@@ -31,17 +31,43 @@ TASK_NAME = "lesson_plan_tasks.generate_lesson_plan"
 
 
 class GenerateLessonPlanTask(celery.Task):
-    """Emits CRITICAL log on final retry exhaustion (CONSTITUTION Rule 18)."""
+    """Emits CRITICAL log and archives the plan on final retry exhaustion (CONSTITUTION Rule 18)."""
 
     def on_failure(self, exc, task_id, args, kwargs, einfo) -> None:  # type: ignore[override]
+        lesson_plan_id = args[0] if args else kwargs.get("lesson_plan_id")
+        class_id = args[1] if len(args) > 1 else kwargs.get("class_id")
         logger.critical(
             "generate_lesson_plan_permanently_failed",
             task_id=task_id,
-            lesson_plan_id=args[0] if args else kwargs.get("lesson_plan_id"),
-            class_id=args[1] if len(args) > 1 else kwargs.get("class_id"),
+            lesson_plan_id=lesson_plan_id,
+            class_id=class_id,
             error=str(exc),
             exc_info=True,
         )
+        if not lesson_plan_id:
+            return
+
+        async def _archive() -> None:
+            from uuid import UUID
+
+            async with AsyncSessionLocal() as session:
+                from sqlalchemy import select
+
+                result = await session.execute(select(LessonPlan).where(LessonPlan.id == UUID(str(lesson_plan_id))))
+                plan = result.scalar_one_or_none()
+                if plan and plan.status == LessonPlanStatus.GENERATING:
+                    await _mark_archived(
+                        plan,
+                        session,
+                        LessonPlanFailureCode.LLM_UNEXPECTED_ERROR,
+                        "Generation failed after multiple retries. Please try again.",
+                    )
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_archive())
+        finally:
+            loop.close()
 
 
 @celery_app.task(
@@ -59,6 +85,7 @@ def generate_lesson_plan_task(
     class_id: str,
     focus_subtopic_ids: list[str],
     gap_summary: dict,
+    duration_minutes: int = 45,
 ) -> dict:
     """Generate a lesson plan via LLM.
 
@@ -68,11 +95,12 @@ def generate_lesson_plan_task(
         "lesson_plan_generation_started",
         lesson_plan_id=lesson_plan_id,
         class_id=class_id,
+        duration_minutes=duration_minutes,
     )
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as session:
-            return await _generate(lesson_plan_id, class_id, focus_subtopic_ids, gap_summary, session)
+            return await _generate(lesson_plan_id, class_id, focus_subtopic_ids, gap_summary, duration_minutes, session)
 
     try:
         loop = asyncio.new_event_loop()
@@ -94,6 +122,7 @@ async def _generate(
     class_id: str,
     focus_subtopic_ids: list[str],
     gap_summary: dict,
+    duration_minutes: int,
     db: AsyncSession,
 ) -> dict:
     from app.ai.providers import router as llm_router
@@ -190,6 +219,7 @@ async def _generate(
         subject_name=subject_name,
         grade_name=grade_name,
         student_count=student_count,
+        duration_minutes=duration_minutes,
         subtopics=subtopics_for_prompt,
         modality_distribution=modality_distribution,
         common_interests=top_interests,
