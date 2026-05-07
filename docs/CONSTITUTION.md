@@ -165,7 +165,7 @@ if current_user.school_id != school_id:
 
 **Rule 18 — Celery tasks must emit a `CRITICAL` log on final retry exhaustion.** Include `class_id`, `student_id` (if applicable), task name, `exc_info=True`.
 
-**Rule 19 — API contracts are frozen once published.** Path, HTTP method, request schema, response schema — all frozen. Future milestones replace stub bodies only. Breaking changes require `/api/v2/` prefix and an ADR.
+
 
 **Rule 20 — Test-Driven Development is non-negotiable.** Every task file creating or modifying backend service/route logic MUST include: (1) named unit test functions with mock setup and assertions, (2) named integration test functions, (3) test file paths. Acceptance criteria checkboxes alone are not sufficient.
 

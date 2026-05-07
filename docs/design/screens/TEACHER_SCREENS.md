@@ -14,14 +14,14 @@
 
 | # | Page | Route | Task file | Status |
 |---|---|---|---|---|
-| 1 | Dashboard | `/teacher/dashboard` | `M0-7-T2` | ✅ Designed |
-| 2 | Gap Map | `/teacher/classes/:classId/gap-map` | `M2-1-T3` | ✅ Designed |
-| 3 | Assessments list | `/teacher/classes/:classId/assessments` | `M1-3-T3` | ✅ Designed |
-| 4 | Assessment creation | `/teacher/assessments/new` | `M1-3-T3` | ✅ Designed |
+| 1 | Dashboard | `/teacher/dashboard` | ✅ Designed |
+| 2 | Gap Map | `/teacher/classes/:classId/gap-map` | ✅ Designed |
+| 3 | Assessments list | `/teacher/classes/:classId/assessments` | ✅ Designed |
+| 4 | Assessment creation | `/teacher/assessments/new` | ✅ Designed |
 | 5 | Assessment results — class | `/teacher/assessments/:id/results` | No task file | ✅ Designed |
 | 6 | Assessment results — student | `/teacher/assessments/:id/results/:studentId` | No task file | ✅ Designed |
-| 7 | Lesson plans list | `/teacher/classes/:classId/lesson-plans` | `M4-1-T4` | ✅ Designed |
-| 8 | Lesson plan detail | `/teacher/lesson-plans/:planId` | `M4-1-T4` | ✅ Designed |
+| 7 | Lesson plans list | `/teacher/classes/:classId/lesson-plans` | ✅ Designed |
+| 8 | Lesson plan detail | `/teacher/lesson-plans/:planId` | ✅ Designed |
 | 9 | Student lesson plan preview | `/teacher/lesson-plans/:planId/student/:studentId` | No task file | ✅ Designed |
 | 10 | My students | `/teacher/classes/:classId/students` | — | 🔲 Pending |
 | 11 | Student profile | `/teacher/students/:studentId` | — | 🔲 Pending |
@@ -31,7 +31,7 @@
 
 ## 1. Dashboard
 **Route:** `/teacher/dashboard`  
-**Task file:** `docs/tasks/M0-7-T2_teacher_dashboard.md`
+
 
 ### Layout
 - `DashboardLayout variant="teacher"` with `[+ Assessment]` gold button in topbar
@@ -69,7 +69,7 @@
 
 ## 2. Gap Map
 **Route:** `/teacher/classes/:classId/gap-map`  
-**Task file:** `docs/tasks/M2-1-T3_gap_map_heatmap_ui.md`
+
 
 ### Layout
 - Full-width heatmap grid below subject tabs
@@ -248,8 +248,8 @@ Pending steps: `bg-gray-100 text-gray-400`
 | Student detail | `GET /api/v1/attempts/{attemptId}/results` |
 
 ### Open items
-- No task file exists for the teacher assessment results page. Needs `M1-3-T4_assessment_results_ui.md` or addition to M1-3-T3.
-- Teacher results endpoint returns `correct_answer_key` (unlike student endpoint which strips it) — confirmed in `M1-3-T2`.
+- Assessment results page needs design specification.
+- Teacher results endpoint returns `correct_answer_key` (unlike student endpoint which strips it).
 
 ---
 
@@ -336,7 +336,7 @@ Tabs in subheader below topbar: `Class plan` (gold active underline) · `Student
 
 ## 9. Student Lesson Plan Preview
 **Route:** `/teacher/lesson-plans/:planId/student/:studentId`  
-**Task file:** None — needs creating. Suggest `M4-1-T5_student_lesson_plan_preview_ui.md`
+
 
 ### Purpose
 Read-only teacher view of exactly what lesson experience one student receives — their group activity only, with explicit personalisation rationale. No editing. No class-level sections from other groups.
