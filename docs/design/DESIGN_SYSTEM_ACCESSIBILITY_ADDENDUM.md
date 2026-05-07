@@ -2,7 +2,7 @@
 **Version:** 2.1 (addendum to DESIGN_SYSTEM.md v2.0)
 **Date:** March 2026
 **Authority:** Pixel (UX/UI Lead)
-**Status:** Authoritative — load alongside DESIGN_SYSTEM.md for every frontend task
+**Status:** Authoritative — load alongside DESIGN_SYSTEM.md for all frontend development
 
 > **This document extends `docs/design/DESIGN_SYSTEM.md`.**
 > It adds two missing standards identified in the gap audit:
@@ -150,9 +150,9 @@ export function Modal({
 // KaihleAdmin passes titleClassName='font-inter font-bold'
 ```
 
-### Usage pattern in task files
+### Usage pattern
 
-All task files that create modals must reference this pattern. Example:
+All components that create modals must reference this pattern. Example:
 
 ```tsx
 // ✅ Correct — uses Modal from packages/ui
@@ -282,21 +282,10 @@ an explicit empty state using `EmptyState` from `packages/ui`.
 ## Files affected by this addendum
 
 When implementing modals and loading states, reference this document. The following
-task files need to be updated to reference `Modal` from `@kaihle/ui` instead of
-custom div-based implementations:
+components need to use the `Modal` from `@kaihle/ui` instead of
+custom div-based implementations.
 
-| Task | Modal component | Update needed |
-|---|---|---|
-| `M0-7-T5d` (Kaihle Admin config/users) | `DeactivateUserModal` | Use `<Modal>` |
-| `M0-7-T5b` (Kaihle Admin billing) | None (no modals) | — |
-| `M0-7-T4` (School Admin UI) | `InviteUserModal`, `CreateClassModal` | Use `<Modal>` |
-| `M0-7-T5` (Kaihle Admin UI) | `AdminCreateSchoolModal`, `AdminExtendTrialModal` | Use `<Modal>` |
-| `M3-2-T4` (Teacher assignment UI) | `AssignStudyPlanModal` | Use `<Modal>` |
-
-All future task files that introduce a modal must include:
-```
-Depends on: M0-8-T6 (Modal component from packages/ui must exist)
-```
+All components that introduce a modal must use the `Modal` component from `@kaihle/ui`.
 
 ---
 

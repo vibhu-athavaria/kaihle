@@ -102,8 +102,6 @@ AI-powered learning diagnostics platform for schools. Identifies knowledge gaps,
     /packages/types/        ← shared TypeScript interfaces + getMasteryStyle()
   /docs/
     CONSTITUTION.md
-    /milestones/            ← M0_brief.md … M6_brief.md
-    /tasks/                 ← M0/… M6/ task files
     /design/
       DESIGN_SYSTEM.md      ← colors, fonts, layouts, role specs, accessibility
     /adr/
@@ -165,7 +163,7 @@ if current_user.school_id != school_id:
 
 **Rule 18 — Celery tasks must emit a `CRITICAL` log on final retry exhaustion.** Include `class_id`, `student_id` (if applicable), task name, `exc_info=True`.
 
-**Rule 19 — API contracts are frozen once published.** Path, HTTP method, request schema, response schema — all frozen. Future milestones replace stub bodies only. Breaking changes require `/api/v2/` prefix and an ADR.
+
 
 **Rule 20 — Test-Driven Development is non-negotiable.** Every task file creating or modifying backend service/route logic MUST include: (1) named unit test functions with mock setup and assertions, (2) named integration test functions, (3) test file paths. Acceptance criteria checkboxes alone are not sufficient.
 
@@ -366,11 +364,8 @@ Boundary: `score = 0.7` → Developing. `score = 0.71` → Strong.
 | What | Where |
 |---|---|
 | Full DB schema (columns, indexes, constraints) | `kaihle_v2_1_schema.sql` |
-| Milestone goals + DoD | `docs/milestones/M{N}_brief.md` |
-| Task instructions | `docs/tasks/M{N}/M{N}-{E}-T{N}_*.md` |
 | LLM prompt templates | `backend/app/ai/prompts/*.jinja2` |
 | Design tokens, component patterns, role specs, accessibility | `docs/design/DESIGN_SYSTEM.md` |
 | Screen specs per role (page inventory, component specs, data map) | `docs/design/screens/TEACHER_SCREENS.md` etc. |
 | Architecture decisions | `docs/adr/ADR-*.md` |
 | Environment variables | §9 of this document |
-| API endpoint status (live vs stubbed) | `docs/API_ENDPOINT_TASK_MAP.md` |

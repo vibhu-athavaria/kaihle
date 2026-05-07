@@ -152,12 +152,12 @@
     {
       "level": 11,
       "name": "Grade 11",
-      "description": "Cambridge AS Level Year 1 (Year 12) — seeded in later milestone"
+      "description": "Cambridge AS Level Year 1 (Year 12)"
     },
     {
       "level": 12,
       "name": "Grade 12",
-      "description": "Cambridge A Level Year 2 (Year 13) — seeded in later milestone"
+      "description": "Cambridge A Level Year 2 (Year 13)"
     }
   ],
   "curriculum_subjects": [

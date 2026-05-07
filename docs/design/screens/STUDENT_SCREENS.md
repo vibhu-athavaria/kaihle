@@ -15,16 +15,16 @@
 
 ## Page inventory
 
-| # | Page | Route | Task file | Status |
+| # | Page | Route | Status |
 |---|---|---|---|---|
-| 1 | Onboarding — questionnaire | `/student/onboarding/profile` | `M0-6-T4` | ✅ Designed |
-| 2 | Dashboard | `/student/dashboard` | `M0-7-T3` | ✅ Designed |
-| 3 | My Progress | `/student/my-progress` | `M2-1-T4` | ✅ Designed |
-| 4 | Study Plans list | `/student/study-plans` | `M3-2-T3` | ✅ Designed |
-| 5 | Study Plan detail | `/student/study-plans/:planId` | `M3-2-T3` | ✅ Designed |
-| 6 | Take Assessment | `/student/assessments/:attemptId/take` | `M1-4-T4` | ✅ Designed |
-| 7 | Assessment Results | `/student/assessments/:attemptId/results` | `M1-4-T4` | ✅ Designed |
-| 8 | Settings | `/student/settings` | None | ✅ Designed |
+| 1 | Onboarding — questionnaire | `/student/onboarding/profile` | ✅ Designed |
+| 2 | Dashboard | `/student/dashboard` | ✅ Designed |
+| 3 | My Progress | `/student/my-progress` | ✅ Designed |
+| 4 | Study Plans list | `/student/study-plans` | ✅ Designed |
+| 5 | Study Plan detail | `/student/study-plans/:planId` | ✅ Designed |
+| 6 | Take Assessment | `/student/assessments/:attemptId/take` | ✅ Designed |
+| 7 | Assessment Results | `/student/assessments/:attemptId/results` | ✅ Designed |
+| 8 | Settings | `/student/settings` | ✅ Designed |
 
 ---
 
@@ -76,7 +76,6 @@ should be understood to mean "Sidebar: X nav item active."
 
 ## 1. Onboarding — Learning Profile Questionnaire
 **Route:** `/student/onboarding/profile`
-**Task file:** `docs/tasks/M0-6-T4_onboarding_ui.md`
 **Layout:** `OnboardingLayout` — full screen, NOT `StudentLayout`. NOT wrapped in `OnboardingRoute` guard (infinite loop risk).
 
 ### Gate logic (from actual OnboardingRouter.tsx)
@@ -141,7 +140,6 @@ From `questionnaire_config.py`:
 
 ## 2. Dashboard
 **Route:** `/student/dashboard`
-**Task file:** `docs/tasks/M0-7-T3_student_dashboard.md`
 **Sidebar nav:** Home item active
 
 ### Layout (top to bottom in content area)
@@ -189,7 +187,6 @@ Each next step card: white bg, border, emoji icon left, title + subtitle, action
 
 ## 3. My Progress
 **Route:** `/student/my-progress`
-**Task file:** `docs/tasks/M2-1-T4_student_gap_profile_ui.md`
 **Sidebar nav:** My progress item active
 
 ### Layout
@@ -223,7 +220,7 @@ Each next step card: white bg, border, emoji icon left, title + subtitle, action
 - Checks `useMyStudyPlans()` defensively
 - Plans exist: "You have N study plans waiting. Go to Study Plans →"
 - No plans: "Your teacher will assign study plans for areas that need more work."
-- This section auto-activates in M3 with no code change needed
+
 
 ### Data sources
 
@@ -242,7 +239,6 @@ Each next step card: white bg, border, emoji icon left, title + subtitle, action
 
 ## 4. Study Plans List
 **Route:** `/student/study-plans`
-**Task file:** `docs/tasks/M3-2-T3_student_study_plan_ui.md`
 **Sidebar nav:** Study plans item active
 
 ### Layout
@@ -275,7 +271,6 @@ Each next step card: white bg, border, emoji icon left, title + subtitle, action
 
 ## 5. Study Plan Detail
 **Route:** `/student/study-plans/:planId`
-**Task file:** `docs/tasks/M3-2-T3_student_study_plan_ui.md`
 **Sidebar nav:** Study plans item active
 
 ### Layout
@@ -318,10 +313,9 @@ Two-column grid (`grid-cols-[1fr_1fr]`): Resources left · Quiz right
 
 ## 6. Take Assessment
 **Route:** `/student/assessments/:attemptId/take`
-**Task file:** `docs/tasks/M1-4-T4_student_assessment_ui.md`
 **Layout:** Full-screen assessment mode — NO `StudentLayout`. No sidebar, no nav.
 
-### Flow (confirmed from M1 brief)
+### Flow
 
 - Tier 1: attempt pre-created by `trigger_onboarding_diagnostics` Celery task — retrieved via `GET /classes/{classId}/diagnostic`
 - Tier 2: attempt created lazily on first access — `GET /attempts/{attemptId}` (backend creates if not exists)
@@ -375,7 +369,6 @@ Two-column grid (`grid-cols-[1fr_1fr]`): Resources left · Quiz right
 
 ## 7. Assessment Results
 **Route:** `/student/assessments/:attemptId/results`
-**Task file:** `docs/tasks/M1-4-T4_student_assessment_ui.md`
 **Layout:** Full-screen centred — uses `StudentLayout` but no sidebar item is active
 
 ### Layout (centred, full screen)
@@ -410,7 +403,6 @@ Per spec: security concern with caching correct answers client-side. Deferred to
 
 ## 8. Settings
 **Route:** `/student/settings`
-**Task file:** None — needs creating. Suggest `M0-7-T3b_student_settings_ui.md`
 **Layout:** `StudentLayout` — no sidebar item active (settings reached via avatar)
 
 ### Layout
@@ -473,11 +465,7 @@ Note below button: "Updating your profile improves future personalisation. ~5 mi
 
 ---
 
-## Open task files needed
 
-| Page | Suggested task file |
-|---|---|
-| Settings | `docs/tasks/M0/M0-7-T3b_student_settings_ui.md` |
 
 ---
 
