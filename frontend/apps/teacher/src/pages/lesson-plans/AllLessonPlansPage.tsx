@@ -1,9 +1,174 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { BookOpen, RefreshCw } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "@kaihle/auth";
+import { Modal } from "@kaihle/ui";
+import { useClassTopics } from "../../hooks/useClassTopics";
 import {
   useClassLessonPlans,
+  useGenerateLessonPlan,
   type LessonPlan,
 } from "../../hooks/useLessonPlans";
+
+// ── Subtopic fetching ─────────────────────────────────────────────────────────
+
+interface Subtopic {
+  id: string;
+  name: string;
+}
+
+function useTopicSubtopics(topicId: string | null) {
+  return useQuery<Subtopic[]>({
+    queryKey: ["subtopics", "topic", topicId],
+    queryFn: async () => {
+      const res = await apiClient.get(`/api/v1/topics/${topicId}/subtopics`);
+      return res.data as Subtopic[];
+    },
+    enabled: !!topicId,
+  });
+}
+
+// ── Generate modal ────────────────────────────────────────────────────────────
+
+function GenerateLessonPlanModal({
+  classId,
+  open,
+  onOpenChange,
+}: {
+  classId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { data: topics = [] } = useClassTopics(classId);
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [selectedSubtopicIds, setSelectedSubtopicIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const { data: subtopics = [], isLoading: subtopicsLoading } =
+    useTopicSubtopics(selectedTopicId);
+  const generate = useGenerateLessonPlan(classId);
+
+  function toggleSubtopic(id: string) {
+    setSelectedSubtopicIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleGenerate() {
+    await generate.mutateAsync({
+      classId,
+      focusSubtopicIds: Array.from(selectedSubtopicIds),
+    });
+    setSelectedTopicId(null);
+    setSelectedSubtopicIds(new Set());
+    onOpenChange(false);
+  }
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="New Lesson Plan"
+      maxWidth="md"
+    >
+      <div className="space-y-5">
+        {/* Step 1 — pick topic */}
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-brand-muted mb-2">
+            1. Choose a topic
+          </p>
+          <div className="space-y-1 max-h-40 overflow-y-auto">
+            {topics.length === 0 ? (
+              <p className="text-sm text-brand-muted">
+                No topics added to this class yet.
+              </p>
+            ) : (
+              topics.map((t) => (
+                <button
+                  key={t.curriculum_topic_id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTopicId(t.curriculum_topic_id);
+                    setSelectedSubtopicIds(new Set());
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                    selectedTopicId === t.curriculum_topic_id
+                      ? "bg-brand-gold text-white font-semibold"
+                      : "hover:bg-gray-50 text-brand-ink"
+                  }`}
+                >
+                  {t.topic_name}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Step 2 — pick subtopics */}
+        {selectedTopicId && (
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-brand-muted mb-2">
+              2. Select subtopics to focus on
+            </p>
+            {subtopicsLoading ? (
+              <div className="animate-pulse space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-8 bg-brand-border rounded-lg" />
+                ))}
+              </div>
+            ) : subtopics.length === 0 ? (
+              <p className="text-sm text-brand-muted">
+                No subtopics found for this topic.
+              </p>
+            ) : (
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {subtopics.map((s) => (
+                  <label
+                    key={s.id}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedSubtopicIds.has(s.id)}
+                      onChange={() => toggleSubtopic(s.id)}
+                      className="w-4 h-4 rounded accent-brand-gold"
+                    />
+                    <span className="text-sm text-brand-ink">{s.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex justify-end gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="px-4 py-2 text-sm font-semibold text-brand-ink border border-brand-border rounded-full hover:bg-gray-50 transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleGenerate}
+            disabled={selectedSubtopicIds.size === 0 || generate.isPending}
+            className="px-4 py-2 text-sm font-bold text-white bg-brand-gold hover:bg-brand-gold-dark disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+          >
+            {generate.isPending ? "Starting…" : "Generate"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Status badge ──────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: LessonPlan["status"] }) {
   if (status === "GENERATING") {
@@ -28,6 +193,8 @@ function StatusBadge({ status }: { status: LessonPlan["status"] }) {
     </span>
   );
 }
+
+// ── Plan card ─────────────────────────────────────────────────────────────────
 
 function LessonPlanCard({
   plan,
@@ -68,9 +235,12 @@ function LessonPlanCard({
   );
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export function AllLessonPlansPage() {
   const { classId } = useParams<{ classId: string }>();
   const { data, isLoading } = useClassLessonPlans(classId);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const plans = data?.data ?? [];
 
@@ -88,7 +258,8 @@ export function AllLessonPlansPage() {
             Select a class to view its lesson plans.
           </h3>
           <p className="text-sm text-brand-muted max-w-sm mx-auto mb-6">
-            Lesson plans are generated on-demand from a class&apos;s gap map.
+            Lesson plans are generated on-demand — pick a class and choose which
+            subtopics to focus on.
           </p>
           <Link
             to="/teacher/classes"
@@ -109,9 +280,8 @@ export function AllLessonPlansPage() {
         </h1>
         <button
           type="button"
-          disabled
-          className="bg-brand-gold text-white text-xs font-bold px-4 py-2 rounded-full opacity-50 cursor-not-allowed"
-          title="Coming soon"
+          onClick={() => setModalOpen(true)}
+          className="bg-brand-gold text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-gold-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
         >
           + New Lesson Plan
         </button>
@@ -132,15 +302,16 @@ export function AllLessonPlansPage() {
             No lesson plans yet.
           </h3>
           <p className="text-sm text-brand-muted max-w-sm mx-auto mb-6">
-            Generate a plan from the gap map to get started. Each plan is built
-            around your students&apos; lowest-mastery subtopics.
+            Generate your first plan — pick the subtopics you want to focus on
+            and the AI will build a differentiated 60-minute lesson.
           </p>
-          <Link
-            to={`/teacher/classes/${classId}/gap-map`}
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
             className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded transition-colors"
           >
-            View Gap Map →
-          </Link>
+            Generate a Lesson Plan →
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -149,6 +320,12 @@ export function AllLessonPlansPage() {
           ))}
         </div>
       )}
+
+      <GenerateLessonPlanModal
+        classId={classId}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+      />
     </div>
   );
 }
