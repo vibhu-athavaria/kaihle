@@ -9,6 +9,7 @@
   "dependencies": {
     "@kaihle/types": "workspace:*",
     "@kaihle/ui": "workspace:*",
+    "@tanstack/react-query": "^5.0.0",
     "axios": "^1.7.0",
     "jwt-decode": "^4.0.0",
     "zustand": "^4.5.0",

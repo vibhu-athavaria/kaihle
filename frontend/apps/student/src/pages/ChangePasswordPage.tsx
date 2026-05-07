@@ -47,7 +47,7 @@ export function ChangePasswordPage() {
         confirm_password: confirmPassword,
       });
       clearMustChangePassword();
-      navigate("/student/dashboard");
+      navigate("/student/onboarding");
     } catch (err) {
       setError(extractApiError(err));
     } finally {
