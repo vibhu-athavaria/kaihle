@@ -77,6 +77,7 @@ async def test_list_topics_when_topics_exist_then_returns_response_list() -> Non
 
     row = MagicMock()
     row.ClassTopic = ct
+    row.topic_id = uuid.uuid4()
     row.topic_name = "Algebra"
     row.subtopic_count = 3
 
@@ -153,8 +154,9 @@ async def test_add_topic_when_valid_then_returns_response_with_topic_name() -> N
     result2 = MagicMock()
     result2.scalar_one_or_none.return_value = None
 
-    # result3: topic_name + subtopic_count
+    # result3: topic_id + topic_name + subtopic_count
     topic_row = MagicMock()
+    topic_row.topic_id = uuid.uuid4()
     topic_row.topic_name = "Linear Equations"
     topic_row.subtopic_count = 5
     result3 = MagicMock()
@@ -210,6 +212,7 @@ async def test_update_topic_when_is_covered_set_then_field_updated() -> None:
     result1.scalar_one_or_none.return_value = ct
 
     topic_row = MagicMock()
+    topic_row.topic_id = uuid.uuid4()
     topic_row.topic_name = "Fractions"
     topic_row.subtopic_count = 2
     result2 = MagicMock()

@@ -266,7 +266,7 @@ class TestSchemaInstantiation:
             status="GENERATED",
             generated_plan={"starter": "intro"},
             teacher_edits=None,
-            created_at=datetime.utcnow(),
+            generated_at=datetime.utcnow(),
         )
         assert lesson_plan.status == "GENERATED"
         assert lesson_plan.generated_plan is not None

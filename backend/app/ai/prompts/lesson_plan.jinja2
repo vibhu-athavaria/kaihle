@@ -1,0 +1,53 @@
+You are an expert curriculum designer helping a teacher prepare a lesson for {{ class_name }}.
+
+## Class context
+- Subject: {{ subject_name }}
+- Grade: {{ grade_name }}
+- Class size: {{ student_count }} students
+
+## Focus subtopics (lowest mastery — these drive the lesson)
+{% for s in subtopics %}
+- **{{ s.name }}** — learning objective: {{ s.learning_objective }}
+  Class average mastery: {{ "%.0f"|format(s.class_avg * 100) }}% ({{ s.student_count }} students assessed)
+{% endfor %}
+
+## Student learning profile aggregate
+Dominant modalities across the class:
+{% for modality, score in modality_distribution.items() %}
+- {{ modality | replace("_", " ") | title }}: {{ "%.0f"|format(score * 100) }}%
+{% endfor %}
+{% if common_interests %}
+Common student interests: {{ common_interests | join(", ") }}
+{% endif %}
+
+## Task
+Design a 60-minute lesson plan that addresses these knowledge gaps. The plan uses a three-group differentiation model:
+- **Group A** — students who have completed the diagnostic but score below 0.4 (Needs Work)
+- **Group B** — students scoring 0.4–0.7 (Developing)
+- **Group C** — students scoring above 0.7 (Approaching mastery / extension)
+
+Structure the lesson across these five phases:
+1. **Starter (10 min)** — whole-class hook that activates prior knowledge and surfaces misconceptions
+2. **Group A activity** — targeted support for struggling students; concrete, step-by-step
+3. **Group B activity** — consolidation and application; guided practice
+4. **Group C activity** — extension and deeper application; more open-ended
+5. **Plenary (10 min)** — whole-class wrap-up; consolidate key ideas, quick check for understanding
+
+Also provide:
+- **Homework** — a short follow-up task (15–20 min) that reinforces the lesson focus
+- **Teacher notes** — 2–3 practical tips for managing the differentiated groups and common misconceptions to watch for
+
+## Output format
+Respond ONLY with a valid JSON object. No prose before or after. No markdown fences.
+
+{
+  "starter_10min": "...",
+  "group_a_activity": "...",
+  "group_b_activity": "...",
+  "group_c_activity": "...",
+  "plenary_10min": "...",
+  "homework": "...",
+  "teacher_notes": "..."
+}
+
+Each value should be 3–6 sentences of clear, practical, classroom-ready instruction. Write for a teacher, not a student.

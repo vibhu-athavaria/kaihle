@@ -32,6 +32,7 @@ import { GapMapPage } from "./pages/gap-map/GapMapPage";
 import { MyStudentsPage } from "./pages/MyStudents";
 import { StudentProfilePage } from "./pages/StudentProfilePage";
 import { AllLessonPlansPage } from "./pages/lesson-plans/AllLessonPlansPage";
+import { LessonPlanDetailPage } from "./pages/lesson-plans/LessonPlanDetailPage";
 import { ContentReviewPage } from "./pages/content-review/ContentReviewPage";
 
 // Plain function — no state, no effects, no React APIs
@@ -84,6 +85,7 @@ function TeacherContentShell() {
       { path: "gap-map", element: <GapMapPage /> },
       { path: "assessments", element: <AssessmentListPage /> },
       { path: "lesson-plans", element: <AllLessonPlansPage /> },
+      { path: "lesson-plans/:planId", element: <LessonPlanDetailPage /> },
       {
         path: "explanation-review",
         element: <ExplanationReviewPage />,

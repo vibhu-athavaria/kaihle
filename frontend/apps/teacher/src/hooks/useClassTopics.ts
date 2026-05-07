@@ -7,6 +7,7 @@ export interface ClassTopicItem {
   id: string;
   class_id: string;
   curriculum_topic_id: string;
+  topic_id: string;
   topic_name: string;
   subtopic_count: number;
   sequence_order: number;

@@ -32,6 +32,7 @@ class ClassTopicResponse(BaseModel):
     id: uuid.UUID
     class_id: uuid.UUID
     curriculum_topic_id: uuid.UUID
+    topic_id: uuid.UUID
     sequence_order: int
     is_covered: bool
     # Denormalized from curriculum_topics for display
