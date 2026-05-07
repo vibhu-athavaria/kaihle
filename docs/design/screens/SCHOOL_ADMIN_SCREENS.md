@@ -14,23 +14,22 @@
 
 ## Page inventory
 
-| # | Page | Route | Task file | Status |
+| # | Page | Route | Status |
 |---|---|---|---|---|
-| 1 | Overview | `/school-admin/overview` | `M0-7-T4` | ✅ Designed |
-| 2 | Users | `/school-admin/users` | `M0-7-T4` | ✅ Designed |
-| 3 | Classes | `/school-admin/classes` | `M0-7-T4` | ✅ Designed |
-| 4 | Class gap map | `/school-admin/classes/:id/gap-map` | None — NEW | ✅ Designed |
-| 5 | Analytics | `/school-admin/analytics` | `M6-1-T2` | ✅ Designed |
-| 6 | Billing | `/school-admin/billing` | None — NEW | ✅ Designed |
-| 7 | Settings | `/school-admin/settings` | None — NEW | 🔲 Pending basic spec |
+| 1 | Overview | `/school-admin/overview` | ✅ Designed |
+| 2 | Users | `/school-admin/users` | ✅ Designed |
+| 3 | Classes | `/school-admin/classes` | ✅ Designed |
+| 4 | Class gap map | `/school-admin/classes/:id/gap-map` | ✅ Designed |
+| 5 | Analytics | `/school-admin/analytics` | ✅ Designed |
+| 6 | Billing | `/school-admin/billing` | ✅ Designed |
+| 7 | Settings | `/school-admin/settings` | 🔲 Pending basic spec |
 
 ---
 
 ## Critical architecture note
 
-Per ADR-001 and `M6-1-T2` correction: School Admin pages live in `apps/school-admin`
-(port 3004) — NOT in `apps/teacher`. The original `M0-7-T4` task file was written
-before the five-app restructure and incorrectly placed these pages in `apps/teacher`.
+School Admin pages live in `apps/school-admin` (port 3004) — NOT in `apps/teacher`.
+This separation ensures proper role isolation per CONSTITUTION Rule 14.
 Any code in `apps/teacher/src/pages/school-admin/` violates CONSTITUTION Rule 14
 and must be migrated to `apps/school-admin/`.
 
@@ -56,7 +55,6 @@ Settings: accessible via avatar dropdown — not a sidebar item.
 
 ## 1. Overview
 **Route:** `/school-admin/overview`  
-**Task file:** `docs/tasks/M0-7-T4_school_admin_ui.md`  
 **Status:** Previously designed — see design sprint session
 
 ### Sections (top to bottom)
@@ -74,8 +72,7 @@ Settings: accessible via avatar dropdown — not a sidebar item.
 ---
 
 ## 2. Users
-**Route:** `/school-admin/users`  
-**Task file:** `docs/tasks/M0-7-T4_school_admin_ui.md`
+**Route:** `/school-admin/users`
 
 ### Layout
 Role tabs (Teachers / Students / Parents) — pill toggle, `bg-gray-100` inactive, `bg-white shadow-sm` active.
@@ -110,8 +107,7 @@ On success: toast "Invite sent to {email}", row appears with Invited badge
 ---
 
 ## 3. Classes
-**Route:** `/school-admin/classes`  
-**Task file:** `docs/tasks/M0-7-T4_school_admin_ui.md`
+**Route:** `/school-admin/classes`
 
 ### Layout
 Table: Class · Subject · Grade · Teacher · Students · Avg mastery
@@ -149,7 +145,6 @@ Actions: Cancel · "Create class →" green
 
 ## 4. Class Gap Map (drill-down)
 **Route:** `/school-admin/classes/:classId/gap-map`  
-**Task file:** None — needs creating. Suggest `M6-1-T3_class_gap_map_admin_ui.md`  
 **Entry points:** Classes side panel "View class gap map →" link · Analytics class table row click
 
 ### Purpose
@@ -178,8 +173,7 @@ This page is for visibility and oversight only.
 ---
 
 ## 5. Analytics
-**Route:** `/school-admin/analytics`  
-**Task file:** `docs/tasks/M6-1-T2_analytics_ui.md`
+**Route:** `/school-admin/analytics`
 
 ### View switcher: Overview | Class gap map
 
@@ -202,8 +196,7 @@ Single endpoint covers everything:
 ---
 
 ## 6. Billing
-**Route:** `/school-admin/billing`  
-**Task file:** None — needs creating. Suggest `M6-2-T2_billing_ui_school_admin.md`
+**Route:** `/school-admin/billing`
 
 ### Layout (top to bottom)
 
@@ -266,13 +259,7 @@ Single endpoint covers everything:
 
 ---
 
-## Open task files needed
 
-| Page | Suggested task file |
-|---|---|
-| Class gap map (admin view) | `docs/tasks/M6/M6-1-T3_class_gap_map_admin_ui.md` |
-| Billing | `docs/tasks/M6/M6-2-T2_billing_ui_school_admin.md` |
-| Settings | `docs/tasks/M0/M0-7-T4b_school_admin_settings_ui.md` |
 
 ---
 

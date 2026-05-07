@@ -12,20 +12,20 @@
 
 ## Page inventory
 
-| # | Page | Route | Task file | Status |
+| # | Page | Route | Status |
 |---|---|---|---|---|
 | 1 | Dashboard | `/teacher/dashboard` | ✅ Designed |
 | 2 | Gap Map | `/teacher/classes/:classId/gap-map` | ✅ Designed |
 | 3 | Assessments list | `/teacher/classes/:classId/assessments` | ✅ Designed |
 | 4 | Assessment creation | `/teacher/assessments/new` | ✅ Designed |
-| 5 | Assessment results — class | `/teacher/assessments/:id/results` | No task file | ✅ Designed |
-| 6 | Assessment results — student | `/teacher/assessments/:id/results/:studentId` | No task file | ✅ Designed |
+| 5 | Assessment results — class | `/teacher/assessments/:id/results` | ✅ Designed |
+| 6 | Assessment results — student | `/teacher/assessments/:id/results/:studentId` | ✅ Designed |
 | 7 | Lesson plans list | `/teacher/classes/:classId/lesson-plans` | ✅ Designed |
 | 8 | Lesson plan detail | `/teacher/lesson-plans/:planId` | ✅ Designed |
-| 9 | Student lesson plan preview | `/teacher/lesson-plans/:planId/student/:studentId` | No task file | ✅ Designed |
-| 10 | My students | `/teacher/classes/:classId/students` | — | 🔲 Pending |
-| 11 | Student profile | `/teacher/students/:studentId` | — | 🔲 Pending |
-| 12 | Settings | `/teacher/settings` | — | 🔲 Pending |
+| 9 | Student lesson plan preview | `/teacher/lesson-plans/:planId/student/:studentId` | ✅ Designed |
+| 10 | My students | `/teacher/classes/:classId/students` | 🔲 Pending |
+| 11 | Student profile | `/teacher/students/:studentId` | 🔲 Pending |
+| 12 | Settings | `/teacher/settings` | 🔲 Pending |
 
 ---
 
@@ -113,8 +113,7 @@
 ---
 
 ## 3. Assessments List
-**Route:** `/teacher/classes/:classId/assessments`  
-**Task file:** `docs/tasks/M1-3-T3_assessment_creation_ui.md`
+**Route:** `/teacher/classes/:classId/assessments`
 
 ### Layout
 - Filter tabs (All / Active / Draft / Closed) — pill toggle style, not underline tabs
@@ -155,8 +154,7 @@
 ---
 
 ## 4. Assessment Creation Wizard
-**Route:** `/teacher/assessments/new`  
-**Task file:** `docs/tasks/M1-3-T3_assessment_creation_ui.md`
+**Route:** `/teacher/assessments/new`
 
 ### 5-step wizard
 
@@ -207,7 +205,7 @@ Pending steps: `bg-gray-100 text-gray-400`
 ## 5 & 6. Assessment Results
 **Route (class):** `/teacher/assessments/:id/results`  
 **Route (student):** `/teacher/assessments/:id/results/:studentId`  
-**Task file:** None — needs creating  
+  
 
 ### Class overview view (Page 5)
 
@@ -254,8 +252,7 @@ Pending steps: `bg-gray-100 text-gray-400`
 ---
 
 ## 7. Lesson Plans List
-**Route:** `/teacher/classes/:classId/lesson-plans`  
-**Task file:** `docs/tasks/M4-1-T4_lesson_plan_ui.md`
+**Route:** `/teacher/classes/:classId/lesson-plans`
 
 ### Layout
 - List of plan cards, newest first
@@ -284,8 +281,7 @@ Pending steps: `bg-gray-100 text-gray-400`
 ---
 
 ## 8. Lesson Plan Detail
-**Route:** `/teacher/lesson-plans/:planId`  
-**Task file:** `docs/tasks/M4-1-T4_lesson_plan_ui.md`
+**Route:** `/teacher/lesson-plans/:planId`
 
 ### Two-tab layout
 Tabs in subheader below topbar: `Class plan` (gold active underline) · `Students (N)`
@@ -384,7 +380,6 @@ Navigation is client-side only — no API call, cycles through the class roster.
 | Student learning profile | `GET /api/v1/onboarding/learning-profile?student_id={studentId}` |
 
 ### Open items
-- No task file exists. Needs adding to M4 milestone or as M4-1-T5.
 - Route pattern `/teacher/lesson-plans/:planId/student/:studentId` needs registering in `apps/teacher/src/App.tsx`.
 
 ---
@@ -393,7 +388,7 @@ Navigation is client-side only — no API call, cycles through the class roster.
 **Route:** `/teacher/classes/:classId/students`  
 **Task file:** None
 
-### Planned content (from sidebar spec in M0-7-T1)
+### Planned content
 - Class roster table
 - Per-student: name, mastery per subject, learning style tag, last active
 - Row click → Student Profile page
@@ -442,15 +437,7 @@ Navigation is client-side only — no API call, cycles through the class roster.
 
 ---
 
-## Open task files needed
 
-| Page | Suggested task file |
-|---|---|
-| Assessment results (class + student) | `docs/tasks/M1/M1-3-T4_assessment_results_ui.md` |
-| Student lesson plan preview | `docs/tasks/M4/M4-1-T5_student_lesson_plan_preview_ui.md` |
-| My students list | `docs/tasks/M2/M2-2-T1_my_students_list_ui.md` |
-| Student profile | `docs/tasks/M2/M2-2-T2_student_profile_ui.md` |
-| Teacher settings | `docs/tasks/M0/M0-7-T2b_teacher_settings_ui.md` |
 
 ---
 

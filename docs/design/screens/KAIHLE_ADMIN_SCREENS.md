@@ -14,24 +14,22 @@
 
 ## Page inventory
 
-| # | Page | Route | Task file | Status |
+| # | Page | Route | Status |
 |---|---|---|---|---|
-| 1 | Platform overview | `/kaihle-admin/overview` | `M0-7-T5` | ✅ Designed |
-| 2 | Schools list | `/kaihle-admin/schools` | `M0-7-T5` | ✅ Designed |
-| 3 | School detail | `/kaihle-admin/schools/:id` | `M0-7-T5` | ✅ Designed |
-| 4 | Platform billing | `/kaihle-admin/billing` | None — NEW | ✅ Designed |
-| 5 | System logs | `/kaihle-admin/logs` | None — NEW | ✅ Designed |
-| 6 | Config | `/kaihle-admin/config` | None — NEW | ✅ Designed |
-| 7 | Platform users | `/kaihle-admin/users` | None — NEW | 🔲 Pending |
+| 1 | Platform overview | `/kaihle-admin/overview` | ✅ Designed |
+| 2 | Schools list | `/kaihle-admin/schools` | ✅ Designed |
+| 3 | School detail | `/kaihle-admin/schools/:id` | ✅ Designed |
+| 4 | Platform billing | `/kaihle-admin/billing` | ✅ Designed |
+| 5 | System logs | `/kaihle-admin/logs` | ✅ Designed |
+| 6 | Config | `/kaihle-admin/config` | ✅ Designed |
+| 7 | Platform users | `/kaihle-admin/users` | 🔲 Pending |
 
 ---
 
 ## Architecture note
 
-Per `M0-7-T5` and confirmed five-app separation: Kaihle Admin pages live in
-`apps/kaihle-admin` (port 3005). The original task file noted these lived in
-`apps/teacher` as an MVP simplification — that decision was superseded by the
-five-app restructure in `CONSTITUTION.md`. Code must NOT go in `apps/teacher`.
+Kaihle Admin pages live in `apps/kaihle-admin` (port 3005).
+Code must NOT go in `apps/teacher` to maintain proper role isolation.
 
 ---
 
@@ -54,8 +52,7 @@ Top nav right: `[+ Add school]` green button + avatar.
 ---
 
 ## 1. Platform Overview
-**Route:** `/kaihle-admin/overview`  
-**Task file:** `docs/tasks/M0-7-T5_kaihle_admin_ui.md`
+**Route:** `/kaihle-admin/overview`
 
 ### Layout (top to bottom)
 1. KPI row: Total schools · Total students · MRR (green value) · Platform onboarding rate
@@ -82,8 +79,7 @@ shows "OpenRouter (interim)" in amber until RunPod/vLLM is unblocked.
 ---
 
 ## 2. Schools List
-**Route:** `/kaihle-admin/schools`  
-**Task file:** `docs/tasks/M0-7-T5_kaihle_admin_ui.md`
+**Route:** `/kaihle-admin/schools`
 
 ### Layout
 - Search input + status filter pills (All / Active / Trial)
@@ -109,11 +105,10 @@ shows "OpenRouter (interim)" in amber until RunPod/vLLM is unblocked.
 ---
 
 ## 3. School Detail
-**Route:** `/kaihle-admin/schools/:schoolId`  
-**Task file:** `docs/tasks/M0-7-T5_kaihle_admin_ui.md`
+**Route:** `/kaihle-admin/schools/:schoolId`
 
 ### Topbar actions
-- "Impersonate school admin" button — calls `POST /platform/schools/{id}/impersonate` → stores scoped JWT → redirects to school admin app as that school's admin. Implemented in M6.
+- "Impersonate school admin" button — calls `POST /platform/schools/{id}/impersonate` → stores scoped JWT → redirects to school admin app as that school's admin.
 - Back breadcrumb: Schools / {School name}
 
 ### Trial banner (TRIAL tier only)
@@ -145,13 +140,12 @@ Opens a simple modal: current plan display + new plan dropdown (Trial → Starte
 | School analytics | `GET /api/v1/schools/{id}/analytics` |
 | Extend trial | `POST /api/v1/admin/schools/{id}/trial-extension` |
 | Change plan | `PATCH /api/v1/admin/schools/{id}` |
-| Impersonate | `POST /api/v1/platform/schools/{id}/impersonate` (M6) |
+| Impersonate | `POST /api/v1/platform/schools/{id}/impersonate` |
 
 ---
 
 ## 4. Platform Billing
-**Route:** `/kaihle-admin/billing`  
-**Task file:** None — needs creating: `docs/tasks/M0-7-T5b_kaihle_admin_billing_ui.md`
+**Route:** `/kaihle-admin/billing`
 
 ### Layout (top to bottom)
 1. Revenue KPI row: MRR · ARR · Past due count · Trials expiring within 7 days
@@ -177,8 +171,7 @@ Opens a simple modal: current plan display + new plan dropdown (Trial → Starte
 ---
 
 ## 5. System Logs
-**Route:** `/kaihle-admin/logs`  
-**Task file:** None — needs creating: `docs/tasks/M0-7-T5c_kaihle_admin_logs_ui.md`
+**Route:** `/kaihle-admin/logs`
 
 ### Layout
 - Filter row: text search input + level dropdown (All / ERROR / WARN / INFO / DEBUG)
@@ -205,8 +198,7 @@ From `structlog` structured logging:
 ---
 
 ## 6. Config
-**Route:** `/kaihle-admin/config`  
-**Task file:** None — needs creating: `docs/tasks/M0-7-T5d_kaihle_admin_config_ui.md`
+**Route:** `/kaihle-admin/config`
 
 ### Sections (read-only display in v1 — no in-app editing, values come from env vars)
 
@@ -237,8 +229,7 @@ From `structlog` structured logging:
 ---
 
 ## 7. Platform Users *(pending design)*
-**Route:** `/kaihle-admin/users`  
-**Task file:** None
+**Route:** `/kaihle-admin/users`
 
 ### Planned scope
 - Search across ALL users on the platform (cross-school)
@@ -261,19 +252,12 @@ From `structlog` structured logging:
 | No role-specific language | Labels are system-level: "Schools", "Platform", "System" |
 | MRR/revenue in green | Financial positive values use `text-brand-primary` |
 | Trial urgency coloring | Red < 3 days, amber < 7 days — consistent across all admin views |
-| Impersonation is M6 | `POST /platform/schools/{id}/impersonate` stub exists but returns 501 until M6 |
+| Impersonation | `POST /platform/schools/{id}/impersonate` stub exists but returns 501 until implemented |
 | Logs page is dark theme | Terminal aesthetic, `bg-slate-900` — exception to the neutral card rule |
 
 ---
 
-## Open task files needed
 
-| Page | Suggested task file |
-|---|---|
-| Platform billing | `docs/tasks/M0/M0-7-T5b_kaihle_admin_billing_ui.md` |
-| System logs | `docs/tasks/M0/M0-7-T5c_kaihle_admin_logs_ui.md` |
-| Config | `docs/tasks/M0/M0-7-T5d_kaihle_admin_config_ui.md` |
-| Platform users | `docs/tasks/M0/M0-7-T5e_kaihle_admin_users_ui.md` |
 
 ---
 

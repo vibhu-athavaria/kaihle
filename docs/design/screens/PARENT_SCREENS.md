@@ -5,7 +5,6 @@
 **App:** `apps/parent` · port 3003
 **Layout wrapper:** `ParentLayout` — left sidebar + top nav + content
 **⚠️ Layout change v2.1:** Sidebar replaces minimal top nav only (see Layout System below)
-**Task file:** `docs/tasks/M5/M5-1-T3_parent_portal_ui.md`
 **Sidebar active state:** Warm cream tint `bg-[#fdf8f0]` + gold dot `bg-brand-gold`
 **Reference mockup:** `docs/design/mockups/parent_dashboard.html`
 
@@ -58,13 +57,13 @@ The parent app is the softest, warmest interface in the five-app system. Every o
 
 ## Page Inventory
 
-| # | Page | Route | Task file | Status |
+| # | Page | Route | Status |
 |---|---|---|---|---|
-| 1 | Login | `/login` | Shared `LoginForm` (M0-3-T5) | ✅ Built |
-| 2 | Password setup | `/parent/setup-password` | Shared `PasswordSetupForm` (M0-9-T4) | ✅ Built |
-| 3 | Dashboard | `/parent/dashboard` | `M5/M5-1-T3_parent_portal_ui.md` | ✅ Designed |
-| 4 | Child Progress | `/parent/children/:studentId/progress` | `M5/M5-1-T3_parent_portal_ui.md` | ✅ Designed |
-| 5 | Settings | `/parent/settings` | `M0/M0-7-T6_parent_settings_ui.md` | 🔲 Pending |
+| 1 | Login | `/login` | ✅ Built |
+| 2 | Password setup | `/parent/setup-password` | ✅ Built |
+| 3 | Dashboard | `/parent/dashboard` | ✅ Designed |
+| 4 | Child Progress | `/parent/children/:studentId/progress` | ✅ Designed |
+| 5 | Settings | `/parent/settings` | 🔲 Pending |
 
 ---
 
@@ -320,7 +319,6 @@ Empty state: warm message — not cold "No data"
 
 ## 5. Settings *(basic spec — pending full task)*
 **Route:** `/parent/settings`
-**Task file needed:** `docs/tasks/M0/M0-7-T6_parent_settings_ui.md`
 **Sidebar nav:** No item active (accessed via avatar)
 
 ### Sections (v1 minimum)

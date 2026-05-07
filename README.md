@@ -351,8 +351,6 @@ The following secrets must be set in your GitHub repository Settings → Secrets
 | `RENDER_SCHOOL_ADMIN_SERVICE_ID` | Render service ID for school admin frontend |
 | `RENDER_KAIHLE_ADMIN_SERVICE_ID` | Render service ID for Kaihle admin frontend |
 
-> Note: These IDs are set up in M6 when Render services are created.
-
 ---
 
 ## Render Setup Checklist

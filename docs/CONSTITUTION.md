@@ -369,4 +369,3 @@ Boundary: `score = 0.7` → Developing. `score = 0.71` → Strong.
 | Screen specs per role (page inventory, component specs, data map) | `docs/design/screens/TEACHER_SCREENS.md` etc. |
 | Architecture decisions | `docs/adr/ADR-*.md` |
 | Environment variables | §9 of this document |
-| API endpoint status (live vs stubbed) | `docs/API_ENDPOINT_TASK_MAP.md` |
