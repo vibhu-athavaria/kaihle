@@ -11,12 +11,12 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.curriculum import Subtopic
+from app.models.curriculum import CurriculumTopic, Subtopic, Topic
 from app.models.gap import GapState
 from app.models.lesson_plan import LessonPlan, LessonPlanStatus
 from app.models.school import Class
 from app.schemas.common import Page
-from app.schemas.lesson_plans import LessonPlanEditRequest, LessonPlanResponse
+from app.schemas.lesson_plans import LessonPlanEditRequest, LessonPlanResponse, SubtopicContext
 
 logger = structlog.get_logger(__name__)
 
@@ -31,6 +31,7 @@ async def generate_lesson_plan(
     teacher_id: UUID,
     school_id: UUID | None,
     focus_subtopic_ids: list[UUID],
+    duration_minutes: int,
     db: AsyncSession,
 ) -> LessonPlan:
     """Create a LessonPlan row (status=GENERATING) and dispatch the Celery task.
@@ -61,6 +62,7 @@ async def generate_lesson_plan(
         str(class_id),
         [str(s) for s in focus_subtopic_ids],
         gap_summary,
+        duration_minutes,
     )
 
     await db.commit()
@@ -73,7 +75,7 @@ async def generate_lesson_plan(
         teacher_id=str(teacher_id),
         subtopic_count=len(focus_subtopic_ids),
     )
-    return plan
+    return plan  # caller converts to response with subtopic context
 
 
 async def list_class_lesson_plans(
@@ -101,9 +103,18 @@ async def list_class_lesson_plans(
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
-    plans = result.scalars().all()
+    plans = list(result.scalars().all())
+
+    # Batch subtopic context for all plans in one query
+    all_subtopic_ids = list({sid for p in plans for sid in p.focus_subtopic_ids})
+    all_context = await _fetch_subtopic_context(all_subtopic_ids, db)
+    context_by_id = {str(sc.subtopic_id): sc for sc in all_context}
+
     return Page(
-        data=[_to_response(p) for p in plans],
+        data=[
+            _to_response(p, [context_by_id[str(sid)] for sid in p.focus_subtopic_ids if str(sid) in context_by_id])
+            for p in plans
+        ],
         total=total,
         page=page,
         page_size=page_size,
@@ -117,7 +128,8 @@ async def get_lesson_plan(
     db: AsyncSession,
 ) -> LessonPlanResponse:
     plan = await _require_plan(plan_id, teacher_id, school_id, db)
-    return _to_response(plan)
+    context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
+    return _to_response(plan, context)
 
 
 async def edit_lesson_plan(
@@ -143,7 +155,8 @@ async def edit_lesson_plan(
     plan.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(plan)
-    return _to_response(plan)
+    context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
+    return _to_response(plan, context)
 
 
 async def regenerate_lesson_plan(
@@ -172,7 +185,8 @@ async def regenerate_lesson_plan(
 
     await db.commit()
     await db.refresh(plan)
-    return _to_response(plan)
+    context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
+    return _to_response(plan, context)
 
 
 async def update_lesson_plan_status(
@@ -195,7 +209,8 @@ async def update_lesson_plan_status(
     plan.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(plan)
-    return _to_response(plan)
+    context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
+    return _to_response(plan, context)
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +264,9 @@ async def _build_gap_summary(
     db: AsyncSession,
 ) -> dict[str, Any]:
     """Average mastery per subtopic across all enrolled students."""
+    if not focus_subtopic_ids:
+        return {}
+
     rows = await db.execute(
         select(
             GapState.subtopic_id,
@@ -279,7 +297,29 @@ async def _build_gap_summary(
     return summary
 
 
-def _to_response(plan: LessonPlan) -> LessonPlanResponse:
+async def _fetch_subtopic_context(
+    subtopic_ids: list[UUID],
+    db: AsyncSession,
+) -> list[SubtopicContext]:
+    """Fetch subtopic names and their parent topic names for a list of IDs."""
+    if not subtopic_ids:
+        return []
+
+    rows = await db.execute(
+        select(Subtopic.id, Subtopic.name, Topic.name.label("topic_name"))
+        .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+        .join(Topic, Topic.id == CurriculumTopic.topic_id)
+        .where(Subtopic.id.in_(subtopic_ids))
+    )
+    id_order = {sid: i for i, sid in enumerate(subtopic_ids)}
+    results = sorted(rows.all(), key=lambda r: id_order.get(r.id, 9999))
+    return [SubtopicContext(subtopic_id=r.id, name=r.name, topic_name=r.topic_name) for r in results]
+
+
+def _to_response(
+    plan: LessonPlan,
+    focus_subtopics: list[SubtopicContext],
+) -> LessonPlanResponse:
     generated = dict(plan.generated_plan or {})
     if plan.teacher_edits:
         generated.update(plan.teacher_edits)
@@ -291,6 +331,8 @@ def _to_response(plan: LessonPlan) -> LessonPlanResponse:
         status=plan.status,
         generated_plan=generated if generated else None,
         teacher_edits=plan.teacher_edits,
+        gap_summary=plan.gap_summary or {},
+        focus_subtopics=focus_subtopics,
         generated_at=plan.generated_at,
         failure_code=plan.failure_code,
         failure_reason=plan.failure_reason,

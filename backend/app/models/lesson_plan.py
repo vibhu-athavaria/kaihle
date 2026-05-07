@@ -59,8 +59,6 @@ class LessonPlan(Base, UUIDMixin):
     gap_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     # {"subtopic_id": {"name": "...", "class_avg": 0.32, "student_count": 8}}
     generated_plan: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    # {starter_10min, group_a_activity, group_b_activity, group_c_activity,
-    #  plenary_10min, homework, teacher_notes}
     teacher_edits: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(
         Enum(

@@ -4,7 +4,13 @@ from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class SubtopicContext(BaseModel):
+    subtopic_id: UUID
+    name: str
+    topic_name: str
 
 
 class LessonPlanResponse(BaseModel):
@@ -14,6 +20,8 @@ class LessonPlanResponse(BaseModel):
     status: str  # "GENERATING" | "GENERATED" | "EDITED" | "USED" | "ARCHIVED"
     generated_plan: dict[str, Any] | None
     teacher_edits: dict[str, Any] | None
+    gap_summary: dict[str, Any]
+    focus_subtopics: list[SubtopicContext]
     generated_at: datetime
     failure_code: str | None = None
     failure_reason: str | None = None
@@ -23,18 +31,29 @@ class LessonPlanResponse(BaseModel):
 
 class GenerateLessonPlanRequest(BaseModel):
     focus_subtopic_ids: list[UUID]
+    duration_minutes: int = Field(default=45, ge=30, le=120)
 
 
 class LessonPlanEditRequest(BaseModel):
-    """All fields optional — PATCH applies only the fields provided."""
+    """All fields optional — PATCH merges only the fields provided into teacher_edits."""
 
-    starter_10min: str | None = None
-    group_a_activity: str | None = None
-    group_b_activity: str | None = None
-    group_c_activity: str | None = None
-    plenary_10min: str | None = None
+    # Top-level text fields
+    prior_knowledge: str | None = None
+    teacher_tips: str | None = None
     homework: str | None = None
-    teacher_notes: str | None = None
+
+    # List fields
+    learning_objectives: list[str] | None = None
+    key_concepts: list[dict[str, str]] | None = None
+    real_world_applications: list[dict[str, str]] | None = None
+    resources_needed: list[str] | None = None
+    common_misconceptions: list[str] | None = None
+
+    # Nested section overrides
+    starter: dict[str, Any] | None = None
+    main_activity: dict[str, Any] | None = None
+    formative_check: dict[str, Any] | None = None
+    plenary: dict[str, Any] | None = None
 
 
 class LessonPlanStatusRequest(BaseModel):
