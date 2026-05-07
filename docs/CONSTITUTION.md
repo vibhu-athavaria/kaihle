@@ -102,8 +102,6 @@ AI-powered learning diagnostics platform for schools. Identifies knowledge gaps,
     /packages/types/        ← shared TypeScript interfaces + getMasteryStyle()
   /docs/
     CONSTITUTION.md
-    /milestones/            ← M0_brief.md … M6_brief.md
-    /tasks/                 ← M0/… M6/ task files
     /design/
       DESIGN_SYSTEM.md      ← colors, fonts, layouts, role specs, accessibility
     /adr/
@@ -366,8 +364,6 @@ Boundary: `score = 0.7` → Developing. `score = 0.71` → Strong.
 | What | Where |
 |---|---|
 | Full DB schema (columns, indexes, constraints) | `kaihle_v2_1_schema.sql` |
-| Milestone goals + DoD | `docs/milestones/M{N}_brief.md` |
-| Task instructions | `docs/tasks/M{N}/M{N}-{E}-T{N}_*.md` |
 | LLM prompt templates | `backend/app/ai/prompts/*.jinja2` |
 | Design tokens, component patterns, role specs, accessibility | `docs/design/DESIGN_SYSTEM.md` |
 | Screen specs per role (page inventory, component specs, data map) | `docs/design/screens/TEACHER_SCREENS.md` etc. |
