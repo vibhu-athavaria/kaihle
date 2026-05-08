@@ -62,6 +62,33 @@ async def test_complete_when_stream_true_and_chunk_content_is_none_then_skipped(
 
 
 @pytest.mark.asyncio
+async def test_complete_when_stream_true_and_choices_empty_then_chunk_skipped() -> None:
+    """When stream=True, chunks with empty choices list are skipped without IndexError."""
+    chunk_empty_choices = MagicMock()
+    chunk_empty_choices.choices = []
+
+    chunk_real = MagicMock()
+    chunk_real.choices = [MagicMock()]
+    chunk_real.choices[0].delta.content = "output"
+
+    async def mock_stream(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        for chunk in [chunk_empty_choices, chunk_real]:
+            yield chunk
+
+    with patch("app.ai.providers.router.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(return_value=mock_stream())
+        from app.ai.providers.router import complete
+
+        result = await complete(
+            task="lesson_plan",
+            messages=[{"role": "user", "content": "test"}],
+            stream=True,
+        )
+
+    assert result == "output"
+
+
+@pytest.mark.asyncio
 async def test_complete_when_stream_false_then_uses_standard_response() -> None:
     """When stream=False (default), complete() returns response.choices[0].message.content."""
     mock_response = MagicMock()

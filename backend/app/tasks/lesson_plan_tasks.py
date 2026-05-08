@@ -340,6 +340,9 @@ class GenerateLessonPlanTask(celery.Task):  # type: ignore[type-arg]
     def on_failure(  # type: ignore[override]
         self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo: object
     ) -> None:
+        # Only emit CRITICAL on true final exhaustion (Rule 18), not on each retry attempt
+        if self.request.retries < self.max_retries:
+            return
         lesson_plan_id = args[0] if args else kwargs.get("lesson_plan_id")
         class_id = args[1] if len(args) > 1 else kwargs.get("class_id")
         logger.critical(

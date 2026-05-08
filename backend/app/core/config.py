@@ -80,6 +80,7 @@ class Settings(BaseSettings):
                 "LLM_STUDY_PLAN_MODEL": self.llm_study_plan_model,
                 "LLM_LESSON_PLAN_MODEL": self.llm_lesson_plan_model,
                 "LLM_STUDENT_PACK_MODEL": self.llm_student_pack_model,
+                "KAIHLE_ADMIN_EMAIL": self.kaihle_admin_email,
             }.items()
             if not val
         ]

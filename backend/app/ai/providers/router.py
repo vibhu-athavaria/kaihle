@@ -86,6 +86,8 @@ async def complete(
     if stream:
         chunks: list[str] = []
         async for chunk in response:
+            if not chunk.choices:
+                continue
             delta = chunk.choices[0].delta.content
             if delta is not None:
                 chunks.append(delta)
