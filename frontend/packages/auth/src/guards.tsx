@@ -82,7 +82,7 @@ export function OnboardingRoute({ children }: { children: React.ReactNode }) {
       return res.data;
     },
     enabled: !!user?.id && user.role === UserRole.STUDENT,
-    staleTime: 30 * 1000, // Cache for 30 seconds
+    staleTime: 5 * 60 * 1000, // 5 minutes — window focus refetch handles post-onboarding invalidation
     refetchOnWindowFocus: true,
   });
 
@@ -91,7 +91,7 @@ export function OnboardingRoute({ children }: { children: React.ReactNode }) {
   if (isLoading)
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary" />
       </div>
     );
   if (!status || !isOnboardingComplete(status)) {

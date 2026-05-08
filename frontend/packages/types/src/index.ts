@@ -5,6 +5,8 @@ export { getSubjectColor, SUBJECT_COLORS } from "./subjects";
 
 export { ACADEMIC_YEAR_REGEX, currentAcademicYear } from "./academic-year";
 
+export type { Topic, TopicDetail } from "./curriculum";
+
 export {
   UserRole,
   RoleGroup,

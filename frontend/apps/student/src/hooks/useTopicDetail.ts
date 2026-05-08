@@ -1,17 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
+import type { TopicDetail } from "@kaihle/types";
 
-export interface TopicDetail {
-  id: string;
-  name: string;
-  description: string | null;
-  resources?: Array<{
-    id: string;
-    title: string;
-    type: string;
-    url: string;
-  }>;
-}
+export type { TopicDetail };
 
 export function useTopicDetail(classId: string, topicId: string) {
   return useQuery<TopicDetail>({
