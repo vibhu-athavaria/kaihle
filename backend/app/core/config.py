@@ -28,14 +28,14 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
-    # LLM task routing — all overridable via environment variables
-    llm_gap_classification_model: str = "gemini/gemini-2.5-flash"
+    # LLM task routing — no defaults here; configure via environment variables
+    llm_gap_classification_model: str = ""
     llm_gap_classification_api_base: str | None = None
 
-    llm_study_plan_model: str = "gpt-4.1-mini"
+    llm_study_plan_model: str = ""
     llm_study_plan_api_base: str | None = None
 
-    llm_lesson_plan_model: str = "gpt-4.1"
+    llm_lesson_plan_model: str = ""
     llm_lesson_plan_api_base: str | None = None
 
     llm_embeddings_model: str = "text-embedding-004"
@@ -44,11 +44,15 @@ class Settings(BaseSettings):
     llm_question_generation_model: str = "gemini/gemini-2.5-flash"
     llm_question_generation_api_base: str | None = None
 
-    llm_student_pack_model: str = "gemini/gemini-2.5-pro"
+    llm_student_pack_model: str = ""
     llm_student_pack_api_base: str | None = None
 
-    llm_concept_guide_model: str = "gemini/gemini-2.5-flash"
+    llm_concept_guide_model: str = ""
     llm_concept_guide_api_base: str | None = None
+
+    # Notification recipients
+    kaihle_admin_email: str = "admin@kaihle.ai"
+    frontend_teacher_url: str = "http://localhost:3001"
 
     # Platform stats — overridable via environment variables
     platform_llm_provider: str = "openai"
