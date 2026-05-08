@@ -471,6 +471,9 @@ importers:
       '@kaihle/ui':
         specifier: workspace:*
         version: link:../ui
+      '@tanstack/react-query':
+        specifier: ^5.0.0
+        version: 5.97.0(react@18.3.1)
       axios:
         specifier: ^1.7.0
         version: 1.15.0

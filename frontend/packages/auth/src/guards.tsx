@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { UserRole, type UserRole as UserRoleType } from "@kaihle/types";
 import { useAuthStore } from "./tokenStore";
 import { apiClient } from "./apiClient";
@@ -71,27 +72,27 @@ function isOnboardingComplete(status: OnboardingStatus): boolean {
  */
 export function OnboardingRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
-  const [status, setStatus] = useState<OnboardingStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  const userId = user?.id;
 
-  useEffect(() => {
-    if (!user || user.role !== UserRole.STUDENT) {
-      setLoading(false);
-      return;
-    }
-    apiClient
-      .get<OnboardingStatus>(`/api/v1/onboarding/status/${user.id}`)
-      .then((res) => setStatus(res.data))
-      .catch(() => setStatus(null))
-      .finally(() => setLoading(false));
-  }, [user]);
+  const { data: status, isLoading } = useQuery<OnboardingStatus>({
+    queryKey: ["student", "onboarding-status", userId],
+    queryFn: async () => {
+      const res = await apiClient.get<OnboardingStatus>(
+        `/api/v1/onboarding/status/${userId}`,
+      );
+      return res.data;
+    },
+    enabled: !!userId && user?.role === UserRole.STUDENT,
+    staleTime: 5 * 60 * 1000, // 5 minutes — window focus refetch handles post-onboarding invalidation
+    refetchOnWindowFocus: true,
+  });
 
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== UserRole.STUDENT) return <>{children}</>;
-  if (loading)
+  if (isLoading)
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-primary" />
       </div>
     );
   if (!status || !isOnboardingComplete(status)) {

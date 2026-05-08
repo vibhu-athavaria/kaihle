@@ -21,6 +21,8 @@ import { StudentSettings } from "./pages/settings/StudentSettings";
 import { TakeAssessmentPage } from "./pages/assessments/TakeAssessmentPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudyPlanDetail } from "./pages/study-plans/StudyPlanDetail";
+import { ClassTopicsPage } from "./pages/classes/ClassTopicsPage";
+import { TopicDetailPage } from "./pages/topics/TopicDetailPage";
 
 function PrivateRouteWithPasswordCheck({
   children,
@@ -74,9 +76,47 @@ export default function App() {
           path="/student/dashboard"
           element={
             <PrivateRouteWithPasswordCheck>
-              <ErrorBoundary role="student">
-                <StudentDashboard />
-              </ErrorBoundary>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <StudentDashboard />
+                </ErrorBoundary>
+              </OnboardingRoute>
+            </PrivateRouteWithPasswordCheck>
+          }
+        />
+        <Route
+          path="/student/classes/:classId/diagnostic"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <TakeAssessmentPage />
+                </ErrorBoundary>
+              </OnboardingRoute>
+            </PrivateRouteWithPasswordCheck>
+          }
+        />
+        <Route
+          path="/student/classes/:classId/topics"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <ClassTopicsPage />
+                </ErrorBoundary>
+              </OnboardingRoute>
+            </PrivateRouteWithPasswordCheck>
+          }
+        />
+        <Route
+          path="/student/classes/:classId/topics/:topicId"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <TopicDetailPage />
+                </ErrorBoundary>
+              </OnboardingRoute>
             </PrivateRouteWithPasswordCheck>
           }
         />
@@ -84,9 +124,11 @@ export default function App() {
           path="/student/my-progress"
           element={
             <PrivateRouteWithPasswordCheck>
-              <ErrorBoundary role="student">
-                <MyProgress />
-              </ErrorBoundary>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <MyProgress />
+                </ErrorBoundary>
+              </OnboardingRoute>
             </PrivateRouteWithPasswordCheck>
           }
         />
@@ -94,9 +136,11 @@ export default function App() {
           path="/student/study-plans"
           element={
             <PrivateRouteWithPasswordCheck>
-              <ErrorBoundary role="student">
-                <StudyPlans />
-              </ErrorBoundary>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <StudyPlans />
+                </ErrorBoundary>
+              </OnboardingRoute>
             </PrivateRouteWithPasswordCheck>
           }
         />
@@ -116,9 +160,11 @@ export default function App() {
           path="/student/assessments"
           element={
             <PrivateRouteWithPasswordCheck>
-              <ErrorBoundary role="student">
-                <Assessments />
-              </ErrorBoundary>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <Assessments />
+                </ErrorBoundary>
+              </OnboardingRoute>
             </PrivateRouteWithPasswordCheck>
           }
         />
@@ -150,9 +196,11 @@ export default function App() {
           path="/student/settings"
           element={
             <PrivateRouteWithPasswordCheck>
-              <RoleRoute allowedRoles={[UserRole.STUDENT]}>
-                <StudentSettings />
-              </RoleRoute>
+              <OnboardingRoute>
+                <RoleRoute allowedRoles={[UserRole.STUDENT]}>
+                  <StudentSettings />
+                </RoleRoute>
+              </OnboardingRoute>
             </PrivateRouteWithPasswordCheck>
           }
         />
@@ -160,9 +208,11 @@ export default function App() {
           path="/student/*"
           element={
             <PrivateRouteWithPasswordCheck>
-              <ErrorBoundary role="student">
-                <StudentDashboard />
-              </ErrorBoundary>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <StudentDashboard />
+                </ErrorBoundary>
+              </OnboardingRoute>
             </PrivateRouteWithPasswordCheck>
           }
         />
