@@ -52,7 +52,6 @@ class Settings(BaseSettings):
 
     # Notification recipients
     kaihle_admin_email: str = "admin@kaihle.ai"
-    frontend_teacher_url: str = "http://localhost:3001"
 
     # Platform stats — overridable via environment variables
     platform_llm_provider: str = "openai"

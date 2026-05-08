@@ -51,7 +51,7 @@ def send_lesson_plan_ready_email(teacher_email: str, plan_id: str, class_name: s
         import resend  # type: ignore[import]
 
         resend.api_key = settings.resend_api_key
-        plan_url = f"{settings.frontend_teacher_url}/lesson-plans/{plan_id}"
+        plan_url = f"{settings.teacher_app_url}/lesson-plans/{plan_id}"
         resend.Emails.send(
             {
                 "from": settings.from_email,
