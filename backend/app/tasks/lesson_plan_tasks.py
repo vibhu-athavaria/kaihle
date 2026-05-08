@@ -1,7 +1,7 @@
 """Lesson plan Celery tasks.
 
 On-demand generation: teacher triggers via POST /classes/{class_id}/lesson-plans/generate.
-No weekly beat schedule — replaced by on-demand model.
+No GapState queries here — lesson plans use StudentLearningProfile (modality + interests) only.
 """
 
 from __future__ import annotations
@@ -15,11 +15,14 @@ from uuid import UUID
 import celery
 import structlog
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import select
+from pydantic import ValidationError
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import AsyncSessionLocal
 from app.models.lesson_plan import LessonPlan, LessonPlanFailureCode, LessonPlanStatus
+from app.schemas.lesson_plan_content import LessonPlanContent
 from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
@@ -29,273 +32,287 @@ _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)), autoescape=
 
 TASK_NAME = "lesson_plan_tasks.generate_lesson_plan"
 
-
-class GenerateLessonPlanTask(celery.Task):
-    """Emits CRITICAL log and archives the plan on final retry exhaustion (CONSTITUTION Rule 18)."""
-
-    def on_failure(self, exc, task_id, args, kwargs, einfo) -> None:  # type: ignore[override]
-        lesson_plan_id = args[0] if args else kwargs.get("lesson_plan_id")
-        class_id = args[1] if len(args) > 1 else kwargs.get("class_id")
-        logger.critical(
-            "generate_lesson_plan_permanently_failed",
-            task_id=task_id,
-            lesson_plan_id=lesson_plan_id,
-            class_id=class_id,
-            error=str(exc),
-            exc_info=True,
-        )
-        if not lesson_plan_id:
-            return
-
-        async def _archive() -> None:
-            from uuid import UUID
-
-            async with AsyncSessionLocal() as session:
-                from sqlalchemy import select
-
-                result = await session.execute(select(LessonPlan).where(LessonPlan.id == UUID(str(lesson_plan_id))))
-                plan = result.scalar_one_or_none()
-                if plan and plan.status == LessonPlanStatus.GENERATING:
-                    await _mark_archived(
-                        plan,
-                        session,
-                        LessonPlanFailureCode.LLM_UNEXPECTED_ERROR,
-                        "Generation failed after multiple retries. Please try again.",
-                    )
-
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(_archive())
-        finally:
-            loop.close()
-
-
-@celery_app.task(
-    bind=True,
-    base=GenerateLessonPlanTask,
-    max_retries=3,
-    default_retry_delay=30,
-    name=TASK_NAME,
-    time_limit=120,
-    queue="celery",
+_CORRECTION_PROMPT = (
+    "Your previous response could not be parsed as valid JSON matching the required schema.\n\n"
+    "Error: {error}\n\n"
+    "Previous response (first 500 chars):\n{previous_response}\n\n"
+    "Return ONLY valid JSON matching the exact schema. No markdown fences, no prose."
 )
-def generate_lesson_plan_task(
-    self: GenerateLessonPlanTask,
-    lesson_plan_id: str,
-    class_id: str,
-    focus_subtopic_ids: list[str],
-    gap_summary: dict,
-    duration_minutes: int = 45,
-) -> dict:
-    """Generate a lesson plan via LLM.
 
-    Creates a new event loop per CONSTITUTION Rule 4.
-    """
-    logger.info(
-        "lesson_plan_generation_started",
-        lesson_plan_id=lesson_plan_id,
-        class_id=class_id,
-        duration_minutes=duration_minutes,
-    )
 
-    async def _run() -> dict:
-        async with AsyncSessionLocal() as session:
-            return await _generate(lesson_plan_id, class_id, focus_subtopic_ids, gap_summary, duration_minutes, session)
+# ---------------------------------------------------------------------------
+# Email helpers
+# ---------------------------------------------------------------------------
 
+
+def send_lesson_plan_ready_email(teacher_email: str, plan_id: str, class_name: str) -> None:
+    """Send success email to teacher with BCC to kaihle-admin. Non-fatal — log on failure."""
     try:
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(_run())
-        finally:
-            loop.close()
+        import resend  # type: ignore[import]
 
-        logger.info("lesson_plan_generation_completed", lesson_plan_id=lesson_plan_id, status=result.get("status"))
-        return result
-
+        resend.api_key = settings.resend_api_key
+        plan_url = f"{settings.frontend_teacher_url}/lesson-plans/{plan_id}"
+        resend.Emails.send(
+            {
+                "from": settings.from_email,
+                "to": [teacher_email],
+                "bcc": [settings.kaihle_admin_email],
+                "subject": f"Your lesson plan for {class_name} is ready",
+                "html": (
+                    f"<p>Your lesson plan for <strong>{class_name}</strong> has been generated.</p>"
+                    f'<p><a href="{plan_url}">View lesson plan →</a></p>'
+                ),
+            }
+        )
     except Exception as exc:
-        logger.error("lesson_plan_generation_failed", lesson_plan_id=lesson_plan_id, error=str(exc), exc_info=True)
-        raise self.retry(exc=exc, countdown=30)
+        logger.warning("lesson_plan_ready_email_failed", plan_id=plan_id, error=str(exc))
+
+
+def send_lesson_plan_failed_email(plan_id: str, class_name: str, reason: str) -> None:
+    """Send failure notification to kaihle-admin only. Non-fatal — log on failure."""
+    try:
+        import resend  # type: ignore[import]
+
+        resend.api_key = settings.resend_api_key
+        resend.Emails.send(
+            {
+                "from": settings.from_email,
+                "to": [settings.kaihle_admin_email],
+                "subject": f"[ALERT] Lesson plan generation failed — {class_name}",
+                "html": f"<p>Plan ID: {plan_id}<br>Class: {class_name}<br>Reason: {reason}</p>",
+            }
+        )
+    except Exception as exc:
+        logger.warning("lesson_plan_failed_email_failed", plan_id=plan_id, error=str(exc))
+
+
+async def _fetch_teacher_email(teacher_id: str, db: AsyncSession) -> str | None:
+    from app.models.user import User
+
+    user = await db.get(User, UUID(teacher_id))
+    return user.email if user else None
+
+
+# ---------------------------------------------------------------------------
+# Context building (learning styles only — never GapState)
+# ---------------------------------------------------------------------------
+
+
+def _compute_class_context(profiles: list) -> dict:
+    """Aggregate modality scores and interests from StudentLearningProfile objects.
+
+    Returns {modality_distribution, top_interests, student_count}.
+    Never reads GapState — lesson plans use learning styles only.
+    """
+    if not profiles:
+        return {"modality_distribution": {}, "top_interests": [], "student_count": 0}
+
+    modality_keys = ["visual", "auditory", "reading_writing", "kinesthetic"]
+    totals: dict[str, float] = defaultdict(float)
+    interest_counts: dict[str, int] = defaultdict(int)
+
+    for profile in profiles:
+        for k in modality_keys:
+            totals[k] += float((profile.modality_scores or {}).get(k, 0.0))
+        for interest in profile.interests or []:
+            interest_counts[interest] += 1
+
+    n = len(profiles)
+    modality_distribution = {k: round(totals[k] / n, 3) for k in modality_keys}
+    top_interests = [i for i, _ in sorted(interest_counts.items(), key=lambda x: -x[1])[:5]]
+
+    return {
+        "modality_distribution": modality_distribution,
+        "top_interests": top_interests,
+        "student_count": n,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Validation helper
+# ---------------------------------------------------------------------------
+
+
+def _try_validate(raw_text: str) -> tuple[dict | None, str]:
+    """Parse and Pydantic-validate raw LLM text. Returns (parsed_dict, error_message)."""
+    try:
+        parsed = json.loads(raw_text.strip())
+    except json.JSONDecodeError as exc:
+        return None, f"JSON parse error: {exc}"
+    try:
+        LessonPlanContent.model_validate(parsed)
+        return parsed, ""
+    except ValidationError as exc:
+        return None, f"Schema validation error: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# Core async generation logic
+# ---------------------------------------------------------------------------
 
 
 async def _generate(
     lesson_plan_id: str,
     class_id: str,
     focus_subtopic_ids: list[str],
-    gap_summary: dict,
     duration_minutes: int,
+    teacher_id: str,
     db: AsyncSession,
-) -> dict:
+) -> None:
+    """Core async generation. Called by both the Celery entry point and tests."""
     from app.ai.providers import router as llm_router
-    from app.models.curriculum import Grade, Subject
-    from app.models.lesson_plan import LessonPlanFailureCode
+    from app.models.curriculum import Grade, Subject, Subtopic
     from app.models.onboarding import StudentLearningProfile
     from app.models.school import Class, ClassEnrollment
 
+    log = logger.bind(lesson_plan_id=lesson_plan_id, class_id=class_id)
+
+    # ── Load plan ─────────────────────────────────────────────────────────────
     result = await db.execute(select(LessonPlan).where(LessonPlan.id == UUID(lesson_plan_id)))
     plan = result.scalar_one_or_none()
     if not plan:
-        logger.error("lesson_plan_not_found", lesson_plan_id=lesson_plan_id)
-        return {"lesson_plan_id": lesson_plan_id, "status": "error", "reason": "not_found"}
+        log.error("lesson_plan_not_found")
+        return
 
     if plan.status != LessonPlanStatus.GENERATING:
-        logger.warning("lesson_plan_not_generating", lesson_plan_id=lesson_plan_id, status=plan.status)
-        return {"lesson_plan_id": lesson_plan_id, "status": "skipped", "reason": "not_generating"}
+        log.warning("lesson_plan_not_generating", status=plan.status)
+        return
 
-    # ---- Load class context ----
+    # ── Load class, grade, subject ────────────────────────────────────────────
     class_result = await db.execute(select(Class).where(Class.id == UUID(class_id)))
-    class_ = class_result.scalar_one_or_none()
-    if not class_:
-        logger.error("class_not_found", class_id=class_id)
-        await _mark_archived(
-            plan, db, LessonPlanFailureCode.CLASS_NOT_FOUND, "Generation failed: class record not found."
-        )
-        return {"lesson_plan_id": lesson_plan_id, "status": "error", "reason": "class_not_found"}
+    cls = class_result.scalar_one_or_none()
+    if not cls:
+        log.error("lesson_plan_class_not_found")
+        await _mark_archived(plan, db, LessonPlanFailureCode.CLASS_NOT_FOUND, "Class record not found.")
+        send_lesson_plan_failed_email(lesson_plan_id, "Unknown class", "Class not found")
+        return
 
-    grade_name = "Unknown Grade"
-    subject_name = "Unknown Subject"
+    grade = await db.get(Grade, cls.grade_id) if cls.grade_id else None
+    subject = await db.get(Subject, cls.subject_id) if cls.subject_id else None
+    grade_name = grade.name if grade else "Unknown Grade"
+    subject_name = subject.name if subject else "Unknown Subject"
 
-    if class_.grade_id:
-        gr = await db.get(Grade, class_.grade_id)
-        if gr:
-            grade_name = gr.name
+    # ── Enrolled student count ────────────────────────────────────────────────
+    count_result = await db.execute(select(func.count()).where(ClassEnrollment.class_id == UUID(class_id)))
+    enrollment_count: int = count_result.scalar_one() or 0
 
-    if class_.subject_id:
-        subj = await db.get(Subject, class_.subject_id)
-        if subj:
-            subject_name = subj.name
-
-    # ---- Load enrolled student count ----
-    from sqlalchemy import func
-
-    enrollment_result = await db.execute(
-        select(func.count()).where(
-            ClassEnrollment.class_id == UUID(class_id),
-        )
-    )
-    student_count = enrollment_result.scalar_one() or 0
-
-    # ---- Load learning profiles for modality distribution ----
+    # ── Learning profiles (StudentLearningProfile only — no GapState) ─────────
     enrolled_result = await db.execute(
         select(ClassEnrollment.student_id).where(ClassEnrollment.class_id == UUID(class_id))
     )
     student_ids = [row[0] for row in enrolled_result.all()]
 
-    modality_totals: dict[str, float] = defaultdict(float)
-    interests_counter: dict[str, int] = defaultdict(int)
-    profile_count = 0
-
     if student_ids:
         profiles_result = await db.execute(
             select(StudentLearningProfile).where(StudentLearningProfile.student_id.in_(student_ids))
         )
-        for profile in profiles_result.scalars().all():
-            profile_count += 1
-            for modality, score in (profile.modality_scores or {}).items():
-                modality_totals[modality] += float(score)
-            for interest in profile.interests or []:
-                interests_counter[interest] += 1
+        profiles = list(profiles_result.scalars().all())
+    else:
+        profiles = []
 
-    modality_distribution: dict[str, float] = {}
-    if profile_count:
-        modality_distribution = {m: total / profile_count for m, total in modality_totals.items()}
+    class_context = _compute_class_context(profiles)
 
-    top_interests = [interest for interest, _ in sorted(interests_counter.items(), key=lambda x: -x[1])[:5]]
+    # Store snapshot in gap_summary (column is misleadingly named — stores class context)
+    plan.gap_summary = class_context
+    log.info("lesson_plan_context_built", student_count=class_context["student_count"])
 
-    # ---- Build subtopics list for prompt ----
-    subtopics_for_prompt = [
-        {
-            "name": info["name"],
-            "learning_objective": info.get("learning_objective", ""),
-            "class_avg": info["class_avg"],
-            "student_count": info["student_count"],
-        }
-        for subtopic_id, info in gap_summary.items()
-    ]
+    # ── Fetch subtopic names from curriculum (no GapState) ────────────────────
+    subtopic_uuids = [UUID(s) for s in focus_subtopic_ids if s]
+    subtopics_for_prompt: list[dict] = []
+    if subtopic_uuids:
+        sub_result = await db.execute(select(Subtopic).where(Subtopic.id.in_(subtopic_uuids)))
+        for sub in sub_result.scalars().all():
+            subtopics_for_prompt.append({"name": sub.name, "learning_objective": sub.learning_objective or ""})
 
-    # ---- Render prompt ----
+    # ── Render prompt ─────────────────────────────────────────────────────────
     template = _jinja_env.get_template("lesson_plan.jinja2")
     prompt_text = template.render(
-        class_name=class_.name,
+        class_name=cls.name,
         subject_name=subject_name,
         grade_name=grade_name,
-        student_count=student_count,
+        student_count=enrollment_count,
         duration_minutes=duration_minutes,
         subtopics=subtopics_for_prompt,
-        modality_distribution=modality_distribution,
-        common_interests=top_interests,
+        modality_distribution=class_context["modality_distribution"],
+        top_interests=class_context["top_interests"],
     )
 
-    # ---- Call LLM ----
+    # ── LLM call (streaming for reliability on long outputs) ──────────────────
     import litellm
 
     try:
         response_text = await llm_router.complete(
             task="lesson_plan",
             messages=[{"role": "user", "content": prompt_text}],
+            max_tokens=4000,
+            stream=True,
         )
     except litellm.AuthenticationError as exc:
-        logger.error(
-            "lesson_plan_llm_auth_failed",
-            lesson_plan_id=lesson_plan_id,
-            class_id=class_id,
-            model=str(exc.model) if hasattr(exc, "model") else "unknown",
-            error=str(exc),
-            exc_info=True,
-        )
-        await _mark_archived(
-            plan,
-            db,
-            LessonPlanFailureCode.LLM_AUTH_ERROR,
-            "Generation failed: LLM provider authentication error. Check API key configuration.",
-        )
-        return {"lesson_plan_id": lesson_plan_id, "status": "error", "reason": "llm_auth_error"}
-    except litellm.RateLimitError as exc:
-        logger.error(
-            "lesson_plan_llm_rate_limited",
-            lesson_plan_id=lesson_plan_id,
-            class_id=class_id,
-            error=str(exc),
-            exc_info=True,
-        )
-        # Rate limits are transient — let the task retry
-        raise
-    except litellm.APIConnectionError as exc:
-        logger.error(
-            "lesson_plan_llm_connection_failed",
-            lesson_plan_id=lesson_plan_id,
-            class_id=class_id,
-            error=str(exc),
-            exc_info=True,
-        )
-        raise
+        log.error("lesson_plan_llm_auth_failed", error=str(exc), exc_info=True)
+        await _mark_archived(plan, db, LessonPlanFailureCode.LLM_AUTH_ERROR, "LLM authentication failed.")
+        send_lesson_plan_failed_email(lesson_plan_id, cls.name, f"LLM auth error: {exc}")
+        return
+    except litellm.RateLimitError:
+        log.error("lesson_plan_llm_rate_limited", exc_info=True)
+        await _mark_archived(plan, db, LessonPlanFailureCode.LLM_RATE_LIMIT_ERROR, "LLM rate limit exceeded.")
+        send_lesson_plan_failed_email(lesson_plan_id, cls.name, "LLM rate limit exceeded")
+        return
     except Exception as exc:
-        logger.error(
-            "lesson_plan_llm_unexpected_error",
-            lesson_plan_id=lesson_plan_id,
-            class_id=class_id,
-            error=str(exc),
-            exc_info=True,
-        )
-        await _mark_archived(
-            plan, db, LessonPlanFailureCode.LLM_UNEXPECTED_ERROR, "Generation failed due to an unexpected error."
-        )
-        return {"lesson_plan_id": lesson_plan_id, "status": "error", "reason": "llm_unexpected_error"}
+        log.error("lesson_plan_llm_unexpected_error", error=str(exc), exc_info=True)
+        await _mark_archived(plan, db, LessonPlanFailureCode.LLM_UNEXPECTED_ERROR, f"Unexpected LLM error: {exc}")
+        send_lesson_plan_failed_email(lesson_plan_id, cls.name, f"Unexpected error: {exc}")
+        return
 
-    # ---- Parse JSON response ----
-    try:
-        generated_plan = json.loads(response_text.strip())
-    except json.JSONDecodeError:
-        logger.error("lesson_plan_json_parse_failed", lesson_plan_id=lesson_plan_id, raw=response_text[:500])
-        await _mark_archived(
-            plan, db, LessonPlanFailureCode.JSON_PARSE_FAILED, "Generation failed: AI returned an unreadable response."
-        )
-        return {"lesson_plan_id": lesson_plan_id, "status": "error", "reason": "json_parse_failed"}
+    # Store raw output immediately — even if validation fails
+    plan.raw_llm_output = response_text
+    log.info("lesson_plan_llm_response_received", chars=len(response_text))
 
-    plan.generated_plan = generated_plan
+    # ── Validate — one correction retry ──────────────────────────────────────
+    parsed, error = _try_validate(response_text)
+
+    if parsed is None:
+        log.warning("lesson_plan_validation_failed_first_attempt", error=error)
+        correction_prompt = _CORRECTION_PROMPT.format(error=error, previous_response=response_text[:500])
+        try:
+            retry_text = await llm_router.complete(
+                task="lesson_plan",
+                messages=[
+                    {"role": "user", "content": prompt_text},
+                    {"role": "assistant", "content": response_text},
+                    {"role": "user", "content": correction_prompt},
+                ],
+                max_tokens=4000,
+                stream=True,
+            )
+            plan.raw_llm_output = retry_text
+            parsed, error = _try_validate(retry_text)
+        except Exception as exc:
+            log.error("lesson_plan_correction_llm_error", error=str(exc), exc_info=True)
+            error = f"Correction LLM error: {exc}"
+            parsed = None
+
+    if parsed is None:
+        log.error("lesson_plan_validation_failed_after_retry", error=error)
+        await _mark_archived(plan, db, LessonPlanFailureCode.JSON_PARSE_FAILED, error)
+        send_lesson_plan_failed_email(lesson_plan_id, cls.name, f"Validation failed after retry: {error}")
+        return
+
+    # ── Success ───────────────────────────────────────────────────────────────
+    plan.generated_plan = parsed
     plan.status = LessonPlanStatus.GENERATED
     await db.commit()
+    log.info("lesson_plan_generation_completed")
 
-    return {"lesson_plan_id": lesson_plan_id, "status": "completed"}
+    teacher_email = await _fetch_teacher_email(teacher_id, db)
+    if teacher_email:
+        send_lesson_plan_ready_email(teacher_email, lesson_plan_id, cls.name)
+    else:
+        log.warning("lesson_plan_teacher_email_not_found", teacher_id=teacher_id)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 async def _mark_archived(
@@ -309,8 +326,72 @@ async def _mark_archived(
     plan.failure_reason = user_message or failure_code
     await db.commit()
     logger.error(
-        "lesson_plan_generation_failed_permanently",
+        "lesson_plan_archived",
         plan_id=str(plan.id),
         failure_code=failure_code,
-        user_message=user_message,
     )
+
+
+# ---------------------------------------------------------------------------
+# Celery task class (CONSTITUTION Rule 18 — CRITICAL log on final retry)
+# ---------------------------------------------------------------------------
+
+
+class GenerateLessonPlanTask(celery.Task):  # type: ignore[type-arg]
+    """Emits CRITICAL log on final retry exhaustion (CONSTITUTION Rule 18)."""
+
+    def on_failure(  # type: ignore[override]
+        self, exc: Exception, task_id: str, args: tuple, kwargs: dict, einfo: object
+    ) -> None:
+        lesson_plan_id = args[0] if args else kwargs.get("lesson_plan_id")
+        class_id = args[1] if len(args) > 1 else kwargs.get("class_id")
+        logger.critical(
+            "generate_lesson_plan_permanently_failed",
+            task_id=task_id,
+            lesson_plan_id=lesson_plan_id,
+            class_id=class_id,
+            error=str(exc),
+            exc_info=True,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Celery entry point
+# ---------------------------------------------------------------------------
+
+
+@celery_app.task(
+    bind=True,
+    base=GenerateLessonPlanTask,
+    max_retries=0,
+    name=TASK_NAME,
+    queue="celery",
+)
+def generate_lesson_plan_task(
+    self: GenerateLessonPlanTask,
+    lesson_plan_id: str,
+    class_id: str,
+    focus_subtopic_ids: list[str],
+    duration_minutes: int = 45,
+    teacher_id: str = "",
+) -> None:
+    """Celery entry point — runs async generation logic in a new event loop.
+
+    Uses new_event_loop() per CONSTITUTION Rule (never asyncio.run inside Celery).
+    """
+    logger.info(
+        "lesson_plan_task_started",
+        lesson_plan_id=lesson_plan_id,
+        class_id=class_id,
+        duration_minutes=duration_minutes,
+    )
+
+    async def _run() -> None:
+        async with AsyncSessionLocal() as session:
+            await _generate(lesson_plan_id, class_id, focus_subtopic_ids, duration_minutes, teacher_id, session)
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_run())
+    finally:
+        loop.close()

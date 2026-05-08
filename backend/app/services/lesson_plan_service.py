@@ -42,13 +42,11 @@ async def generate_lesson_plan(
 
     await _require_teacher_class(class_id, teacher_id, school_id, db)
 
-    gap_summary = await _build_gap_summary(class_id, focus_subtopic_ids, db)
-
     plan = LessonPlan(
         class_id=class_id,
         teacher_id=teacher_id,
         focus_subtopic_ids=focus_subtopic_ids,
-        gap_summary=gap_summary,
+        gap_summary={},
         generated_plan={},
         status=LessonPlanStatus.GENERATING,
         generated_at=datetime.now(UTC),
@@ -61,8 +59,8 @@ async def generate_lesson_plan(
         str(plan.id),
         str(class_id),
         [str(s) for s in focus_subtopic_ids],
-        gap_summary,
         duration_minutes,
+        str(teacher_id),
     )
 
     await db.commit()
@@ -180,7 +178,8 @@ async def regenerate_lesson_plan(
         str(plan.id),
         str(plan.class_id),
         [str(s) for s in plan.focus_subtopic_ids],
-        plan.gap_summary,
+        45,
+        str(plan.teacher_id),
     )
 
     await db.commit()
