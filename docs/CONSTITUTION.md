@@ -253,12 +253,12 @@ Single database. `school_id` on every non-curriculum table. Enforced at the serv
 
 All LLM calls go through `backend/app/ai/providers/router.py` via LiteLLM. Switching providers requires only an environment variable change — no code changes.
 
-| Task | Default model | Max latency |
-|---|---|---|
-| `gap_classification` | `gemini/gemini-2.5-flash` | 5s |
-| `study_plan` | `gpt-4.1-mini` | 10s |
-| `lesson_plan` | `openrouter/anthropic/claude-sonnet-4-6` | 90s |
-| `student_pack` | `gemini/gemini-2.5-pro` | 30s |
+| Task | Env var |
+|---|---|
+| `gap_classification` | `LLM_GAP_CLASSIFICATION_MODEL` |
+| `study_plan` | `LLM_STUDY_PLAN_MODEL` |
+| `lesson_plan` | `LLM_LESSON_PLAN_MODEL` |
+| `student_pack` | `LLM_STUDENT_PACK_MODEL` |
 
 **Note:** pgvector embeddings are not used in v1. `subtopic_content` table (structured SQL) replaces cosine similarity for all content curation. Do not add embedding calls without an ADR.
 

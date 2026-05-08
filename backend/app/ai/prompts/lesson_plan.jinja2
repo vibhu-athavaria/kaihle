@@ -1,108 +1,122 @@
-You are an expert lesson planning assistant helping a teacher design a practical, classroom-ready lesson plan.
+You are an expert lesson planning assistant. Design a practical, immediately-usable lesson plan.
 
 ## Class context
 - **Class:** {{ class_name }}
 - **Subject:** {{ subject_name }}
 - **Grade:** {{ grade_name }}
-- **Students:** {{ student_count }}
+- **Students enrolled:** {{ student_count }}
 - **Lesson duration:** {{ duration_minutes }} minutes
 
-## Focus subtopics
+## Subtopics to cover
 {% for s in subtopics %}
 - **{{ s.name }}**{% if s.learning_objective %} — {{ s.learning_objective }}{% endif %}
-  - Class average mastery: {{ "%.0f"|format(s.class_avg * 100) }}% ({{ s.student_count }} students assessed)
 {% endfor %}
-
-## Student profile
-{% if modality_distribution %}
-Learning modality distribution across the class:
-{% for modality, score in modality_distribution.items() | sort(attribute=1, reverse=True) %}
-- {{ modality | replace("_", " ") | capitalize }}: {{ "%.0f"|format(score * 100) }}%
-{% endfor %}
-{% else %}
-No learning profile data yet — design for a mixed-modality class.
+{% if not subtopics %}
+- (No specific subtopics selected — design a general lesson for the class)
 {% endif %}
-{% if common_interests %}
 
-Top student interests (use these to ground real-world examples):
-{{ common_interests | join(", ") }}
+## Class learning profile
+{% if modality_distribution %}
+Learning modality breakdown (use the dominant modality to shape HOW you teach):
+{% for modality, score in modality_distribution.items() %}
+- {{ modality | replace("_", " ") | capitalize }}: {{ "%.0f" | format(score * 100) }}%
+{% endfor %}
+Dominant modality: {{ modality_distribution | dictsort(by='value', reverse=True) | first | first | replace("_", " ") | capitalize }}
+{% else %}
+No learning profile data yet — design for a mixed-modality class (balance visual, discussion, and hands-on activities).
+{% endif %}
+
+{% if top_interests %}
+Student interests — anchor at least one real-world example to these: {{ top_interests | join(", ") }}
 {% endif %}
 
 ## Ability groups
-Design differentiated activities for three groups based on current mastery:
-- **Foundation** (below 40%) — needs scaffolding, concrete examples, guided practice
-- **Core** (40–70%) — consolidating understanding, needs application with some challenge
-- **Extension** (above 70%) — ready to deepen, connect, or apply knowledge in novel contexts
+The class will split into three groups during the main activity. Design differentiated activities for each:
+- **Foundation** — needs scaffolding and concrete examples; guided practice with support prompts
+- **Core** — consolidating understanding; application with moderate challenge
+- **Extension** — ready to deepen, connect, and apply in novel contexts
 
-## Time budget
-Total lesson: **{{ duration_minutes }} minutes**
-- Starter: ~{{ (duration_minutes * 0.10) | round | int }} min
-- Introduction & key concepts: ~{{ (duration_minutes * 0.15) | round | int }} min
-- Main differentiated activity: ~{{ (duration_minutes * 0.50) | round | int }} min
-- Formative check: ~{{ (duration_minutes * 0.10) | round | int }} min
-- Plenary: ~{{ (duration_minutes * 0.15) | round | int }} min
+## Time budget ({{ duration_minutes }} min total)
+- Starter: {{ (duration_minutes * 0.10) | round | int }} min
+- Key concepts introduction: {{ (duration_minutes * 0.15) | round | int }} min
+- Group activity: {{ (duration_minutes * 0.50) | round | int }} min
+- Exit ticket: {{ (duration_minutes * 0.10) | round | int }} min
+- Plenary: {{ (duration_minutes * 0.15) | round | int }} min
 
-## Your task
-Generate a complete, practical lesson plan a teacher can pick up and use immediately. Be specific — name actual activities, not vague suggestions. Connect activities to student interests wherever possible. Include at least two real-world applications of the subtopic(s).
+## Field-by-field instructions
+- `lesson_hook`: One compelling, surprising sentence that makes students curious — connects to their interests. DO NOT start with "Today we will learn".
+- `learning_objectives`: "I can..." statements for the board. 2–3 objectives only.
+- `key_concepts`: 2–4 concepts in teaching sequence. Each must have:
+  - `teacher_does`: Specific, named teacher actions — what to write/draw/ask/demonstrate.
+  - `student_does`: What students actively produce — not just "listen". E.g. mini-whiteboard response, prediction, labelled diagram.
+  - `check_question`: One diagnostic question the teacher asks BEFORE advancing to the next concept.
+  - `misconception.student_error`: The most common wrong belief for this concept.
+  - `misconception.trigger_phrase`: The exact wrong sentence students say.
+  - `misconception.recovery_script`: What the teacher says/does to correct it — specific and actionable.
+  - `transition_cue`: One bridging sentence to the next concept. Use null on the last concept.
+- `group_activities.foundation / core / extension`:
+  - `description`: Named activity with specific materials. What does the student DO? Name the worksheet, resource, output.
+  - `stuck_prompt`: Exact sentence the teacher says if a student is stuck.
+- `resources_needed`: Every physical item needed before class. E.g. "8 force image cards · Foundation"
+- `exit_ticket.questions`: 2 questions. Q1 = core understanding, Q2 = application.
+  - `good_answer`: Model answer a well-understanding student gives.
+  - `pivot_if_wrong`: What the teacher does if most students get it wrong — 1–2 sentences, specific.
+- `starter`: Named activity (Think-Pair-Share, Predict-Observe, etc.) that activates prior knowledge.
+- `plenary`: Named reflection activity (3-2-1, Cold call, Exit slip, etc.).
+- `prior_knowledge`: One sentence on assumed prior knowledge.
+- `homework`: Optional 15–20 min task, or null.
 
-Return ONLY valid JSON — no markdown fences, no prose before or after — in this exact structure:
+Return ONLY valid JSON — no markdown fences, no prose before or after:
 
 {
-  "learning_objectives": [
-    "Students will be able to ...",
-    "Students will be able to ..."
-  ],
-  "prior_knowledge": "Brief description of what students should already know before this lesson.",
-  "starter": {
-    "duration_minutes": <int>,
-    "activity": "Specific, named activity. E.g. 'Think-Pair-Share', 'Quick quiz', 'Real-world hook'. Connect to a student interest."
+  "lesson_hook": "<string>",
+  "time_breakdown": {
+    "starter_minutes": <int>,
+    "intro_minutes": <int>,
+    "activity_minutes": <int>,
+    "exit_ticket_minutes": <int>,
+    "plenary_minutes": <int>
   },
+  "learning_objectives": ["<string>"],
   "key_concepts": [
-    { "term": "...", "definition": "Plain-language definition a student can understand." }
-  ],
-  "real_world_applications": [
     {
-      "context": "Short label for the real-world context, e.g. 'Sports statistics' or 'Social media reach'",
-      "example": "Concrete 2–3 sentence explanation of how this subtopic appears in that context."
-    },
-    {
-      "context": "...",
-      "example": "..."
+      "name": "<string>",
+      "duration_minutes": <int>,
+      "teacher_does": "<string>",
+      "student_does": "<string>",
+      "check_question": "<string>",
+      "misconception": {
+        "student_error": "<string>",
+        "trigger_phrase": "<string>",
+        "recovery_script": "<string>"
+      },
+      "transition_cue": "<string or null>"
     }
   ],
-  "main_activity": {
-    "duration_minutes": <int>,
-    "group_foundation": {
-      "focus": "One sentence on what this group is working towards.",
-      "activity": "Specific activity with clear teacher instructions. What does the student do? What does the teacher do? Name any resources needed."
-    },
-    "group_core": {
-      "focus": "One sentence on what this group is working towards.",
-      "activity": "Specific activity with clear teacher instructions."
-    },
-    "group_extension": {
-      "focus": "One sentence on what this group is working towards.",
-      "activity": "Specific activity. Should stretch and challenge, not just more of the same."
-    }
+  "group_activities": {
+    "foundation": { "description": "<string>", "stuck_prompt": "<string>" },
+    "core":       { "description": "<string>", "stuck_prompt": "<string>" },
+    "extension":  { "description": "<string>", "stuck_prompt": "<string>" }
   },
-  "formative_check": {
-    "duration_minutes": <int>,
-    "type": "exit_ticket",
+  "resources_needed": ["<string>"],
+  "exit_ticket": {
     "questions": [
-      "Question testing core understanding, not rote recall.",
-      "Question applying the concept to a new situation."
+      {
+        "label": "Q1 — core understanding",
+        "question_text": "<string>",
+        "good_answer": "<string>",
+        "pivot_if_wrong": "<string>"
+      },
+      {
+        "label": "Q2 — application",
+        "question_text": "<string>",
+        "good_answer": "<string>",
+        "pivot_if_wrong": "<string>"
+      }
     ]
   },
-  "plenary": {
-    "duration_minutes": <int>,
-    "activity": "Specific plenary that connects back to learning objectives and lets students articulate what they learned. E.g. '3-2-1 reflection', 'Cold call', 'Pair share summary'."
-  },
-  "homework": "Optional brief task (15–20 min). Write null if none needed.",
-  "resources_needed": [
-    "Every material the teacher needs to prepare before the lesson."
-  ],
-  "common_misconceptions": [
-    "Misconception students typically have, and how the teacher should address it."
-  ],
-  "teacher_tips": "2–3 sentences of practical advice: pacing, group transitions, what to watch for, differentiation reminders."
+  "starter": { "duration_minutes": <int>, "activity": "<string>" },
+  "plenary":  { "duration_minutes": <int>, "activity": "<string>" },
+  "prior_knowledge": "<string>",
+  "homework": "<string or null>"
 }

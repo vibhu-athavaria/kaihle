@@ -28,14 +28,14 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
-    # LLM task routing — all overridable via environment variables
-    llm_gap_classification_model: str = "gemini/gemini-2.5-flash"
+    # LLM task routing — no defaults here; configure via environment variables
+    llm_gap_classification_model: str = ""
     llm_gap_classification_api_base: str | None = None
 
-    llm_study_plan_model: str = "gpt-4.1-mini"
+    llm_study_plan_model: str = ""
     llm_study_plan_api_base: str | None = None
 
-    llm_lesson_plan_model: str = "gpt-4.1"
+    llm_lesson_plan_model: str = ""
     llm_lesson_plan_api_base: str | None = None
 
     llm_embeddings_model: str = "text-embedding-004"
@@ -44,11 +44,14 @@ class Settings(BaseSettings):
     llm_question_generation_model: str = "gemini/gemini-2.5-flash"
     llm_question_generation_api_base: str | None = None
 
-    llm_student_pack_model: str = "gemini/gemini-2.5-pro"
+    llm_student_pack_model: str = ""
     llm_student_pack_api_base: str | None = None
 
-    llm_concept_guide_model: str = "gemini/gemini-2.5-flash"
+    llm_concept_guide_model: str = ""
     llm_concept_guide_api_base: str | None = None
+
+    # Notification recipients
+    kaihle_admin_email: str = "admin@kaihle.ai"
 
     # Platform stats — overridable via environment variables
     platform_llm_provider: str = "openai"
@@ -64,6 +67,29 @@ class Settings(BaseSettings):
     parent_app_url: str = "http://localhost:3003"
     school_admin_app_url: str = "http://localhost:3004"
     kaihle_admin_app_url: str = "http://localhost:3005"
+
+    @model_validator(mode="after")
+    def _validate_llm_models(self) -> "Settings":
+        """Fail fast if any task-critical LLM model is unconfigured outside test environments."""
+        if self.environment not in ("staging", "production"):
+            return self
+        missing = [
+            name
+            for name, val in {
+                "LLM_GAP_CLASSIFICATION_MODEL": self.llm_gap_classification_model,
+                "LLM_STUDY_PLAN_MODEL": self.llm_study_plan_model,
+                "LLM_LESSON_PLAN_MODEL": self.llm_lesson_plan_model,
+                "LLM_STUDENT_PACK_MODEL": self.llm_student_pack_model,
+                "KAIHLE_ADMIN_EMAIL": self.kaihle_admin_email,
+            }.items()
+            if not val
+        ]
+        if missing:
+            raise ValueError(
+                f"Required LLM model environment variables are not set: {', '.join(missing)}. "
+                f"Configure them in your .env file or deployment environment."
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_production_app_urls(self) -> "Settings":

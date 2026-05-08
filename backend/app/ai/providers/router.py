@@ -48,6 +48,7 @@ async def complete(
     messages: list[dict[str, Any]],
     temperature: float = 0.7,
     max_tokens: int = 2000,
+    stream: bool = False,
 ) -> str:
     """Call the configured LLM for the given task. Provider-agnostic.
 
@@ -56,6 +57,7 @@ async def complete(
         messages: OpenAI-format message list [{"role": "...", "content": "..."}]
         temperature: Sampling temperature (default 0.7)
         max_tokens: Maximum tokens in response (default 2000)
+        stream: If True, collect streamed chunks into a single string (default False)
 
     Returns:
         The model's text response as a string.
@@ -70,15 +72,28 @@ async def complete(
     model = TASK_MODEL_MAP[task]
     api_base = TASK_API_BASE_MAP.get(task)
 
-    logger.info("llm_call_started", task=task, model=model, has_custom_api_base=api_base is not None)
+    logger.info("llm_call_started", task=task, model=model, stream=stream, has_custom_api_base=api_base is not None)
 
     response = await litellm.acompletion(
         model=model,
-        api_base=api_base or None,  # None tells LiteLLM to use the provider's default endpoint
+        api_base=api_base or None,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
+        stream=stream,
     )
+
+    if stream:
+        chunks: list[str] = []
+        async for chunk in response:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta is not None:
+                chunks.append(delta)
+        text = "".join(chunks)
+        logger.info("llm_call_completed_streaming", task=task, model=model, chars=len(text))
+        return text
 
     logger.info(
         "llm_call_completed",

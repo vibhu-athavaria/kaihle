@@ -127,12 +127,11 @@ class TestTaskModelMap:
         assert required_tasks.issubset(TASK_API_BASE_MAP.keys())
 
     def test_task_model_map_values_are_strings(self) -> None:
-        """Test that all TASK_MODEL_MAP values are non-empty strings."""
+        """Test that all TASK_MODEL_MAP values are strings (empty when not configured via env vars)."""
         from app.ai.providers.router import TASK_MODEL_MAP
 
         for task, model in TASK_MODEL_MAP.items():
             assert isinstance(model, str), f"Task {task} has non-string model: {model}"
-            assert len(model) > 0, f"Task {task} has empty model string"
 
     def test_task_api_base_map_values_are_strings_or_none(self) -> None:
         """Test that all TASK_API_BASE_MAP values are strings or None."""

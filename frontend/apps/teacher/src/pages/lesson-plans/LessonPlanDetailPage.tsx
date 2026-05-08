@@ -1,128 +1,403 @@
 import { useParams, Link } from "react-router-dom";
 import {
-  RefreshCw,
   ChevronLeft,
   Clock,
   BookOpen,
-  Lightbulb,
-  AlertCircle,
+  AlertTriangle,
+  HelpCircle,
+  Zap,
+  CheckCircle2,
 } from "lucide-react";
-import { useLessonPlan } from "../../hooks/useLessonPlans";
+import {
+  useLessonPlan,
+  type LessonPlanContent,
+  type LessonPlanConcept,
+  type ClassContextSnapshot,
+} from "../../hooks/useLessonPlans";
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Learning-style sidebar ─────────────────────────────────────────────────────
 
-function SectionCard({
-  title,
-  duration,
-  children,
-  accent = "gold",
-}: {
-  title: string;
-  duration?: number;
-  children: React.ReactNode;
-  accent?: "gold" | "green" | "blue" | "purple";
-}) {
-  const accentMap = {
-    gold: "border-l-brand-gold text-brand-gold",
-    green: "border-l-brand-green text-brand-green",
-    blue: "border-l-blue-500 text-blue-600",
-    purple: "border-l-purple-500 text-purple-600",
-  };
+function ModalityBar({ label, score }: { label: string; score: number }) {
+  const pct = Math.round(score * 100);
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-5">
-      <div
-        className={`flex items-center justify-between mb-3 border-l-4 pl-3 ${accentMap[accent]}`}
-      >
-        <h2 className="font-semibold text-sm">{title}</h2>
-        {duration != null && (
-          <span className="inline-flex items-center gap-1 text-xs text-brand-muted font-medium">
-            <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-            {duration} min
-          </span>
-        )}
+    <div>
+      <div className="flex justify-between mb-1">
+        <span className="text-xs text-brand-body capitalize">{label}</span>
+        <span className="text-xs font-semibold text-brand-ink">{pct}%</span>
       </div>
-      {children}
+      <div className="w-full bg-brand-border rounded-full h-1.5">
+        <div
+          className="bg-brand-gold h-1.5 rounded-full transition-all duration-500"
+          style={{ width: `${pct}%` }}
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${label} ${pct}%`}
+        />
+      </div>
     </div>
   );
 }
 
-function StringList({ items }: { items: string[] }) {
+function LearningStyleSidebar({
+  snapshot,
+  durationMinutes,
+  timeBreakdown,
+}: {
+  snapshot: ClassContextSnapshot;
+  durationMinutes: number | null;
+  timeBreakdown: LessonPlanContent["time_breakdown"] | null;
+}) {
+  const modalities = Object.entries(snapshot.modality_distribution ?? {}).sort(
+    ([, a], [, b]) => b - a,
+  );
+
+  const phases = timeBreakdown
+    ? [
+        {
+          label: "Starter",
+          min: timeBreakdown.starter_minutes,
+          color: "bg-brand-gold",
+        },
+        {
+          label: "Introduction",
+          min: timeBreakdown.intro_minutes,
+          color: "bg-blue-400",
+        },
+        {
+          label: "Group activity",
+          min: timeBreakdown.activity_minutes,
+          color: "bg-brand-primary",
+        },
+        {
+          label: "Exit ticket",
+          min: timeBreakdown.exit_ticket_minutes,
+          color: "bg-purple-400",
+        },
+        {
+          label: "Plenary",
+          min: timeBreakdown.plenary_minutes,
+          color: "bg-brand-amber",
+        },
+      ]
+    : [];
+
+  const phaseTotal = phases.reduce((s, p) => s + p.min, 0);
+  const total = (durationMinutes ?? phaseTotal) || 1;
+
   return (
-    <ul className="space-y-1">
-      {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-2 text-sm text-brand-body">
-          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-brand-gold flex-shrink-0" />
-          {item}
-        </li>
-      ))}
-    </ul>
+    <aside className="w-[240px] flex-shrink-0 space-y-5">
+      {/* Time flow */}
+      {phases.length > 0 && (
+        <div className="bg-white rounded-xl border border-brand-border p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-brand-muted mb-3">
+            Time flow
+          </h3>
+          {/* Stacked bar */}
+          <div className="flex h-2 rounded-full overflow-hidden mb-3 gap-px">
+            {phases.map((p) => (
+              <div
+                key={p.label}
+                className={`${p.color} transition-all`}
+                style={{ width: `${(p.min / total) * 100}%` }}
+                aria-label={`${p.label} ${p.min} minutes`}
+              />
+            ))}
+          </div>
+          <div className="space-y-1.5">
+            {phases.map((p) => (
+              <div key={p.label} className="flex items-center gap-2">
+                <span
+                  className={`w-2 h-2 rounded-full flex-shrink-0 ${p.color}`}
+                  aria-hidden="true"
+                />
+                <span className="text-xs text-brand-body flex-1">
+                  {p.label}
+                </span>
+                <span className="text-xs font-semibold text-brand-ink tabular-nums">
+                  {p.min}m
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Learning style */}
+      {modalities.length > 0 && (
+        <div className="bg-white rounded-xl border border-brand-border p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-brand-muted mb-3">
+            Class learning style
+          </h3>
+          <div className="space-y-2.5">
+            {modalities.map(([key, val]) => (
+              <ModalityBar
+                key={key}
+                label={key.replace("_", " ")}
+                score={val}
+              />
+            ))}
+          </div>
+          {snapshot.student_count > 0 && (
+            <p className="mt-3 text-[10px] text-brand-muted">
+              Based on {snapshot.student_count} student
+              {snapshot.student_count !== 1 ? "s" : ""}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Interests */}
+      {(snapshot.top_interests ?? []).length > 0 && (
+        <div className="bg-white rounded-xl border border-brand-border p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-brand-muted mb-3">
+            Class interests
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {snapshot.top_interests.map((interest) => (
+              <span
+                key={interest}
+                className="inline-block px-2 py-0.5 bg-brand-gold/10 text-brand-gold-dark text-xs font-medium rounded-full"
+              >
+                {interest}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </aside>
   );
 }
 
-function GroupBand({
-  label,
-  bandLabel,
-  duration,
-  activity,
-  extra,
-  color,
+// ── Concept card ───────────────────────────────────────────────────────────────
+
+function ConceptCard({
+  concept,
+  index,
 }: {
-  label: string;
-  bandLabel: string;
-  duration?: number;
-  activity: string;
-  extra?: string;
-  color: "red" | "amber" | "green";
+  concept: LessonPlanConcept;
+  index: number;
 }) {
-  const colorMap = {
-    red: {
+  return (
+    <div className="bg-white rounded-xl border border-brand-border p-5">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
+            {index + 1}
+          </span>
+          <h3 className="font-semibold text-sm text-brand-ink">
+            {concept.name}
+          </h3>
+        </div>
+        <span className="inline-flex items-center gap-1 text-xs text-brand-muted">
+          <Clock className="w-3 h-3" aria-hidden="true" />
+          {concept.duration_minutes}m
+        </span>
+      </div>
+
+      <div className="space-y-2 mb-4">
+        <div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">
+            Teacher does
+          </span>
+          <p className="text-sm text-brand-body mt-0.5">
+            {concept.teacher_does}
+          </p>
+        </div>
+        <div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">
+            Students do
+          </span>
+          <p className="text-sm text-brand-body mt-0.5">
+            {concept.student_does}
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-blue-50 rounded-lg p-3 mb-3">
+        <div className="flex items-start gap-2">
+          <HelpCircle
+            className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5"
+            aria-hidden="true"
+          />
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">
+              Check question
+            </span>
+            <p className="text-sm text-blue-800 mt-0.5">
+              {concept.check_question}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 rounded-lg p-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle
+            className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5"
+            aria-hidden="true"
+          />
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
+              Common misconception
+            </span>
+            <p className="text-xs text-amber-800">
+              <span className="font-semibold">Students say: </span>
+              &ldquo;{concept.misconception.trigger_phrase}&rdquo;
+            </p>
+            <p className="text-xs text-amber-700">
+              <span className="font-semibold">Recovery: </span>
+              {concept.misconception.recovery_script}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {concept.transition_cue && (
+        <p className="mt-3 text-xs text-brand-muted italic border-t border-brand-border pt-2">
+          <span className="font-semibold not-italic text-brand-body">
+            Transition:{" "}
+          </span>
+          {concept.transition_cue}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Group activity grid ────────────────────────────────────────────────────────
+
+function GroupActivityGrid({
+  activities,
+}: {
+  activities: LessonPlanContent["group_activities"];
+}) {
+  const groups = [
+    {
+      key: "foundation" as const,
+      label: "Foundation",
       bg: "bg-red-50",
       badge: "bg-red-100 text-red-700",
       dot: "bg-brand-red",
     },
-    amber: {
+    {
+      key: "core" as const,
+      label: "Core",
       bg: "bg-amber-50",
       badge: "bg-amber-100 text-amber-700",
       dot: "bg-brand-amber",
     },
-    green: {
+    {
+      key: "extension" as const,
+      label: "Extension",
       bg: "bg-brand-green-light",
       badge: "bg-brand-green-light text-brand-green",
       dot: "bg-brand-green",
     },
-  };
-  const c = colorMap[color];
+  ];
+
   return (
-    <div className={`rounded-lg p-4 ${c.bg}`}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span
-            className={`w-2 h-2 rounded-full ${c.dot}`}
-            aria-hidden="true"
-          />
-          <span
-            className={`text-xs font-bold px-2 py-0.5 rounded-full ${c.badge}`}
-          >
-            {bandLabel}
-          </span>
-          {label && <span className="text-xs text-brand-muted">{label}</span>}
+    <div className="space-y-3">
+      {groups.map(({ key, label, bg, badge, dot }) => {
+        const activity = activities[key];
+        return (
+          <div key={key} className={`rounded-lg p-4 ${bg}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <span
+                className={`w-2 h-2 rounded-full ${dot}`}
+                aria-hidden="true"
+              />
+              <span
+                className={`text-xs font-bold px-2 py-0.5 rounded-full ${badge}`}
+              >
+                {label}
+              </span>
+            </div>
+            <p className="text-sm text-brand-body leading-relaxed mb-2">
+              {activity.description}
+            </p>
+            <p className="text-xs text-brand-muted italic">
+              <span className="font-semibold not-italic text-brand-body">
+                If stuck:{" "}
+              </span>
+              &ldquo;{activity.stuck_prompt}&rdquo;
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Exit ticket card ───────────────────────────────────────────────────────────
+
+function ExitTicketCard({
+  exitTicket,
+}: {
+  exitTicket: LessonPlanContent["exit_ticket"];
+}) {
+  if (!exitTicket.questions.length) return null;
+  return (
+    <div className="space-y-3">
+      {exitTicket.questions.map((q, i) => (
+        <div
+          key={i}
+          className="bg-purple-50 rounded-xl border border-purple-100 p-4"
+        >
+          <div className="flex items-start gap-2 mb-3">
+            <CheckCircle2
+              className="w-4 h-4 text-purple-500 flex-shrink-0 mt-0.5"
+              aria-hidden="true"
+            />
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500">
+                {q.label}
+              </span>
+              <p className="text-sm font-semibold text-brand-ink mt-0.5">
+                {q.question_text}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-1.5 pl-6">
+            <p className="text-xs text-purple-700">
+              <span className="font-semibold">Good answer: </span>
+              {q.good_answer}
+            </p>
+            <p className="text-xs text-brand-muted">
+              <span className="font-semibold text-brand-body">
+                If most are wrong:{" "}
+              </span>
+              {q.pivot_if_wrong}
+            </p>
+          </div>
         </div>
-        {duration != null && (
-          <span className="text-xs text-brand-muted flex items-center gap-1">
-            <Clock className="w-3 h-3" aria-hidden="true" />
-            {duration} min
-          </span>
-        )}
+      ))}
+    </div>
+  );
+}
+
+// ── Phase divider ──────────────────────────────────────────────────────────────
+
+function PhaseDivider({
+  title,
+  minutes,
+  icon: Icon,
+}: {
+  title: string;
+  minutes: number;
+  icon: React.ElementType;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 text-brand-muted">
+        <Icon className="w-4 h-4" aria-hidden="true" />
+        <span className="text-xs font-bold uppercase tracking-wider">
+          {title}
+        </span>
+        <span className="text-xs font-semibold tabular-nums">{minutes}m</span>
       </div>
-      <p className="text-sm text-brand-body leading-relaxed">{activity}</p>
-      {extra && (
-        <p className="mt-2 text-xs text-brand-muted italic">
-          <span className="font-semibold not-italic text-brand-ink">
-            Extension:{" "}
-          </span>
-          {extra}
-        </p>
-      )}
+      <div className="flex-1 h-px bg-brand-border" />
     </div>
   );
 }
@@ -137,7 +412,7 @@ export function LessonPlanDetailPage() {
     return (
       <div className="p-6 animate-pulse space-y-4">
         <div className="h-6 bg-brand-border rounded w-48" />
-        {[1, 2, 3, 4, 5].map((i) => (
+        {[1, 2, 3, 4].map((i) => (
           <div key={i} className="h-24 bg-brand-border rounded-xl" />
         ))}
       </div>
@@ -153,11 +428,10 @@ export function LessonPlanDetailPage() {
   }
 
   const isGenerating = plan.status === "GENERATING";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const c = (plan.generated_plan ?? {}) as Record<string, any>;
+  const c: LessonPlanContent | null = plan.generated_plan;
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6">
       {/* Header */}
       <div className="flex items-center gap-2 mb-6">
         <Link
@@ -172,275 +446,166 @@ export function LessonPlanDetailPage() {
         </h1>
         {isGenerating && (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-amber-light text-brand-amber animate-pulse ml-2">
-            <RefreshCw className="w-3 h-3 animate-spin" aria-hidden="true" />
-            Generating…
+            Generating — you&apos;ll be emailed when ready
           </span>
         )}
       </div>
 
       {isGenerating ? (
-        <div className="bg-white rounded-2xl border border-brand-border p-12 text-center">
-          <RefreshCw
-            className="w-8 h-8 text-brand-gold animate-spin mx-auto mb-4"
-            aria-hidden="true"
-          />
+        <div className="bg-white rounded-2xl border border-brand-border p-12 text-center max-w-md">
+          <div className="w-10 h-10 rounded-full bg-brand-amber-light flex items-center justify-center mx-auto mb-4">
+            <Clock className="w-5 h-5 text-brand-amber" aria-hidden="true" />
+          </div>
           <h3 className="font-display font-semibold text-lg text-brand-ink mb-2">
-            Your lesson plan is being generated.
+            Generating your lesson plan
           </h3>
-          <p className="text-sm text-brand-muted max-w-sm mx-auto">
-            This usually takes under 30 seconds. This page will update
-            automatically when it&apos;s ready.
+          <p className="text-sm text-brand-muted max-w-xs mx-auto">
+            This usually takes 1–2 minutes. You&apos;ll receive an email when
+            it&apos;s ready — no need to stay on this page.
           </p>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Learning objectives */}
-          {Array.isArray(c.learning_objectives) &&
-            c.learning_objectives.length > 0 && (
-              <SectionCard title="Learning Objectives" accent="gold">
-                <StringList items={c.learning_objectives as string[]} />
-              </SectionCard>
+      ) : c ? (
+        <div className="flex gap-6 items-start">
+          {/* Sidebar */}
+          <LearningStyleSidebar
+            snapshot={plan.gap_summary}
+            durationMinutes={null}
+            timeBreakdown={c.time_breakdown}
+          />
+
+          {/* Main content */}
+          <div className="flex-1 min-w-0 space-y-5">
+            {/* Lesson hook */}
+            {c.lesson_hook && (
+              <div className="bg-brand-gold/10 border border-brand-gold/20 rounded-xl p-5">
+                <div className="flex items-start gap-3">
+                  <Zap
+                    className="w-5 h-5 text-brand-gold flex-shrink-0 mt-0.5"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-brand-gold">
+                      Lesson hook
+                    </span>
+                    <p className="text-base font-semibold text-brand-ink mt-1 leading-snug">
+                      {c.lesson_hook}
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
 
-          {/* Prior knowledge */}
-          {c.prior_knowledge && (
-            <SectionCard title="Prior Knowledge" accent="blue">
-              <p className="text-sm text-brand-body leading-relaxed">
-                {String(c.prior_knowledge)}
-              </p>
-            </SectionCard>
-          )}
-
-          {/* Starter */}
-          {c.starter && (
-            <SectionCard
-              title="Starter"
-              duration={
-                (c.starter as Record<string, unknown>).duration_minutes as
-                  | number
-                  | undefined
-              }
-              accent="gold"
-            >
-              <p className="text-sm text-brand-body leading-relaxed">
-                {String((c.starter as Record<string, unknown>).activity ?? "")}
-              </p>
-              {!!(c.starter as Record<string, unknown>).purpose && (
-                <p className="mt-2 text-xs text-brand-muted italic">
-                  <span className="font-semibold not-italic text-brand-ink">
-                    Purpose:{" "}
-                  </span>
-                  {String((c.starter as Record<string, unknown>).purpose)}
-                </p>
-              )}
-            </SectionCard>
-          )}
-
-          {/* Key concepts */}
-          {Array.isArray(c.key_concepts) && c.key_concepts.length > 0 && (
-            <SectionCard title="Key Concepts" accent="blue">
-              <div className="space-y-2">
-                {(c.key_concepts as Array<Record<string, string>>).map(
-                  (kc, i) => (
-                    <div key={i} className="flex gap-2 text-sm">
-                      <span className="font-semibold text-brand-ink min-w-[120px]">
-                        {kc.term}
-                      </span>
-                      <span className="text-brand-body">{kc.definition}</span>
-                    </div>
-                  ),
-                )}
-              </div>
-            </SectionCard>
-          )}
-
-          {/* Real-world applications */}
-          {Array.isArray(c.real_world_applications) &&
-            c.real_world_applications.length > 0 && (
-              <SectionCard title="Real-World Applications" accent="green">
-                <div className="space-y-3">
-                  {(
-                    c.real_world_applications as Array<Record<string, string>>
-                  ).map((app, i) => (
-                    <div key={i} className="flex gap-3">
-                      <Lightbulb
-                        className="w-4 h-4 text-brand-gold flex-shrink-0 mt-0.5"
+            {/* Learning objectives */}
+            {c.learning_objectives.length > 0 && (
+              <div className="bg-white rounded-xl border border-brand-border p-5">
+                <h2 className="font-semibold text-sm text-brand-ink mb-3 flex items-center gap-2">
+                  <span
+                    className="w-1 h-4 rounded-full bg-brand-gold"
+                    aria-hidden="true"
+                  />
+                  Learning Objectives
+                </h2>
+                <ul className="space-y-1.5">
+                  {c.learning_objectives.map((obj, i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-2 text-sm text-brand-body"
+                    >
+                      <span
+                        className="mt-1.5 w-1.5 h-1.5 rounded-full bg-brand-gold flex-shrink-0"
                         aria-hidden="true"
                       />
-                      <div>
-                        {app.title && (
-                          <p className="text-sm font-semibold text-brand-ink">
-                            {app.title}
-                          </p>
-                        )}
-                        <p className="text-sm text-brand-body leading-relaxed">
-                          {app.description}
-                        </p>
-                      </div>
-                    </div>
+                      {obj}
+                    </li>
                   ))}
-                </div>
-              </SectionCard>
+                </ul>
+              </div>
             )}
 
-          {/* Differentiated main activity */}
-          {c.main_activity && (
-            <SectionCard
-              title="Main Activity — Differentiated Groups"
-              accent="gold"
-            >
-              <div className="space-y-3">
-                {!!(c.main_activity as Record<string, unknown>)
-                  .group_foundation && (
-                  <GroupBand
-                    bandLabel="Needs Work"
-                    label={String(
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .group_foundation as Record<string, unknown>
-                      ).label ?? "",
-                    )}
-                    duration={
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .group_foundation as Record<string, unknown>
-                      ).duration_minutes as number | undefined
-                    }
-                    activity={String(
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .group_foundation as Record<string, unknown>
-                      ).activity ?? "",
-                    )}
-                    extra={String(
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .group_foundation as Record<string, unknown>
-                      ).support ?? "",
-                    )}
-                    color="red"
+            {/* Prior knowledge */}
+            {c.prior_knowledge && (
+              <div className="bg-white rounded-xl border border-brand-border p-5">
+                <h2 className="font-semibold text-sm text-brand-ink mb-2 flex items-center gap-2">
+                  <span
+                    className="w-1 h-4 rounded-full bg-blue-400"
+                    aria-hidden="true"
                   />
-                )}
-                {!!(c.main_activity as Record<string, unknown>).core && (
-                  <GroupBand
-                    bandLabel="Developing"
-                    label={String(
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .core as Record<string, unknown>
-                      ).label ?? "",
-                    )}
-                    duration={
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .core as Record<string, unknown>
-                      ).duration_minutes as number | undefined
-                    }
-                    activity={String(
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .core as Record<string, unknown>
-                      ).activity ?? "",
-                    )}
-                    extra={String(
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .core as Record<string, unknown>
-                      ).extension_prompt ?? "",
-                    )}
-                    color="amber"
-                  />
-                )}
-                {!!(c.main_activity as Record<string, unknown>).extension && (
-                  <GroupBand
-                    bandLabel="Strong"
-                    label={String(
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .extension as Record<string, unknown>
-                      ).label ?? "",
-                    )}
-                    duration={
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .extension as Record<string, unknown>
-                      ).duration_minutes as number | undefined
-                    }
-                    activity={String(
-                      (
-                        (c.main_activity as Record<string, unknown>)
-                          .extension as Record<string, unknown>
-                      ).activity ?? "",
-                    )}
-                    color="green"
-                  />
-                )}
+                  Prior Knowledge
+                </h2>
+                <p className="text-sm text-brand-body">{c.prior_knowledge}</p>
               </div>
-            </SectionCard>
-          )}
+            )}
 
-          {/* Formative check */}
-          {c.formative_check && (
-            <SectionCard
-              title="Formative Check"
-              duration={
-                (c.formative_check as Record<string, unknown>)
-                  .duration_minutes as number | undefined
-              }
-              accent="purple"
-            >
-              <p className="text-sm font-semibold text-brand-ink mb-1">
-                {String(
-                  (c.formative_check as Record<string, unknown>).method ?? "",
-                )}
+            {/* Starter */}
+            <PhaseDivider
+              title="Starter"
+              minutes={c.starter.duration_minutes}
+              icon={Clock}
+            />
+            <div className="bg-white rounded-xl border border-brand-border p-5">
+              <p className="text-sm text-brand-body leading-relaxed">
+                {c.starter.activity}
               </p>
-              {!!(c.formative_check as Record<string, unknown>)
-                .what_to_look_for && (
-                <p className="text-xs text-brand-muted">
-                  <span className="font-semibold text-brand-body">
-                    Look for:{" "}
-                  </span>
-                  {String(
-                    (c.formative_check as Record<string, unknown>)
-                      .what_to_look_for,
-                  )}
-                </p>
-              )}
-            </SectionCard>
-          )}
+            </div>
 
-          {/* Plenary */}
-          {c.plenary && (
-            <SectionCard
+            {/* Key concepts */}
+            {c.key_concepts.length > 0 && (
+              <>
+                <PhaseDivider
+                  title="Key Concepts"
+                  minutes={c.time_breakdown.intro_minutes}
+                  icon={BookOpen}
+                />
+                <div className="space-y-4">
+                  {c.key_concepts.map((concept, i) => (
+                    <ConceptCard key={i} concept={concept} index={i} />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Group activities */}
+            <PhaseDivider
+              title="Group Activity"
+              minutes={c.time_breakdown.activity_minutes}
+              icon={Clock}
+            />
+            <div className="bg-white rounded-xl border border-brand-border p-5">
+              <GroupActivityGrid activities={c.group_activities} />
+            </div>
+
+            {/* Exit ticket */}
+            <PhaseDivider
+              title="Exit Ticket"
+              minutes={c.time_breakdown.exit_ticket_minutes}
+              icon={CheckCircle2}
+            />
+            <ExitTicketCard exitTicket={c.exit_ticket} />
+
+            {/* Plenary */}
+            <PhaseDivider
               title="Plenary"
-              duration={
-                (c.plenary as Record<string, unknown>).duration_minutes as
-                  | number
-                  | undefined
-              }
-              accent="gold"
-            >
+              minutes={c.plenary.duration_minutes}
+              icon={Clock}
+            />
+            <div className="bg-white rounded-xl border border-brand-border p-5">
               <p className="text-sm text-brand-body leading-relaxed">
-                {String((c.plenary as Record<string, unknown>).activity ?? "")}
+                {c.plenary.activity}
               </p>
-            </SectionCard>
-          )}
+            </div>
 
-          {/* Homework */}
-          {c.homework && (
-            <SectionCard title="Homework" accent="blue">
-              <p className="text-sm text-brand-body leading-relaxed">
-                {String(c.homework)}
-              </p>
-            </SectionCard>
-          )}
-
-          {/* Resources needed */}
-          {Array.isArray(c.resources_needed) &&
-            c.resources_needed.length > 0 && (
-              <SectionCard title="Resources Needed" accent="gold">
+            {/* Resources */}
+            {c.resources_needed.length > 0 && (
+              <div className="bg-white rounded-xl border border-brand-border p-5">
+                <h2 className="font-semibold text-sm text-brand-ink mb-3 flex items-center gap-2">
+                  <span
+                    className="w-1 h-4 rounded-full bg-brand-gold"
+                    aria-hidden="true"
+                  />
+                  Resources Needed
+                </h2>
                 <div className="flex flex-wrap gap-2">
-                  {(c.resources_needed as string[]).map((r, i) => (
+                  {c.resources_needed.map((r, i) => (
                     <span
                       key={i}
                       className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 text-brand-ink text-xs font-medium rounded-full"
@@ -453,40 +618,27 @@ export function LessonPlanDetailPage() {
                     </span>
                   ))}
                 </div>
-              </SectionCard>
+              </div>
             )}
 
-          {/* Common misconceptions */}
-          {Array.isArray(c.common_misconceptions) &&
-            c.common_misconceptions.length > 0 && (
-              <SectionCard title="Common Misconceptions" accent="purple">
-                <div className="space-y-2">
-                  {(c.common_misconceptions as string[]).map((m, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <AlertCircle
-                        className="w-4 h-4 text-purple-500 flex-shrink-0 mt-0.5"
-                        aria-hidden="true"
-                      />
-                      <p className="text-sm text-brand-body leading-relaxed">
-                        {m}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </SectionCard>
+            {/* Homework */}
+            {c.homework && (
+              <div className="bg-white rounded-xl border border-brand-border p-5">
+                <h2 className="font-semibold text-sm text-brand-ink mb-2 flex items-center gap-2">
+                  <span
+                    className="w-1 h-4 rounded-full bg-blue-400"
+                    aria-hidden="true"
+                  />
+                  Homework
+                </h2>
+                <p className="text-sm text-brand-body">{c.homework}</p>
+              </div>
             )}
-
-          {/* Teacher tips */}
-          {c.teacher_tips && (
-            <div className="bg-brand-amber-light border border-amber-200 rounded-xl p-5">
-              <h2 className="font-semibold text-sm text-amber-700 mb-2">
-                Teacher Tips
-              </h2>
-              <p className="text-sm text-amber-800 leading-relaxed">
-                {String(c.teacher_tips)}
-              </p>
-            </div>
-          )}
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-brand-border p-8 text-center">
+          <p className="text-sm text-brand-muted">No plan content available.</p>
         </div>
       )}
     </div>

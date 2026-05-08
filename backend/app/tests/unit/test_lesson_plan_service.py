@@ -37,7 +37,7 @@ def _make_plan(plan_id=None, class_id=None, teacher_id=None, status="GENERATED")
     p.week_start = None
     p.status = status
     p.focus_subtopic_ids = []
-    p.gap_summary = {}
+    p.class_context_snapshot = {}
     p.generated_plan = {"starter_10min": "intro"}
     p.teacher_edits = None
     p.generated_at = datetime.now(UTC)
@@ -85,8 +85,8 @@ async def test_generate_lesson_plan_when_teacher_owns_class_then_dispatches_task
     mock_db.execute = AsyncMock(
         side_effect=[
             _scalar(class_),  # _require_teacher_class
-            _scalars([]),  # _build_gap_summary — GapState rows
-            _scalars([]),  # _build_gap_summary — subtopics
+            _scalars([]),  # _build_class_context_snapshot — GapState rows
+            _scalars([]),  # _build_class_context_snapshot — subtopics
         ]
     )
     mock_db.flush = AsyncMock()
@@ -99,7 +99,7 @@ async def test_generate_lesson_plan_when_teacher_owns_class_then_dispatches_task
 
     with patch("app.services.lesson_plan_service.LessonPlan", return_value=plan):
         with patch(
-            "app.tasks.lesson_plan_tasks.generate_lesson_plan_task",
+            "app.services.lesson_plan_service.generate_lesson_plan_task",
             mock_task,
         ):
             with patch(

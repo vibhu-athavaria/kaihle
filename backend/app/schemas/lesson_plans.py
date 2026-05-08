@@ -20,7 +20,7 @@ class LessonPlanResponse(BaseModel):
     status: str  # "GENERATING" | "GENERATED" | "EDITED" | "USED" | "ARCHIVED"
     generated_plan: dict[str, Any] | None
     teacher_edits: dict[str, Any] | None
-    gap_summary: dict[str, Any]
+    class_context_snapshot: dict[str, Any]
     focus_subtopics: list[SubtopicContext]
     generated_at: datetime
     failure_code: str | None = None
