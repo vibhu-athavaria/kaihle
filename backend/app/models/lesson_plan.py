@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -77,3 +77,4 @@ class LessonPlan(Base, UUIDMixin):
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failure_code: Mapped[str | None] = mapped_column(_FAILURE_CODE_ENUM, nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(nullable=True)
+    raw_llm_output: Mapped[str | None] = mapped_column(Text, nullable=True)
