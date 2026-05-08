@@ -14,14 +14,74 @@ export interface SubtopicContext {
   topic_name: string;
 }
 
+export interface ClassContextSnapshot {
+  modality_distribution: Record<string, number>;
+  top_interests: string[];
+  student_count: number;
+}
+
+export interface LessonPlanMisconception {
+  student_error: string;
+  trigger_phrase: string;
+  recovery_script: string;
+}
+
+export interface LessonPlanConcept {
+  name: string;
+  duration_minutes: number;
+  teacher_does: string;
+  student_does: string;
+  check_question: string;
+  misconception: LessonPlanMisconception;
+  transition_cue: string | null;
+}
+
+export interface LessonPlanGroupActivity {
+  description: string;
+  stuck_prompt: string;
+}
+
+export interface LessonPlanExitTicketQuestion {
+  label: string;
+  question_text: string;
+  good_answer: string;
+  pivot_if_wrong: string;
+}
+
+export interface LessonPlanContent {
+  lesson_hook: string;
+  time_breakdown: {
+    starter_minutes: number;
+    intro_minutes: number;
+    activity_minutes: number;
+    exit_ticket_minutes: number;
+    plenary_minutes: number;
+  };
+  learning_objectives: string[];
+  key_concepts: LessonPlanConcept[];
+  group_activities: {
+    foundation: LessonPlanGroupActivity;
+    core: LessonPlanGroupActivity;
+    extension: LessonPlanGroupActivity;
+  };
+  resources_needed: string[];
+  exit_ticket: {
+    questions: LessonPlanExitTicketQuestion[];
+  };
+  starter: { duration_minutes: number; activity: string };
+  plenary: { duration_minutes: number; activity: string };
+  prior_knowledge: string;
+  homework: string | null;
+}
+
 export interface LessonPlan {
   id: string;
   class_id: string;
   week_start: string | null;
   status: LessonPlanStatus;
-  generated_plan: Record<string, unknown> | null;
-  teacher_edits: Record<string, unknown> | null;
-  gap_summary: Record<string, unknown>;
+  generated_plan: LessonPlanContent | null;
+  teacher_edits: Partial<LessonPlanContent> | null;
+  gap_summary: ClassContextSnapshot;
   focus_subtopics: SubtopicContext[];
   generated_at: string;
   failure_code: string | null;
@@ -64,7 +124,7 @@ async function generateLessonPlan(params: {
 
 async function editLessonPlan(params: {
   planId: string;
-  edits: Partial<Record<string, unknown>>;
+  edits: Partial<LessonPlanContent>;
 }): Promise<LessonPlan> {
   const res = await apiClient.patch(
     `/api/v1/lesson-plans/${params.planId}`,
@@ -94,11 +154,6 @@ export function useClassLessonPlans(classId: string | undefined) {
     queryKey: ["lesson-plans", "class", classId],
     queryFn: () => fetchClassLessonPlans(classId!),
     enabled: !!classId,
-    // Poll every 5s while any plan is still generating
-    refetchInterval: (query) => {
-      const plans = query.state.data?.data ?? [];
-      return plans.some((p) => p.status === "GENERATING") ? 5000 : false;
-    },
   });
 }
 
@@ -107,9 +162,6 @@ export function useLessonPlan(planId: string | undefined) {
     queryKey: ["lesson-plans", planId],
     queryFn: () => fetchLessonPlan(planId!),
     enabled: !!planId,
-    refetchInterval: (query) => {
-      return query.state.data?.status === "GENERATING" ? 5000 : false;
-    },
   });
 }
 
