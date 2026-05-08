@@ -16,7 +16,7 @@ import celery
 import structlog
 from jinja2 import Environment, FileSystemLoader
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -192,10 +192,6 @@ async def _generate(
     grade_name = grade.name if grade else "Unknown Grade"
     subject_name = subject.name if subject else "Unknown Subject"
 
-    # ── Enrolled student count ────────────────────────────────────────────────
-    count_result = await db.execute(select(func.count()).where(ClassEnrollment.class_id == UUID(class_id)))
-    enrollment_count: int = count_result.scalar_one() or 0
-
     # ── Learning profiles (StudentLearningProfile only — no GapState) ─────────
     enrolled_result = await db.execute(
         select(ClassEnrollment.student_id).where(ClassEnrollment.class_id == UUID(class_id))
@@ -230,7 +226,7 @@ async def _generate(
         class_name=cls.name,
         subject_name=subject_name,
         grade_name=grade_name,
-        student_count=enrollment_count,
+        student_count=class_context["student_count"],
         duration_minutes=duration_minutes,
         subtopics=subtopics_for_prompt,
         modality_distribution=class_context["modality_distribution"],
@@ -253,10 +249,9 @@ async def _generate(
         send_lesson_plan_failed_email(lesson_plan_id, cls.name, f"LLM auth error: {exc}")
         return
     except litellm.RateLimitError:
-        log.error("lesson_plan_llm_rate_limited", exc_info=True)
-        await _mark_archived(plan, db, LessonPlanFailureCode.LLM_RATE_LIMIT_ERROR, "LLM rate limit exceeded.")
-        send_lesson_plan_failed_email(lesson_plan_id, cls.name, "LLM rate limit exceeded")
-        return
+        # Transient — re-raise so Celery retries. Plan stays in GENERATING.
+        log.warning("lesson_plan_llm_rate_limited_will_retry", exc_info=True)
+        raise
     except Exception as exc:
         log.error("lesson_plan_llm_unexpected_error", error=str(exc), exc_info=True)
         await _mark_archived(plan, db, LessonPlanFailureCode.LLM_UNEXPECTED_ERROR, f"Unexpected LLM error: {exc}")
@@ -298,12 +293,14 @@ async def _generate(
         return
 
     # ── Success ───────────────────────────────────────────────────────────────
+    # Fetch email before commit — session expires after commit in async SQLAlchemy
+    teacher_email = await _fetch_teacher_email(teacher_id, db)
+
     plan.generated_plan = parsed
     plan.status = LessonPlanStatus.GENERATED
     await db.commit()
     log.info("lesson_plan_generation_completed")
 
-    teacher_email = await _fetch_teacher_email(teacher_id, db)
     if teacher_email:
         send_lesson_plan_ready_email(teacher_email, lesson_plan_id, cls.name)
     else:
@@ -363,7 +360,7 @@ class GenerateLessonPlanTask(celery.Task):  # type: ignore[type-arg]
 @celery_app.task(
     bind=True,
     base=GenerateLessonPlanTask,
-    max_retries=0,
+    max_retries=2,
     name=TASK_NAME,
     queue="celery",
 )
@@ -378,7 +375,11 @@ def generate_lesson_plan_task(
     """Celery entry point — runs async generation logic in a new event loop.
 
     Uses new_event_loop() per CONSTITUTION Rule (never asyncio.run inside Celery).
+    max_retries=2 covers transient LLM rate limits. Permanent failures (auth, parse)
+    are archived inside _generate and do not propagate here.
     """
+    import litellm
+
     logger.info(
         "lesson_plan_task_started",
         lesson_plan_id=lesson_plan_id,
@@ -393,5 +394,24 @@ def generate_lesson_plan_task(
     loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(_run())
+    except litellm.RateLimitError as exc:
+        # Transient — Celery will retry (up to max_retries=2) with 60s back-off
+        logger.warning(
+            "lesson_plan_rate_limit_retry",
+            lesson_plan_id=lesson_plan_id,
+            retries=self.request.retries,
+        )
+        raise self.retry(exc=exc, countdown=60)
+    except Exception as exc:
+        # Unexpected exception that escaped _generate — CONSTITUTION Rule 18
+        logger.critical(
+            "generate_lesson_plan_permanently_failed",
+            lesson_plan_id=lesson_plan_id,
+            class_id=class_id,
+            error=str(exc),
+            exc_info=True,
+        )
+        send_lesson_plan_failed_email(lesson_plan_id, "Unknown", f"Unexpected task error: {exc}")
+        raise
     finally:
         loop.close()

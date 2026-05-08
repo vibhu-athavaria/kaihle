@@ -70,6 +70,28 @@ class Settings(BaseSettings):
     kaihle_admin_app_url: str = "http://localhost:3005"
 
     @model_validator(mode="after")
+    def _validate_llm_models(self) -> "Settings":
+        """Fail fast if any task-critical LLM model is unconfigured outside test environments."""
+        if self.environment not in ("staging", "production"):
+            return self
+        missing = [
+            name
+            for name, val in {
+                "LLM_GAP_CLASSIFICATION_MODEL": self.llm_gap_classification_model,
+                "LLM_STUDY_PLAN_MODEL": self.llm_study_plan_model,
+                "LLM_LESSON_PLAN_MODEL": self.llm_lesson_plan_model,
+                "LLM_STUDENT_PACK_MODEL": self.llm_student_pack_model,
+            }.items()
+            if not val
+        ]
+        if missing:
+            raise ValueError(
+                f"Required LLM model environment variables are not set: {', '.join(missing)}. "
+                f"Configure them in your .env file or deployment environment."
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validate_production_app_urls(self) -> "Settings":
         """Fail fast at startup if any app URL still points to localhost in production."""
         if self.environment == "production":

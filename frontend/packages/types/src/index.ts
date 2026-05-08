@@ -1,3 +1,12 @@
+export type {
+  LessonPlanContent,
+  LessonPlanConcept,
+  LessonPlanGroupActivity,
+  LessonPlanExitTicketQuestion,
+  LessonPlanMisconception,
+  ClassContextSnapshot,
+} from "./lesson-plan";
+
 export { getMasteryStyle, scoreToPercent } from "./mastery";
 export type { MasteryLabel, MasteryStyle } from "./mastery";
 

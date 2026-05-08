@@ -66,9 +66,6 @@ def _build_mock_db(plan: MagicMock, class_id: uuid.UUID | None = None) -> AsyncM
     class_result = MagicMock()
     class_result.scalar_one_or_none.return_value = mock_class
 
-    enroll_count_result = MagicMock()
-    enroll_count_result.scalar_one.return_value = 16
-
     enrolled_ids_result = MagicMock()
     enrolled_ids_result.all.return_value = [(uuid.uuid4(),), (uuid.uuid4(),)]
 
@@ -89,7 +86,6 @@ def _build_mock_db(plan: MagicMock, class_id: uuid.UUID | None = None) -> AsyncM
         side_effect=[
             plan_result,
             class_result,
-            enroll_count_result,
             enrolled_ids_result,
             profiles_result,
             subtopics_result,
@@ -212,3 +208,119 @@ def test_compute_class_context_when_profiles_given_then_averages_modalities() ->
     assert ctx["modality_distribution"]["visual"] == pytest.approx(0.7)
     assert ctx["modality_distribution"]["auditory"] == pytest.approx(0.5)
     assert "football" in ctx["top_interests"]
+
+
+@pytest.mark.asyncio
+async def test_generate_when_plan_not_found_then_returns_early() -> None:
+    """When lesson plan row is missing, _generate returns without archiving."""
+    from app.tasks.lesson_plan_tasks import _generate
+
+    plan_result = MagicMock()
+    plan_result.scalar_one_or_none.return_value = None
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=plan_result)
+    mock_db.commit = AsyncMock()
+
+    await _generate(
+        lesson_plan_id=str(uuid.uuid4()),
+        class_id=str(uuid.uuid4()),
+        focus_subtopic_ids=[],
+        duration_minutes=60,
+        teacher_id=str(uuid.uuid4()),
+        db=mock_db,
+    )
+
+    mock_db.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_generate_when_class_not_found_then_archives_with_class_not_found_code() -> None:
+    """When class row is missing, plan is archived with CLASS_NOT_FOUND."""
+    from app.models.lesson_plan import LessonPlanFailureCode, LessonPlanStatus
+    from app.tasks.lesson_plan_tasks import _generate
+
+    plan = _make_plan()
+
+    plan_result = MagicMock()
+    plan_result.scalar_one_or_none.return_value = plan
+
+    class_result = MagicMock()
+    class_result.scalar_one_or_none.return_value = None
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(side_effect=[plan_result, class_result])
+    mock_db.commit = AsyncMock()
+
+    with patch("app.tasks.lesson_plan_tasks.send_lesson_plan_failed_email"):
+        await _generate(
+            lesson_plan_id=str(plan.id),
+            class_id=str(uuid.uuid4()),
+            focus_subtopic_ids=[],
+            duration_minutes=60,
+            teacher_id=str(uuid.uuid4()),
+            db=mock_db,
+        )
+
+    assert plan.status == LessonPlanStatus.ARCHIVED
+    assert plan.failure_code == LessonPlanFailureCode.CLASS_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_generate_when_llm_auth_error_then_archives_with_auth_code() -> None:
+    """LiteLLM AuthenticationError → plan archived with LLM_AUTH_ERROR, no retry."""
+    import litellm
+
+    from app.models.lesson_plan import LessonPlanFailureCode, LessonPlanStatus
+    from app.tasks.lesson_plan_tasks import _generate
+
+    plan = _make_plan()
+    mock_db = _build_mock_db(plan)
+
+    with (
+        patch("app.tasks.lesson_plan_tasks.send_lesson_plan_failed_email"),
+        patch(
+            "app.ai.providers.router.complete",
+            new=AsyncMock(side_effect=litellm.AuthenticationError("bad key", llm_provider="openai", model="x")),
+        ),
+    ):
+        await _generate(
+            lesson_plan_id=str(plan.id),
+            class_id=str(uuid.uuid4()),
+            focus_subtopic_ids=[],
+            duration_minutes=60,
+            teacher_id=str(uuid.uuid4()),
+            db=mock_db,
+        )
+
+    assert plan.status == LessonPlanStatus.ARCHIVED
+    assert plan.failure_code == LessonPlanFailureCode.LLM_AUTH_ERROR
+
+
+@pytest.mark.asyncio
+async def test_generate_when_rate_limit_error_then_reraises_for_celery_retry() -> None:
+    """LiteLLM RateLimitError is re-raised so Celery can retry — plan stays GENERATING."""
+    import litellm
+
+    from app.tasks.lesson_plan_tasks import _generate
+
+    plan = _make_plan()
+    mock_db = _build_mock_db(plan)
+
+    with patch(
+        "app.ai.providers.router.complete",
+        new=AsyncMock(side_effect=litellm.RateLimitError("rate limited", llm_provider="openai", model="x")),
+    ):
+        with pytest.raises(litellm.RateLimitError):
+            await _generate(
+                lesson_plan_id=str(plan.id),
+                class_id=str(uuid.uuid4()),
+                focus_subtopic_ids=[],
+                duration_minutes=60,
+                teacher_id=str(uuid.uuid4()),
+                db=mock_db,
+            )
+
+    # Plan must remain in GENERATING — Celery will retry
+    assert plan.status == "GENERATING"
+    mock_db.commit.assert_not_called()

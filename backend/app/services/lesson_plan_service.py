@@ -46,6 +46,7 @@ async def generate_lesson_plan(
         class_id=class_id,
         teacher_id=teacher_id,
         focus_subtopic_ids=focus_subtopic_ids,
+        duration_minutes=duration_minutes,
         gap_summary={},
         generated_plan={},
         status=LessonPlanStatus.GENERATING,
@@ -178,7 +179,7 @@ async def regenerate_lesson_plan(
         str(plan.id),
         str(plan.class_id),
         [str(s) for s in plan.focus_subtopic_ids],
-        45,
+        plan.duration_minutes,
         str(plan.teacher_id),
     )
 
