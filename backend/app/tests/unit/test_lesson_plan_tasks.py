@@ -17,7 +17,7 @@ def _make_plan(status: str = "GENERATING") -> MagicMock:
     plan.raw_llm_output = None
     plan.failure_code = None
     plan.failure_reason = None
-    plan.gap_summary = None
+    plan.class_context_snapshot = None
     return plan
 
 

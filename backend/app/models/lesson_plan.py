@@ -57,8 +57,7 @@ class LessonPlan(Base, UUIDMixin):
     week_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     duration_minutes: Mapped[int] = mapped_column(nullable=False, default=45)
     focus_subtopic_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False, default=list)
-    gap_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    # {"subtopic_id": {"name": "...", "class_avg": 0.32, "student_count": 8}}
+    class_context_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     generated_plan: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     teacher_edits: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(

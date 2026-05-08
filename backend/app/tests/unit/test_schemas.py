@@ -266,7 +266,7 @@ class TestSchemaInstantiation:
             status="GENERATED",
             generated_plan={"starter": "intro"},
             teacher_edits=None,
-            gap_summary={},
+            class_context_snapshot={},
             focus_subtopics=[],
             generated_at=datetime.utcnow(),
         )

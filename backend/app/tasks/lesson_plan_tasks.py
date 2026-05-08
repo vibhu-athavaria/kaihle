@@ -13,15 +13,22 @@ from pathlib import Path
 from uuid import UUID
 
 import celery
+import litellm
+import resend  # type: ignore[import]
 import structlog
 from jinja2 import Environment, FileSystemLoader
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.providers import router as llm_router
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
+from app.models.curriculum import Grade, Subject, Subtopic
 from app.models.lesson_plan import LessonPlan, LessonPlanFailureCode, LessonPlanStatus
+from app.models.onboarding import StudentLearningProfile
+from app.models.school import Class, ClassEnrollment
+from app.models.user import User
 from app.schemas.lesson_plan_content import LessonPlanContent
 from app.tasks.celery_app import celery_app
 
@@ -48,8 +55,6 @@ _CORRECTION_PROMPT = (
 def send_lesson_plan_ready_email(teacher_email: str, plan_id: str, class_name: str) -> None:
     """Send success email to teacher with BCC to kaihle-admin. Non-fatal — log on failure."""
     try:
-        import resend  # type: ignore[import]
-
         resend.api_key = settings.resend_api_key
         plan_url = f"{settings.teacher_app_url}/lesson-plans/{plan_id}"
         resend.Emails.send(
@@ -71,8 +76,6 @@ def send_lesson_plan_ready_email(teacher_email: str, plan_id: str, class_name: s
 def send_lesson_plan_failed_email(plan_id: str, class_name: str, reason: str) -> None:
     """Send failure notification to kaihle-admin only. Non-fatal — log on failure."""
     try:
-        import resend  # type: ignore[import]
-
         resend.api_key = settings.resend_api_key
         resend.Emails.send(
             {
@@ -87,8 +90,6 @@ def send_lesson_plan_failed_email(plan_id: str, class_name: str, reason: str) ->
 
 
 async def _fetch_teacher_email(teacher_id: str, db: AsyncSession) -> str | None:
-    from app.models.user import User
-
     user = await db.get(User, UUID(teacher_id))
     return user.email if user else None
 
@@ -160,11 +161,6 @@ async def _generate(
     db: AsyncSession,
 ) -> None:
     """Core async generation. Called by both the Celery entry point and tests."""
-    from app.ai.providers import router as llm_router
-    from app.models.curriculum import Grade, Subject, Subtopic
-    from app.models.onboarding import StudentLearningProfile
-    from app.models.school import Class, ClassEnrollment
-
     log = logger.bind(lesson_plan_id=lesson_plan_id, class_id=class_id)
 
     # ── Load plan ─────────────────────────────────────────────────────────────
@@ -208,8 +204,7 @@ async def _generate(
 
     class_context = _compute_class_context(profiles)
 
-    # Store snapshot in gap_summary (column is misleadingly named — stores class context)
-    plan.gap_summary = class_context
+    plan.class_context_snapshot = class_context
     log.info("lesson_plan_context_built", student_count=class_context["student_count"])
 
     # ── Fetch subtopic names from curriculum (no GapState) ────────────────────
@@ -234,8 +229,6 @@ async def _generate(
     )
 
     # ── LLM call (streaming for reliability on long outputs) ──────────────────
-    import litellm
-
     try:
         response_text = await llm_router.complete(
             task="lesson_plan",
@@ -381,8 +374,6 @@ def generate_lesson_plan_task(
     max_retries=2 covers transient LLM rate limits. Permanent failures (auth, parse)
     are archived inside _generate and do not propagate here.
     """
-    import litellm
-
     logger.info(
         "lesson_plan_task_started",
         lesson_plan_id=lesson_plan_id,
