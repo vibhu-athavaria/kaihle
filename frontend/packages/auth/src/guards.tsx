@@ -72,16 +72,17 @@ function isOnboardingComplete(status: OnboardingStatus): boolean {
  */
 export function OnboardingRoute({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
+  const userId = user?.id;
 
   const { data: status, isLoading } = useQuery<OnboardingStatus>({
-    queryKey: ["student", "onboarding-status", user?.id],
+    queryKey: ["student", "onboarding-status", userId],
     queryFn: async () => {
       const res = await apiClient.get<OnboardingStatus>(
-        `/api/v1/onboarding/status/${user!.id}`,
+        `/api/v1/onboarding/status/${userId}`,
       );
       return res.data;
     },
-    enabled: !!user?.id && user.role === UserRole.STUDENT,
+    enabled: !!userId && user?.role === UserRole.STUDENT,
     staleTime: 5 * 60 * 1000, // 5 minutes — window focus refetch handles post-onboarding invalidation
     refetchOnWindowFocus: true,
   });
