@@ -4,9 +4,9 @@ import {
   getMasteryStyle,
   scoreToPercent,
   getSubjectColor,
-} from "@kaihle/types";
+} from "@kaihle/types"; // getMasteryStyle + scoreToPercent used for class-level avg display
 import { useClassAssessments } from "../../hooks/useClassAssessments";
-import { useMyStudents } from "../../hooks/useMyStudents";
+import { useClassEnrollments } from "../../hooks/useClassEnrollments";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
 import { useClassTopics } from "../../hooks/useClassTopics";
 import { useAuth } from "@kaihle/auth";
@@ -18,6 +18,8 @@ import {
   FileText,
   BookOpen,
   BookMarked,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import { ClassSetupWizard } from "./ClassSetupWizard";
 
@@ -30,10 +32,8 @@ export function ClassDetailPage() {
     useTeacherDashboard(schoolId);
   const { data: assessments, isLoading: assessmentsLoading } =
     useClassAssessments(classId);
-  const { data: students, isLoading: studentsLoading } = useMyStudents(
-    classId ? [classId] : [],
-    [],
-  );
+  const { data: students = [], isLoading: studentsLoading } =
+    useClassEnrollments(classId);
   const { data: classTopics = [], isLoading: topicsLoading } =
     useClassTopics(classId);
 
@@ -60,9 +60,11 @@ export function ClassDetailPage() {
   const displayPct = scoreToPercent(cls.avgMastery);
   const subjectColor = getSubjectColor(cls.subjectName);
 
-  const sortedStudents = [...(students ?? [])]
-    .sort((a, b) => (a.avgMastery ?? -1) - (b.avgMastery ?? -1))
-    .slice(0, 5);
+  const sortedStudents = [...students].sort((a, b) =>
+    `${a.first_name} ${a.last_name}`.localeCompare(
+      `${b.first_name} ${b.last_name}`,
+    ),
+  );
 
   const recentAssessments = [...(assessments ?? [])]
     .sort(
@@ -242,13 +244,21 @@ export function ClassDetailPage() {
         </div>
       )}
 
-      {/* ── Students at risk + Recent assessments ─────────────────────────── */}
+      {/* ── Enrolled students + Recent assessments ────────────────────────── */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <h2 className="font-display font-semibold text-lg text-brand-ink mb-3">
-            Students at Risk
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-display font-semibold text-lg text-brand-ink">
+              Enrolled Students
+            </h2>
+            {!studentsLoading && sortedStudents.length > 0 && (
+              <span className="text-xs text-brand-muted">
+                {sortedStudents.length} student
+                {sortedStudents.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
           {studentsLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -259,35 +269,42 @@ export function ClassDetailPage() {
               ))}
             </div>
           ) : sortedStudents.length === 0 ? (
-            <div className="text-sm text-brand-muted">
-              No students enrolled yet.
+            <div className="bg-white rounded-xl border border-brand-border p-6 text-center">
+              <Users
+                className="w-8 h-8 text-brand-muted mx-auto mb-2"
+                aria-hidden="true"
+              />
+              <p className="text-sm text-brand-muted">
+                No students enrolled yet.
+              </p>
             </div>
           ) : (
             <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
-              {sortedStudents.map((student, i) => {
-                const style = getMasteryStyle(student.avgMastery);
-                return (
-                  <Link
-                    key={student.id}
-                    to={`/teacher/students/${student.id}/profile`}
-                    className={`flex items-center justify-between px-4 py-3 hover:bg-brand-border-soft/50 transition-colors ${i > 0 ? "border-t border-brand-border" : ""}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`w-2 h-2 rounded-full ${style.dotClass}`}
+              {sortedStudents.map((student, i) => (
+                <Link
+                  key={student.id}
+                  to={`/teacher/students/${student.id}/profile`}
+                  className={`flex items-center justify-between px-4 py-3 hover:bg-brand-border-soft/50 transition-colors ${i > 0 ? "border-t border-brand-border" : ""}`}
+                >
+                  <span className="text-sm font-medium text-brand-ink">
+                    {student.first_name} {student.last_name}
+                  </span>
+                  {student.diagnostic_completed ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-green">
+                      <CheckCircle2
+                        className="w-3.5 h-3.5"
+                        aria-hidden="true"
                       />
-                      <span className="text-sm font-medium text-brand-ink">
-                        {student.name}
-                      </span>
-                    </div>
-                    <span
-                      className={`text-sm font-semibold ${style.textClass}`}
-                    >
-                      {scoreToPercent(student.avgMastery)}
+                      Diagnostic done
                     </span>
-                  </Link>
-                );
-              })}
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-muted">
+                      <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                      Awaiting diagnostic
+                    </span>
+                  )}
+                </Link>
+              ))}
             </div>
           )}
         </div>

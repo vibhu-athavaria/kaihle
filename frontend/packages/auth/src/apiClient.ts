@@ -62,6 +62,7 @@ apiClient.interceptors.response.use(
       useAuthStore.getState();
 
     if (!refreshToken) {
+      isRefreshing = false;
       clearTokens();
       return Promise.reject(error);
     }
