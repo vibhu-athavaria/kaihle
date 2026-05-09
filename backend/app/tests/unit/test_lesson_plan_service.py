@@ -13,6 +13,8 @@ from app.services.lesson_plan_service import (
     generate_lesson_plan,
     get_lesson_plan,
     list_class_lesson_plans,
+    list_teacher_lesson_plans,
+    regenerate_lesson_plan,
     update_lesson_plan_status,
 )
 
@@ -406,3 +408,123 @@ def test_to_response_when_no_content_then_generated_plan_is_none():
     response = _to_response(plan, focus_subtopics=[], class_name="")
 
     assert response.generated_plan is None
+
+
+# ---------------------------------------------------------------------------
+# list_teacher_lesson_plans
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_teacher_lesson_plans_when_no_class_filter_then_returns_all_plans():
+    teacher_id = uuid.uuid4()
+    plan1 = _make_plan(teacher_id=teacher_id)
+    plan2 = _make_plan(teacher_id=teacher_id)
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            _scalar_one(2),  # count
+            _scalars([plan1, plan2]),  # list
+            _scalars([]),  # _fetch_subtopic_context
+            _rows([]),  # _fetch_class_names
+        ]
+    )
+
+    page = await list_teacher_lesson_plans(
+        teacher_id=teacher_id,
+        school_id=uuid.uuid4(),
+        page=1,
+        page_size=10,
+        db=mock_db,
+    )
+
+    assert page.total == 2
+    assert len(page.data) == 2
+
+
+@pytest.mark.asyncio
+async def test_list_teacher_lesson_plans_when_class_filter_set_then_filters_results():
+    teacher_id = uuid.uuid4()
+    class_id = uuid.uuid4()
+    plan = _make_plan(teacher_id=teacher_id, class_id=class_id)
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            _scalar_one(1),
+            _scalars([plan]),
+            _scalars([]),
+            _rows([]),
+        ]
+    )
+
+    page = await list_teacher_lesson_plans(
+        teacher_id=teacher_id,
+        school_id=uuid.uuid4(),
+        page=1,
+        page_size=10,
+        db=mock_db,
+        class_id=class_id,
+    )
+
+    assert page.total == 1
+    assert page.data[0].class_id == class_id
+
+
+# ---------------------------------------------------------------------------
+# regenerate_lesson_plan
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_regenerate_lesson_plan_when_plan_exists_then_resets_to_generating():
+    teacher_id = uuid.uuid4()
+    school_id = uuid.uuid4()
+    class_ = _make_class(teacher_id=teacher_id, school_id=school_id)
+    plan = _make_plan(class_id=class_.id, teacher_id=teacher_id, status="ARCHIVED")
+    plan.failure_code = "llm_unexpected_error"
+    plan.failure_reason = "Some error"
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            _scalar(plan),  # _require_plan
+            _scalar(class_),  # class school check
+            _scalars([]),  # _fetch_subtopic_context
+            _rows([]),  # _fetch_class_names
+        ]
+    )
+    mock_db.commit = AsyncMock()
+
+    mock_task = MagicMock()
+    mock_task.delay = MagicMock()
+
+    with patch("app.services.lesson_plan_service.generate_lesson_plan_task", mock_task):
+        await regenerate_lesson_plan(
+            plan_id=plan.id,
+            teacher_id=teacher_id,
+            school_id=school_id,
+            db=mock_db,
+        )
+
+    assert plan.status == "GENERATING"
+    assert plan.failure_code is None
+    assert plan.failure_reason is None
+    mock_task.delay.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_regenerate_lesson_plan_when_plan_not_found_then_raises_404():
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=_scalar(None))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await regenerate_lesson_plan(
+            plan_id=uuid.uuid4(),
+            teacher_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            db=mock_db,
+        )
+
+    assert exc_info.value.status_code == 404

@@ -131,8 +131,8 @@ async def list_teacher_lesson_plans(
 ) -> Page[LessonPlanResponse]:
     """All lesson plans for this teacher across all their classes, sorted newest first.
 
-    Optionally filtered to a single class_id. school_id is enforced via teacher_id
-    ownership on LessonPlan rows — no cross-school leakage possible.
+    Optionally filtered to a single class_id. LessonPlan rows carry teacher_id which is
+    school-scoped — no cross-school leakage. school_id kept in signature for API consistency.
     """
     base_where = [LessonPlan.teacher_id == teacher_id]
     if class_id is not None:
@@ -221,6 +221,8 @@ async def regenerate_lesson_plan(
 
     plan.generated_plan = {}
     plan.teacher_edits = None
+    plan.failure_code = None
+    plan.failure_reason = None
     plan.status = LessonPlanStatus.GENERATING
     plan.generated_at = datetime.now(UTC)
     plan.updated_at = datetime.now(UTC)
@@ -233,7 +235,8 @@ async def regenerate_lesson_plan(
         plan.duration_minutes,
         str(plan.teacher_id),
     )
-    await db.refresh(plan)
+    # Don't refresh — we know the committed state; a refresh risks returning GENERATED
+    # if the task completes before this line executes.
     context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
     class_names = await _fetch_class_names([plan.class_id], db)
     return _to_response(plan, context, class_names.get(str(plan.class_id), ""))

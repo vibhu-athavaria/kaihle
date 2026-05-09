@@ -171,6 +171,7 @@ export function useGenerateLessonPlan(classId: string, onSuccess?: () => void) {
       void queryClient.invalidateQueries({
         queryKey: ["lesson-plans", "class", classId],
       });
+      void queryClient.invalidateQueries({ queryKey: ["lesson-plans", "all"] });
       onSuccess?.();
     },
   });
@@ -185,6 +186,7 @@ export function useEditLessonPlan(planId: string) {
       void queryClient.invalidateQueries({
         queryKey: ["lesson-plans", "class", data.class_id],
       });
+      void queryClient.invalidateQueries({ queryKey: ["lesson-plans", "all"] });
     },
   });
 }
@@ -211,6 +213,7 @@ export function useUpdateLessonPlanStatus(classId: string) {
       void queryClient.invalidateQueries({
         queryKey: ["lesson-plans", "class", classId],
       });
+      void queryClient.invalidateQueries({ queryKey: ["lesson-plans", "all"] });
     },
   });
 }
