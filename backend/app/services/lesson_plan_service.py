@@ -52,7 +52,9 @@ async def generate_lesson_plan(
     )
     db.add(plan)
     await db.flush()
-    await db.refresh(plan)
+    await db.refresh(plan)  # get the generated id before commit
+
+    await db.commit()  # commit BEFORE dispatching — task must see the row
 
     generate_lesson_plan_task.delay(
         str(plan.id),
@@ -61,9 +63,6 @@ async def generate_lesson_plan(
         duration_minutes,
         str(teacher_id),
     )
-
-    await db.commit()
-    await db.refresh(plan)
 
     logger.info(
         "lesson_plan_generation_dispatched",
@@ -102,14 +101,68 @@ async def list_class_lesson_plans(
     )
     plans = list(result.scalars().all())
 
-    # Batch subtopic context for all plans in one query
+    # Batch subtopic context and class name in two queries
     all_subtopic_ids = list({sid for p in plans for sid in p.focus_subtopic_ids})
     all_context = await _fetch_subtopic_context(all_subtopic_ids, db)
     context_by_id = {str(sc.subtopic_id): sc for sc in all_context}
+    class_names = await _fetch_class_names([class_id], db)
+    cls_name = class_names.get(str(class_id), "")
 
     return Page(
         data=[
-            _to_response(p, [context_by_id[str(sid)] for sid in p.focus_subtopic_ids if str(sid) in context_by_id])
+            _to_response(
+                p, [context_by_id[str(sid)] for sid in p.focus_subtopic_ids if str(sid) in context_by_id], cls_name
+            )
+            for p in plans
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+async def list_teacher_lesson_plans(
+    teacher_id: UUID,
+    school_id: UUID | None,
+    page: int,
+    page_size: int,
+    db: AsyncSession,
+    class_id: UUID | None = None,
+) -> Page[LessonPlanResponse]:
+    """All lesson plans for this teacher across all their classes, sorted newest first.
+
+    Optionally filtered to a single class_id. LessonPlan rows carry teacher_id which is
+    school-scoped — no cross-school leakage. school_id kept in signature for API consistency.
+    """
+    base_where = [LessonPlan.teacher_id == teacher_id]
+    if class_id is not None:
+        base_where.append(LessonPlan.class_id == class_id)
+
+    count_result = await db.execute(select(func.count()).where(*base_where))
+    total = count_result.scalar_one()
+
+    result = await db.execute(
+        select(LessonPlan)
+        .where(*base_where)
+        .order_by(LessonPlan.generated_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    plans = list(result.scalars().all())
+
+    all_subtopic_ids = list({sid for p in plans for sid in p.focus_subtopic_ids})
+    all_context = await _fetch_subtopic_context(all_subtopic_ids, db)
+    context_by_id = {str(sc.subtopic_id): sc for sc in all_context}
+    all_class_ids = list({p.class_id for p in plans})
+    class_names = await _fetch_class_names(all_class_ids, db)
+
+    return Page(
+        data=[
+            _to_response(
+                p,
+                [context_by_id[str(sid)] for sid in p.focus_subtopic_ids if str(sid) in context_by_id],
+                class_names.get(str(p.class_id), ""),
+            )
             for p in plans
         ],
         total=total,
@@ -126,7 +179,8 @@ async def get_lesson_plan(
 ) -> LessonPlanResponse:
     plan = await _require_plan(plan_id, teacher_id, school_id, db)
     context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
-    return _to_response(plan, context)
+    class_names = await _fetch_class_names([plan.class_id], db)
+    return _to_response(plan, context, class_names.get(str(plan.class_id), ""))
 
 
 async def edit_lesson_plan(
@@ -153,7 +207,8 @@ async def edit_lesson_plan(
     await db.commit()
     await db.refresh(plan)
     context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
-    return _to_response(plan, context)
+    class_names = await _fetch_class_names([plan.class_id], db)
+    return _to_response(plan, context, class_names.get(str(plan.class_id), ""))
 
 
 async def regenerate_lesson_plan(
@@ -166,10 +221,12 @@ async def regenerate_lesson_plan(
 
     plan.generated_plan = {}
     plan.teacher_edits = None
+    plan.failure_code = None
+    plan.failure_reason = None
     plan.status = LessonPlanStatus.GENERATING
     plan.generated_at = datetime.now(UTC)
     plan.updated_at = datetime.now(UTC)
-    await db.flush()
+    await db.commit()  # commit BEFORE dispatching — task must see the GENERATING status
 
     generate_lesson_plan_task.delay(
         str(plan.id),
@@ -178,11 +235,11 @@ async def regenerate_lesson_plan(
         plan.duration_minutes,
         str(plan.teacher_id),
     )
-
-    await db.commit()
-    await db.refresh(plan)
+    # Don't refresh — we know the committed state; a refresh risks returning GENERATED
+    # if the task completes before this line executes.
     context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
-    return _to_response(plan, context)
+    class_names = await _fetch_class_names([plan.class_id], db)
+    return _to_response(plan, context, class_names.get(str(plan.class_id), ""))
 
 
 async def update_lesson_plan_status(
@@ -206,7 +263,8 @@ async def update_lesson_plan_status(
     await db.commit()
     await db.refresh(plan)
     context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
-    return _to_response(plan, context)
+    class_names = await _fetch_class_names([plan.class_id], db)
+    return _to_response(plan, context, class_names.get(str(plan.class_id), ""))
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +331,18 @@ async def _fetch_subtopic_context(
     return [SubtopicContext(subtopic_id=r.id, name=r.name, topic_name=r.topic_name) for r in results]
 
 
+async def _fetch_class_names(class_ids: list[UUID], db: AsyncSession) -> dict[str, str]:
+    """Batch-fetch class names for a list of class IDs. Returns {str(class_id): name}."""
+    if not class_ids:
+        return {}
+    result = await db.execute(select(Class.id, Class.name).where(Class.id.in_(class_ids)))
+    return {str(row.id): row.name for row in result.all()}
+
+
 def _to_response(
     plan: LessonPlan,
     focus_subtopics: list[SubtopicContext],
+    class_name: str,
 ) -> LessonPlanResponse:
     generated = dict(plan.generated_plan or {})
     if plan.teacher_edits:
@@ -284,8 +351,10 @@ def _to_response(
     return LessonPlanResponse(
         id=plan.id,
         class_id=plan.class_id,
+        class_name=class_name,
         week_start=plan.week_start,
         status=plan.status,
+        duration_minutes=plan.duration_minutes,
         generated_plan=generated if generated else None,
         teacher_edits=plan.teacher_edits,
         class_context_snapshot=plan.class_context_snapshot or {},

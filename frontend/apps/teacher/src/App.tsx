@@ -33,6 +33,7 @@ import { MyStudentsPage } from "./pages/MyStudents";
 import { StudentProfilePage } from "./pages/StudentProfilePage";
 import { AllLessonPlansPage } from "./pages/lesson-plans/AllLessonPlansPage";
 import { LessonPlanDetailPage } from "./pages/lesson-plans/LessonPlanDetailPage";
+import { TeacherLessonPlansPage } from "./pages/lesson-plans/TeacherLessonPlansPage";
 import { ContentReviewPage } from "./pages/content-review/ContentReviewPage";
 
 // Plain function — no state, no effects, no React APIs
@@ -56,7 +57,7 @@ function TeacherShell() {
       { path: "classes", element: <ClassesPage /> },
       { path: "students", element: <MyStudentsPage /> },
       { path: "assessments", element: <AllAssessmentsPage /> },
-      { path: "lesson-plans", element: <AllLessonPlansPage /> },
+      { path: "lesson-plans", element: <TeacherLessonPlansPage /> },
       { path: "content-review", element: <ContentReviewPage /> },
       {
         path: "students/:studentId/profile",

@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.providers import router as llm_router
 from app.core.config import settings
-from app.core.database import AsyncSessionLocal
+from app.core.database import CeleryAsyncSessionLocal
 from app.models.curriculum import Grade, Subject, Subtopic
 from app.models.lesson_plan import LessonPlan, LessonPlanFailureCode, LessonPlanStatus
 from app.models.onboarding import StudentLearningProfile
@@ -382,7 +382,7 @@ def generate_lesson_plan_task(
     )
 
     async def _run() -> None:
-        async with AsyncSessionLocal() as session:
+        async with CeleryAsyncSessionLocal() as session:
             await _generate(lesson_plan_id, class_id, focus_subtopic_ids, duration_minutes, teacher_id, session)
 
     loop = asyncio.new_event_loop()
@@ -405,6 +405,39 @@ def generate_lesson_plan_task(
             error=str(exc),
             exc_info=True,
         )
+
+        # Best-effort: mark plan ARCHIVED so it doesn't stay stuck in GENERATING.
+        # Open a fresh loop + session — the original may have already closed or errored.
+        # Pass exc_message explicitly — nested async def can't close over `exc` reliably.
+        exc_message = str(exc)
+
+        async def _mark_failed_fallback() -> None:
+            async with CeleryAsyncSessionLocal() as db:
+                result = await db.execute(select(LessonPlan).where(LessonPlan.id == UUID(lesson_plan_id)))
+                plan = result.scalar_one_or_none()
+                if plan and plan.status == LessonPlanStatus.GENERATING:
+                    plan.status = LessonPlanStatus.ARCHIVED
+                    plan.failure_code = LessonPlanFailureCode.LLM_UNEXPECTED_ERROR
+                    plan.failure_reason = f"Unexpected task error: {exc_message}"
+                    await db.commit()
+                    logger.error(
+                        "lesson_plan_archived_by_fallback",
+                        lesson_plan_id=lesson_plan_id,
+                        error=exc_message,
+                    )
+
+        fallback_loop = asyncio.new_event_loop()
+        try:
+            fallback_loop.run_until_complete(_mark_failed_fallback())
+        except Exception as fallback_exc:
+            logger.warning(
+                "lesson_plan_fallback_archive_failed",
+                lesson_plan_id=lesson_plan_id,
+                error=str(fallback_exc),
+            )
+        finally:
+            fallback_loop.close()
+
         send_lesson_plan_failed_email(lesson_plan_id, "Unknown", f"Unexpected task error: {exc}")
         raise
     finally:

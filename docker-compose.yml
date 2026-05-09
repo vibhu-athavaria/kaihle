@@ -59,7 +59,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: kaihle_celery
-    command: celery -A app.tasks.celery_app worker --loglevel=info
+    command: celery -A app.tasks.celery_app worker --pool=threads --loglevel=info
     volumes:
       - ./backend:/app
     env_file:

@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.quiz_generator import generate_quiz
-from app.core.database import AsyncSessionLocal
+from app.core.database import CeleryAsyncSessionLocal
 from app.models import Class, StudyPlan, StudyPlanQuiz, StudyPlanResource
 from app.models.study_plan import ResourceType, StudyPlanStatus
 from app.tasks.celery_app import celery_app
@@ -81,7 +81,7 @@ def generate_study_plan_content(self: GenerateStudyPlanContentTask, plan_id: str
     logger.info("study_plan_content_generation_started", plan_id=plan_id)
 
     async def _run() -> dict:
-        async with AsyncSessionLocal() as session:
+        async with CeleryAsyncSessionLocal() as session:
             return await _generate_content(plan_id, session)
 
     try:

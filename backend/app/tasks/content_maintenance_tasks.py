@@ -17,7 +17,7 @@ import structlog
 from celery import Task, shared_task
 from sqlalchemy import select
 
-from app.core.database import AsyncSessionLocal
+from app.core.database import CeleryAsyncSessionLocal
 from app.models import SubtopicContent
 
 logger = structlog.get_logger()
@@ -82,7 +82,7 @@ async def _run_stale_check() -> None:
     checked = 0
     stale_count = 0
 
-    async with AsyncSessionLocal() as session:
+    async with CeleryAsyncSessionLocal() as session:
         async with httpx.AsyncClient(
             timeout=REQUEST_TIMEOUT_S,
             follow_redirects=True,

@@ -77,9 +77,7 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:
     Returns:
         Dict with assessment_id and class_id.
     """
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-    from app.core.config import settings
+    from app.core.database import CeleryAsyncSessionLocal
     from app.services.assessment_service import AssessmentService, QuestionBankEmptyError
 
     logger.info("create_class_diagnostic_task_started", class_id=class_id)
@@ -92,10 +90,7 @@ def create_class_diagnostic_task(self, class_id: str) -> dict[str, object]:
         raise
 
     async def _run() -> dict[str, object]:
-        engine = create_async_engine(settings.database_url, echo=False)
-        async_session = async_sessionmaker(engine, expire_on_commit=False)
-
-        async with async_session() as db:
+        async with CeleryAsyncSessionLocal() as db:
             async with db.begin():
                 service = AssessmentService(db)
                 assessment = await service.create_class_diagnostic(
@@ -183,9 +178,7 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
     Returns:
         Dict with attempt_id and student_id.
     """
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-    from app.core.config import settings
+    from app.core.database import CeleryAsyncSessionLocal
     from app.models.school import ClassEnrollment
     from app.models.user import OnboardingStatus
     from app.services.assessment_service import AssessmentService
@@ -205,10 +198,7 @@ def trigger_onboarding_diagnostics(self, student_id: str, class_id: str) -> dict
         raise
 
     async def _run() -> dict[str, object]:
-        engine = create_async_engine(settings.database_url, echo=False)
-        async_session = async_sessionmaker(engine, expire_on_commit=False)
-
-        async with async_session() as db:
+        async with CeleryAsyncSessionLocal() as db:
             async with db.begin():
                 service = AssessmentService(db)
 

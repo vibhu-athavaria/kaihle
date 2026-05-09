@@ -45,11 +45,11 @@ function LearningStyleSidebar({
   durationMinutes,
   timeBreakdown,
 }: {
-  snapshot: ClassContextSnapshot;
+  snapshot: ClassContextSnapshot | null | undefined;
   durationMinutes: number | null;
   timeBreakdown: LessonPlanContent["time_breakdown"] | null;
 }) {
-  const modalities = Object.entries(snapshot.modality_distribution ?? {}).sort(
+  const modalities = Object.entries(snapshot?.modality_distribution ?? {}).sort(
     ([, a], [, b]) => b - a,
   );
 
@@ -139,23 +139,23 @@ function LearningStyleSidebar({
               />
             ))}
           </div>
-          {snapshot.student_count > 0 && (
+          {(snapshot?.student_count ?? 0) > 0 && (
             <p className="mt-3 text-[10px] text-brand-muted">
-              Based on {snapshot.student_count} student
-              {snapshot.student_count !== 1 ? "s" : ""}
+              Based on {snapshot!.student_count} student
+              {snapshot!.student_count !== 1 ? "s" : ""}
             </p>
           )}
         </div>
       )}
 
       {/* Interests */}
-      {(snapshot.top_interests ?? []).length > 0 && (
+      {(snapshot?.top_interests ?? []).length > 0 && (
         <div className="bg-white rounded-xl border border-brand-border p-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-brand-muted mb-3">
             Class interests
           </h3>
           <div className="flex flex-wrap gap-1.5">
-            {snapshot.top_interests.map((interest) => (
+            {snapshot!.top_interests.map((interest) => (
               <span
                 key={interest}
                 className="inline-block px-2 py-0.5 bg-brand-gold/10 text-brand-gold-dark text-xs font-medium rounded-full"
@@ -468,7 +468,7 @@ export function LessonPlanDetailPage() {
         <div className="flex gap-6 items-start">
           {/* Sidebar */}
           <LearningStyleSidebar
-            snapshot={plan.gap_summary}
+            snapshot={plan.class_context_snapshot}
             durationMinutes={null}
             timeBreakdown={c.time_breakdown}
           />

@@ -54,7 +54,8 @@ async def generate_lesson_plan(
         db=db,
     )
     context = await lesson_plan_service._fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
-    return lesson_plan_service._to_response(plan, context)
+    class_names = await lesson_plan_service._fetch_class_names([plan.class_id], db)
+    return lesson_plan_service._to_response(plan, context, class_names.get(str(plan.class_id), ""))
 
 
 @router.get("/classes/{class_id}/lesson-plans", response_model=Page[LessonPlanResponse])
@@ -74,6 +75,26 @@ async def list_class_lesson_plans(
         page=page,
         page_size=page_size,
         db=db,
+    )
+
+
+@router.get("/lesson-plans", response_model=Page[LessonPlanResponse])
+async def list_teacher_lesson_plans(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+    class_id: UUID | None = Query(None),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> Page[LessonPlanResponse]:
+    from app.services import lesson_plan_service
+
+    return await lesson_plan_service.list_teacher_lesson_plans(
+        teacher_id=current_user.id,
+        school_id=current_user.school_id,
+        page=page,
+        page_size=page_size,
+        db=db,
+        class_id=class_id,
     )
 
 

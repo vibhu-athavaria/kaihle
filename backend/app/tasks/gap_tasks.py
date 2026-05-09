@@ -73,10 +73,10 @@ def calculate_gap_states(self, attempt_id: str) -> dict[str, object]:
         raise
 
     async def _run_service(attempt_id_str: str) -> dict[str, object]:
-        from app.core.database import AsyncSessionLocal
+        from app.core.database import CeleryAsyncSessionLocal
         from app.services.gap_service import GapService
 
-        async with AsyncSessionLocal() as db:
+        async with CeleryAsyncSessionLocal() as db:
             async with db.begin():
                 service = GapService(db)
                 return await service.calculate_gap_states_for_attempt(attempt_uuid)
@@ -171,11 +171,11 @@ def update_gap_state_from_quiz(
 
         from sqlalchemy import select
 
-        from app.core.database import AsyncSessionLocal
+        from app.core.database import CeleryAsyncSessionLocal
         from app.models import GapState, StudyPlan, StudyPlanQuiz
         from app.services.gap_service import GapService
 
-        async with AsyncSessionLocal() as db:
+        async with CeleryAsyncSessionLocal() as db:
             async with db.begin():
                 # Load plan to get student_id, school_id, class_id
                 plan_result = await db.execute(select(StudyPlan).where(StudyPlan.id == plan_uuid))
