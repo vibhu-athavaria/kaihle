@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { BookOpen, RefreshCw } from "lucide-react";
+import { BookOpen, Clock, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 import { Modal } from "@kaihle/ui";
@@ -8,6 +8,7 @@ import { useClassTopics } from "../../hooks/useClassTopics";
 import {
   useClassLessonPlans,
   useGenerateLessonPlan,
+  useRegenerateLessonPlan,
   type LessonPlan,
 } from "../../hooks/useLessonPlans";
 
@@ -37,10 +38,12 @@ function GenerateLessonPlanModal({
   classId,
   open,
   onOpenChange,
+  onGenerated,
 }: {
   classId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onGenerated?: () => void;
 }) {
   const { data: topics = [] } = useClassTopics(classId);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
@@ -50,7 +53,7 @@ function GenerateLessonPlanModal({
   const [durationMinutes, setDurationMinutes] = useState(45);
   const { data: subtopics = [], isLoading: subtopicsLoading } =
     useTopicSubtopics(selectedTopicId);
-  const generate = useGenerateLessonPlan(classId);
+  const generate = useGenerateLessonPlan(classId, onGenerated);
 
   function toggleSubtopic(id: string) {
     setSelectedSubtopicIds((prev) => {
@@ -304,9 +307,9 @@ function GenerateLessonPlanModal({
 function StatusBadge({ status }: { status: LessonPlan["status"] }) {
   if (status === "GENERATING") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-amber-light text-brand-amber animate-pulse">
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-brand-amber-light text-brand-amber animate-pulse">
         <RefreshCw className="w-3 h-3 animate-spin" aria-hidden="true" />
-        Generating — you'll be emailed when ready
+        Generating…
       </span>
     );
   }
@@ -316,13 +319,17 @@ function StatusBadge({ status }: { status: LessonPlan["status"] }) {
     USED: "bg-gray-100 text-brand-muted",
     ARCHIVED: "bg-red-50 text-red-600",
   };
+  const label: Record<string, string> = {
+    GENERATED: "Ready",
+    EDITED: "Edited",
+    USED: "Used",
+    ARCHIVED: "Failed",
+  };
   return (
     <span
-      className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${map[status] ?? "bg-gray-100 text-brand-muted"}`}
+      className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${map[status] ?? "bg-gray-100 text-brand-muted"}`}
     >
-      {status === "ARCHIVED"
-        ? "Failed"
-        : status.charAt(0) + status.slice(1).toLowerCase()}
+      {label[status] ?? status}
     </span>
   );
 }
@@ -336,13 +343,19 @@ function LessonPlanCard({
   plan: LessonPlan;
   classId: string;
 }) {
+  const retry = useRegenerateLessonPlan(plan.id, classId);
+
   const date = new Date(plan.generated_at).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
 
-  // Group subtopics by topic_name — preserves insertion order
+  const hook = plan.generated_plan?.lesson_hook ?? null;
+  const conceptCount = plan.generated_plan?.key_concepts?.length ?? 0;
+  const objectiveCount = plan.generated_plan?.learning_objectives?.length ?? 0;
+
+  // Flatten subtopics as "Topic — Subtopic" pills, grouped by topic
   const byTopic = (plan.focus_subtopics ?? []).reduce<
     Record<string, typeof plan.focus_subtopics>
   >((acc, s) => {
@@ -352,67 +365,182 @@ function LessonPlanCard({
   }, {});
   const topicGroups = Object.entries(byTopic);
 
+  const isGenerated =
+    plan.status === "GENERATED" ||
+    plan.status === "EDITED" ||
+    plan.status === "USED";
+
   return (
-    <div className="bg-white rounded-xl border border-brand-border p-5">
-      {/* Top row — date, status, action */}
+    <div
+      className={`bg-white rounded-xl border p-5 transition-shadow hover:shadow-sm ${
+        plan.status === "ARCHIVED" ? "border-red-200" : "border-brand-border"
+      }`}
+    >
+      {/* ── Header row ───────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 mb-3">
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <BookOpen
             className="w-4 h-4 text-brand-gold flex-shrink-0"
             aria-hidden="true"
           />
           <span className="font-semibold text-brand-ink text-sm">{date}</span>
+          {/* Duration pill */}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded-full text-[11px] font-semibold text-brand-ink">
+            <Clock className="w-3 h-3 text-brand-muted" aria-hidden="true" />
+            {plan.duration_minutes} min
+          </span>
           <StatusBadge status={plan.status} />
         </div>
-        {plan.status !== "GENERATING" && plan.status !== "ARCHIVED" && (
+
+        {/* Action button */}
+        {plan.status === "ARCHIVED" ? (
+          <button
+            type="button"
+            onClick={() => retry.mutate()}
+            disabled={retry.isPending}
+            className="flex-shrink-0 px-3 py-1.5 text-xs font-bold text-white bg-red-500 hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2"
+          >
+            {retry.isPending ? "Retrying…" : "Retry"}
+          </button>
+        ) : isGenerated ? (
           <Link
             to={`/teacher/classes/${classId}/lesson-plans/${plan.id}`}
-            className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark flex-shrink-0 focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded transition-colors"
+            className="flex-shrink-0 px-3 py-1.5 text-xs font-bold text-white bg-brand-gold hover:bg-brand-gold-dark rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
           >
-            View →
+            View plan
           </Link>
-        )}
+        ) : null}
       </div>
 
-      {/* Topics + subtopics grouped */}
+      {/* ── Lesson hook preview ──────────────────────────────────── */}
+      {hook && (
+        <p className="text-sm text-brand-body leading-relaxed mb-3 line-clamp-2 italic">
+          &ldquo;{hook}&rdquo;
+        </p>
+      )}
+
+      {/* Generating hint */}
+      {plan.status === "GENERATING" && (
+        <p className="text-xs text-brand-muted mb-3">
+          You'll receive an email when this plan is ready.
+        </p>
+      )}
+
+      {/* Failure reason */}
+      {plan.status === "ARCHIVED" && plan.failure_reason && (
+        <p className="text-xs text-red-500 mb-3">{plan.failure_reason}</p>
+      )}
+
+      {/* ── Subtopics ────────────────────────────────────────────── */}
       {topicGroups.length > 0 && (
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {topicGroups.map(([topicName, subs]) => (
-            <div key={topicName}>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-brand-muted mb-1.5">
+            <div
+              key={topicName}
+              className="flex flex-wrap items-center gap-1.5"
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wide text-brand-muted">
                 {topicName}
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {subs.map((s, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center px-2.5 py-1 bg-gray-50 border border-brand-border rounded-full text-xs text-brand-ink"
-                  >
-                    {s.name}
-                  </span>
-                ))}
-              </div>
+              </span>
+              <span className="text-brand-border text-[10px]">·</span>
+              {subs.map((s, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center px-2 py-0.5 bg-gray-50 border border-brand-border rounded-full text-xs text-brand-ink"
+                >
+                  {s.name}
+                </span>
+              ))}
             </div>
           ))}
         </div>
       )}
 
-      {/* Failure reason */}
-      {plan.status === "ARCHIVED" && plan.failure_reason && (
-        <p className="text-xs text-red-500 mt-2">{plan.failure_reason}</p>
+      {/* ── Stats row (only for completed plans) ─────────────────── */}
+      {isGenerated && (conceptCount > 0 || objectiveCount > 0) && (
+        <div className="flex items-center gap-3 mt-3 pt-3 border-t border-brand-border">
+          {conceptCount > 0 && (
+            <span className="text-xs text-brand-muted">
+              <span className="font-semibold text-brand-ink">
+                {conceptCount}
+              </span>{" "}
+              {conceptCount === 1 ? "concept" : "concepts"}
+            </span>
+          )}
+          {objectiveCount > 0 && (
+            <span className="text-xs text-brand-muted">
+              <span className="font-semibold text-brand-ink">
+                {objectiveCount}
+              </span>{" "}
+              {objectiveCount === 1 ? "objective" : "objectives"}
+            </span>
+          )}
+        </div>
       )}
+    </div>
+  );
+}
+
+// ── Pagination controls ───────────────────────────────────────────────────────
+
+function Pagination({
+  page,
+  totalPages,
+  onPage,
+}: {
+  page: number;
+  totalPages: number;
+  onPage: (p: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-1 mt-6">
+      <button
+        type="button"
+        onClick={() => onPage(page - 1)}
+        disabled={page === 1}
+        className="px-3 py-1.5 text-xs font-semibold rounded-full border border-brand-border text-brand-ink hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+      >
+        ← Prev
+      </button>
+      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+        <button
+          key={p}
+          type="button"
+          onClick={() => onPage(p)}
+          className={`w-8 h-8 text-xs font-semibold rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 ${
+            p === page
+              ? "bg-brand-gold text-white"
+              : "border border-brand-border text-brand-ink hover:bg-gray-50"
+          }`}
+        >
+          {p}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => onPage(page + 1)}
+        disabled={page === totalPages}
+        className="px-3 py-1.5 text-xs font-semibold rounded-full border border-brand-border text-brand-ink hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+      >
+        Next →
+      </button>
     </div>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const PAGE_SIZE = 10;
+
 export function AllLessonPlansPage() {
   const { classId } = useParams<{ classId: string }>();
-  const { data, isLoading } = useClassLessonPlans(classId);
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useClassLessonPlans(classId, page, PAGE_SIZE);
   const [modalOpen, setModalOpen] = useState(false);
 
   const plans = data?.data ?? [];
+  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
 
   if (!classId) {
     return (
@@ -444,10 +572,18 @@ export function AllLessonPlansPage() {
 
   return (
     <div className="p-6">
+      {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display font-bold text-2xl text-brand-ink">
-          Lesson Plans
-        </h1>
+        <div>
+          <h1 className="font-display font-bold text-2xl text-brand-ink">
+            Lesson Plans
+          </h1>
+          {data && data.total > 0 && (
+            <p className="text-xs text-brand-muted mt-0.5">
+              {data.total} {data.total === 1 ? "plan" : "plans"} total
+            </p>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => setModalOpen(true)}
@@ -457,10 +593,11 @@ export function AllLessonPlansPage() {
         </button>
       </div>
 
+      {/* ── Content ────────────────────────────────────────────── */}
       {isLoading ? (
         <div className="animate-pulse space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 bg-brand-border rounded-xl" />
+            <div key={i} className="h-28 bg-brand-border rounded-xl" />
           ))}
         </div>
       ) : plans.length === 0 ? (
@@ -484,17 +621,21 @@ export function AllLessonPlansPage() {
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {plans.map((plan) => (
-            <LessonPlanCard key={plan.id} plan={plan} classId={classId} />
-          ))}
-        </div>
+        <>
+          <div className="space-y-3">
+            {plans.map((plan) => (
+              <LessonPlanCard key={plan.id} plan={plan} classId={classId} />
+            ))}
+          </div>
+          <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+        </>
       )}
 
       <GenerateLessonPlanModal
         classId={classId}
         open={modalOpen}
         onOpenChange={setModalOpen}
+        onGenerated={() => setPage(1)}
       />
     </div>
   );

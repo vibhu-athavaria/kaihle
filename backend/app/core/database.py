@@ -7,9 +7,11 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
+# Pooled engine for FastAPI — lives in a single long-lived event loop.
 engine = create_async_engine(
     settings.database_url,
     echo=settings.environment == "development",
@@ -20,6 +22,20 @@ engine = create_async_engine(
 
 AsyncSessionLocal = async_sessionmaker(
     engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+# Unpooled engine for Celery tasks — each task runs in its own event loop.
+# NullPool creates a fresh connection per session and closes it immediately,
+# so no asyncio primitives are shared across event loop boundaries.
+celery_engine = create_async_engine(
+    settings.database_url,
+    poolclass=NullPool,
+)
+
+CeleryAsyncSessionLocal = async_sessionmaker(
+    celery_engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )

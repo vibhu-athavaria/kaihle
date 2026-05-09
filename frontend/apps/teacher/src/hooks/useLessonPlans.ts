@@ -34,11 +34,13 @@ export interface SubtopicContext {
 export interface LessonPlan {
   id: string;
   class_id: string;
+  class_name: string;
   week_start: string | null;
   status: LessonPlanStatus;
+  duration_minutes: number;
   generated_plan: LessonPlanContent | null;
   teacher_edits: Partial<LessonPlanContent> | null;
-  gap_summary: ClassContextSnapshot;
+  class_context_snapshot: ClassContextSnapshot | null;
   focus_subtopics: SubtopicContext[];
   generated_at: string;
   failure_code: string | null;
@@ -52,9 +54,13 @@ export interface LessonPlanPage {
   page_size: number;
 }
 
-async function fetchClassLessonPlans(classId: string): Promise<LessonPlanPage> {
+async function fetchClassLessonPlans(
+  classId: string,
+  page: number,
+  pageSize: number,
+): Promise<LessonPlanPage> {
   const res = await apiClient.get(
-    `/api/v1/classes/${classId}/lesson-plans?page_size=20`,
+    `/api/v1/classes/${classId}/lesson-plans?page=${page}&page_size=${pageSize}`,
   );
   return res.data;
 }
@@ -106,11 +112,46 @@ async function updateLessonPlanStatus(params: {
   return res.data;
 }
 
-export function useClassLessonPlans(classId: string | undefined) {
+async function fetchTeacherLessonPlans(
+  page: number,
+  pageSize: number,
+  classId?: string,
+): Promise<LessonPlanPage> {
+  const params: Record<string, string | number> = { page, page_size: pageSize };
+  if (classId) params.class_id = classId;
+  const res = await apiClient.get("/api/v1/lesson-plans", { params });
+  return res.data;
+}
+
+export function useTeacherLessonPlans(
+  page = 1,
+  pageSize = 10,
+  classId?: string,
+) {
   return useQuery({
-    queryKey: ["lesson-plans", "class", classId],
-    queryFn: () => fetchClassLessonPlans(classId!),
+    queryKey: ["lesson-plans", "all", page, pageSize, classId],
+    queryFn: () => fetchTeacherLessonPlans(page, pageSize, classId),
+    refetchInterval: (query) => {
+      const plans = query.state.data?.data ?? [];
+      return plans.some((p) => p.status === "GENERATING") ? 5000 : false;
+    },
+  });
+}
+
+export function useClassLessonPlans(
+  classId: string | undefined,
+  page = 1,
+  pageSize = 10,
+) {
+  return useQuery({
+    queryKey: ["lesson-plans", "class", classId, page, pageSize],
+    queryFn: () => fetchClassLessonPlans(classId!, page, pageSize),
     enabled: !!classId,
+    // Poll while any plan is generating so failure/success surfaces immediately
+    refetchInterval: (query) => {
+      const plans = query.state.data?.data ?? [];
+      return plans.some((p) => p.status === "GENERATING") ? 5000 : false;
+    },
   });
 }
 
@@ -122,7 +163,7 @@ export function useLessonPlan(planId: string | undefined) {
   });
 }
 
-export function useGenerateLessonPlan(classId: string) {
+export function useGenerateLessonPlan(classId: string, onSuccess?: () => void) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: generateLessonPlan,
@@ -130,6 +171,7 @@ export function useGenerateLessonPlan(classId: string) {
       void queryClient.invalidateQueries({
         queryKey: ["lesson-plans", "class", classId],
       });
+      onSuccess?.();
     },
   });
 }
@@ -156,6 +198,7 @@ export function useRegenerateLessonPlan(planId: string, classId: string) {
       void queryClient.invalidateQueries({
         queryKey: ["lesson-plans", "class", classId],
       });
+      void queryClient.invalidateQueries({ queryKey: ["lesson-plans", "all"] });
     },
   });
 }

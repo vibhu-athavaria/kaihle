@@ -36,6 +36,7 @@ def _make_plan(plan_id=None, class_id=None, teacher_id=None, status="GENERATED")
     p.teacher_id = teacher_id or uuid.uuid4()
     p.week_start = None
     p.status = status
+    p.duration_minutes = 45
     p.focus_subtopic_ids = []
     p.class_context_snapshot = {}
     p.generated_plan = {"starter_10min": "intro"}
@@ -44,6 +45,13 @@ def _make_plan(plan_id=None, class_id=None, teacher_id=None, status="GENERATED")
     p.failure_code = None
     p.failure_reason = None
     return p
+
+
+def _rows(values):
+    """Mock db.execute result for queries returning .all() rows (used by _fetch_class_names)."""
+    r = MagicMock()
+    r.all.return_value = values
+    return r
 
 
 def _scalar(value):
@@ -175,6 +183,8 @@ async def test_list_class_lesson_plans_when_valid_teacher_then_returns_page():
             _scalar(class_),  # _require_teacher_class
             _scalar_one(1),  # count
             _scalars([plan]),  # list
+            _scalars([]),  # _fetch_subtopic_context
+            _rows([]),  # _fetch_class_names
         ]
     )
 
@@ -209,6 +219,8 @@ async def test_get_lesson_plan_when_plan_exists_then_merges_edits():
         side_effect=[
             _scalar(plan),  # plan fetch
             _scalar(class_),  # class school check
+            _scalars([]),  # _fetch_subtopic_context
+            _rows([]),  # _fetch_class_names
         ]
     )
 
@@ -258,6 +270,8 @@ async def test_edit_lesson_plan_when_generated_then_stores_edits():
         side_effect=[
             _scalar(plan),
             _scalar(class_),
+            _scalars([]),  # _fetch_subtopic_context
+            _rows([]),  # _fetch_class_names
         ]
     )
     mock_db.commit = AsyncMock()
@@ -322,6 +336,8 @@ async def test_update_lesson_plan_status_when_generated_to_used_then_succeeds():
         side_effect=[
             _scalar(plan),
             _scalar(class_),
+            _scalars([]),  # _fetch_subtopic_context
+            _rows([]),  # _fetch_class_names
         ]
     )
     mock_db.commit = AsyncMock()
@@ -375,7 +391,7 @@ def test_to_response_when_teacher_edits_present_then_merges():
     plan.generated_plan = {"starter_10min": "original", "homework": "original hw"}
     plan.teacher_edits = {"starter_10min": "edited"}
 
-    response = _to_response(plan, focus_subtopics=[])
+    response = _to_response(plan, focus_subtopics=[], class_name="")
 
     assert response.generated_plan is not None
     assert response.generated_plan["starter_10min"] == "edited"
@@ -387,6 +403,6 @@ def test_to_response_when_no_content_then_generated_plan_is_none():
     plan.generated_plan = {}
     plan.teacher_edits = None
 
-    response = _to_response(plan, focus_subtopics=[])
+    response = _to_response(plan, focus_subtopics=[], class_name="")
 
     assert response.generated_plan is None

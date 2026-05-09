@@ -262,8 +262,10 @@ class TestSchemaInstantiation:
         lesson_plan = LessonPlanResponse(
             id=uuid.uuid4(),
             class_id=uuid.uuid4(),
+            class_name="Test Class",
             week_start=date.today(),
             status="GENERATED",
+            duration_minutes=45,
             generated_plan={"starter": "intro"},
             teacher_edits=None,
             class_context_snapshot={},

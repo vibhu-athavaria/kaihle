@@ -16,8 +16,10 @@ class SubtopicContext(BaseModel):
 class LessonPlanResponse(BaseModel):
     id: UUID
     class_id: UUID
+    class_name: str
     week_start: date | None
     status: str  # "GENERATING" | "GENERATED" | "EDITED" | "USED" | "ARCHIVED"
+    duration_minutes: int
     generated_plan: dict[str, Any] | None
     teacher_edits: dict[str, Any] | None
     class_context_snapshot: dict[str, Any]
