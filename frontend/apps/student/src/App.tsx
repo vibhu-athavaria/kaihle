@@ -22,6 +22,7 @@ import { TakeAssessmentPage } from "./pages/assessments/TakeAssessmentPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudyPlanDetail } from "./pages/study-plans/StudyPlanDetail";
 import { ClassTopicsPage } from "./pages/classes/ClassTopicsPage";
+import { ClassPage } from "./pages/classes/ClassPage";
 import { TopicDetailPage } from "./pages/topics/TopicDetailPage";
 
 function PrivateRouteWithPasswordCheck({
@@ -91,6 +92,18 @@ export default function App() {
               <OnboardingRoute>
                 <ErrorBoundary role="student">
                   <TakeAssessmentPage />
+                </ErrorBoundary>
+              </OnboardingRoute>
+            </PrivateRouteWithPasswordCheck>
+          }
+        />
+        <Route
+          path="/student/classes/:classId"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <ClassPage />
                 </ErrorBoundary>
               </OnboardingRoute>
             </PrivateRouteWithPasswordCheck>
