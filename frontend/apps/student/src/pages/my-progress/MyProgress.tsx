@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { StudentLayout } from "@kaihle/ui";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import { useStudentGapMap } from "../../hooks/useStudentGapMap";
-import { useMyClasses } from "../../hooks/useMyClasses";
 import { TopicSection } from "../../components/my-progress/TopicSection";
 import { ConceptGuideProvider } from "../../context/ConceptGuideContext";
 import { ConceptGuideDrawer } from "../../components/ai/ConceptGuideDrawer";
@@ -37,22 +36,20 @@ export function MyProgress() {
     selectedSubjectId ?? undefined,
   );
 
-  const { data: myClasses = [] } = useMyClasses();
-
   // Find classes for the selected subject to determine diagnostic status
   const subjectClasses = useMemo(
     () =>
-      myClasses.filter((c) => c.subjectId === selectedSubjectId && c.isActive),
-    [myClasses, selectedSubjectId],
+      layout.sidebarClasses.filter((c) => c.subjectId === selectedSubjectId),
+    [layout.sidebarClasses, selectedSubjectId],
   );
 
   // At least one class for this subject has a pending/in-progress diagnostic
   const diagnosticPending = subjectClasses.some(
-    (c) => c.onboardingDiagnosticStatus !== "COMPLETED",
+    (c) => c.diagnosticStatus !== "COMPLETED",
   );
   // Find the first class with a pending diagnostic to link to its assessments page
   const pendingDiagnosticClass = subjectClasses.find(
-    (c) => c.onboardingDiagnosticStatus !== "COMPLETED",
+    (c) => c.diagnosticStatus !== "COMPLETED",
   );
 
   const topics = useMemo(() => {
