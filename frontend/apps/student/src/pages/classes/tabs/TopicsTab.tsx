@@ -28,7 +28,7 @@ export function TopicsTab({ classId, lessonPackReady }: TopicsTabProps) {
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-16 bg-brand-border rounded-card animate-pulse"
+            className="h-16 bg-brand-border rounded-xl animate-pulse"
           />
         ))}
       </div>
@@ -38,7 +38,7 @@ export function TopicsTab({ classId, lessonPackReady }: TopicsTabProps) {
   return (
     <div className="space-y-4">
       {lessonPackReady && (
-        <div className="flex items-center gap-3 bg-brand-green-light border border-brand-green rounded-card p-4">
+        <div className="flex items-center gap-3 bg-brand-green-light border border-brand-green rounded-xl p-4">
           <Package
             className="w-5 h-5 text-brand-green flex-shrink-0"
             aria-hidden="true"
@@ -63,7 +63,7 @@ export function TopicsTab({ classId, lessonPackReady }: TopicsTabProps) {
                 onClick={() =>
                   navigate(`/student/classes/${classId}/topics/${topic.id}`)
                 }
-                className="w-full text-left bg-white rounded-card border border-brand-border p-4 shadow-sm transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                className="w-full text-left bg-white rounded-xl border border-brand-border p-4 shadow-sm transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
               >
                 <div className="flex items-center gap-3">
                   <span
