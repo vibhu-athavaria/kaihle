@@ -41,7 +41,7 @@ class ClassSummary(BaseModel):
     subject_color: str  # Tailwind class name, e.g. "bg-brand-primary"
     teacher_name: str
     mastery_score: float | None  # None = no gap states yet
-    mastery_label: str  # "Strong" | "Developing" | "Needs Work" | "Not assessed"
+    mastery_label: Literal["Strong", "Developing", "Needs Work", "Not assessed"]
     topics_total: int
     topics_assessed: int
     diagnostic_status: Literal["PENDING", "IN_PROGRESS", "COMPLETED"]
