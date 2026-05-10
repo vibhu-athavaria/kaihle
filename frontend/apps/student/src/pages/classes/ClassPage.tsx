@@ -22,7 +22,8 @@ export function ClassPage() {
   const layout = useStudentLayoutProps();
 
   // Use already-cached dashboard data to avoid an extra API call for class metadata
-  const { data: dashboard } = useStudentDashboard();
+  const { data: dashboard, isLoading: isDashboardLoading } =
+    useStudentDashboard();
   const classData = dashboard?.classes.find((c) => c.class_id === classId);
 
   const activeTab = (searchParams.get("tab") as TabKey | null) ?? "topics";
@@ -65,26 +66,36 @@ export function ClassPage() {
 
         {/* Class header card */}
         <div className="bg-white rounded-xl border border-brand-border p-5 shadow-sm">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-full bg-brand-primary/10 flex items-center justify-center flex-shrink-0">
-              <span
-                className="font-display font-bold text-lg text-brand-primary"
-                aria-hidden="true"
-              >
-                {classData?.subject_name?.[0] ?? "?"}
-              </span>
+          {isDashboardLoading && !classData ? (
+            <div className="flex items-start gap-4 animate-pulse">
+              <div className="w-12 h-12 rounded-full bg-brand-border flex-shrink-0" />
+              <div className="flex-1 min-w-0 space-y-2">
+                <div className="h-7 bg-brand-border rounded-full w-48" />
+                <div className="h-5 bg-brand-border rounded-full w-32" />
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <h1 className="font-display font-bold text-2xl text-brand-ink">
-                {classData?.class_name ?? classData?.subject_name ?? "Class"}
-              </h1>
-              <p className="font-sans text-sm text-brand-body mt-0.5">
-                {[classData?.teacher_name, classData?.subject_name]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
+          ) : (
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-full bg-brand-primary/10 flex items-center justify-center flex-shrink-0">
+                <span
+                  className="font-display font-bold text-lg text-brand-primary"
+                  aria-hidden="true"
+                >
+                  {classData?.subject_name?.[0] ?? "?"}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h1 className="font-display font-bold text-2xl text-brand-ink">
+                  {classData?.class_name ?? classData?.subject_name ?? "Class"}
+                </h1>
+                <p className="font-sans text-sm text-brand-body mt-0.5">
+                  {[classData?.teacher_name, classData?.subject_name]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Tab bar */}
