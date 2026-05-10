@@ -236,7 +236,8 @@ class StudentDashboardService:
                 )
             )
             for a in assessments_q.all():
-                days_until = (a.deadline - now).days
+                deadline_aware = a.deadline.replace(tzinfo=UTC) if a.deadline.tzinfo is None else a.deadline
+                days_until = (deadline_aware - now).days
                 priority = 1 if days_until == 0 else 2
                 action_items.append(
                     ActionItem(
