@@ -35,14 +35,12 @@ export function MyProgressTab({ subjectId }: MyProgressTabProps) {
 
   if (scores.length === 0) {
     return (
-      <div className="text-center py-16 px-6">
-        <div className="text-4xl mb-4">📊</div>
-        <h3 className="font-display font-bold text-xl text-brand-ink mb-2">
-          No progress data yet
-        </h3>
-        <p className="font-sans text-brand-body text-sm max-w-sm mx-auto">
-          Complete your diagnostic to start tracking your progress across
-          subtopics.
+      <div role="status" className="text-center py-12">
+        <p className="text-sm font-semibold text-[#4a5240]">
+          No progress data yet.
+        </p>
+        <p className="text-xs text-[#9ca3af] mt-1">
+          Complete your first assessment to see your progress here.
         </p>
       </div>
     );

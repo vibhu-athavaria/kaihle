@@ -2,7 +2,7 @@ import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { StudentLayout } from "@kaihle/ui";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
-import { useMyClasses } from "../../hooks/useMyClasses";
+import { useStudentDashboard } from "../../hooks/useStudentDashboard";
 import { TopicsTab } from "./tabs/TopicsTab";
 import { StudyPlanTab } from "./tabs/StudyPlanTab";
 import { MyProgressTab } from "./tabs/MyProgressTab";
@@ -21,9 +21,9 @@ export function ClassPage() {
   const navigate = useNavigate();
   const layout = useStudentLayoutProps();
 
-  // Targeted class data — avoids re-using composite dashboard hook per API discipline rule
-  const { data: classes } = useMyClasses();
-  const classInfo = classes?.find((c) => c.id === classId);
+  // Use already-cached dashboard data to avoid an extra API call for class metadata
+  const { data: dashboard } = useStudentDashboard();
+  const classData = dashboard?.classes.find((c) => c.class_id === classId);
 
   const activeTab = (searchParams.get("tab") as TabKey | null) ?? "topics";
 
@@ -59,7 +59,7 @@ export function ClassPage() {
           </button>
           <ChevronRight className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
           <span className="text-brand-ink font-medium truncate">
-            {classInfo?.name ?? classInfo?.subjectName ?? "Class"}
+            {classData?.class_name ?? classData?.subject_name ?? "Class"}
           </span>
         </nav>
 
@@ -71,15 +71,15 @@ export function ClassPage() {
                 className="font-display font-bold text-lg text-brand-primary"
                 aria-hidden="true"
               >
-                {classInfo?.subjectName?.[0] ?? "?"}
+                {classData?.subject_name?.[0] ?? "?"}
               </span>
             </div>
             <div className="flex-1 min-w-0">
               <h1 className="font-display font-bold text-2xl text-brand-ink">
-                {classInfo?.name ?? classInfo?.subjectName ?? "Class"}
+                {classData?.class_name ?? classData?.subject_name ?? "Class"}
               </h1>
               <p className="font-sans text-sm text-brand-body mt-0.5">
-                {[classInfo?.teacherName, classInfo?.subjectName]
+                {[classData?.teacher_name, classData?.subject_name]
                   .filter(Boolean)
                   .join(" · ")}
               </p>
@@ -122,15 +122,13 @@ export function ClassPage() {
           {activeTab === "study-plan" && (
             <StudyPlanTab
               classId={classId!}
-              diagnosticStatus={
-                classInfo?.onboardingDiagnosticStatus ?? "PENDING"
-              }
+              diagnosticStatus={classData?.diagnostic_status ?? "PENDING"}
             />
           )}
-          {activeTab === "progress" && classInfo?.subjectId && (
-            <MyProgressTab subjectId={classInfo.subjectId} />
+          {activeTab === "progress" && classData?.subject_id && (
+            <MyProgressTab subjectId={classData.subject_id} />
           )}
-          {activeTab === "progress" && !classInfo?.subjectId && (
+          {activeTab === "progress" && !classData?.subject_id && (
             <div className="text-center py-16 px-6">
               <p className="font-sans text-sm text-brand-body">
                 Loading class information…
