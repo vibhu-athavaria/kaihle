@@ -31,7 +31,7 @@ SUBJECT_DOT_CLASS: dict[str, str] = {
 }
 
 
-def _mastery_label(score: float | None) -> str:
+def _mastery_label(score: float | None) -> Literal["Strong", "Developing", "Needs Work", "Not assessed"]:
     if score is None:
         return "Not assessed"
     if score > 0.7:
@@ -203,7 +203,7 @@ class StudentDashboardService:
                     subject_color=SUBJECT_DOT_CLASS.get(row.subject_name, "bg-brand-muted"),
                     teacher_name=f"{row.teacher_first} {row.teacher_last}".strip(),
                     mastery_score=mastery if mastery is not None else None,
-                    mastery_label=_mastery_label(mastery),  # type: ignore[arg-type]
+                    mastery_label=_mastery_label(mastery),
                     topics_total=topics_total_by_class.get(row.class_id, 0),
                     topics_assessed=assessed_by_class.get(row.class_id, 0),
                     diagnostic_status=row.onboarding_diagnostic_status,
