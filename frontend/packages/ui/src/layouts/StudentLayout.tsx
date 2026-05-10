@@ -1,7 +1,7 @@
 // packages/ui/src/layouts/StudentLayout.tsx
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Home, BarChart2, ClipboardList, Settings, LogOut } from "lucide-react";
+import { Home, BarChart2, ClipboardList } from "lucide-react";
 
 export type StudentNavItem = "home" | "progress" | "assessments";
 
@@ -60,7 +60,7 @@ export function StudentLayout({
   studentName,
   gradeName,
   curriculumName,
-  onLogout,
+  onLogout: _onLogout,
   assessmentBadge,
 }: StudentLayoutProps) {
   const navigate = useNavigate();
@@ -106,9 +106,9 @@ export function StudentLayout({
           aria-label="Main navigation"
         >
           {/* HOME section */}
-          <p className="px-3 pt-3 pb-1 text-xs font-bold uppercase tracking-[0.8px] text-brand-muted">
+          <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-muted">
             Home
-          </p>
+          </div>
 
           {[
             { key: "home" as StudentNavItem, label: "Dashboard", Icon: Home },
@@ -124,7 +124,13 @@ export function StudentLayout({
                 key={key}
                 to={NAV_ROUTES[key]}
                 aria-current={isActive ? "page" : undefined}
-                className={navItemClass(isActive)}
+                className={[
+                  "relative flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
+                  "text-sm font-semibold transition-colors",
+                  isActive
+                    ? "bg-[#f0fdf4] text-brand-primary font-semibold"
+                    : "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
+                ].join(" ")}
               >
                 {isActive ? (
                   <span
@@ -139,21 +145,25 @@ export function StudentLayout({
             );
           })}
 
-          {/* MY CLASSES section */}
+          {/* MY CLASSES section — dynamic, flat, no lock state distinction */}
           {classes.length > 0 && (
             <>
-              <p className="px-3 pt-4 pb-1 text-xs font-bold uppercase tracking-[0.8px] text-brand-muted">
+              <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-muted">
                 My Classes
-              </p>
+              </div>
               {classes.map((cls) => (
                 <Link
                   key={cls.id}
                   to={`/student/classes/${cls.id}`}
                   aria-label={cls.name}
-                  className="flex items-center gap-2 mx-2 px-3 py-2 rounded-lg text-sm font-medium text-brand-body hover:bg-gray-50 hover:text-brand-ink transition-colors"
+                  className={[
+                    "flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
+                    "text-sm font-semibold transition-colors",
+                    "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
+                  ].join(" ")}
                 >
                   <span
-                    className={`w-2 h-2 rounded-full flex-shrink-0 ${getSubjectDotColor(cls.subjectName)}`}
+                    className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${getSubjectDotColor(cls.subjectName)}`}
                     aria-hidden="true"
                   />
                   {cls.name}
@@ -162,10 +172,10 @@ export function StudentLayout({
             </>
           )}
 
-          {/* Divider */}
-          <hr className="mx-3 my-2 border-brand-border" />
+          {/* Divider before Assessments */}
+          <hr className="mx-3 my-3 border-brand-border" />
 
-          {/* Assessments */}
+          {/* Assessments — no section label */}
           {(() => {
             const isActive = activeNav === "assessments";
             const showBadge = !!assessmentBadge && assessmentBadge > 0;
@@ -173,23 +183,29 @@ export function StudentLayout({
               <Link
                 to={NAV_ROUTES["assessments"]}
                 aria-current={isActive ? "page" : undefined}
-                className={navItemClass(isActive)}
+                className={[
+                  "relative flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
+                  "text-sm font-semibold transition-colors",
+                  isActive
+                    ? "bg-[#f0fdf4] text-brand-primary font-semibold"
+                    : "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
+                ].join(" ")}
               >
                 {isActive ? (
                   <span
-                    className="w-1.5 h-1.5 rounded-full bg-brand-primary flex-shrink-0"
+                    className="w-[6px] h-[6px] rounded-full bg-brand-primary flex-shrink-0"
                     aria-hidden="true"
                   />
                 ) : (
                   <ClipboardList
-                    className="w-4 h-4 flex-shrink-0"
+                    className="w-5 h-5 flex-shrink-0"
                     aria-hidden="true"
                   />
                 )}
                 Assessments
                 {showBadge && (
-                  <span className="ml-auto bg-brand-primary text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full leading-none flex-shrink-0">
-                    {assessmentBadge > 9 ? "9+" : assessmentBadge}
+                  <span className="ml-auto bg-brand-primary text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    {assessmentBadge}
                   </span>
                 )}
               </Link>
@@ -197,38 +213,24 @@ export function StudentLayout({
           })()}
         </nav>
 
-        {/* ── SIDEBAR BOTTOM ───────────────────────────────────── */}
-        <div className="border-t border-brand-border p-3 space-y-0.5">
+        {/* ── SIDEBAR BOTTOM — profile card ───────────────────── */}
+        <div className="border-t border-brand-border p-3 flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate("/student/settings")}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors"
-            aria-label="Settings"
+            className="w-7 h-7 rounded-full bg-[#f0fdf4] flex items-center justify-center
+                       font-sans font-bold text-[11px] text-brand-primary
+                       hover:opacity-80 transition-opacity flex-shrink-0"
+            aria-label={`${studentName} — open settings`}
           >
-            <Settings className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-            Settings
+            {initials}
           </button>
-          <button
-            type="button"
-            onClick={onLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors"
-            aria-label="Log out"
-          >
-            <LogOut className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-            Log out
-          </button>
-          {/* Profile card — name and grade */}
-          <div className="flex items-center gap-2 px-3 py-2 mt-1 border-t border-brand-border-soft pt-3">
-            <div className="w-7 h-7 rounded-full bg-role-student-nav-active flex items-center justify-center font-sans font-bold text-xs text-brand-primary flex-shrink-0">
-              {initials}
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold text-brand-ink truncate">
+              {studentName}
             </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-brand-ink truncate">
-                {studentName}
-              </div>
-              <div className="text-xs text-brand-muted truncate">
-                {gradeName}
-              </div>
+            <div className="text-[10px] text-brand-muted truncate">
+              {gradeName}
             </div>
           </div>
         </div>
