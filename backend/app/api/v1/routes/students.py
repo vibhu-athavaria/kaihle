@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user, require_role
 from app.models.user import User, UserRole
+from app.schemas.student_dashboard import DashboardResponse
 from app.schemas.students import (
     CheckQuestion,
     ConceptGuideRequest,
@@ -29,6 +30,7 @@ from app.schemas.students import (
     StudentInfoResponse,
 )
 from app.schemas.user_detail import StudentDetailResponse
+from app.services.student_dashboard_service import StudentDashboardService
 from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
 
 logger = structlog.get_logger()
@@ -51,6 +53,20 @@ async def get_my_student_info(
 
     logger.info("my_student_info_requested", student_id=str(current_user.id))
     return await UserService(db).get_student_info(current_user)
+
+
+@router.get("/me/dashboard", response_model=DashboardResponse)
+async def get_my_dashboard(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DashboardResponse:
+    """Single-call dashboard payload for the student app."""
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can access this endpoint",
+        )
+    return await StudentDashboardService(db).get_dashboard(current_user)
 
 
 @router.get("/{student_id}/info", response_model=StudentInfoResponse)
