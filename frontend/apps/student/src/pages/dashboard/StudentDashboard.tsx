@@ -32,11 +32,6 @@ export function StudentDashboard() {
   const studyPlans = dashboardData?.studyPlans ?? [];
   const activeAssessments = dashboardData?.activeAssessments ?? [];
 
-  const studyPlanBadgeCount =
-    studyPlans.filter(
-      (sp) => sp.status === "ACTIVE" || sp.status === "IN_PROGRESS",
-    ).length || undefined;
-
   const activeStudyPlans =
     studyPlans?.filter((sp) => sp.status === "ACTIVE") || [];
   const inProgressStudyPlans =
@@ -90,7 +85,6 @@ export function StudentDashboard() {
       gradeName={layout.gradeName}
       curriculumName={layout.curriculumName}
       classes={layout.sidebarClasses}
-      studyPlanBadge={studyPlanBadgeCount}
       assessmentBadge={layout.assessmentBadge}
       onLogout={layout.onLogout}
     >

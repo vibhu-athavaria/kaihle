@@ -1,21 +1,9 @@
 // packages/ui/src/layouts/StudentLayout.tsx
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  Home,
-  BarChart2,
-  BookOpen,
-  ClipboardList,
-  ChevronRight,
-  LogOut,
-  Settings,
-} from "lucide-react";
+import { Home, BarChart2, ClipboardList } from "lucide-react";
 
-export type StudentNavItem =
-  | "home"
-  | "progress"
-  | "study-plans"
-  | "assessments";
+export type StudentNavItem = "home" | "progress" | "assessments";
 
 export interface StudentClass {
   id: string;
@@ -35,7 +23,6 @@ export interface StudentLayoutProps {
   gradeName: string; // "Grade 9" — sidebar profile card + top nav subtitle
   curriculumName: string; // "Cambridge IGCSE" — sidebar profile card + top nav subtitle
   onLogout: () => void; // sidebar logout button
-  studyPlanBadge?: number; // count of ACTIVE + IN_PROGRESS plans shown on sidebar
   assessmentBadge?: number; // count of new ACTIVE assessments not yet started
 }
 
@@ -57,7 +44,6 @@ function getSubjectDotColor(subjectName: string): string {
 const NAV_ROUTES: Record<StudentNavItem, string> = {
   home: "/student/dashboard",
   progress: "/student/my-progress",
-  "study-plans": "/student/study-plans",
   assessments: "/student/assessments",
 };
 
@@ -76,8 +62,7 @@ export function StudentLayout({
   studentName,
   gradeName,
   curriculumName,
-  onLogout,
-  studyPlanBadge,
+  onLogout: _onLogout,
   assessmentBadge,
 }: StudentLayoutProps) {
   const navigate = useNavigate();
@@ -114,47 +99,30 @@ export function StudentLayout({
           className="flex-1 overflow-y-auto py-4"
           aria-label="Main navigation"
         >
-          {/* LEARN section */}
+          {/* HOME section */}
           <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-muted">
-            Learn
+            Home
           </div>
 
           {[
-            { key: "home" as StudentNavItem, label: "Home", Icon: Home },
+            { key: "home" as StudentNavItem, label: "Dashboard", Icon: Home },
             {
               key: "progress" as StudentNavItem,
               label: "My progress",
               Icon: BarChart2,
             },
-            {
-              key: "study-plans" as StudentNavItem,
-              label: "Study plans",
-              Icon: BookOpen,
-            },
-            {
-              key: "assessments" as StudentNavItem,
-              label: "Assessments",
-              Icon: ClipboardList,
-            },
           ].map(({ key, label, Icon }) => {
             const isActive = activeNav === key;
-            const badgeCount =
-              key === "study-plans"
-                ? studyPlanBadge
-                : key === "assessments"
-                  ? assessmentBadge
-                  : undefined;
-            const showBadge = !!badgeCount && badgeCount > 0;
             return (
               <Link
                 key={key}
                 to={NAV_ROUTES[key]}
                 aria-current={isActive ? "page" : undefined}
                 className={[
-                  "flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
+                  "relative flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
                   "text-sm font-semibold transition-colors",
                   isActive
-                    ? "bg-role-student-nav-active text-brand-primary font-semibold"
+                    ? "bg-[#f0fdf4] text-brand-primary font-semibold"
                     : "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
                 ].join(" ")}
               >
@@ -167,84 +135,98 @@ export function StudentLayout({
                   <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                 )}
                 {label}
-                {showBadge && (
-                  <span className="ml-auto bg-brand-primary text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-                    {badgeCount}
-                  </span>
-                )}
               </Link>
             );
           })}
 
-          {/* CLASSES section — dynamic */}
+          {/* MY CLASSES section — dynamic, flat, no lock state distinction */}
           {classes.length > 0 && (
             <>
-              <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-body">
-                Classes
+              <div className="px-3 pt-4 pb-1 font-bold text-topnav-sub uppercase tracking-widest text-brand-muted">
+                My Classes
               </div>
-              {classes.map((cls) => {
-                const isLocked = cls.diagnosticStatus !== "COMPLETED";
-                const route = isLocked
-                  ? cls.diagnosticAttemptId
-                    ? `/student/assessments/${cls.diagnosticAttemptId}/take`
-                    : `/student/classes/${cls.id}/diagnostic`
-                  : `/student/classes/${cls.id}/topics`;
-                return (
-                  <Link
-                    key={cls.id}
-                    to={route}
-                    aria-label={
-                      isLocked
-                        ? `${cls.name} — tap to begin your diagnostic`
-                        : cls.name
-                    }
-                    className={[
-                      "flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
-                      "text-sm font-semibold transition-colors",
-                      "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
-                    ].join(" ")}
-                  >
-                    {isLocked ? (
-                      <ChevronRight
-                        className="w-5 h-5 flex-shrink-0"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <span
-                        className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${getSubjectDotColor(
-                          cls.subjectName,
-                        )}`}
-                        aria-hidden="true"
-                      />
-                    )}
-                    {cls.name}
-                  </Link>
-                );
-              })}
+              {classes.map((cls) => (
+                <Link
+                  key={cls.id}
+                  to={`/student/classes/${cls.id}`}
+                  aria-label={cls.name}
+                  className={[
+                    "flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
+                    "text-sm font-semibold transition-colors",
+                    "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
+                  ].join(" ")}
+                >
+                  <span
+                    className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${getSubjectDotColor(cls.subjectName)}`}
+                    aria-hidden="true"
+                  />
+                  {cls.name}
+                </Link>
+              ))}
             </>
           )}
+
+          {/* Divider before Assessments */}
+          <hr className="mx-3 my-3 border-brand-border" />
+
+          {/* Assessments — no section label */}
+          {(() => {
+            const isActive = activeNav === "assessments";
+            const showBadge = !!assessmentBadge && assessmentBadge > 0;
+            return (
+              <Link
+                to={NAV_ROUTES["assessments"]}
+                aria-current={isActive ? "page" : undefined}
+                className={[
+                  "relative flex items-center gap-2 mx-2 px-3 py-2.5 rounded-lg",
+                  "text-sm font-semibold transition-colors",
+                  isActive
+                    ? "bg-[#f0fdf4] text-brand-primary font-semibold"
+                    : "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
+                ].join(" ")}
+              >
+                {isActive ? (
+                  <span
+                    className="w-[6px] h-[6px] rounded-full bg-brand-primary flex-shrink-0"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <ClipboardList
+                    className="w-5 h-5 flex-shrink-0"
+                    aria-hidden="true"
+                  />
+                )}
+                Assessments
+                {showBadge && (
+                  <span className="ml-auto bg-brand-primary text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                    {assessmentBadge}
+                  </span>
+                )}
+              </Link>
+            );
+          })()}
         </nav>
 
-        {/* ── SIDEBAR BOTTOM ──────────────────────────────────── */}
-        <div className="border-t border-brand-border p-3">
+        {/* ── SIDEBAR BOTTOM — profile card ───────────────────── */}
+        <div className="border-t border-brand-border p-3 flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate("/student/settings")}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors"
-            aria-label="Settings"
+            className="w-7 h-7 rounded-full bg-[#f0fdf4] flex items-center justify-center
+                       font-sans font-bold text-[11px] text-brand-primary
+                       hover:opacity-80 transition-opacity flex-shrink-0"
+            aria-label={`${studentName} — open settings`}
           >
-            <Settings className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-            Settings
+            {initials}
           </button>
-          <button
-            type="button"
-            onClick={onLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors"
-            aria-label="Log out"
-          >
-            <LogOut className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-            Log out
-          </button>
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold text-brand-ink truncate">
+              {studentName}
+            </div>
+            <div className="text-[10px] text-brand-muted truncate">
+              {gradeName}
+            </div>
+          </div>
         </div>
       </aside>
 
