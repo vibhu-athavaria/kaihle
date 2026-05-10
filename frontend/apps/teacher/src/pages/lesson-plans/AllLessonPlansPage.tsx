@@ -11,6 +11,7 @@ import {
   useRegenerateLessonPlan,
   type LessonPlan,
 } from "../../hooks/useLessonPlans";
+import { useClass } from "../../hooks/useClass";
 
 // ── Subtopic fetching ─────────────────────────────────────────────────────────
 
@@ -539,6 +540,8 @@ export function AllLessonPlansPage() {
   const { data, isLoading } = useClassLessonPlans(classId, page, PAGE_SIZE);
   const [modalOpen, setModalOpen] = useState(false);
 
+  const { data: currentClass } = useClass(classId);
+
   const plans = data?.data ?? [];
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
 
@@ -572,6 +575,27 @@ export function AllLessonPlansPage() {
 
   return (
     <div className="p-6">
+      <nav
+        className="flex items-center gap-2 text-sm text-brand-muted mb-4"
+        aria-label="Breadcrumb"
+      >
+        <Link
+          to="/teacher/classes"
+          className="hover:text-brand-ink transition-colors"
+        >
+          Classes
+        </Link>
+        <span aria-hidden="true">/</span>
+        <Link
+          to={`/teacher/classes/${classId}`}
+          className="hover:text-brand-ink transition-colors"
+        >
+          {currentClass?.name ?? "Class"}
+        </Link>
+        <span aria-hidden="true">/</span>
+        <span className="text-brand-ink font-medium">Lesson Plans</span>
+      </nav>
+
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-6">
         <div>

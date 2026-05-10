@@ -9,6 +9,7 @@ import {
   useDeleteAssessment,
   type AssessmentStatus,
 } from "../../hooks/useClassAssessments";
+import { useClass } from "../../hooks/useClass";
 
 function statusBadge(status: AssessmentStatus) {
   switch (status) {
@@ -33,6 +34,8 @@ export function AssessmentListPage() {
   const { classId } = useParams<{ classId: string }>();
   const [searchParams] = useSearchParams();
   const [dismissedBanner, setDismissedBanner] = useState(false);
+
+  const { data: currentClass } = useClass(classId);
 
   const {
     data: assessments,
@@ -62,6 +65,29 @@ export function AssessmentListPage() {
 
   return (
     <div className="p-6">
+      {classId && (
+        <nav
+          className="flex items-center gap-2 text-sm text-brand-muted mb-4"
+          aria-label="Breadcrumb"
+        >
+          <Link
+            to="/teacher/classes"
+            className="hover:text-brand-ink transition-colors"
+          >
+            Classes
+          </Link>
+          <span aria-hidden="true">/</span>
+          <Link
+            to={`/teacher/classes/${classId}`}
+            className="hover:text-brand-ink transition-colors"
+          >
+            {currentClass?.name ?? "Class"}
+          </Link>
+          <span aria-hidden="true">/</span>
+          <span className="text-brand-ink font-medium">Assessments</span>
+        </nav>
+      )}
+
       {showBanner && (
         <div className="bg-brand-green-light border border-brand-green rounded-xl p-4 flex items-center justify-between mb-4">
           <span className="text-sm font-medium text-brand-ink">

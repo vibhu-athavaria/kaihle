@@ -35,6 +35,7 @@ import { AllLessonPlansPage } from "./pages/lesson-plans/AllLessonPlansPage";
 import { LessonPlanDetailPage } from "./pages/lesson-plans/LessonPlanDetailPage";
 import { TeacherLessonPlansPage } from "./pages/lesson-plans/TeacherLessonPlansPage";
 import { ContentReviewPage } from "./pages/content-review/ContentReviewPage";
+import { ClassStudyPlanPage } from "./pages/classes/ClassStudyPlanPage";
 
 // Plain function — no state, no effects, no React APIs
 function getTeacherGreeting(firstName: string | undefined): {
@@ -85,6 +86,7 @@ function TeacherContentShell() {
       { path: "", element: <ClassDetailPage /> },
       { path: "gap-map", element: <GapMapPage /> },
       { path: "assessments", element: <AssessmentListPage /> },
+      { path: "study-plan", element: <ClassStudyPlanPage /> },
       { path: "lesson-plans", element: <AllLessonPlansPage /> },
       { path: "lesson-plans/:planId", element: <LessonPlanDetailPage /> },
       {
