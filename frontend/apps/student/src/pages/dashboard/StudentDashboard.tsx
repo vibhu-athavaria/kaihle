@@ -8,8 +8,10 @@ import {
   ResolvedSubjectScore,
 } from "./SubjectScoresSection";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
-import { useStudentDashboard } from "../../hooks/useStudentDashboard";
-import { type AssessmentItem } from "../../hooks/useStudentAssessments";
+import {
+  useStudentDashboard,
+  type ActionItem,
+} from "../../hooks/useStudentDashboard";
 
 export function StudentDashboard() {
   const layout = useStudentLayoutProps();
@@ -29,21 +31,10 @@ export function StudentDashboard() {
     setResolvedSubjectScores(scores);
   }, []);
 
-  const studyPlans = dashboardData?.studyPlans ?? [];
-  const activeAssessments = dashboardData?.activeAssessments ?? [];
+  const actionItems = dashboardData?.action_items ?? [];
 
-  const activeStudyPlans =
-    studyPlans?.filter((sp) => sp.status === "ACTIVE") || [];
-  const inProgressStudyPlans =
-    studyPlans?.filter((sp) => sp.status === "IN_PROGRESS") || [];
-
-  // Build next steps including subject scores for weakest-area logic
-  const nextSteps = buildNextSteps(
-    activeAssessments,
-    activeStudyPlans,
-    inProgressStudyPlans,
-    resolvedSubjectScores,
-  );
+  // Build next steps from action_items + subject scores for weakest-area logic
+  const nextSteps = buildNextSteps(actionItems, resolvedSubjectScores);
 
   // Build unique subjects from enrolled classes for subject scores section
   const uniqueSubjects = useMemo<SubjectEntry[]>(() => {
@@ -192,27 +183,28 @@ interface NextStep {
 }
 
 function buildNextSteps(
-  activeAssessments: AssessmentItem[],
-  activeStudyPlans: Array<{ id: string; title: string; status: string }>,
-  inProgressStudyPlans: Array<{ id: string; title: string; status: string }>,
+  actionItems: ActionItem[],
   subjectScores: ResolvedSubjectScore[],
 ): NextStep[] {
   const nextSteps: NextStep[] = [];
 
-  // Priority 1: Active assessments
-  // urgent = any active assessment has a deadline within 48 hours
-  if (activeAssessments.length > 0) {
+  // Sort action items by priority (lower number = higher priority)
+  const sorted = [...actionItems].sort((a, b) => a.priority - b.priority);
+
+  // Priority 1: Assessments due
+  const assessmentItems = sorted.filter((a) => a.type === "assessment_due");
+  if (assessmentItems.length > 0) {
     const now = Date.now();
     const fortyEightHours = 48 * 60 * 60 * 1000;
-    const urgent = activeAssessments.some(
+    const urgent = assessmentItems.some(
       (a) =>
-        a.deadline !== null &&
-        new Date(a.deadline).getTime() - now <= fortyEightHours,
+        a.due_date !== null &&
+        new Date(a.due_date).getTime() - now <= fortyEightHours,
     );
     nextSteps.push({
       type: "assessment",
       id: "assessment-active",
-      title: `${activeAssessments.length} assessment${activeAssessments.length !== 1 ? "s" : ""} active`,
+      title: `${assessmentItems.length} assessment${assessmentItems.length !== 1 ? "s" : ""} active`,
       subtitle: "Complete your pending assessments",
       actionLabel: "Start now →",
       route: "/student/assessments",
@@ -220,35 +212,41 @@ function buildNextSteps(
     });
   }
 
-  // Priority 2: Study plans with status ACTIVE (not yet started)
-  if (activeStudyPlans.length > 0) {
+  // Priority 2: Study plans ready (not started) or in progress
+  const studyPlanReady = sorted.filter(
+    (a) =>
+      a.type === "study_plan_continue" && a.action_url.includes("study-plans"),
+  );
+  if (studyPlanReady.length > 0) {
+    const first = studyPlanReady[0];
     nextSteps.push({
       type: "study-plan-ready",
       id: "study-plan-ready",
-      title: `${activeStudyPlans.length} study plan${
-        activeStudyPlans.length > 1 ? "s" : ""
-      } ready`,
-      subtitle: "Start learning where it counts",
+      title: "Study plan ready",
+      subtitle: `${first.subject_name} — ${first.class_name}`,
       actionLabel: "Begin →",
-      route: "/student/study-plans",
+      route: first.action_url,
     });
   }
 
-  // Priority 3: Study plans with status IN_PROGRESS (started, not finished)
-  if (inProgressStudyPlans.length > 0) {
+  // Priority 3: Lesson pack ready
+  const lessonPackItems = sorted.filter((a) => a.type === "lesson_pack_ready");
+  if (lessonPackItems.length > 0) {
+    const first = lessonPackItems[0];
     nextSteps.push({
       type: "study-plan-progress",
-      id: `study-plan-progress-${inProgressStudyPlans[0].id}`,
-      title: "Continue your study plan",
-      subtitle: inProgressStudyPlans[0].title,
-      actionLabel: "Continue →",
-      route: `/student/study-plans/${inProgressStudyPlans[0].id}`,
+      id: `lesson-pack-${first.class_id}`,
+      title: "Lesson pack ready",
+      subtitle: `${first.subject_name} — ${first.class_name}`,
+      actionLabel: "View →",
+      route: first.action_url,
     });
   }
 
-  // Priority 4: Weakest subject with no active study plan
+  // Priority 4: Weakest subject with no active study plan (derived from subject scores)
+  const hasStudyPlanStep = nextSteps.some((s) => s.type === "study-plan-ready");
   const assessedScores = subjectScores.filter((s) => s.avgMastery !== null);
-  if (assessedScores.length > 0 && activeStudyPlans.length === 0) {
+  if (assessedScores.length > 0 && !hasStudyPlanStep) {
     const weakest = assessedScores.reduce((a, b) =>
       (a.avgMastery ?? 1) < (b.avgMastery ?? 1) ? a : b,
     );
