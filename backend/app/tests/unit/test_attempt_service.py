@@ -164,7 +164,7 @@ class TestGetClassDiagnostic:
             ]
         )
 
-        result_attempt, result_questions = await service.get_class_diagnostic(
+        result_attempt, result_assessment, result_questions = await service.get_class_diagnostic(
             class_id=class_id,
             student_id=student_id,
             school_id=school_id,

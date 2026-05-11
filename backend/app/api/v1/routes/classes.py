@@ -23,6 +23,7 @@ from app.schemas.class_enrollment import (
     ClassCreate,
     ClassResponse,
     ClassUpdate,
+    ClassWithSummary,
     EnrollRequest,
     EnrollResponse,
     StudentSummary,
@@ -30,6 +31,7 @@ from app.schemas.class_enrollment import (
     UnenrollRequest,
 )
 from app.services.class_service import ClassService
+from app.services.gap_service import GapService
 
 router = APIRouter(tags=["classes"])
 
@@ -57,6 +59,53 @@ async def _class_to_response(class_: Class, db: AsyncSession) -> ClassResponse:
         subject_name=subject_name,
         grade_name=grade_name,
         teacher_name=teacher_name,
+    )
+
+
+async def _class_to_summary_response(
+    class_: Class,
+    db: AsyncSession,
+    gap_service: GapService,
+) -> ClassWithSummary:
+    """Convert Class ORM model to ClassWithSummary schema with display names and summary data."""
+    subject_name = class_.subject.name if class_.subject else ""
+    grade_name = class_.grade.name if class_.grade else ""
+    grade_level = class_.grade.level if class_.grade else None
+
+    teacher_name = None
+    if class_.teacher:
+        teacher_name = f"{class_.teacher.first_name} {class_.teacher.last_name}".strip()
+
+    # Get summary data from gap service
+    try:
+        summary = await gap_service.get_class_summary(class_.id, class_.school_id)
+        avg_mastery = summary.avg_mastery
+        student_count = summary.student_count
+        students_below_threshold = summary.students_below_threshold
+    except Exception:
+        # If no gap data, use defaults
+        avg_mastery = None
+        student_count = 0
+        students_below_threshold = 0
+
+    return ClassWithSummary(
+        id=class_.id,
+        school_id=class_.school_id,
+        grade_id=class_.grade_id,
+        subject_id=class_.subject_id,
+        curriculum_id=class_.curriculum_id,
+        teacher_id=class_.teacher_id,
+        teacher_name=teacher_name,
+        has_teacher=class_.teacher_id is not None,
+        name=class_.name,
+        academic_year=class_.academic_year,
+        is_active=class_.is_active,
+        grade_name=grade_name,
+        grade_level=grade_level,
+        subject_name=subject_name,
+        avg_mastery=avg_mastery,
+        student_count=student_count,
+        students_below_threshold=students_below_threshold,
     )
 
 
@@ -95,9 +144,12 @@ async def create_class(
 async def list_classes(
     school_id: uuid.UUID,
     include_inactive: bool = Query(False, description="Include inactive classes (admin only; ignored for teachers)"),
+    include_summary: bool = Query(
+        False, description="Include enriched summary data (avg_mastery, student_count, etc.)"
+    ),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
-) -> list[ClassResponse]:
+) -> list[ClassResponse] | list[ClassWithSummary]:
     """List classes. Teacher sees own classes only. SchoolAdmin/KaihleAdmin see all.
 
     When include_summary=true, returns enriched data including grade_name, subject_name,
@@ -112,8 +164,11 @@ async def list_classes(
     effective_inactive = include_inactive if current_user.role != UserRole.TEACHER else False
     classes = await service.list_classes(school_id, teacher_id, include_inactive=effective_inactive)
 
-    class_responses = [await _class_to_response(c, db) for c in classes]
-    return class_responses
+    if include_summary:
+        gap_service = GapService(db)
+        return [await _class_to_summary_response(c, db, gap_service) for c in classes]
+    else:
+        return [await _class_to_response(c, db) for c in classes]
 
 
 # ── Class-scoped operations ───────────────────────────────────────────────────

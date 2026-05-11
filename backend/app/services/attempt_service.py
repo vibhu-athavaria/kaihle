@@ -98,7 +98,7 @@ class AttemptService:
         class_id: uuid.UUID,
         student_id: uuid.UUID,
         school_id: uuid.UUID,
-    ) -> tuple[StudentAttempt, list[QuestionBank]]:
+    ) -> tuple[StudentAttempt, Assessment, list[QuestionBank]]:
         """Return the student's diagnostic attempt for a class.
 
         Args:
@@ -107,7 +107,7 @@ class AttemptService:
             school_id: The student's school (for multi-tenancy guard).
 
         Returns:
-            (StudentAttempt, questions_without_correct_answer)
+            (StudentAttempt, Assessment, questions_without_correct_answer)
 
         Raises:
             ValueError: If no ACTIVE DIAGNOSTIC assessment is found for the class.
@@ -161,7 +161,7 @@ class AttemptService:
             rng = _random.Random(str(student_id))
             questions = rng.sample(questions, max_per_attempt)
 
-        return attempt, questions
+        return attempt, assessment, questions
 
     # ── Tier 2: lazy attempt creation ───────────────────────────────────
 
@@ -170,7 +170,7 @@ class AttemptService:
         assessment_id: uuid.UUID,
         student_id: uuid.UUID,
         school_id: uuid.UUID,
-    ) -> tuple[StudentAttempt, list[QuestionBank]]:
+    ) -> tuple[StudentAttempt, Assessment, list[QuestionBank]]:
         """Return existing attempt or create one if the student is enrolled.
 
         Used for Tier 2 (teacher-created) assessments where the attempt is
@@ -182,7 +182,7 @@ class AttemptService:
             school_id: The student's school (for multi-tenancy guard).
 
         Returns:
-            (StudentAttempt, questions_without_correct_answer)
+            (StudentAttempt, Assessment, questions_without_correct_answer)
 
         Raises:
             ValueError: If assessment not found, not ACTIVE, or student not enrolled.
@@ -210,7 +210,7 @@ class AttemptService:
         existing_attempt = existing_result.scalar_one_or_none()
         if existing_attempt is not None:
             questions = await self._load_questions(assessment_id, strip_answers=True)
-            return existing_attempt, questions
+            return existing_attempt, assessment, questions
 
         # Verify enrollment before creating
         enrollment_result = await self.db.execute(
@@ -240,7 +240,65 @@ class AttemptService:
         )
 
         questions = await self._load_questions(assessment_id, strip_answers=True)
-        return attempt, questions
+        return attempt, assessment, questions
+
+    # ── Attempt retrieval ─────────────────────────────────────────────────
+
+    async def get_attempt(
+        self,
+        attempt_id: uuid.UUID,
+        requesting_user_id: uuid.UUID,
+        requesting_user_role: UserRole,
+        school_id: uuid.UUID | None,
+    ) -> tuple[StudentAttempt, Assessment, list[QuestionBank]]:
+        """Return an existing attempt with its questions.
+
+        Access rules:
+        - STUDENT: only their own attempt.
+        - TEACHER / SCHOOL_ADMIN: attempt must belong to same school.
+        - KAIHLE_ADMIN: unrestricted.
+
+        Args:
+            attempt_id: The StudentAttempt UUID.
+            requesting_user_id: The requesting user's ID.
+            requesting_user_role: The requesting user's role.
+            school_id: The requesting user's school ID (None for KAIHLE_ADMIN).
+
+        Returns:
+            (StudentAttempt, Assessment, questions_without_correct_answer)
+
+        Raises:
+            AttemptNotFoundError: If attempt not found.
+            AttemptAccessDeniedError: If access denied.
+        """
+        # Load attempt
+        attempt_result = await self.db.execute(select(StudentAttempt).where(StudentAttempt.id == attempt_id))
+        attempt = attempt_result.scalar_one_or_none()
+        if attempt is None:
+            raise AttemptNotFoundError(f"Attempt not found: {attempt_id}")
+
+        # Authorization
+        if requesting_user_role == UserRole.STUDENT:
+            if attempt.student_id != requesting_user_id:
+                raise AttemptAccessDeniedError("Access denied")
+        elif requesting_user_role == UserRole.KAIHLE_ADMIN:
+            pass  # KAIHLE_ADMIN bypasses school check
+        else:
+            # TEACHER / SCHOOL_ADMIN: verify attempt belongs to same school
+            assessment_result = await self.db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
+            assessment = assessment_result.scalar_one_or_none()
+            if assessment is None or (school_id is not None and assessment.school_id != school_id):
+                raise AttemptAccessDeniedError("Access denied")
+
+        # Load assessment and questions
+        assessment_result = await self.db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
+        assessment = assessment_result.scalar_one_or_none()
+        if assessment is None:
+            raise AttemptNotFoundError(f"Assessment not found for attempt: {attempt_id}")
+
+        questions = await self._load_questions(attempt.assessment_id, strip_answers=True)
+
+        return attempt, assessment, questions
 
     # ── Per-question response ────────────────────────────────────────────
 

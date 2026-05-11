@@ -86,10 +86,10 @@ class StudentDashboardService:
             )
             .join(Class, Class.id == ClassEnrollment.class_id)
             .join(Subject, Subject.id == Class.subject_id)
-            .join(User, User.id == Class.teacher_id)
+            .outerjoin(User, User.id == Class.teacher_id)
             .where(
                 ClassEnrollment.student_id == student.id,
-                ClassEnrollment.is_active == True,  # noqa: E712
+                ClassEnrollment.is_active.is_(True),  # noqa: E712
                 Class.school_id == student.school_id,
             )
         )
@@ -229,7 +229,7 @@ class StudentDashboardService:
                 .join(Subject, Subject.id == Class.subject_id)
                 .where(
                     Assessment.class_id.in_(class_ids),
-                    Assessment.is_system_generated == False,  # noqa: E712
+                    Assessment.is_system_generated.is_(False),  # noqa: E712
                     Assessment.deadline.isnot(None),
                     Assessment.deadline <= deadline_cutoff,
                     Assessment.deadline >= now,

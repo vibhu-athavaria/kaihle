@@ -92,7 +92,7 @@ async def get_class_diagnostic(
     assert current_user.school_id is not None, "Student must belong to a school"
     service = AttemptService(db)
     try:
-        attempt, questions = await service.get_class_diagnostic(
+        attempt, assessment, questions = await service.get_class_diagnostic(
             class_id=class_id,
             student_id=current_user.id,
             school_id=current_user.school_id,
@@ -102,9 +102,7 @@ async def get_class_diagnostic(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
-    diag_assessment_result = await db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
-    diag_assessment = diag_assessment_result.scalar_one_or_none()
-    diag_title = diag_assessment.title if diag_assessment else "Diagnostic Assessment"
+    diag_title = assessment.title if assessment else "Diagnostic Assessment"
 
     return AttemptResponse(
         id=attempt.id,
@@ -134,7 +132,7 @@ async def start_assessment(
     assert current_user.school_id is not None, "Student must belong to a school"
     service = AttemptService(db)
     try:
-        attempt, questions = await service.get_or_create_attempt(
+        attempt, assessment, questions = await service.get_or_create_attempt(
             assessment_id=assessment_id,
             student_id=current_user.id,
             school_id=current_user.school_id,
@@ -147,9 +145,7 @@ async def start_assessment(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg) from exc
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
 
-    assessment_result = await db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
-    assessment_obj = assessment_result.scalar_one_or_none()
-    assessment_title = assessment_obj.title if assessment_obj else "Assessment"
+    assessment_title = assessment.title if assessment else "Assessment"
 
     return AttemptResponse(
         id=attempt.id,
@@ -176,39 +172,23 @@ async def get_attempt(
     created at publish time by a separate mechanism. This endpoint reads
     an existing attempt — it does not create one.
     """
-    from sqlalchemy import select
-
-    from app.models.assessment import Assessment, StudentAttempt
-
-    result = await db.execute(select(StudentAttempt).where(StudentAttempt.id == attempt_id))
-    attempt = result.scalar_one_or_none()
-    if attempt is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
-
-    # Authorization: KAIHLE_ADMIN bypasses school check; all others must match school.
-    # STUDENT additionally must own the attempt.
-    if current_user.role != UserRole.KAIHLE_ADMIN:
-        assessment_result = await db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
-        assessment = assessment_result.scalar_one_or_none()
-        if assessment is None or assessment.school_id != current_user.school_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-        if current_user.role == UserRole.STUDENT and attempt.student_id != current_user.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    # KAIHLE_ADMIN has no school_id; pass sentinel for service bypass
+    school_id = current_user.school_id if current_user.school_id is not None else _uuid.UUID(int=0)
 
     service = AttemptService(db)
-    questions = await service._load_questions(attempt.assessment_id, strip_answers=True)
+    try:
+        attempt, assessment, questions = await service.get_attempt(
+            attempt_id=attempt_id,
+            requesting_user_id=current_user.id,
+            requesting_user_role=UserRole(current_user.role),
+            school_id=school_id,
+        )
+    except AttemptNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except AttemptAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied") from exc
 
-    # Fetch title (assessment may already be loaded above for auth check)
-    if current_user.role == UserRole.KAIHLE_ADMIN:
-        from sqlalchemy import select as _select
-
-        from app.models.assessment import Assessment as _Assessment
-
-        _a_result = await db.execute(_select(_Assessment).where(_Assessment.id == attempt.assessment_id))
-        _a = _a_result.scalar_one_or_none()
-        assessment_title = _a.title if _a else "Assessment"
-    else:
-        assessment_title = assessment.title if assessment else "Assessment"
+    assessment_title = assessment.title if assessment else "Assessment"
 
     return AttemptResponse(
         id=attempt.id,
