@@ -12,6 +12,7 @@ class AttemptResponse(BaseModel):
     id: UUID
     assessment_id: UUID
     student_id: UUID
+    title: str  # Assessment title for display in the UI
     status: str  # "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED"
     started_at: datetime | None
     submitted_at: datetime | None

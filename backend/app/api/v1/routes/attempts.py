@@ -60,12 +60,19 @@ def _questions_to_schema(questions: list[QuestionBank]) -> list[AssessmentQuesti
             raw_options = _cast(list[dict[str, str]], q.options)
             for opt in raw_options:
                 options.append(QuestionOption(key=opt["key"], text=opt["text"]))
+        elif q.question_type == "TRUE_FALSE":
+            # TRUE_FALSE questions store options as NULL — synthesize them.
+            options = [
+                QuestionOption(key="True", text="True"),
+                QuestionOption(key="False", text="False"),
+            ]
         result.append(
             AssessmentQuestion(
                 question_id=q.id,
                 question_text=q.question_text,
                 question_type=q.question_type,
                 options=options,
+                difficulty_level=int(q.difficulty_level) if q.difficulty_level is not None else 0,
             )
         )
     return result
@@ -85,7 +92,7 @@ async def get_class_diagnostic(
     assert current_user.school_id is not None, "Student must belong to a school"
     service = AttemptService(db)
     try:
-        attempt, questions = await service.get_class_diagnostic(
+        attempt, assessment, questions = await service.get_class_diagnostic(
             class_id=class_id,
             student_id=current_user.id,
             school_id=current_user.school_id,
@@ -95,6 +102,8 @@ async def get_class_diagnostic(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
+    diag_title = assessment.title if assessment else "Diagnostic Assessment"
+
     return AttemptResponse(
         id=attempt.id,
         assessment_id=attempt.assessment_id,
@@ -103,6 +112,7 @@ async def get_class_diagnostic(
         started_at=attempt.started_at,
         submitted_at=attempt.completed_at,
         score=attempt.overall_score,
+        title=diag_title,
         questions=_questions_to_schema(questions),
     )
 
@@ -122,7 +132,7 @@ async def start_assessment(
     assert current_user.school_id is not None, "Student must belong to a school"
     service = AttemptService(db)
     try:
-        attempt, questions = await service.get_or_create_attempt(
+        attempt, assessment, questions = await service.get_or_create_attempt(
             assessment_id=assessment_id,
             student_id=current_user.id,
             school_id=current_user.school_id,
@@ -135,6 +145,8 @@ async def start_assessment(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg) from exc
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
 
+    assessment_title = assessment.title if assessment else "Assessment"
+
     return AttemptResponse(
         id=attempt.id,
         assessment_id=attempt.assessment_id,
@@ -143,6 +155,7 @@ async def start_assessment(
         started_at=attempt.started_at,
         submitted_at=attempt.completed_at,
         score=attempt.overall_score,
+        title=assessment_title,
         questions=_questions_to_schema(questions),
     )
 
@@ -159,27 +172,23 @@ async def get_attempt(
     created at publish time by a separate mechanism. This endpoint reads
     an existing attempt — it does not create one.
     """
-    from sqlalchemy import select
-
-    from app.models.assessment import Assessment, StudentAttempt
-
-    result = await db.execute(select(StudentAttempt).where(StudentAttempt.id == attempt_id))
-    attempt = result.scalar_one_or_none()
-    if attempt is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
-
-    # Authorization: KAIHLE_ADMIN bypasses school check; all others must match school.
-    # STUDENT additionally must own the attempt.
-    if current_user.role != UserRole.KAIHLE_ADMIN:
-        assessment_result = await db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
-        assessment = assessment_result.scalar_one_or_none()
-        if assessment is None or assessment.school_id != current_user.school_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-        if current_user.role == UserRole.STUDENT and attempt.student_id != current_user.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    # KAIHLE_ADMIN has no school_id; pass sentinel for service bypass
+    school_id = current_user.school_id if current_user.school_id is not None else _uuid.UUID(int=0)
 
     service = AttemptService(db)
-    questions = await service._load_questions(attempt.assessment_id, strip_answers=True)
+    try:
+        attempt, assessment, questions = await service.get_attempt(
+            attempt_id=attempt_id,
+            requesting_user_id=current_user.id,
+            requesting_user_role=UserRole(current_user.role),
+            school_id=school_id,
+        )
+    except AttemptNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except AttemptAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied") from exc
+
+    assessment_title = assessment.title if assessment else "Assessment"
 
     return AttemptResponse(
         id=attempt.id,
@@ -189,6 +198,7 @@ async def get_attempt(
         started_at=attempt.started_at,
         submitted_at=attempt.completed_at,
         score=attempt.overall_score,
+        title=assessment_title,
         questions=_questions_to_schema(questions),
     )
 

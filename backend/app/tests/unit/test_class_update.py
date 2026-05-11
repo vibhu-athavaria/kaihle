@@ -144,6 +144,9 @@ async def test_patch_class_route_when_valid_then_returns_200(
         name="New Name",
         academic_year="2024/2025",
         is_active=True,
+        subject=SimpleNamespace(name="Math"),
+        grade=SimpleNamespace(name="Grade 7"),
+        teacher=SimpleNamespace(first_name="John", last_name="Doe"),
     )
 
     mock_db = AsyncMock()

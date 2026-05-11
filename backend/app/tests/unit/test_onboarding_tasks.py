@@ -99,10 +99,13 @@ class TestCreateClassDiagnostic:
         class_ = _make_class(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
         existing = _make_existing_assessment()
 
-        mock_class = MagicMock(scalar_one_or_none=MagicMock(return_value=class_))
-        mock_question_count = MagicMock(scalar=MagicMock(return_value=10))  # Questions exist
-        mock_existing = MagicMock(scalar_one_or_none=MagicMock(return_value=existing))
-        service.db.execute = AsyncMock(side_effect=[mock_class, mock_question_count, mock_existing])  # type: ignore[method-assign]
+        mock_class = MagicMock()
+        mock_class.scalar_one_or_none.return_value = class_
+        mock_question_count = MagicMock()
+        mock_question_count.scalar.return_value = 10
+        mock_existing = MagicMock()
+        mock_existing.scalar_one_or_none = MagicMock(return_value=existing)
+        service.db.execute = AsyncMock(side_effect=[mock_class, mock_existing, mock_question_count])  # type: ignore[method-assign]
 
         result = await service.create_class_diagnostic(class_.id)
 
@@ -116,48 +119,60 @@ class TestCreateClassDiagnostic:
         class_ = _make_class(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
         subject = SimpleNamespace(id=class_.subject_id, name="Mathematics")
 
-        mock_class = MagicMock(scalar_one_or_none=MagicMock(return_value=class_))
-        mock_question_count = MagicMock(scalar=MagicMock(return_value=10))  # Questions exist
-        mock_no_existing = MagicMock(scalar_one_or_none=MagicMock(return_value=None))
-        mock_subject = MagicMock(scalar_one_or_none=MagicMock(return_value=subject))
+        mock_class = MagicMock()
+        mock_class.scalar_one_or_none = MagicMock(return_value=class_)
+        mock_question_count = MagicMock()
+        mock_question_count.scalar.return_value = 10
+        mock_no_existing = MagicMock()
+        mock_no_existing.scalar_one_or_none = MagicMock(return_value=None)
+        mock_subject = MagicMock()
+        mock_subject.scalar_one_or_none = MagicMock(return_value=subject)
         mock_no_topics = MagicMock()
         mock_no_topics.scalars.return_value.all.return_value = []
 
         service.db.execute = AsyncMock(  # type: ignore[method-assign]
-            side_effect=[mock_class, mock_question_count, mock_no_existing, mock_subject, mock_no_topics]
+            side_effect=[mock_class, mock_no_existing, mock_question_count, mock_subject, mock_no_topics]
         )
         service.db.flush = AsyncMock()  # type: ignore[method-assign]
 
-        result = await service.create_class_diagnostic(class_.id)
+        await service.create_class_diagnostic(class_.id)
 
-        assert result.is_system_generated is True
-        assert result.created_by is None
-        assert result.assessment_type == AssessmentType.DIAGNOSTIC
-        assert result.status == AssessmentStatus.ACTIVE
-        assert result.curriculum_topic_id is None
-        assert result.class_id == class_.id
-        assert "Mathematics" in result.title
-        assert result.config["max_questions_per_attempt"] == MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT
+        service.db.add.assert_called_once()
+        assessment = service.db.add.call_args[0][0]
+        assert assessment.is_system_generated is True
+        assert assessment.created_by is None
+        assert assessment.assessment_type == AssessmentType.DIAGNOSTIC
+        assert assessment.status == AssessmentStatus.ACTIVE
+        assert assessment.curriculum_topic_id is None
+        assert assessment.class_id == class_.id
+        assert "Mathematics" in assessment.title
+        assert assessment.config["max_questions_per_attempt"] == MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT
 
     @pytest.mark.asyncio
     async def test_when_subject_not_found_then_uses_unknown_subject_title(self, service: AssessmentService) -> None:
         class_ = _make_class(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
 
-        mock_class = MagicMock(scalar_one_or_none=MagicMock(return_value=class_))
-        mock_question_count = MagicMock(scalar=MagicMock(return_value=10))  # Questions exist
-        mock_no_existing = MagicMock(scalar_one_or_none=MagicMock(return_value=None))
-        mock_no_subject = MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        mock_class = MagicMock()
+        mock_class.scalar_one_or_none = MagicMock(return_value=class_)
+        mock_question_count = MagicMock()
+        mock_question_count.scalar.return_value = 10
+        mock_no_existing = MagicMock()
+        mock_no_existing.scalar_one_or_none = MagicMock(return_value=None)
+        mock_no_subject = MagicMock()
+        mock_no_subject.scalar_one_or_none = MagicMock(return_value=None)
         mock_no_topics = MagicMock()
         mock_no_topics.scalars.return_value.all.return_value = []
 
         service.db.execute = AsyncMock(  # type: ignore[method-assign]
-            side_effect=[mock_class, mock_question_count, mock_no_existing, mock_no_subject, mock_no_topics]
+            side_effect=[mock_class, mock_no_existing, mock_question_count, mock_no_subject, mock_no_topics]
         )
         service.db.flush = AsyncMock()  # type: ignore[method-assign]
 
-        result = await service.create_class_diagnostic(class_.id)
+        await service.create_class_diagnostic(class_.id)
 
-        assert "Unknown Subject" in result.title
+        service.db.add.assert_called_once()
+        assessment = service.db.add.call_args[0][0]
+        assert "Unknown Subject" in assessment.title
 
     @pytest.mark.asyncio
     async def test_when_question_bank_empty_then_raises_question_bank_empty_error(
@@ -165,11 +180,15 @@ class TestCreateClassDiagnostic:
     ) -> None:
         class_ = _make_class(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
 
-        mock_class = MagicMock(scalar_one_or_none=MagicMock(return_value=class_))
-        mock_empty_question_count = MagicMock(scalar=MagicMock(return_value=0))  # No questions
+        mock_class = MagicMock()
+        mock_class.scalar_one_or_none = MagicMock(return_value=class_)
+        mock_empty_question_count = MagicMock()
+        mock_empty_question_count.scalar.return_value = 0
+        mock_no_existing = MagicMock()
+        mock_no_existing.scalar_one_or_none = MagicMock(return_value=None)
 
         service.db.execute = AsyncMock(  # type: ignore[method-assign]
-            side_effect=[mock_class, mock_empty_question_count]
+            side_effect=[mock_class, mock_no_existing, mock_empty_question_count]
         )
 
         with pytest.raises(QuestionBankEmptyError, match="No questions in question_bank"):

@@ -61,7 +61,7 @@ export function StudyPlanDetail() {
 
   return (
     <StudentLayout
-      activeNav="study-plans"
+      activeNav="home"
       studentName={layout.studentName}
       gradeName={layout.gradeName}
       curriculumName={layout.curriculumName}

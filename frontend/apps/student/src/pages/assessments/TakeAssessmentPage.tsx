@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, CheckCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle, X } from "lucide-react";
 import { StudentLayout, Modal, Skeleton } from "@kaihle/ui";
 import {
   useAttempt,
@@ -292,26 +292,40 @@ export function TakeAssessmentPage() {
       <div className="max-w-2xl mx-auto space-y-5">
         {/* ── Top bar ─────────────────────────────────────── */}
         <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={handleBackArrow}
-            aria-label="Leave assessment"
-            className="flex items-center gap-1.5 text-brand-muted hover:text-brand-ink transition-colors font-sans text-sm min-h-[44px] min-w-[44px]"
-          >
-            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">Back</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleBackArrow}
+              aria-label="Leave assessment"
+              className="flex items-center gap-1.5 text-brand-muted hover:text-brand-ink transition-colors font-sans text-sm min-h-[44px] min-w-[44px]"
+            >
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+              <span className="sr-only sm:not-sr-only">Back</span>
+            </button>
+          </div>
 
           <h1 className="font-display font-bold text-lg text-brand-ink truncate px-2">
-            Assessment
+            {attempt?.title ?? "Assessment"}
           </h1>
 
-          {/* Q X / total indicator */}
-          {!isLoading && totalQuestions > 0 && (
-            <span className="font-sans text-sm text-brand-muted whitespace-nowrap">
-              Q{currentIndex + 1}&nbsp;/&nbsp;{totalQuestions}
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {/* Q X / total indicator */}
+            {!isLoading && totalQuestions > 0 && (
+              <span className="font-sans text-sm text-brand-muted whitespace-nowrap">
+                Q{currentIndex + 1}&nbsp;/&nbsp;{totalQuestions}
+              </span>
+            )}
+            {/* Cancel button */}
+            <button
+              type="button"
+              onClick={handleBackArrow}
+              aria-label="Cancel assessment"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-gray-100 text-brand-ink hover:bg-gray-200 font-sans text-sm font-medium transition-colors min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Cancel</span>
+            </button>
+          </div>
         </div>
 
         {/* ── Progress bar ─────────────────────────────────── */}
@@ -360,21 +374,53 @@ export function TakeAssessmentPage() {
 
         {/* ── Question card ─────────────────────────────────── */}
         {isLoading ? (
-          <>
-            <QuestionSkeleton />
-            <QuestionSkeleton />
-            <QuestionSkeleton />
-          </>
+          <QuestionSkeleton />
         ) : currentQuestion ? (
-          <div className="space-y-5">
+          <div className="bg-white rounded-card border border-brand-border p-5 space-y-5 shadow-sm">
+            {/* Meta row: question type + difficulty */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-green-pale text-brand-primary">
+                {currentQuestion.question_type === "TRUE_FALSE"
+                  ? "True / False"
+                  : "Multiple choice"}
+              </span>
+              {currentQuestion.difficulty_level > 0 && (
+                <span
+                  className={[
+                    "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold",
+                    currentQuestion.difficulty_level >= 4
+                      ? "bg-red-50 text-red-700"
+                      : currentQuestion.difficulty_level >= 2
+                        ? "bg-amber-50 text-amber-700"
+                        : "bg-gray-100 text-brand-body",
+                  ].join(" ")}
+                >
+                  {currentQuestion.difficulty_level >= 4
+                    ? "Hard"
+                    : currentQuestion.difficulty_level >= 2
+                      ? "Medium"
+                      : "Easy"}
+                </span>
+              )}
+              {currentQuestion.subtopic_name && (
+                <span className="text-xs text-brand-muted truncate">
+                  {currentQuestion.subtopic_name}
+                </span>
+              )}
+            </div>
+
             {/* Question text */}
             <p className="font-sans text-base text-brand-ink leading-relaxed">
               {currentQuestion.question_text}
             </p>
 
-            {/* Options grid: 2 cols on mobile, 4 cols on md+ */}
+            {/* Options: stacked for True/False, 2-col grid for MCQ */}
             <div
-              className="grid grid-cols-2 md:grid-cols-4 gap-3"
+              className={
+                currentQuestion.question_type === "TRUE_FALSE"
+                  ? "flex flex-col gap-3"
+                  : "grid grid-cols-1 sm:grid-cols-2 gap-3"
+              }
               role="radiogroup"
               aria-label={`Options for question ${currentIndex + 1}`}
             >

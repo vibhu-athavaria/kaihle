@@ -81,7 +81,7 @@ async def list_class_topics(
         user_id=str(current_user.id),
         class_id=str(class_id),
     )
-    # TODO(M0-10): Replace with actual topic listing from curriculum
+    # TODO: Replace with actual topic listing from curriculum
     return []
 
 
@@ -98,7 +98,7 @@ async def get_class_topic(
         class_id=str(class_id),
         topic_id=str(topic_id),
     )
-    # TODO(M0-10): Replace with actual topic retrieval
+    # TODO: Replace with actual topic retrieval
     raise NotImplementedError("Topic retrieval not yet implemented")
 
 
@@ -118,7 +118,7 @@ async def list_topic_resources(
         class_id=str(class_id),
         topic_id=str(topic_id),
     )
-    # TODO(M0-10): Replace with actual resource listing
+    # TODO: Replace with actual resource listing
     return []
 
 
@@ -138,7 +138,7 @@ async def get_topic_lesson_plan(
         class_id=str(class_id),
         topic_id=str(topic_id),
     )
-    # TODO(M0-10): Replace with actual lesson plan retrieval
+    # TODO: Replace with actual lesson plan retrieval
     return None
 
 
@@ -158,23 +158,5 @@ async def list_topic_quizzes(
         class_id=str(class_id),
         topic_id=str(topic_id),
     )
-    # TODO(M0-10): Replace with actual quiz listing
+    # TODO: Replace with actual quiz listing
     return []
-
-
-@router.get("/{class_id}/diagnostic", response_model=DiagnosticStubResponse)
-async def get_class_diagnostic(
-    class_id: UUID = Path(..., description="Class ID"),
-    current_user: CurrentUser = Depends(get_current_user),
-) -> DiagnosticStubResponse:
-    """Get the Tier 1 diagnostic for a class."""
-    logger.debug(
-        "class_diagnostic_retrieved",
-        user_id=str(current_user.id),
-        class_id=str(class_id),
-    )
-    return DiagnosticStubResponse(
-        class_id=class_id,
-        status="PENDING",
-        assessment_id=None,
-    )

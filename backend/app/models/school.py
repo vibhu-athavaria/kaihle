@@ -8,9 +8,11 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, CheckConstraint, Enum, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.curriculum import Grade, Subject
+from app.models.user import User
 
 
 class ClassEnrollment(Base):
@@ -89,6 +91,11 @@ class Class(Base, UUIDMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     academic_year: Mapped[str] = mapped_column(String(20), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Relationships for eager loading (avoids N+1 queries when listing classes)
+    subject: Mapped["Subject"] = relationship("Subject", lazy="joined")
+    grade: Mapped["Grade"] = relationship("Grade", lazy="joined")
+    teacher: Mapped["User"] = relationship("User", lazy="joined")
 
 
 class School(Base, UUIDMixin, TimestampMixin):

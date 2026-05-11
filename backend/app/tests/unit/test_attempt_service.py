@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.assessment import AssessmentStatus, AttemptStatus
+from app.models.assessment import AssessmentStatus, AssessmentType, AttemptStatus
 from app.services.attempt_service import (
     AttemptAccessDeniedError,
     AttemptAlreadyCompletedError,
@@ -46,14 +46,23 @@ def _make_assessment(
     school_id: uuid.UUID | None = None,
     class_id: uuid.UUID | None = None,
     status: str = AssessmentStatus.ACTIVE,
+    assessment_type: str = AssessmentType.DIAGNOSTIC,
     is_system_generated: bool = True,
+    config: dict | None = {
+        "num_questions": 10,
+        "difficulty_range": [1, 4],
+        "question_types": ["MCQ", "SHORT_ANSWER"],
+        "time_limit_minutes": None,
+    },
 ) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
         school_id=school_id or uuid.uuid4(),
         class_id=class_id or uuid.uuid4(),
         status=status,
+        assessment_type=assessment_type,
         is_system_generated=is_system_generated,
+        config=config,
     )
 
 
@@ -155,7 +164,7 @@ class TestGetClassDiagnostic:
             ]
         )
 
-        result_attempt, result_questions = await service.get_class_diagnostic(
+        result_attempt, result_assessment, result_questions = await service.get_class_diagnostic(
             class_id=class_id,
             student_id=student_id,
             school_id=school_id,
@@ -193,7 +202,7 @@ class TestGetClassDiagnostic:
         """No ACTIVE system-generated assessment → ValueError."""
         mock_db.execute = AsyncMock(return_value=_scalar_result(None))
 
-        with pytest.raises(ValueError, match="No active Tier 1 diagnostic"):
+        with pytest.raises(ValueError, match="No active diagnostic"):
             await service.get_class_diagnostic(class_id=uuid.uuid4(), student_id=uuid.uuid4(), school_id=uuid.uuid4())
 
 
