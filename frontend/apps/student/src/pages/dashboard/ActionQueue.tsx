@@ -17,7 +17,7 @@ const ACTION_CONFIG: Record<
   },
   lesson_pack_ready: {
     emoji: "📦",
-    bgClass: "bg-[#f0fdf4]",
+    bgClass: "bg-brand-green-pale",
     defaultLabel: "Lesson pack ready",
   },
   study_plan_continue: {
@@ -27,7 +27,7 @@ const ACTION_CONFIG: Record<
   },
   diagnostic_pending: {
     emoji: "🎯",
-    bgClass: "bg-[#f0fdf4]",
+    bgClass: "bg-brand-green-pale",
     defaultLabel: "Take your diagnostic",
   },
 };
@@ -52,7 +52,7 @@ function DueDateChip({
     priority === 1 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800";
   return (
     <span
-      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${colorClass}`}
+      className={`text-xs font-bold px-2 py-0.5 rounded-full ${colorClass}`}
     >
       {label}
     </span>
@@ -64,12 +64,12 @@ export function ActionQueue({ items }: ActionQueueProps) {
     return (
       <div
         role="status"
-        className="bg-white border border-[#e5e7eb] rounded-xl px-4 py-5 text-center"
+        className="bg-white border border-brand-border rounded-card px-4 py-5 text-center"
       >
-        <p className="text-sm text-[#4a5240] font-semibold">
+        <p className="text-sm font-semibold text-brand-body">
           You're all caught up!
         </p>
-        <p className="text-xs text-[#9ca3af] mt-1">
+        <p className="text-xs text-brand-muted mt-1">
           Check back after your next lesson.
         </p>
       </div>
@@ -77,13 +77,13 @@ export function ActionQueue({ items }: ActionQueueProps) {
   }
 
   return (
-    <div className="bg-white border border-[#e5e7eb] rounded-xl overflow-hidden">
+    <div className="bg-white border border-brand-border rounded-card overflow-hidden">
       {items.map((item, idx) => {
         const config = ACTION_CONFIG[item.type];
         return (
           <div
             key={`${item.type}-${item.class_id}-${idx}`}
-            className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-b-0"
+            className="flex items-center gap-3 px-4 py-3 border-b border-brand-border-soft last:border-b-0"
           >
             <div
               className={`w-9 h-9 rounded-lg flex items-center justify-center text-base flex-shrink-0 ${config.bgClass}`}
@@ -91,10 +91,10 @@ export function ActionQueue({ items }: ActionQueueProps) {
               {config.emoji}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-semibold text-[#1a2016] truncate">
+              <div className="text-sm font-semibold text-brand-ink truncate">
                 {config.defaultLabel}
               </div>
-              <div className="text-[11px] text-[#9ca3af] mt-0.5">
+              <div className="text-xs text-brand-muted mt-0.5">
                 {item.class_name} · {item.subject_name}
               </div>
             </div>
@@ -105,7 +105,7 @@ export function ActionQueue({ items }: ActionQueueProps) {
               />
               <Link
                 to={item.action_url}
-                className="text-[11px] font-bold px-3 py-1.5 rounded-full bg-[#1a5c38] text-white hover:opacity-90 transition-opacity"
+                className="text-xs font-bold px-3 py-1.5 rounded-full bg-brand-primary text-white hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
               >
                 Go →
               </Link>

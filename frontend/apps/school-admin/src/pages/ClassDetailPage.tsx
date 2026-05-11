@@ -435,7 +435,7 @@ export function ClassDetailPage() {
     data: classDetail,
     isLoading: detailLoading,
     isError: detailError,
-  } = useClassDetail(classId!, classSummary);
+  } = useClassDetail(classId!);
 
   const { data: enrollments, isLoading: enrollmentsLoading } =
     useClassEnrollments(classId!);

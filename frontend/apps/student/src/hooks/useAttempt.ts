@@ -24,7 +24,10 @@ export interface QuestionOption {
 export interface AttemptQuestion {
   question_id: string;
   question_text: string;
+  question_type: string; // "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER"
   options: QuestionOption[];
+  difficulty_level: number; // 0–5; 0 = unset
+  subtopic_name: string;
 }
 
 /** Status values mirroring AssessmentAttemptStatus enum in the backend. */
@@ -38,6 +41,7 @@ export interface AttemptResponse {
   id: string;
   assessment_id: string;
   student_id: string;
+  title: string;
   status: AttemptStatus;
   started_at: string; // ISO 8601
   submitted_at: string | null;

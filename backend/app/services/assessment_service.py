@@ -178,7 +178,7 @@ def _sample_pool_with_difficulty_distribution(
 
 
 def _generate_title(body: AssessmentCreateRequest, class_name: str, subject_name: str) -> str:
-    """Generate a human-readable title for a Tier 2 assessment."""
+    """Generate a human-readable title for a assessment."""
     if body.title:
         return body.title
     prefix = {
@@ -249,6 +249,22 @@ class AssessmentService:
         if class_ is None:
             raise ValueError(f"Class not found: class_id={class_id}")
 
+        # Idempotency: check if diagnostic assessment already exists
+        existing = await self.db.execute(
+            select(Assessment).where(
+                Assessment.class_id == class_.id,
+                Assessment.is_system_generated.is_(True),
+            )
+        )
+        existing_assessment = existing.scalar_one_or_none()
+        if existing_assessment is not None:
+            logger.debug(
+                "class_diagnostic_already_exists",
+                class_id=str(class_.id),
+                assessment_id=str(existing_assessment.id),
+            )
+            return existing_assessment
+
         # Count available questions before doing anything else
         question_count_result = await self.db.execute(
             select(func.count(QuestionBank.id))
@@ -266,22 +282,6 @@ class AssessmentService:
                 f"No questions in question_bank for subject={class_.subject_id} "
                 f"grade={class_.grade_id}. Run import_questions.py first."
             )
-
-        # Idempotency: check if system-generated assessment already exists
-        existing = await self.db.execute(
-            select(Assessment).where(
-                Assessment.class_id == class_.id,
-                Assessment.is_system_generated.is_(True),
-            )
-        )
-        existing_assessment = existing.scalar_one_or_none()
-        if existing_assessment is not None:
-            logger.debug(
-                "class_diagnostic_already_exists",
-                class_id=str(class_.id),
-                assessment_id=str(existing_assessment.id),
-            )
-            return existing_assessment
 
         # Load subject name for assessment title (single query, not N+1)
         subject_result = await self.db.execute(select(Subject.name).where(Subject.id == class_.subject_id))
@@ -588,7 +588,7 @@ class AssessmentService:
 
         return _sample_pool_with_difficulty_distribution(all_rows, MAX_DIAGNOSTIC_POOL, rng)
 
-    # ── Tier 2: teacher-created assessments ─────────────────────────────────
+    # ── teacher-created assessments ─────────────────────────────────
 
     async def create_assessment(
         self,
@@ -597,7 +597,7 @@ class AssessmentService:
         class_id: uuid.UUID,
         body: AssessmentCreateRequest,
     ) -> Assessment:
-        """Create a Tier 2 (teacher-created) assessment with question sampling.
+        """Create a (teacher-created) assessment with question sampling.
 
         Validates teacher ownership, samples questions with topic distribution,
         and persists the assessment + bridge rows atomically.
@@ -687,6 +687,12 @@ class AssessmentService:
             subject_name = subject_result.scalar_one_or_none() or "Unknown Subject"
             title = _generate_title(body, class_.name, subject_name)
 
+        config_ = {
+            "num_questions": body.question_count,
+            "difficulty_range": [body.difficulty_min, body.difficulty_max],
+            "question_types": ["MCQ", "SHORT_ANSWER"],
+            "time_limit_minutes": None,
+        }
         # Step 5 — Create Assessment in DRAFT status
         assessment = Assessment(
             id=uuid.uuid4(),
@@ -699,7 +705,7 @@ class AssessmentService:
             title=title,
             question_count=body.question_count,
             deadline=body.deadline,
-            config={},
+            config=config_,
         )
         self.db.add(assessment)
         await self.db.flush()  # get assessment.id without committing
@@ -716,7 +722,7 @@ class AssessmentService:
         self.db.add_all(bridge_rows)
 
         logger.info(
-            "tier2_assessment_created",
+            "assessment_created",
             assessment_id=str(assessment.id),
             class_id=str(class_id),
             teacher_id=str(teacher_id),

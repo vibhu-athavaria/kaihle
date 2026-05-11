@@ -13,6 +13,7 @@ Design notes:
 - calculate_gap_states Celery task is fired after submit; we do NOT await it.
 """
 
+import random as _random
 import uuid
 from datetime import UTC, datetime
 from typing import Protocol, cast
@@ -25,6 +26,7 @@ from app.models.assessment import (
     Assessment,
     AssessmentSelectedQuestion,
     AssessmentStatus,
+    AssessmentType,
     AttemptStatus,
     ScoredBy,
     StudentAttempt,
@@ -89,7 +91,7 @@ class AttemptService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    # ── Tier 1 (diagnostic) ─────────────────────────────────────────────
+    # ── diagnostic ─────────────────────────────────────────────
 
     async def get_class_diagnostic(
         self,
@@ -97,10 +99,7 @@ class AttemptService:
         student_id: uuid.UUID,
         school_id: uuid.UUID,
     ) -> tuple[StudentAttempt, list[QuestionBank]]:
-        """Return the student's Tier 1 diagnostic attempt for a class.
-
-        The attempt is pre-created by the Celery onboarding task at enrollment.
-        This endpoint only reads — it never creates.
+        """Return the student's diagnostic attempt for a class.
 
         Args:
             class_id: The class UUID.
@@ -111,26 +110,26 @@ class AttemptService:
             (StudentAttempt, questions_without_correct_answer)
 
         Raises:
-            ValueError: If no ACTIVE system-generated assessment is found for the class.
+            ValueError: If no ACTIVE DIAGNOSTIC assessment is found for the class.
             AttemptNotFoundError: If the student's attempt row does not yet exist.
         """
-        # Step 1 — find the Tier 1 ACTIVE assessment for this class
+        # Step 1 — find the ACTIVE DIAGNOSTIC assessment for this class
         assessment_result = await self.db.execute(
             select(Assessment).where(
                 Assessment.class_id == class_id,
                 Assessment.school_id == school_id,
-                Assessment.is_system_generated.is_(True),
+                Assessment.assessment_type == AssessmentType.DIAGNOSTIC,
                 Assessment.status == AssessmentStatus.ACTIVE,
             )
         )
         assessment = assessment_result.scalar_one_or_none()
         if assessment is None:
             logger.warning(
-                "no_active_tier1_diagnostic",
+                "no_active_diagnostic",
                 class_id=str(class_id),
                 school_id=str(school_id),
             )
-            raise ValueError("No active Tier 1 diagnostic found for this class")
+            raise ValueError("No active diagnostic found for this class")
 
         # Step 2 — find the student's pre-created attempt
         attempt_result = await self.db.execute(
@@ -151,6 +150,16 @@ class AttemptService:
 
         # Step 3 — load questions in order, stripped of correct answers
         questions = await self._load_questions(assessment.id, strip_answers=True)
+
+        # Apply per-student question limit from assessment config.
+        # The pool may have up to MAX_DIAGNOSTIC_POOL questions; each student
+        # sees at most max_questions_per_attempt. Sample is seeded by student_id
+        # so the same student always sees the same subset on revisit.
+        config = assessment.config or {}
+        max_per_attempt = config.get("num_questions")
+        if max_per_attempt and len(questions) > max_per_attempt:
+            rng = _random.Random(str(student_id))
+            questions = rng.sample(questions, max_per_attempt)
 
         return attempt, questions
 

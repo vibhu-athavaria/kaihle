@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.models.curriculum import Grade
 from app.models.gap import GapState
@@ -144,9 +145,17 @@ class ClassService:
             include_inactive: When True, also return inactive classes (admin use only)
 
         Returns:
-            List of Class models
+            List of Class models with subject, grade, and teacher relationships loaded
         """
-        query = select(Class).where(Class.school_id == school_id)
+        query = (
+            select(Class)
+            .options(
+                joinedload(Class.subject),  # Load Subject for name
+                joinedload(Class.grade),  # Load Grade for name
+                joinedload(Class.teacher),  # Load User for first_name/last_name
+            )
+            .where(Class.school_id == school_id)
+        )
 
         if not include_inactive:
             query = query.where(Class.is_active.is_(True))
@@ -156,7 +165,7 @@ class ClassService:
             query = query.where(Class.teacher_id == teacher_id)
 
         result = await self.db.execute(query.order_by(Class.name))
-        return list(result.scalars().all())
+        return list(result.unique().scalars().all())  # Use unique() to handle joined duplicates
 
     async def get_class(self, class_id: uuid.UUID) -> Class:
         """Get a class by ID.

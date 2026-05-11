@@ -185,7 +185,8 @@ class TestListClasses:
             for i in range(3)
         ]
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = classes
+        # list_classes uses result.unique().scalars().all()
+        mock_result.unique.return_value.scalars.return_value.all.return_value = classes
         mock_db.execute = AsyncMock(return_value=mock_result)
 
         # Act
@@ -216,7 +217,7 @@ class TestListClasses:
             )
         ]
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = classes
+        mock_result.unique.return_value.scalars.return_value.all.return_value = classes
         mock_db.execute = AsyncMock(return_value=mock_result)
 
         # Act
@@ -243,7 +244,7 @@ class TestListClasses:
             is_active=True,
         )
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [active_class]
+        mock_result.unique.return_value.scalars.return_value.all.return_value = [active_class]
         mock_db.execute = AsyncMock(return_value=mock_result)
 
         result = await class_service.list_classes(school_id, include_inactive=False)
@@ -269,7 +270,7 @@ class TestListClasses:
             is_active=False,
         )
         mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = [inactive_class]
+        mock_result.unique.return_value.scalars.return_value.all.return_value = [inactive_class]
         mock_db.execute = AsyncMock(return_value=mock_result)
 
         result = await class_service.list_classes(school_id, include_inactive=True)

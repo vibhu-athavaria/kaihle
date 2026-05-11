@@ -197,8 +197,13 @@ async def test_list_classes_include_summary_false_then_returns_basic(
     assert len(data) == 1
 
     item = data[0]
-    assert "grade_name" not in item
-    assert "subject_name" not in item
+    # Basic ClassResponse now includes display names
+    assert "grade_name" in item
+    assert "subject_name" in item
+    assert "teacher_name" in item
+    # But should not include summary fields
+    assert "avg_mastery" not in item
+    assert "student_count" not in item
 
 
 @pytest.mark.asyncio

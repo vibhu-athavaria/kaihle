@@ -122,7 +122,7 @@ export function MyProgress() {
                     key={subject.subjectId}
                     type="button"
                     onClick={() => setSelectedSubjectId(subject.subjectId)}
-                    className={`px-4 py-2 rounded-lg font-sans text-sm font-medium transition-colors ${
+                    className={`px-4 py-2 rounded-card font-sans text-sm font-medium transition-colors ${
                       selectedSubjectId === subject.subjectId
                         ? "bg-brand-primary text-white"
                         : "bg-white border border-brand-border text-brand-ink hover:bg-brand-bg"

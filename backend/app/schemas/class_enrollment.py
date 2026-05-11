@@ -28,10 +28,13 @@ class ClassResponse(BaseModel):
     grade_id: uuid.UUID
     subject_id: uuid.UUID
     curriculum_id: uuid.UUID
-    teacher_id: uuid.UUID
+    teacher_id: uuid.UUID | None = None
     name: str
     academic_year: str
     is_active: bool
+    subject_name: str = ""
+    grade_name: str = ""
+    teacher_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -65,7 +65,7 @@ export function ClassPage() {
         </nav>
 
         {/* Class header card */}
-        <div className="bg-white rounded-xl border border-brand-border p-5 shadow-sm">
+        <div className="bg-white rounded-card border border-brand-border p-5 shadow-sm">
           {isDashboardLoading && !classData ? (
             <div className="flex items-start gap-4 animate-pulse">
               <div className="w-12 h-12 rounded-full bg-brand-border flex-shrink-0" />

@@ -43,10 +43,10 @@ function DueChip({ deadline }: { deadline: string | null }) {
       ? "bg-red-100 text-red-700"
       : diffDays <= 7
         ? "bg-amber-100 text-amber-800"
-        : "bg-gray-100 text-[#9ca3af]";
+        : "bg-gray-100 text-brand-muted";
   return (
     <span
-      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${colorClass}`}
+      className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${colorClass}`}
     >
       {label}
     </span>
@@ -121,7 +121,7 @@ function TeacherAssessmentCard({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-role-student-border p-5 flex flex-col gap-3">
+    <div className="bg-white rounded-card border border-brand-border p-5 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-sans text-xs font-bold uppercase tracking-wide text-brand-muted mb-1">
@@ -200,18 +200,18 @@ function PendingDiagnosticCard({
       : "Take diagnostic →";
 
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
+    <div className="bg-amber-50 border border-amber-200 rounded-card p-4 flex gap-3">
       <span className="text-2xl flex-shrink-0 mt-0.5" aria-hidden="true">
         🎯
       </span>
       <div className="flex-1">
-        <p className="font-sans text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-0.5">
+        <p className="font-sans text-xs font-bold uppercase tracking-[0.8px] text-amber-700 mb-0.5">
           {classLabel}
         </p>
-        <div className="text-[13px] font-bold text-[#1a2016]">
+        <div className="text-sm font-bold text-brand-ink">
           {assessment.title}
         </div>
-        <div className="text-[12px] text-[#4a5240] mt-1 leading-relaxed">
+        <div className="text-xs text-brand-body mt-1 leading-relaxed">
           This diagnostic helps Kaihle understand your current level. Completing
           it will unlock your personalised study plan for this subject.
         </div>
@@ -242,7 +242,7 @@ function CompletedDiagnosticRow({
     : null;
 
   return (
-    <div className="bg-white rounded-xl border border-role-student-border p-4 flex items-center justify-between gap-4">
+    <div className="bg-white rounded-card border border-brand-border p-4 flex items-center justify-between gap-4">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-full bg-brand-green-light flex items-center justify-center flex-shrink-0">
           <ClipboardList
@@ -251,7 +251,7 @@ function CompletedDiagnosticRow({
           />
         </div>
         <div>
-          <p className="font-sans text-[10px] font-bold uppercase tracking-wide text-brand-muted mb-0.5">
+          <p className="font-sans text-xs font-bold uppercase tracking-[0.8px] text-brand-muted mb-0.5">
             {classLabel} · Diagnostic
           </p>
           <h3 className="font-display font-bold text-sm text-brand-ink">
@@ -348,9 +348,9 @@ export function Assessments() {
             className="animate-pulse space-y-3"
             aria-label="Loading assessments"
           >
-            <div className="h-20 bg-brand-border rounded-xl w-full" />
-            <div className="h-20 bg-brand-border rounded-xl w-full" />
-            <div className="h-20 bg-brand-border rounded-xl w-full" />
+            <div className="h-20 bg-brand-border rounded-card w-full" />
+            <div className="h-20 bg-brand-border rounded-card w-full" />
+            <div className="h-20 bg-brand-border rounded-card w-full" />
           </div>
         )}
 
@@ -358,7 +358,7 @@ export function Assessments() {
         {!isPageLoading && isError && (
           <div
             role="alert"
-            className="bg-red-50 border border-red-200 rounded-xl p-6 text-center"
+            className="bg-red-50 border border-red-200 rounded-card p-6 text-center"
           >
             <p className="font-sans text-sm text-red-700 font-semibold">
               Could not load assessments. Please refresh the page.
@@ -368,34 +368,13 @@ export function Assessments() {
 
         {!isPageLoading && !isError && (
           <>
-            {/* 1 — Teacher assessments (upcoming) */}
-            {upcomingTeacher.length > 0 && (
-              <section aria-labelledby="teacher-assessments-heading">
-                <h2
-                  id="teacher-assessments-heading"
-                  className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3"
-                >
-                  Set by your teacher
-                </h2>
-                <div className="space-y-3">
-                  {upcomingTeacher.map((a) => (
-                    <TeacherAssessmentCard
-                      key={a.id}
-                      assessment={a}
-                      className={classMap.get(a.classId) ?? "Class"}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* 2 — Diagnostic assessments */}
+            {/* 1 — Diagnostic assessments (priority) */}
             {(pendingDiagnostics.length > 0 ||
               completedDiagnostics.length > 0) && (
               <section aria-labelledby="diagnostics-heading">
                 <h2
                   id="diagnostics-heading"
-                  className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3"
+                  className="font-sans text-xs font-bold uppercase tracking-[0.8px] text-brand-muted mb-3"
                 >
                   Diagnostic assessments
                 </h2>
@@ -418,12 +397,33 @@ export function Assessments() {
               </section>
             )}
 
+            {/* 2 — Teacher assessments (upcoming) */}
+            {upcomingTeacher.length > 0 && (
+              <section aria-labelledby="teacher-assessments-heading">
+                <h2
+                  id="teacher-assessments-heading"
+                  className="font-sans text-xs font-bold uppercase tracking-[0.8px] text-brand-muted mb-3"
+                >
+                  Set by your teacher
+                </h2>
+                <div className="space-y-3">
+                  {upcomingTeacher.map((a) => (
+                    <TeacherAssessmentCard
+                      key={a.id}
+                      assessment={a}
+                      className={classMap.get(a.classId) ?? "Class"}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* 3 — Completed teacher assessments */}
             {completedTeacher.length > 0 && (
               <section aria-labelledby="completed-heading">
                 <h2
                   id="completed-heading"
-                  className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3"
+                  className="font-sans text-xs font-bold uppercase tracking-[0.8px] text-brand-muted mb-3"
                 >
                   Completed
                 </h2>
@@ -443,7 +443,7 @@ export function Assessments() {
             {!hasAnything && (
               <div
                 role="status"
-                className="bg-white rounded-xl border border-role-student-border p-12 text-center"
+                className="bg-white rounded-card border border-brand-border p-12 text-center"
               >
                 <div className="text-4xl mb-4">📋</div>
                 <h3 className="font-display font-bold text-xl text-brand-ink mb-2">

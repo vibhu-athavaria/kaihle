@@ -60,12 +60,19 @@ def _questions_to_schema(questions: list[QuestionBank]) -> list[AssessmentQuesti
             raw_options = _cast(list[dict[str, str]], q.options)
             for opt in raw_options:
                 options.append(QuestionOption(key=opt["key"], text=opt["text"]))
+        elif q.question_type == "TRUE_FALSE":
+            # TRUE_FALSE questions store options as NULL — synthesize them.
+            options = [
+                QuestionOption(key="True", text="True"),
+                QuestionOption(key="False", text="False"),
+            ]
         result.append(
             AssessmentQuestion(
                 question_id=q.id,
                 question_text=q.question_text,
                 question_type=q.question_type,
                 options=options,
+                difficulty_level=int(q.difficulty_level) if q.difficulty_level is not None else 0,
             )
         )
     return result
@@ -95,6 +102,10 @@ async def get_class_diagnostic(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
+    diag_assessment_result = await db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
+    diag_assessment = diag_assessment_result.scalar_one_or_none()
+    diag_title = diag_assessment.title if diag_assessment else "Diagnostic Assessment"
+
     return AttemptResponse(
         id=attempt.id,
         assessment_id=attempt.assessment_id,
@@ -103,6 +114,7 @@ async def get_class_diagnostic(
         started_at=attempt.started_at,
         submitted_at=attempt.completed_at,
         score=attempt.overall_score,
+        title=diag_title,
         questions=_questions_to_schema(questions),
     )
 
@@ -135,6 +147,10 @@ async def start_assessment(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg) from exc
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg) from exc
 
+    assessment_result = await db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
+    assessment_obj = assessment_result.scalar_one_or_none()
+    assessment_title = assessment_obj.title if assessment_obj else "Assessment"
+
     return AttemptResponse(
         id=attempt.id,
         assessment_id=attempt.assessment_id,
@@ -143,6 +159,7 @@ async def start_assessment(
         started_at=attempt.started_at,
         submitted_at=attempt.completed_at,
         score=attempt.overall_score,
+        title=assessment_title,
         questions=_questions_to_schema(questions),
     )
 
@@ -181,6 +198,18 @@ async def get_attempt(
     service = AttemptService(db)
     questions = await service._load_questions(attempt.assessment_id, strip_answers=True)
 
+    # Fetch title (assessment may already be loaded above for auth check)
+    if current_user.role == UserRole.KAIHLE_ADMIN:
+        from sqlalchemy import select as _select
+
+        from app.models.assessment import Assessment as _Assessment
+
+        _a_result = await db.execute(_select(_Assessment).where(_Assessment.id == attempt.assessment_id))
+        _a = _a_result.scalar_one_or_none()
+        assessment_title = _a.title if _a else "Assessment"
+    else:
+        assessment_title = assessment.title if assessment else "Assessment"
+
     return AttemptResponse(
         id=attempt.id,
         assessment_id=attempt.assessment_id,
@@ -189,6 +218,7 @@ async def get_attempt(
         started_at=attempt.started_at,
         submitted_at=attempt.completed_at,
         score=attempt.overall_score,
+        title=assessment_title,
         questions=_questions_to_schema(questions),
     )
 

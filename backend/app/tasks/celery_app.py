@@ -5,7 +5,7 @@ import structlog
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import worker_ready
-from sqlalchemy import update
+from sqlalchemy import or_, update
 
 from app.core.config import settings
 
@@ -55,7 +55,7 @@ def reconcile_stuck_lesson_plans(sender: object, **kwargs: object) -> None:
                 update(LessonPlan)
                 .where(
                     LessonPlan.status == LessonPlanStatus.GENERATING,
-                    LessonPlan.updated_at < cutoff,
+                    or_(LessonPlan.updated_at.is_(None), LessonPlan.updated_at < cutoff),
                 )
                 .values(
                     status=LessonPlanStatus.ARCHIVED,

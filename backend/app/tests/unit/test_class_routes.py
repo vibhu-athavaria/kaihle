@@ -12,11 +12,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.database import get_db
+from app.core.deps import get_current_user
+from app.main import app
 from app.models.user import UserRole
 
 
 def _make_fake_class(school_id: uuid.UUID) -> SimpleNamespace:
     """Return a minimal object that satisfies _class_to_response."""
+    # subject, grade, teacher must have .name / .first_name/.last_name
+    # for _class_to_response which accesses class_.subject.name etc.
+    subject = SimpleNamespace(name="Math")
+    grade = SimpleNamespace(name="Grade 7")
+    teacher = SimpleNamespace(first_name="John", last_name="Doe")
     return SimpleNamespace(
         id=uuid.uuid4(),
         school_id=school_id,
@@ -27,6 +35,9 @@ def _make_fake_class(school_id: uuid.UUID) -> SimpleNamespace:
         name="Math 7A",
         academic_year="2025-2026",
         is_active=True,
+        subject=subject,
+        grade=grade,
+        teacher=teacher,
     )
 
 
@@ -53,9 +64,6 @@ async def test_create_class_when_valid_payload_then_delegates_to_service_and_ret
     Assert:  response is 201, service.create_class was called once with correct args.
              No diagnostic dispatch — diagnostics are now teacher-designed.
     """
-    from app.core.database import get_db
-    from app.core.deps import get_current_user
-    from app.main import app
 
     fake_admin = MagicMock()
     fake_admin.id = uuid.uuid4()
@@ -125,7 +133,26 @@ async def test_list_classes_route_when_include_inactive_true_then_calls_service_
     fake_admin.school_id = school_id
     fake_admin.role = UserRole.SCHOOL_ADMIN
 
-    with patch("app.api.v1.routes.classes.ClassService") as MockService:
+    with (
+        patch("app.api.v1.routes.classes.ClassService") as MockService,
+        patch(
+            "app.api.v1.routes.classes._class_to_response",
+            return_value={
+                "id": str(fake_class.id),
+                "school_id": str(fake_class.school_id),
+                "grade_id": str(fake_class.grade_id),
+                "subject_id": str(fake_class.subject_id),
+                "curriculum_id": str(fake_class.curriculum_id),
+                "teacher_id": str(fake_class.teacher_id),
+                "name": fake_class.name,
+                "academic_year": fake_class.academic_year,
+                "is_active": fake_class.is_active,
+                "subject_name": "Math",
+                "grade_name": "Grade 7",
+                "teacher_name": "John Doe",
+            },
+        ),
+    ):
         mock_instance = MockService.return_value
         mock_instance.list_classes = AsyncMock(return_value=[fake_class])
 

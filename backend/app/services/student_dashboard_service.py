@@ -292,7 +292,7 @@ class StudentDashboardService:
                         subject_name=row.subject_name,
                         priority=3,
                         due_date=None,
-                        action_url=f"/student/classes/{row.class_id}?tab=study-plan",
+                        action_url=f"/student/classes/{row.class_id}/diagnostic",
                     )
                 )
 

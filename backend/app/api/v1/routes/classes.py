@@ -13,19 +13,16 @@ identifies the class.
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, _check_school_access, require_role
-from app.models.curriculum import Grade, Subject
 from app.models.school import Class
-from app.models.user import User, UserRole
+from app.models.user import UserRole
 from app.schemas.class_enrollment import (
     ClassCreate,
     ClassResponse,
     ClassUpdate,
-    ClassWithSummary,
     EnrollRequest,
     EnrollResponse,
     StudentSummary,
@@ -33,13 +30,20 @@ from app.schemas.class_enrollment import (
     UnenrollRequest,
 )
 from app.services.class_service import ClassService
-from app.services.gap_service import GapService
 
 router = APIRouter(tags=["classes"])
 
 
-def _class_to_response(class_: Class) -> ClassResponse:
-    """Convert Class ORM model to ClassResponse schema."""
+async def _class_to_response(class_: Class, db: AsyncSession) -> ClassResponse:
+    """Convert Class ORM model to ClassResponse schema with display names."""
+    # No DB queries needed — use loaded relationships
+    subject_name = class_.subject.name if class_.subject else ""
+    grade_name = class_.grade.name if class_.grade else ""
+
+    teacher_name = None
+    if class_.teacher:
+        teacher_name = f"{class_.teacher.first_name} {class_.teacher.last_name}".strip()
+
     return ClassResponse(
         id=class_.id,
         school_id=class_.school_id,
@@ -50,6 +54,9 @@ def _class_to_response(class_: Class) -> ClassResponse:
         name=class_.name,
         academic_year=class_.academic_year,
         is_active=class_.is_active,
+        subject_name=subject_name,
+        grade_name=grade_name,
+        teacher_name=teacher_name,
     )
 
 
@@ -81,17 +88,16 @@ async def create_class(
         if "not subscribed" in msg:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
-    return _class_to_response(class_)
+    return await _class_to_response(class_, db)
 
 
 @router.get("/schools/{school_id}/classes")
 async def list_classes(
     school_id: uuid.UUID,
-    include_summary: bool = Query(False, description="Include grade/subject names and class summary"),
     include_inactive: bool = Query(False, description="Include inactive classes (admin only; ignored for teachers)"),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN, UserRole.TEACHER)),
     db: AsyncSession = Depends(get_db),
-) -> list[ClassWithSummary] | list[ClassResponse]:
+) -> list[ClassResponse]:
     """List classes. Teacher sees own classes only. SchoolAdmin/KaihleAdmin see all.
 
     When include_summary=true, returns enriched data including grade_name, subject_name,
@@ -106,52 +112,8 @@ async def list_classes(
     effective_inactive = include_inactive if current_user.role != UserRole.TEACHER else False
     classes = await service.list_classes(school_id, teacher_id, include_inactive=effective_inactive)
 
-    if include_summary:
-        grades_result = await db.execute(select(Grade).where(Grade.id.in_([c.grade_id for c in classes])))
-        grade_objects = list(grades_result.scalars().all())
-        grades = {g.id: g.name for g in grade_objects}
-        grade_levels = {g.id: g.level for g in grade_objects}
-
-        subjects_result = await db.execute(select(Subject).where(Subject.id.in_([c.subject_id for c in classes])))
-        subjects = {s.id: s.name for s in subjects_result.scalars().all()}
-
-        teacher_ids = [c.teacher_id for c in classes if c.teacher_id]
-        teachers_result = await db.execute(select(User).where(User.id.in_(teacher_ids)))
-        teachers = {t.id: f"{t.first_name} {t.last_name}".strip() for t in teachers_result.scalars().all()}
-
-        gap_service = GapService(db)
-        summaries = await gap_service.get_class_summaries_batch(
-            class_ids=[c.id for c in classes],
-            school_id=school_id,
-        )
-
-        results = []
-        for cls in classes:
-            summary = summaries.get(cls.id)
-            results.append(
-                ClassWithSummary(
-                    id=cls.id,
-                    school_id=cls.school_id,
-                    grade_id=cls.grade_id,
-                    subject_id=cls.subject_id,
-                    curriculum_id=cls.curriculum_id,
-                    teacher_id=cls.teacher_id,
-                    teacher_name=teachers.get(cls.teacher_id) if cls.teacher_id else None,
-                    has_teacher=cls.teacher_id is not None,
-                    name=cls.name,
-                    academic_year=cls.academic_year,
-                    is_active=cls.is_active,
-                    grade_name=grades.get(cls.grade_id, ""),
-                    grade_level=grade_levels.get(cls.grade_id),
-                    subject_name=subjects.get(cls.subject_id, ""),
-                    avg_mastery=summary.avg_mastery if summary else None,
-                    student_count=summary.student_count if summary else 0,
-                    students_below_threshold=summary.students_below_threshold if summary else 0,
-                )
-            )
-        return results
-
-    return [_class_to_response(c) for c in classes]
+    class_responses = [await _class_to_response(c, db) for c in classes]
+    return class_responses
 
 
 # ── Class-scoped operations ───────────────────────────────────────────────────
@@ -170,7 +132,7 @@ async def get_class(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
     _check_school_access(class_.school_id, current_user)
-    return _class_to_response(class_)
+    return await _class_to_response(class_, db)
 
 
 @router.patch("/classes/{class_id}", response_model=ClassResponse)
@@ -196,7 +158,7 @@ async def update_class(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     await db.commit()
-    return _class_to_response(class_)
+    return await _class_to_response(class_, db)
 
 
 # ── Enrollment (noun-based resource) ─────────────────────────────────────────

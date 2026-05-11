@@ -114,9 +114,7 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
         default=AssessmentStatus.DRAFT,
     )
     is_system_generated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # TRUE = Tier 1 (auto-created on student enrollment by Celery task)
-    # FALSE = Tier 2 (manually created by teacher)
-    # Determines whether submit triggers onboarding completion check
+    # system generated logic has changed. Now all assessment will be generate by the request
     curriculum_topic_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("curriculum_topics.id", ondelete="SET NULL"),
@@ -137,7 +135,6 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
         # the teacher selected. System samples questions from these topics only.
         # NULL for legacy system-generated assessments and all Tier 2 assessments.
     )
-    # Tier 2 fields (Tier 1 system assessments leave these NULL)
     question_count: Mapped[int | None] = mapped_column(Integer)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

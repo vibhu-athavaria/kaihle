@@ -24,7 +24,7 @@ export function MyProgressTab({ subjectId }: MyProgressTabProps) {
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className="h-14 bg-brand-border rounded-xl animate-pulse"
+            className="h-14 bg-brand-border rounded-card animate-pulse"
           />
         ))}
       </div>
@@ -36,10 +36,10 @@ export function MyProgressTab({ subjectId }: MyProgressTabProps) {
   if (scores.length === 0) {
     return (
       <div role="status" className="text-center py-12">
-        <p className="text-sm font-semibold text-[#4a5240]">
+        <p className="text-sm font-semibold text-brand-body">
           No progress data yet.
         </p>
-        <p className="text-xs text-[#9ca3af] mt-1">
+        <p className="text-xs text-brand-muted mt-1">
           Complete your first assessment to see your progress here.
         </p>
       </div>
@@ -61,7 +61,7 @@ export function MyProgressTab({ subjectId }: MyProgressTabProps) {
     <div className="space-y-6">
       {Object.entries(byTopic).map(([topicId, { topicName, subtopics }]) => (
         <div key={topicId}>
-          <h3 className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-3">
+          <h3 className="font-sans text-xs font-bold uppercase tracking-[0.8px] text-brand-muted mb-3">
             {topicName}
           </h3>
           <div className="space-y-2">
@@ -77,7 +77,7 @@ export function MyProgressTab({ subjectId }: MyProgressTabProps) {
               return (
                 <div
                   key={s.subtopic_id}
-                  className="flex items-center gap-3 bg-white rounded-xl border border-brand-border px-4 py-3"
+                  className="flex items-center gap-3 bg-white rounded-card border border-brand-border px-4 py-3"
                 >
                   <span
                     className={`w-5 h-5 rounded-full flex-shrink-0 ${dotClass}`}
