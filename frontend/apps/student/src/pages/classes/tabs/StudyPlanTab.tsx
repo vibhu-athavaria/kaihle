@@ -15,7 +15,7 @@ export function StudyPlanTab({ classId, diagnosticStatus }: StudyPlanTabProps) {
 
   if (diagnosticStatus === "PENDING" || diagnosticStatus === "IN_PROGRESS") {
     return (
-      <div className="bg-amber-50 border border-amber-200 rounded-card p-6 flex flex-col items-center text-center gap-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 flex flex-col items-center text-center gap-4">
         <div className="text-4xl">🎯</div>
         <div>
           <h3 className="font-display font-bold text-xl text-brand-ink mb-2">
@@ -52,7 +52,7 @@ export function StudyPlanTab({ classId, diagnosticStatus }: StudyPlanTabProps) {
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-16 bg-brand-border rounded-card animate-pulse"
+            className="h-16 bg-brand-border rounded-xl animate-pulse"
           />
         ))}
       </div>
@@ -94,7 +94,7 @@ export function StudyPlanTab({ classId, diagnosticStatus }: StudyPlanTabProps) {
                 : undefined
             }
             disabled={isGenerating}
-            className="w-full text-left bg-white rounded-card border border-brand-border p-4 shadow-sm transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 disabled:cursor-default disabled:hover:shadow-sm"
+            className="w-full text-left bg-white rounded-xl border border-brand-border p-4 shadow-sm transition-all hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 disabled:cursor-default disabled:hover:shadow-sm"
           >
             <div className="flex items-center gap-3">
               <div className="flex-shrink-0">
