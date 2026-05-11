@@ -7,11 +7,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, distinct, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import Assessment
-from app.models.curriculum import Grade, Subject
+from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic, Topic
 from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment
 from app.models.study_plan import StudyPlan, StudyPlanStatus
@@ -117,18 +117,20 @@ class StudentDashboardService:
         topics_total_by_class: dict[uuid.UUID, int] = {}
         if class_ids:
             topics_q = await self.db.execute(
-                text(
-                    """
-                    SELECT c.id AS class_id, COUNT(DISTINCT t.id) AS total
-                    FROM classes c
-                    JOIN curriculum_topics ct ON ct.curriculum_id = c.curriculum_id
-                                             AND ct.subject_id = c.subject_id
-                    JOIN topics t ON t.id = ct.topic_id
-                    WHERE c.id = ANY(:class_ids)
-                    GROUP BY c.id
-                    """
-                ),
-                {"class_ids": class_ids},
+                select(
+                    Class.id.label("class_id"),
+                    func.count(distinct(Topic.id)).label("total"),
+                )
+                .join(
+                    CurriculumTopic,
+                    and_(
+                        CurriculumTopic.curriculum_id == Class.curriculum_id,
+                        CurriculumTopic.subject_id == Class.subject_id,
+                    ),
+                )
+                .join(Topic, Topic.id == CurriculumTopic.topic_id)
+                .where(Class.id.in_(class_ids))
+                .group_by(Class.id)
             )
             topics_total_by_class = {row.class_id: row.total for row in topics_q.all()}
 
@@ -136,19 +138,18 @@ class StudentDashboardService:
         assessed_by_class: dict[uuid.UUID, int] = {}
         if class_ids:
             assessed_q = await self.db.execute(
-                text(
-                    """
-                    SELECT gs.class_id, COUNT(DISTINCT ct.topic_id) AS assessed
-                    FROM gap_states gs
-                    JOIN subtopics st ON st.id = gs.subtopic_id
-                    JOIN curriculum_topics ct ON ct.id = st.curriculum_topic_id
-                    WHERE gs.student_id = :student_id
-                      AND gs.class_id = ANY(:class_ids)
-                      AND gs.attempt_count > 0
-                    GROUP BY gs.class_id
-                    """
-                ),
-                {"student_id": student.id, "class_ids": class_ids},
+                select(
+                    GapState.class_id,
+                    func.count(distinct(CurriculumTopic.topic_id)).label("assessed"),
+                )
+                .join(Subtopic, Subtopic.id == GapState.subtopic_id)
+                .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                .where(
+                    GapState.student_id == student.id,
+                    GapState.class_id.in_(class_ids),
+                    GapState.attempt_count > 0,
+                )
+                .group_by(GapState.class_id)
             )
             assessed_by_class = {row.class_id: row.assessed for row in assessed_q.all()}
 
