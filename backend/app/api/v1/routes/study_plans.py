@@ -6,6 +6,7 @@ Route decorators, paths, response models, and status codes are frozen (CONSTITUT
 
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +24,9 @@ from app.schemas.study_plans import (
     StudyPlanResponse,
 )
 from app.services import study_plan_service as sp_service
-from app.services.study_plan_service import DiagnosticNotCompletedError
+from app.services.study_plan_service import CeleryDispatchError, DiagnosticNotCompletedError
+
+logger = structlog.get_logger()
 
 router = APIRouter(tags=["study-plans"])
 
@@ -66,6 +69,19 @@ async def assign_study_plans(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Student must complete the diagnostic assessment before study plans can be assigned",
+        ) from exc
+    except CeleryDispatchError as exc:
+        # Plans are committed but background task failed to dispatch.
+        # Return 202 with what was created so the client is not left in limbo;
+        # operators can manually retry via the individual task.
+        logger.warning("celery_dispatch_failed_returning_partial", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_202_ACCEPTED,
+            detail=(
+                "Study plans were created but the background generation task "
+                "could not be dispatched. Plans are in GENERATING status. "
+                "Contact an operator to retry."
+            ),
         ) from exc
 
     return result
@@ -135,14 +151,21 @@ async def list_student_study_plans(
         if enrollment.scalar_one_or_none() is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student not in your class")
 
-    # Use the student's school_id for the query
-    student_school_result = await db.execute(
-        select(Class.school_id)
-        .join(ClassEnrollment, ClassEnrollment.class_id == Class.id)
-        .where(ClassEnrollment.student_id == student_id)
-        .limit(1)
-    )
-    school_id = student_school_result.scalar_one_or_none() or current_user.school_id
+    # Determine school_id — prefer the authenticated user's school when available
+    # (prevents non-deterministic results when a student spans multiple schools).
+    # Fall back to querying the student's enrollment only when the user has no
+    # own school_id (e.g. KAIHLE_ADMIN with no school association).
+    school_id = current_user.school_id
+    if school_id is None:
+        student_school_result = await db.execute(
+            select(Class.school_id)
+            .join(ClassEnrollment, ClassEnrollment.class_id == Class.id)
+            .where(ClassEnrollment.student_id == student_id)
+            .order_by(Class.id)  # deterministic: oldest class first
+            .limit(1)
+        )
+        school_id = student_school_result.scalar_one_or_none()
+
     if school_id is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot determine school for student")
 

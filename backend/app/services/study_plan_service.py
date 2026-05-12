@@ -8,7 +8,7 @@ Orchestrates creation of personalised study plans:
 - mark_resource_watched: marks a resource as watched
 
 The async content generation (curation + quiz generation) is handled by
-the Celery task generate_study_plan_content.
+the Celery task generate_bulk_study_plan_content.
 """
 
 from __future__ import annotations
@@ -59,6 +59,10 @@ class DiagnosticNotCompletedError(Exception):
     """Raised when trying to assign a study plan before diagnostic is completed."""
 
 
+class CeleryDispatchError(Exception):
+    """Raised when the Celery task dispatch fails after the DB commit."""
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -83,6 +87,10 @@ async def create_bulk_study_plans(
 
     Returns:
         StudyPlanAssignResponse with created plans and skipped students.
+
+    Raises:
+        DiagnosticNotCompletedError: if no eligible students exist.
+        CeleryDispatchError: if the background task cannot be dispatched.
     """
 
     # Build the base query: only students who have completed the diagnostic.
@@ -136,9 +144,8 @@ async def create_bulk_study_plans(
     await db.commit()
 
     # Dispatch a single Celery task for all plans — AFTER commit succeeds.
-    # If this fails we log and let the plans stay in GENERATING; a operator
-    # can manually re-trigger or the plans can be retried via the individual
-    # task on demand.
+    # Raising on dispatch failure so the HTTP response correctly reflects the error;
+    # the DB rows are already committed so operators can manually retry.
     try:
         generate_bulk_study_plan_content.delay(plan_ids)
     except Exception as exc:
@@ -148,6 +155,10 @@ async def create_bulk_study_plans(
             plan_count=len(plan_ids),
             error=str(exc),
         )
+        raise CeleryDispatchError(
+            f"Study plans were created (IDs: {plan_ids}) but the background "
+            f"generation task could not be dispatched: {exc}"
+        ) from exc
 
     logger.info(
         "bulk_study_plans_created",
@@ -265,7 +276,7 @@ async def submit_quiz(
     if not quiz:
         raise ValueError("No quiz found for this plan")
 
-    # Score responses
+    # Score responses — guard against non-string correct_answer
     questions = quiz.questions.get("questions", [])
     scored_results: list[dict[str, Any]] = []
     correct_count = 0
@@ -283,7 +294,7 @@ async def submit_quiz(
             continue
 
         question = questions[resp.question_index]
-        correct = question.get("correct_answer", "").upper()
+        correct = str(question.get("correct_answer", "")).upper()
         given = resp.answer.upper()
         is_correct = given == correct
         score = 1.0 if is_correct else 0.0
@@ -358,7 +369,7 @@ async def list_student_plans(
         student_id: UUID of the student.
         school_id: UUID of the school (enforces isolation via Class join).
         db: Async SQLAlchemy session.
-        status_filter: Optional status to filter by.
+        status_filter: Optional StudyPlanStatus to filter by.
         subject_id: Optional subject UUID to filter by.
         page: Page number (1-indexed).
         page_size: Number of items per page.
@@ -380,13 +391,7 @@ async def list_student_plans(
         .order_by(StudyPlan.created_at.desc())
     )
 
-    _valid_statuses = {
-        StudyPlanStatus.GENERATING,
-        StudyPlanStatus.ACTIVE,
-        StudyPlanStatus.COMPLETED,
-        StudyPlanStatus.ABANDONED,
-    }
-    if status_filter and status_filter in _valid_statuses:
+    if status_filter is not None:
         query = query.where(StudyPlan.status == status_filter)
 
     if subject_id:
@@ -481,6 +486,7 @@ def _build_plan_response(plan: StudyPlan, subtopic_name: str) -> StudyPlanRespon
         quiz_questions = plan.quiz.questions.get("questions", [])
         quiz_score = plan.quiz.score
 
+    # created_at is NOT NULL on TimestampMixin; the fallback is dead code
     return StudyPlanResponse(
         id=plan.id,
         student_id=plan.student_id,
@@ -491,5 +497,5 @@ def _build_plan_response(plan: StudyPlan, subtopic_name: str) -> StudyPlanRespon
         resources=resources,
         quiz_questions=quiz_questions,
         quiz_score=quiz_score,
-        created_at=plan.created_at or datetime.now(UTC),
+        created_at=plan.created_at,  # always non-null; no fallback needed
     )
