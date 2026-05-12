@@ -304,10 +304,7 @@ class OnboardingService:
         student_profile = result.scalar_one_or_none()
         learning_profile_complete = student_profile.is_learning_profile_complete if student_profile else False
 
-        # Get diagnostic completion status per class_enrollments (for information only)
-        diagnostics_by_class = await self.get_diagnostic_status_by_class(student_id)
-
-        return {"learning_profile_complete": learning_profile_complete, "diagnostics_by_class": diagnostics_by_class}
+        return {"learning_profile_complete": learning_profile_complete}
 
     async def get_learning_profile(self, student_id: UUID) -> StudentLearningProfile | None:
         """Get a student's learning profile.

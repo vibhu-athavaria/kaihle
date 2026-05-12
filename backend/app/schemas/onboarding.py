@@ -132,9 +132,6 @@ class OnboardingStatusResponse(BaseModel):
     """
 
     learning_profile_complete: bool = Field(..., description="True if learning profile questionnaire is submitted")
-    diagnostics_by_class: list[DiagnosticStatusByClass] = Field(
-        default_factory=list, description="Per-class diagnostic status breakdown"
-    )
 
     model_config = ConfigDict(from_attributes=True)
 

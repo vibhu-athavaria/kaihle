@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Literal
 
 import structlog
-from sqlalchemy import and_, distinct, func, select, text
+from sqlalchemy import and_, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.assessment import Assessment
+from app.models.assessment import Assessment, AttemptStatus, StudentAttempt
 from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic, Topic
 from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment
@@ -154,42 +154,43 @@ class StudentDashboardService:
             assessed_by_class = {row.class_id: row.assessed for row in assessed_q.all()}
 
         # 6. Trend (recent vs prev week)
-        now = datetime.now(UTC)
-        week_ago = now - timedelta(days=7)
-        two_weeks_ago = now - timedelta(days=14)
+        # now = datetime.now(UTC)
+        # week_ago = now - timedelta(days=7)
+        # two_weeks_ago = now - timedelta(days=14)
         trend_by_class: dict[uuid.UUID, Literal["up", "down", "flat", "none"]] = {}
-        if class_ids:
-            trend_q = await self.db.execute(
-                text(
-                    """
-                    SELECT gs.class_id,
-                           AVG(CASE WHEN sats.attempted_at >= :week_ago THEN sats.score END) AS recent_avg,
-                           AVG(CASE WHEN sats.attempted_at < :week_ago
-                                     AND sats.attempted_at >= :two_weeks_ago THEN sats.score END) AS prev_avg
-                    FROM student_attempt_subtopic_scores sats
-                    JOIN gap_states gs
-                      ON gs.subtopic_id = sats.subtopic_id
-                     AND gs.student_id = sats.student_id
-                    WHERE sats.student_id = :student_id
-                      AND sats.attempted_at >= :two_weeks_ago
-                      AND gs.class_id = ANY(:class_ids)
-                    GROUP BY gs.class_id
-                    """
-                ),
-                {
-                    "student_id": student.id,
-                    "week_ago": week_ago,
-                    "two_weeks_ago": two_weeks_ago,
-                    "class_ids": class_ids,
-                },
-            )
-            trend_by_class = {
-                row.class_id: _trend(
-                    float(row.recent_avg) if row.recent_avg is not None else None,
-                    float(row.prev_avg) if row.prev_avg is not None else None,
-                )
-                for row in trend_q.all()
-            }
+        # Let's comment for now We don't need show this for MVP (TODO)
+        # if class_ids:
+        #     trend_q = await self.db.execute(
+        #         text(
+        #             """
+        #             SELECT gs.class_id,
+        #                    AVG(CASE WHEN sats.attempted_at >= :week_ago THEN sats.score END) AS recent_avg,
+        #                    AVG(CASE WHEN sats.attempted_at < :week_ago
+        #                              AND sats.attempted_at >= :two_weeks_ago THEN sats.score END) AS prev_avg
+        #             FROM student_attempt_subtopic_scores sats
+        #             JOIN gap_states gs
+        #               ON gs.subtopic_id = sats.subtopic_id
+        #              AND gs.student_id = sats.student_id
+        #             WHERE sats.student_id = :student_id
+        #               AND sats.attempted_at >= :two_weeks_ago
+        #               AND gs.class_id = ANY(:class_ids)
+        #             GROUP BY gs.class_id
+        #             """
+        #         ),
+        #         {
+        #             "student_id": student.id,
+        #             "week_ago": week_ago,
+        #             "two_weeks_ago": two_weeks_ago,
+        #             "class_ids": class_ids,
+        #         },
+        #     )
+        #     trend_by_class = {
+        #         row.class_id: _trend(
+        #             float(row.recent_avg) if row.recent_avg is not None else None,
+        #             float(row.prev_avg) if row.prev_avg is not None else None,
+        #         )
+        #         for row in trend_q.all()
+        #     }
 
         # 7. Build ClassSummary list
         classes: list[ClassSummary] = []
@@ -215,40 +216,47 @@ class StudentDashboardService:
         # 8. Action items
         action_items: list[ActionItem] = []
 
-        # (a) Teacher assessments due within 7 days
+        # (a) Class assessments Pending
         if class_ids:
-            deadline_cutoff = now + timedelta(days=7)
             assessments_q = await self.db.execute(
                 select(
                     Assessment.id,
                     Assessment.deadline,
                     Assessment.class_id,
+                    Assessment.title,
+                    StudentAttempt.id.label("attempt_id"),
                     Class.name.label("class_name"),
                     Subject.name.label("subject_name"),
                 )
                 .join(Class, Class.id == Assessment.class_id)
                 .join(Subject, Subject.id == Class.subject_id)
+                .outerjoin(
+                    StudentAttempt,
+                    and_(
+                        StudentAttempt.assessment_id == Assessment.id,
+                        StudentAttempt.student_id == student.id,
+                        StudentAttempt.status != AttemptStatus.COMPLETED,
+                    ),
+                )
                 .where(
                     Assessment.class_id.in_(class_ids),
-                    Assessment.is_system_generated.is_(False),  # noqa: E712
-                    Assessment.deadline.isnot(None),
-                    Assessment.deadline <= deadline_cutoff,
-                    Assessment.deadline >= now,
+                    # Assessment.is_system_generated.is_(False),  # noqa: E712
                 )
+                .order_by(Assessment.created_at.desc())
             )
             for a in assessments_q.all():
-                deadline_aware = a.deadline.replace(tzinfo=UTC) if a.deadline.tzinfo is None else a.deadline
-                days_until = (deadline_aware - now).days
-                priority = 1 if days_until == 0 else 2
+                a_url = f"/student/assessments/{a.attempt_id}/take" if a.attempt_id else ""
                 action_items.append(
                     ActionItem(
                         type="assessment_due",
+                        title=a.title,
                         class_id=a.class_id,
+                        assessment_id=a.id,
                         class_name=a.class_name,
                         subject_name=a.subject_name,
-                        priority=priority,
-                        due_date=a.deadline,
-                        action_url="/student/assessments",
+                        priority=1,
+                        due_date=None,
+                        action_url=a_url,
                     )
                 )
 
@@ -282,20 +290,20 @@ class StudentDashboardService:
                     )
                 )
 
-        # (c) Diagnostic pending
-        for row in enrollments:
-            if row.onboarding_diagnostic_status == "PENDING":
-                action_items.append(
-                    ActionItem(
-                        type="diagnostic_pending",
-                        class_id=row.class_id,
-                        class_name=row.class_name,
-                        subject_name=row.subject_name,
-                        priority=3,
-                        due_date=None,
-                        action_url=f"/student/classes/{row.class_id}/diagnostic",
-                    )
-                )
+        # # (c) Diagnostic pending
+        # for row in enrollments:
+        #     if row.onboarding_diagnostic_status == "PENDING":
+        #         action_items.append(
+        #             ActionItem(
+        #                 type="diagnostic_pending",
+        #                 class_id=row.class_id,
+        #                 class_name=row.class_name,
+        #                 subject_name=row.subject_name,
+        #                 priority=3,
+        #                 due_date=None,
+        #                 action_url=f"/student/classes/{row.class_id}/diagnostic",
+        #             )
+        #         )
 
         action_items.sort(
             key=lambda a: (

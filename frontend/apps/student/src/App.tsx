@@ -19,6 +19,7 @@ import { StudyPlans } from "./pages/study-plans/StudyPlans";
 import { Assessments } from "./pages/assessments/Assessments";
 import { StudentSettings } from "./pages/settings/StudentSettings";
 import { TakeAssessmentPage } from "./pages/assessments/TakeAssessmentPage";
+import { DiagnosticStartPage } from "./pages/assessments/DiagnosticStartPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudyPlanDetail } from "./pages/study-plans/StudyPlanDetail";
 import { ClassTopicsPage } from "./pages/classes/ClassTopicsPage";
@@ -91,7 +92,7 @@ export default function App() {
             <PrivateRouteWithPasswordCheck>
               <OnboardingRoute>
                 <ErrorBoundary role="student">
-                  <TakeAssessmentPage />
+                  <DiagnosticStartPage />
                 </ErrorBoundary>
               </OnboardingRoute>
             </PrivateRouteWithPasswordCheck>

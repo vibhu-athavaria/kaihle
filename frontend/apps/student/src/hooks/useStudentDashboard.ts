@@ -11,12 +11,14 @@ export type ActionItemType =
 
 export interface ActionItem {
   type: ActionItemType;
+  title: string | null;
   class_id: string;
   class_name: string;
   subject_name: string;
   priority: number;
   due_date: string | null;
-  action_url: string;
+  action_url: string | null;
+  assessment_id: string | null;
 }
 
 export interface ClassSummary {

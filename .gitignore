@@ -25,7 +25,7 @@ src/**/*.js
 src/**/*.js.map
 /plans/*
 .cache/
-
+.kilo/plans/**
 # IDE
 .vscode/
 .idea/
