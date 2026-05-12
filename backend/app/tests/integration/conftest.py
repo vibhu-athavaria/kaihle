@@ -14,7 +14,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token, hash_password
-from app.models.school import School
+from app.models.school import School, SchoolCurriculum
 from app.models.user import User, UserRole
 
 # Set test environment variables BEFORE importing app modules
@@ -433,3 +433,19 @@ async def test_assessment(
     db_session.add(assessment)
     await db_session.commit()
     return assessment
+
+
+@pytest_asyncio.fixture
+async def school_curriculum(
+    db_session: AsyncSession, test_school: School, test_curriculum: Curriculum
+) -> SchoolCurriculum:
+    """Create a school-curriculum subscription."""
+    from app.models.school import SchoolCurriculum
+
+    sub = SchoolCurriculum(
+        school_id=test_school.id,
+        curriculum_id=test_curriculum.id,
+    )
+    db_session.add(sub)
+    await db_session.commit()
+    return sub

@@ -52,7 +52,7 @@ class TestCreateClass:
             academic_year="2025-2026",
         )
 
-        # Mock teacher lookup then curriculum subscription check
+        # Mock teacher lookup then curriculum subscription check then class refetch
         from app.models.school import SchoolCurriculum
 
         teacher = User(id=teacher_id, school_id=school_id, role=UserRole.TEACHER)
@@ -61,7 +61,19 @@ class TestCreateClass:
         teacher_result.scalar_one_or_none.return_value = teacher
         subscription_result = MagicMock()
         subscription_result.scalar_one_or_none.return_value = sc
-        mock_db.execute = AsyncMock(side_effect=[teacher_result, subscription_result])
+        # Third execute call is the class refetch after flush (line 94 in class_service.py)
+        class_result = MagicMock()
+        mock_class = MagicMock(spec=Class)
+        mock_class.id = uuid.uuid4()
+        mock_class.name = "Math 7A"
+        mock_class.teacher_id = teacher_id
+        mock_class.grade_id = grade_id
+        mock_class.subject_id = subject_id
+        mock_class.curriculum_id = curriculum_id
+        mock_class.school_id = school_id
+        mock_class.academic_year = "2025-2026"
+        class_result.scalars.return_value.one.return_value = mock_class
+        mock_db.execute = AsyncMock(side_effect=[teacher_result, subscription_result, class_result])
         mock_db.flush = AsyncMock()
 
         # Act
@@ -152,7 +164,19 @@ class TestCreateClass:
         teacher_result.scalar_one_or_none.return_value = teacher
         subscription_result = MagicMock()
         subscription_result.scalar_one_or_none.return_value = sc
-        mock_db.execute = AsyncMock(side_effect=[teacher_result, subscription_result])
+        # Third execute call is the class refetch after flush (line 94 in class_service.py)
+        class_result = MagicMock()
+        mock_class = MagicMock(spec=Class)
+        mock_class.id = uuid.uuid4()
+        mock_class.name = "Math 7A"
+        mock_class.teacher_id = teacher_id
+        mock_class.grade_id = data.grade_id
+        mock_class.subject_id = data.subject_id
+        mock_class.curriculum_id = curriculum_id
+        mock_class.school_id = school_id
+        mock_class.academic_year = "2025-2026"
+        class_result.scalars.return_value.one.return_value = mock_class
+        mock_db.execute = AsyncMock(side_effect=[teacher_result, subscription_result, class_result])
         mock_db.flush = AsyncMock()
 
         class_ = await class_service.create_class(school_id, data)
