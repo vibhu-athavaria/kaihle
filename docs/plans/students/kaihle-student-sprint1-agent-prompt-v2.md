@@ -125,10 +125,6 @@ The `isOnboardingComplete()` function currently reads:
 ```ts
 function isOnboardingComplete(status: OnboardingStatus): boolean {
   if (!status.learning_profile_complete) return false;
-  if (!status.diagnostics_by_class || status.diagnostics_by_class.length === 0) {
-    return false;  // ← blocks students with no enrolled classes
-  }
-  return status.diagnostics_by_class.every((d) => d.status === "COMPLETED");
 }
 ```
 Fix: gate on `learning_profile_complete` only. Remove the diagnostics check entirely.

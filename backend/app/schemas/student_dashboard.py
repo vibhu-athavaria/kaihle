@@ -21,7 +21,9 @@ class ActionItem(BaseModel):
         "study_plan_continue",
         "diagnostic_pending",
     ]
+    title: str | None = None
     class_id: UUID
+    assessment_id: UUID | None = None  # when attempt_id is null, this is set
     class_name: str
     subject_name: str
     priority: int  # 1 = today / urgent, 2 = this week, 3 = nudge

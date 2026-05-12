@@ -36,15 +36,8 @@ export function RoleRoute({
   return <>{children}</>;
 }
 
-type DiagnosticsByClass = {
-  class_id: string;
-  class_name: string;
-  status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
-};
-
 type OnboardingStatus = {
   learning_profile_complete: boolean;
-  diagnostics_by_class: DiagnosticsByClass[];
 };
 
 /**

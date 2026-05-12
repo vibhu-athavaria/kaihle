@@ -38,7 +38,7 @@ The Student Learning Profile captures each student’s learning modalities, work
 - Service: `backend/app/services/onboarding_service.py`
   - `save_questionnaire_response(student_id, responses)` – processes answers, computes modality scores, work style, interests; upserts `StudentLearningProfile`; sets `StudentProfile.is_learning_profile_complete = TRUE`.
   - `get_learning_profile_authorized(...)` – enforces role-based access (student own, teacher class ownership, school same-school, admin any).
-  - `get_onboarding_status(student_id)` – returns `{learning_profile_complete, diagnostics_by_class}`.
+  - `get_onboarding_status(student_id)` – returns `{learning_profile_complete}`.
   - `get_or_create_learning_profile(student_id, school_id)` – creates empty profile if none exists.
   - `verify_teacher_student_relationship(teacher_id, student_id)` – checks class enrollment for teacher authorization.
 

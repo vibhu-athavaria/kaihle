@@ -1,6 +1,5 @@
 /**
- * TakeAssessmentPage — used for both Tier 1 (onboarding diagnostic) and
- * Tier 2 (teacher-created progress check) assessments.
+ * TakeAssessmentPage — renders an in-progress assessment by attemptId.
  *
  * Route: /student/assessments/:attemptId/take
  *

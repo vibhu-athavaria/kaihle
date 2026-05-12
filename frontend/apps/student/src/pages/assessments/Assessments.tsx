@@ -188,16 +188,22 @@ function PendingDiagnosticCard({
   assessment,
   className: classLabel,
 }: PendingDiagnosticCardProps) {
-  const attemptRoute = assessment.attemptId
-    ? assessment.attemptStatus === "IN_PROGRESS"
-      ? `/student/assessments/${assessment.attemptId}/take`
-      : `/student/assessments/${assessment.attemptId}/take`
-    : `/student/classes/${assessment.classId}/diagnostic`;
+  const navigate = useNavigate();
+  const startAssessment = useStartAssessment();
 
-  const buttonLabel =
-    assessment.attemptStatus === "IN_PROGRESS"
-      ? "Continue →"
-      : "Take diagnostic →";
+  // If an attempt already exists (IN_PROGRESS), link directly to it
+  const resumeRoute = assessment.attemptId
+    ? `/student/assessments/${assessment.attemptId}/take`
+    : null;
+
+  const handleStart = async () => {
+    try {
+      const attempt = await startAssessment.mutateAsync(assessment.id);
+      navigate(`/student/assessments/${attempt.id}/take`);
+    } catch {
+      // error surfaced via startAssessment.isError
+    }
+  };
 
   return (
     <div className="bg-amber-50 border border-amber-200 rounded-card p-4 flex gap-3">
@@ -215,12 +221,28 @@ function PendingDiagnosticCard({
           This diagnostic helps Kaihle understand your current level. Completing
           it will unlock your personalised study plan for this subject.
         </div>
-        <Link
-          to={attemptRoute}
-          className="inline-block mt-3 font-sans text-sm font-semibold text-amber-800 hover:text-amber-900 focus-visible:ring-2 focus-visible:ring-amber-700 rounded"
-        >
-          {buttonLabel}
-        </Link>
+        {resumeRoute ? (
+          <Link
+            to={resumeRoute}
+            className="inline-block mt-3 font-sans text-sm font-semibold text-amber-800 hover:text-amber-900 focus-visible:ring-2 focus-visible:ring-amber-700 rounded"
+          >
+            Continue →
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void handleStart()}
+            disabled={startAssessment.isPending}
+            className="inline-block mt-3 font-sans text-sm font-semibold text-amber-800 hover:text-amber-900 focus-visible:ring-2 focus-visible:ring-amber-700 rounded disabled:opacity-60"
+          >
+            {startAssessment.isPending ? "Starting…" : "Take diagnostic →"}
+          </button>
+        )}
+        {startAssessment.isError && (
+          <p className="mt-1 font-sans text-xs text-brand-red">
+            Could not start — please try again.
+          </p>
+        )}
       </div>
     </div>
   );

@@ -99,10 +99,7 @@ async def get_student_onboarding_status(
         data=status_data,
     )
 
-    return OnboardingStatusResponse(
-        learning_profile_complete=status_data["learning_profile_complete"],
-        diagnostics_by_class=status_data["diagnostics_by_class"],
-    )
+    return OnboardingStatusResponse(learning_profile_complete=status_data["learning_profile_complete"])
 
 
 @router.get("/questionnaire", response_model=QuestionnaireDefinition)

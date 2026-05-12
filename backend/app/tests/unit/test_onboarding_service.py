@@ -467,7 +467,6 @@ class TestGetOnboardingStatus:
         status = await service.get_onboarding_status(student_id)
 
         assert status["learning_profile_complete"] is True
-        assert len(status["diagnostics_by_class"]) == 0
 
     async def test_when_no_student_profile_then_false(self, service: OnboardingService, student_id: uuid.UUID) -> None:
         """Test that learning_profile_complete return false when student profile doesn't exist."""
@@ -485,7 +484,6 @@ class TestGetOnboardingStatus:
         status = await service.get_onboarding_status(student_id)
 
         assert status["learning_profile_complete"] is False
-        assert len(status["diagnostics_by_class"]) == 0
 
 
 @pytest.mark.asyncio

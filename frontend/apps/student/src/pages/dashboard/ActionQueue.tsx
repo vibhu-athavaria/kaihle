@@ -1,6 +1,7 @@
 // frontend/apps/student/src/pages/dashboard/ActionQueue.tsx
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { ActionItem } from "../../hooks/useStudentDashboard";
+import { useStartAssessment } from "../../hooks/useAttempt";
 
 interface ActionQueueProps {
   items: ActionItem[];
@@ -60,6 +61,20 @@ function DueDateChip({
 }
 
 export function ActionQueue({ items }: ActionQueueProps) {
+  const navigate = useNavigate();
+  const startMutation = useStartAssessment();
+
+  const handleClick = async (item: ActionItem) => {
+    if (item.action_url) {
+      // Resume existing attempt
+      navigate(item.action_url);
+    } else if (item.assessment_id) {
+      // Start new attempt via mutation
+      const result = await startMutation.mutateAsync(item.assessment_id);
+      navigate(`/student/assessments/${result.id}/take`);
+    }
+  };
+
   if (items.length === 0) {
     return (
       <div
@@ -80,6 +95,7 @@ export function ActionQueue({ items }: ActionQueueProps) {
     <div className="bg-white border border-brand-border rounded-card overflow-hidden">
       {items.map((item, idx) => {
         const config = ACTION_CONFIG[item.type];
+        const isLoading = startMutation.isPending;
         return (
           <div
             key={`${item.type}-${item.class_id}-${idx}`}
@@ -92,7 +108,7 @@ export function ActionQueue({ items }: ActionQueueProps) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold text-brand-ink truncate">
-                {config.defaultLabel}
+                {item.title ? item.title : config.defaultLabel}
               </div>
               <div className="text-xs text-brand-muted mt-0.5">
                 {item.class_name} · {item.subject_name}
@@ -103,12 +119,14 @@ export function ActionQueue({ items }: ActionQueueProps) {
                 dueDateIso={item.due_date}
                 priority={item.priority}
               />
-              <Link
-                to={item.action_url}
-                className="text-xs font-bold px-3 py-1.5 rounded-full bg-brand-primary text-white hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+              <button
+                type="button"
+                onClick={() => handleClick(item)}
+                disabled={isLoading}
+                className="text-xs font-bold px-3 py-1.5 rounded-full bg-brand-primary text-white hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 disabled:opacity-50"
               >
-                Go →
-              </Link>
+                {isLoading ? "Loading..." : "Go →"}
+              </button>
             </div>
           </div>
         );
