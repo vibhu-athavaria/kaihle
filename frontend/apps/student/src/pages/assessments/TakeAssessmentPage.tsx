@@ -137,18 +137,6 @@ export function TakeAssessmentPage() {
   const progressPct =
     totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
 
-  // ── Handle option select ─────────────────────────────────────
-  const handleSelect = useCallback(
-    (key: string) => {
-      if (!currentQuestion) return;
-      setAnswers((prev) => ({
-        ...prev,
-        [currentQuestion.question_id]: key,
-      }));
-    },
-    [currentQuestion],
-  );
-
   // ── Auto-save on Next click ──────────────────────────────────
   const saveCurrentAnswer = useCallback(
     async (questionId: string, key: string) => {
@@ -176,16 +164,25 @@ export function TakeAssessmentPage() {
     [attemptId, submitResponseMutation],
   );
 
-  // ── Navigation helpers ───────────────────────────────────────
-  const goToNext = useCallback(async () => {
-    if (!currentQuestion) return;
-    const key = answers[currentQuestion.question_id];
-    if (key) {
-      // fire-and-forget save; don't block navigation
+  // ── Handle option select ─────────────────────────────────────
+  const handleSelect = useCallback(
+    (key: string) => {
+      if (!currentQuestion) return;
+      setAnswers((prev) => ({
+        ...prev,
+        [currentQuestion.question_id]: key,
+      }));
+      // Auto-save immediately (fire-and-forget)
       void saveCurrentAnswer(currentQuestion.question_id, key);
-    }
+    },
+    [currentQuestion, saveCurrentAnswer],
+  );
+
+  // ── Navigation helpers ───────────────────────────────────────
+  const goToNext = useCallback(() => {
+    if (!currentQuestion) return;
     setCurrentIndex((i) => Math.min(i + 1, totalQuestions - 1));
-  }, [answers, currentQuestion, saveCurrentAnswer, totalQuestions]);
+  }, [currentQuestion, totalQuestions]);
 
   const goToPrev = useCallback(() => {
     setCurrentIndex((i) => Math.max(i - 1, 0));
