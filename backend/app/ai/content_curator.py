@@ -1,4 +1,4 @@
-"""Content Curation Engine — M3-1-T1.
+"""
 
 Retrieves top 1–3 approved video resources for a student's gap subtopic,
 ordered by popularity and learning-modality weighting.

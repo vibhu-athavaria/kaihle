@@ -39,6 +39,13 @@ class StudyPlanItem(BaseModel):
     status: str  # "GENERATING"
 
 
+class StudyPlanSkippedItem(BaseModel):
+    """A student who was not assigned a study plan and why."""
+
+    student_id: UUID
+    reason: str
+
+
 class StudyPlanAssignRequest(BaseModel):
     subtopic_id: UUID
     student_ids: list[UUID] | None = Field(
@@ -49,7 +56,9 @@ class StudyPlanAssignRequest(BaseModel):
 
 class StudyPlanAssignResponse(BaseModel):
     status: str = "generating"
+    class_id: UUID
     plans: list[StudyPlanItem]
+    skipped: list[StudyPlanSkippedItem] = Field(default_factory=list)
 
 
 class QuizResponse(BaseModel):

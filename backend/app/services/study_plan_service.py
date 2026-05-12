@@ -8,7 +8,7 @@ Orchestrates creation of personalised study plans:
 - mark_resource_watched: marks a resource as watched
 
 The async content generation (curation + quiz generation) is handled by
-the Celery task generate_study_plan_content.
+the Celery task generate_bulk_study_plan_content.
 """
 
 from __future__ import annotations
@@ -18,28 +18,49 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Class, StudyPlan, StudyPlanQuiz, StudyPlanResource
+from app.models import (
+    Class,
+    ClassEnrollment,
+    CurriculumTopic,
+    StudyPlan,
+    StudyPlanQuiz,
+    StudyPlanResource,
+    Subtopic,
+)
 from app.models.study_plan import StudyPlanStatus
+from app.models.user import OnboardingStatus
 from app.schemas.common import Page
 from app.schemas.study_plans import (
     QuizSubmitRequest,
     QuizSubmitResponse,
     StudyPlanAssignRequest,
+    StudyPlanAssignResponse,
     StudyPlanItem,
     StudyPlanResponse,
+    StudyPlanSkippedItem,
 )
 from app.schemas.study_plans import (
     StudyPlanResource as StudyPlanResourceSchema,
 )
+from app.tasks.gap_tasks import update_gap_state_from_quiz
+from app.tasks.study_plan_tasks import generate_bulk_study_plan_content
 
 logger = structlog.get_logger()
 
 # Score threshold above which a study plan is considered "mastered"
 MASTERED_THRESHOLD = 0.75
+
+
+class DiagnosticNotCompletedError(Exception):
+    """Raised when trying to assign a study plan before diagnostic is completed."""
+
+
+class CeleryDispatchError(Exception):
+    """Raised when the Celery task dispatch fails after the DB commit."""
 
 
 # ---------------------------------------------------------------------------
@@ -52,64 +73,106 @@ async def create_bulk_study_plans(
     class_id: UUID,
     assigned_by: UUID,
     db: AsyncSession,
-    redis: Any | None = None,
-) -> list[StudyPlanItem]:
+) -> StudyPlanAssignResponse:
     """Create one study plan per student, each individually personalised.
+
+    Students without a completed diagnostic are skipped and returned in the
+    ``skipped`` field of the response (they do not cause an error).
 
     Args:
         config: Assignment request (subtopic_id and optional student_ids).
         class_id: UUID of the class (from route path param — not in request body).
         assigned_by: UUID of the teacher.
         db: Async SQLAlchemy session.
-        redis: Optional Redis client.
 
     Returns:
-        List of StudyPlanItems (one per student), all in GENERATING status.
+        StudyPlanAssignResponse with created plans and skipped students.
+
+    Raises:
+        DiagnosticNotCompletedError: if no eligible students exist.
+        CeleryDispatchError: if the background task cannot be dispatched.
     """
-    from app.tasks.study_plan_tasks import generate_study_plan_content
 
-    # Get student IDs if not provided
-    student_ids = config.student_ids
-    if not student_ids:
-        student_ids = await _get_enrolled_students(class_id, db)
+    # Build the base query: only students who have completed the diagnostic.
+    # This query is used whether or not student_ids was provided — it IS the
+    # source of truth for eligible students.
+    base_query = (
+        select(ClassEnrollment.student_id)
+        .where(ClassEnrollment.class_id == class_id)
+        .where(ClassEnrollment.onboarding_diagnostic_status == OnboardingStatus.COMPLETED)
+        .where(ClassEnrollment.is_active.is_(True))
+    )
 
-    plans: list[StudyPlanItem] = []
-    for student_id in student_ids:
-        plan = StudyPlan(
-            student_id=student_id,
+    if config.student_ids:
+        # Explicit student list — intersect with diagnostic-completed set
+        base_query = base_query.where(ClassEnrollment.student_id.in_(config.student_ids))
+
+    result = await db.execute(base_query)
+    eligible_student_ids: list[UUID] = [row[0] for row in result.all()]
+
+    if not eligible_student_ids:
+        raise DiagnosticNotCompletedError(f"No students have completed the diagnostic for class {class_id}")
+
+    # Track which students were requested but not eligible (for the skipped list)
+    skipped: list[StudyPlanSkippedItem] = []
+    if config.student_ids:
+        eligible_set = set(eligible_student_ids)
+        for sid in config.student_ids:
+            if sid not in eligible_set:
+                skipped.append(StudyPlanSkippedItem(student_id=sid, reason="incomplete_diagnostic"))
+
+    # Batch-create all StudyPlan rows in a single round-trip
+    plans_to_create = [
+        StudyPlan(
+            student_id=sid,
             subtopic_id=config.subtopic_id,
             class_id=class_id,
             assigned_by=assigned_by,
             status=StudyPlanStatus.GENERATING,
         )
-        db.add(plan)
-        await db.flush()
+        for sid in eligible_student_ids
+    ]
+    db.add_all(plans_to_create)
+    await db.flush()  # All IDs assigned in one DB round-trip
 
-        try:
-            generate_study_plan_content.delay(str(plan.id))
-        except Exception as exc:
-            logger.warning(
-                "celery_queue_failed_bulk",
-                plan_id=str(plan.id),
-                error=str(exc),
-            )
-
-        plans.append(
-            StudyPlanItem(
-                plan_id=plan.id,
-                student_id=student_id,
-                status=StudyPlanStatus.GENERATING,
-            )
-        )
+    plan_ids = [str(plan.id) for plan in plans_to_create]
+    plan_items = [
+        StudyPlanItem(plan_id=plan.id, student_id=plan.student_id, status=StudyPlanStatus.GENERATING)
+        for plan in plans_to_create
+    ]
 
     await db.commit()
+
+    # Dispatch a single Celery task for all plans — AFTER commit succeeds.
+    # Raising on dispatch failure so the HTTP response correctly reflects the error;
+    # the DB rows are already committed so operators can manually retry.
+    try:
+        generate_bulk_study_plan_content.delay(plan_ids)
+    except Exception as exc:
+        logger.error(
+            "celery_bulk_dispatch_failed",
+            class_id=str(class_id),
+            plan_count=len(plan_ids),
+            error=str(exc),
+        )
+        raise CeleryDispatchError(
+            f"Study plans were created (IDs: {plan_ids}) but the background "
+            f"generation task could not be dispatched: {exc}"
+        ) from exc
+
     logger.info(
         "bulk_study_plans_created",
-        count=len(plans),
+        count=len(plan_items),
+        skipped_count=len(skipped),
         subtopic_id=str(config.subtopic_id),
         class_id=str(class_id),
     )
-    return plans
+
+    return StudyPlanAssignResponse(
+        class_id=class_id,
+        plans=plan_items,
+        skipped=skipped,
+    )
 
 
 async def get_study_plan(
@@ -137,7 +200,6 @@ async def get_study_plan(
         ValueError: If plan not found.
         PermissionError: If caller is not authorised to view this plan.
     """
-    from app.models.curriculum import Subtopic
 
     result = await db.execute(
         select(StudyPlan)
@@ -197,7 +259,6 @@ async def submit_quiz(
     Raises:
         ValueError: If plan not found, not owned by student, or not ACTIVE.
     """
-    from app.tasks.gap_tasks import update_gap_state_from_quiz
 
     # Load and validate plan
     result = await db.execute(select(StudyPlan).where(StudyPlan.id == plan_id))
@@ -215,7 +276,7 @@ async def submit_quiz(
     if not quiz:
         raise ValueError("No quiz found for this plan")
 
-    # Score responses
+    # Score responses — guard against non-string correct_answer
     questions = quiz.questions.get("questions", [])
     scored_results: list[dict[str, Any]] = []
     correct_count = 0
@@ -233,7 +294,7 @@ async def submit_quiz(
             continue
 
         question = questions[resp.question_index]
-        correct = question.get("correct_answer", "").upper()
+        correct = str(question.get("correct_answer", "")).upper()
         given = resp.answer.upper()
         is_correct = given == correct
         score = 1.0 if is_correct else 0.0
@@ -308,7 +369,7 @@ async def list_student_plans(
         student_id: UUID of the student.
         school_id: UUID of the school (enforces isolation via Class join).
         db: Async SQLAlchemy session.
-        status_filter: Optional status to filter by.
+        status_filter: Optional StudyPlanStatus to filter by.
         subject_id: Optional subject UUID to filter by.
         page: Page number (1-indexed).
         page_size: Number of items per page.
@@ -316,8 +377,6 @@ async def list_student_plans(
     Returns:
         Page of StudyPlanResponse objects.
     """
-    from app.models import Subtopic
-    from app.schemas.common import Page as PydanticPage
 
     # Base query with school isolation via Class join (Rule 3)
     query = (
@@ -332,18 +391,10 @@ async def list_student_plans(
         .order_by(StudyPlan.created_at.desc())
     )
 
-    _valid_statuses = {
-        StudyPlanStatus.GENERATING,
-        StudyPlanStatus.ACTIVE,
-        StudyPlanStatus.COMPLETED,
-        StudyPlanStatus.ABANDONED,
-    }
-    if status_filter and status_filter in _valid_statuses:
+    if status_filter is not None:
         query = query.where(StudyPlan.status == status_filter)
 
     if subject_id:
-        from app.models.curriculum import CurriculumTopic  # noqa: PLC0415
-
         query = (
             query.join(Subtopic, Subtopic.id == StudyPlan.subtopic_id)
             .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
@@ -369,7 +420,7 @@ async def list_student_plans(
 
     responses = [_build_plan_response(plan, subtopic_map.get(plan.subtopic_id, "")) for plan in plans]
 
-    return PydanticPage(data=responses, total=total, page=page, page_size=page_size)
+    return Page(data=responses, total=total, page=page, page_size=page_size)
 
 
 async def mark_resource_watched(
@@ -388,7 +439,6 @@ async def mark_resource_watched(
     Raises:
         ValueError: If plan not found or not owned by student.
     """
-    from sqlalchemy import update
 
     result = await db.execute(select(StudyPlan).where(StudyPlan.id == plan_id))
     plan = result.scalar_one_or_none()
@@ -436,6 +486,7 @@ def _build_plan_response(plan: StudyPlan, subtopic_name: str) -> StudyPlanRespon
         quiz_questions = plan.quiz.questions.get("questions", [])
         quiz_score = plan.quiz.score
 
+    # created_at is NOT NULL on TimestampMixin; the fallback is dead code
     return StudyPlanResponse(
         id=plan.id,
         student_id=plan.student_id,
@@ -446,13 +497,5 @@ def _build_plan_response(plan: StudyPlan, subtopic_name: str) -> StudyPlanRespon
         resources=resources,
         quiz_questions=quiz_questions,
         quiz_score=quiz_score,
-        created_at=plan.created_at or datetime.now(UTC),
+        created_at=plan.created_at,  # always non-null; no fallback needed
     )
-
-
-async def _get_enrolled_students(class_id: UUID, db: AsyncSession) -> list[UUID]:
-    """Return all student user IDs enrolled in a class."""
-    from app.models import ClassEnrollment
-
-    result = await db.execute(select(ClassEnrollment.student_id).where(ClassEnrollment.class_id == class_id))
-    return [row[0] for row in result.all()]

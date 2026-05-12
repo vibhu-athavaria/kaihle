@@ -172,20 +172,39 @@ def update_gap_state_from_quiz(
         from sqlalchemy import select
 
         from app.core.database import CeleryAsyncSessionLocal
-        from app.models import GapState, StudyPlan, StudyPlanQuiz
+        from app.models import Class, GapState, StudyPlan, StudyPlanQuiz
         from app.services.gap_service import GapService
 
         async with CeleryAsyncSessionLocal() as db:
             async with db.begin():
-                # Load plan to get student_id, school_id, class_id
+                # Load plan to get student_id and class_id
                 plan_result = await db.execute(select(StudyPlan).where(StudyPlan.id == plan_uuid))
                 plan = plan_result.scalar_one_or_none()
                 if not plan:
                     return {"plan_id": plan_id, "status": "error", "reason": "plan_not_found"}
 
                 effective_student_id = student_uuid or plan.student_id
-                school_id = plan.school_id
                 class_id = plan.class_id
+
+                # Look up school_id via class — StudyPlan has no direct school_id column
+                school_id = None
+                if class_id:
+                    class_result = await db.execute(select(Class).where(Class.id == class_id))
+                    class_row = class_result.scalar_one_or_none()
+                    if class_row:
+                        school_id = class_row.school_id
+
+                if school_id is None:
+                    logger.warning(
+                        "update_gap_from_quiz_no_school",
+                        plan_id=plan_id,
+                        class_id=str(class_id) if class_id else None,
+                    )
+                    return {
+                        "plan_id": plan_id,
+                        "status": "error",
+                        "reason": "class_has_no_school_id",
+                    }
 
                 # Load quiz score
                 quiz_result = await db.execute(select(StudyPlanQuiz).where(StudyPlanQuiz.plan_id == plan_uuid))

@@ -8,6 +8,8 @@ from celery.signals import worker_ready
 from sqlalchemy import or_, update
 
 from app.core.config import settings
+from app.core.database import CeleryAsyncSessionLocal
+from app.models.lesson_plan import LessonPlan, LessonPlanFailureCode, LessonPlanStatus
 
 logger = structlog.get_logger(__name__)
 
@@ -17,7 +19,7 @@ celery_app = Celery(
     backend=settings.celery_result_backend,
     include=[
         "app.tasks.gap_tasks",
-        "app.tasks.onboarding_tasks",
+        # "app.tasks.onboarding_tasks",
         "app.tasks.lesson_plan_tasks",
         "app.tasks.parent_tasks",
         "app.tasks.content_maintenance_tasks",
@@ -44,8 +46,6 @@ def reconcile_stuck_lesson_plans(sender: object, **kwargs: object) -> None:
     (e.g. Render instance restart, SIGKILL). Python exception handlers don't run
     in that case, so this is the only reliable cleanup path.
     """
-    from app.core.database import CeleryAsyncSessionLocal
-    from app.models.lesson_plan import LessonPlan, LessonPlanFailureCode, LessonPlanStatus
 
     cutoff = datetime.now(UTC) - timedelta(minutes=15)
 
