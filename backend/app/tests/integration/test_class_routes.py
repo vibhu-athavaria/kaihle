@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.curriculum import Curriculum, Grade, Subject
-from app.models.school import School
+from app.models.school import School, SchoolCurriculum
 from app.models.user import User
 from app.schemas.class_enrollment import ClassCreate
 from app.services.class_service import ClassService
@@ -16,12 +16,14 @@ async def test_create_class_returns_class_with_relationships_loaded(
     test_grade: Grade,
     test_subject: Subject,
     test_curriculum: Curriculum,
+    school_curriculum: SchoolCurriculum,
 ) -> None:
     """Test that created class has subject, grade, and teacher relationships loaded."""
     # Arrange
     service = ClassService(db_session)
     data = ClassCreate(
         name="Test Class",
+        school_id=test_school.id,
         grade_id=test_grade.id,
         subject_id=test_subject.id,
         curriculum_id=test_curriculum.id,
