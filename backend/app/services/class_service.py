@@ -90,6 +90,10 @@ class ClassService:
         self.db.add(class_)
         await self.db.flush()
 
+        # Let lazy="joined" load relationships on fetch
+        result_class = await self.db.execute(select(Class).where(Class.id == class_.id))
+        class_ = result_class.scalars().one()
+
         if data.student_ids:
             await self._enroll_students_no_diagnostic(class_.id, school_id, data.student_ids)
 
