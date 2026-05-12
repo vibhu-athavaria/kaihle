@@ -297,7 +297,7 @@ class OnboardingService:
             student_id: The student user ID.
 
         Returns:
-            Dictionary with learning_profile_complete and diagnostics_by_class
+            Dictionary with learning_profile_complete
         """
         # Check learning profile completion via student_profiles
         result = await self.db.execute(select(StudentProfile).where(StudentProfile.user_id == student_id))

@@ -74,7 +74,7 @@ After dashboard access, per-class diagnostics (Tier 1) are **not required** to a
   - `GET /onboarding/questionnaire` – fetch questionnaire definition.
   - `POST /onboarding/questionnaire/submit` – submit responses, returns `StudentLearningProfile`.
   - `GET /onboarding/learning-profile` (query: `student_id`) – get learning profile with role-based access.
-  - `GET /onboarding/status/{student_id}` – get `{learning_profile_complete, diagnostics_by_class}`.
+  - `GET /onboarding/status/{student_id}` – get `{learning_profile_complete}`.
   - `GET /onboarding/students/pending` – list students with incomplete learning profiles (admins).
 
 - Service: `backend/app/services/onboarding_service.py`

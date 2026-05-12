@@ -248,7 +248,6 @@ async def test_full_onboarding_flow(
     # 2. Check initial onboarding status
     status = await service.get_onboarding_status(test_student.id)
     assert status["learning_profile_complete"] is False
-    assert len(status["diagnostics_by_class"]) == 0
 
     # 3. Submit questionnaire responses
     responses: list[dict[str, Any]] = [
@@ -275,7 +274,6 @@ async def test_full_onboarding_flow(
     # 5. Check onboarding status after profile completion
     status = await service.get_onboarding_status(test_student.id)
     assert status["learning_profile_complete"] is True
-    assert len(status["diagnostics_by_class"]) == 0
 
     # 6. Update diagnostic status to completed via class_enrollments (v2.1)
     # Create a class and enroll the student
@@ -309,7 +307,6 @@ async def test_full_onboarding_flow(
     # 7. Check final onboarding status
     status = await service.get_onboarding_status(test_student.id)
     assert status["learning_profile_complete"] is True
-    assert len(status["diagnostics_by_class"]) == 1
 
     # 8. Re-submit (idempotent check)
     reupdated_profile = await service.save_questionnaire_response(test_student.id, responses)

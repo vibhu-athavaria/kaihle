@@ -40,7 +40,6 @@ describe("useOnboardingStatus", () => {
     mockedApiGet.mockResolvedValueOnce({
       data: {
         learning_profile_complete: true,
-        diagnostics_by_class: [],
       },
     });
 
@@ -91,9 +90,6 @@ describe("useOnboardingStatus", () => {
     mockedApiGet.mockResolvedValueOnce({
       data: {
         learning_profile_complete: false,
-        diagnostics_by_class: [
-          { class_id: "cls-1", class_name: "Maths 9A", status: "PENDING" },
-        ],
       },
     });
 
@@ -107,6 +103,5 @@ describe("useOnboardingStatus", () => {
     // Assert: isPending false once data is available
     expect(result.current.isPending).toBe(false);
     expect(result.current.data?.learning_profile_complete).toBe(false);
-    expect(result.current.data?.diagnostics_by_class).toHaveLength(1);
   });
 });

@@ -26,6 +26,8 @@ src/**/*.js.map
 /plans/*
 .cache/
 .kilo/plans/**
+.kilocode/**
+.kilo/**
 # IDE
 .vscode/
 .idea/

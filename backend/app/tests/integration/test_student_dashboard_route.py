@@ -150,22 +150,6 @@ async def test_dashboard_route_response_matches_schema(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_route_when_diagnostic_pending_then_action_item_added(
-    client: AsyncClient,
-    enrolled_student_for_dashboard: User,
-    student_class_with_enrollment: Class,
-) -> None:
-    response = await client.get(
-        "/api/v1/students/me/dashboard",
-        headers=make_auth_header(enrolled_student_for_dashboard),
-    )
-    body = response.json()
-    diagnostic_items = [a for a in body["action_items"] if a["type"] == "diagnostic_pending"]
-    assert len(diagnostic_items) == 1
-    assert diagnostic_items[0]["priority"] == 3
-
-
-@pytest.mark.asyncio
 async def test_dashboard_route_filters_by_school_id(
     client: AsyncClient,
     school: School,
