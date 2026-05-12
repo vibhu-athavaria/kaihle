@@ -6,6 +6,9 @@ generate_study_plan_content: async task that:
 3. Generates a quiz (via quiz_generator.py)
 4. Stores results in StudyPlanResource + StudyPlanQuiz
 5. Updates StudyPlan status to ACTIVE (or ABANDONED on failure)
+
+generate_bulk_study_plan_content: dispatches a single Celery task that processes
+a list of plan IDs in batches of BATCH_SIZE, calling _generate_content for each.
 """
 
 from __future__ import annotations
@@ -28,6 +31,119 @@ from app.tasks.celery_app import celery_app
 logger = structlog.get_logger(__name__)
 
 SHARED_TASK_NAME = "app.tasks.study_plan_tasks.generate_study_plan_content"
+BULK_TASK_NAME = "app.tasks.study_plan_tasks.generate_bulk_study_plan_content"
+
+# Process plans in batches to avoid overwhelming the content curator / DB
+BATCH_SIZE = 10
+
+
+# ---------------------------------------------------------------------------
+# Bulk task — one task dispatches to N plans in batches
+# ---------------------------------------------------------------------------
+
+
+class GenerateBulkStudyPlanContentTask(celery.Task):
+    """Celery Task subclass that emits a CRITICAL log when all retries are exhausted.
+
+    Per CONSTITUTION Rule 18: tasks must emit a CRITICAL log on final retry exhaustion.
+    """
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo) -> None:  # type: ignore[override]
+        """Called by Celery when all retries are exhausted."""
+        logger.critical(
+            "generate_bulk_study_plan_content_permanently_failed",
+            task_id=task_id,
+            plan_ids=args[0] if args else kwargs.get("plan_ids"),
+            error=str(exc),
+            exc_info=True,
+        )
+
+
+@celery_app.task(
+    bind=True,
+    base=GenerateBulkStudyPlanContentTask,
+    name=BULK_TASK_NAME,
+    max_retries=3,
+    default_retry_delay=60,
+    time_limit=600,
+    queue="celery",
+)
+def generate_bulk_study_plan_content(self: GenerateBulkStudyPlanContentTask, plan_ids: list[str]) -> dict:  # type: ignore[type-arg]
+    """Generate study plan content for multiple plans in batches.
+
+    Takes a list of plan_id strings and processes them in batches of BATCH_SIZE.
+    Each plan is handled by _generate_content, which opens its own DB session.
+
+    Args:
+        plan_ids: List of UUID strings of the StudyPlans to process.
+
+    Returns:
+        Dict with total_count, processed_count, failed_count and per-plan results.
+    """
+    logger.info("bulk_study_plan_content_generation_started", total_count=len(plan_ids))
+
+    async def _run() -> dict:
+        async with CeleryAsyncSessionLocal() as session:
+            return await _generate_bulk_content(plan_ids, session)
+
+    try:
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(_run())
+        finally:
+            loop.close()
+
+        logger.info(
+            "bulk_study_plan_content_generation_completed",
+            total_count=len(plan_ids),
+            processed=result.get("processed_count", 0),
+            failed=result.get("failed_count", 0),
+        )
+        return result
+
+    except Exception as exc:
+        logger.error(
+            "bulk_study_plan_content_generation_failed",
+            plan_ids=plan_ids,
+            error=str(exc),
+            exc_info=True,
+        )
+        raise self.retry(exc=exc, countdown=60)
+
+
+async def _generate_bulk_content(plan_ids: list[str], db: AsyncSession) -> dict:
+    """Process multiple plan IDs in batches, each via _generate_content.
+
+    Opens one DB session for the whole operation but handles each plan's
+    content generation (curation + quiz) independently. Commit happens
+    per-plan inside _generate_content.
+    """
+    results: list[dict] = []
+    failed_count = 0
+
+    for i in range(0, len(plan_ids), BATCH_SIZE):
+        batch = plan_ids[i : i + BATCH_SIZE]
+        for plan_id in batch:
+            try:
+                result = await _generate_content(plan_id, db)
+                results.append(result)
+                if result.get("status") == "error":
+                    failed_count += 1
+            except Exception as exc:
+                logger.warning(
+                    "bulk_plan_generation_failed",
+                    plan_id=plan_id,
+                    error=str(exc),
+                )
+                results.append({"plan_id": plan_id, "status": "error", "reason": str(exc)})
+                failed_count += 1
+
+    return {
+        "total_count": len(plan_ids),
+        "processed_count": len(plan_ids) - failed_count,
+        "failed_count": failed_count,
+        "results": results,
+    }
 
 
 # ---------------------------------------------------------------------------

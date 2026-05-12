@@ -138,10 +138,10 @@ Each of the five frontend apps serves **exactly one role**. Zero cross-role code
 
 **Rule 10 — Password setup is required for all magic-link-invited users.** School Admins, Teachers, Students — all must complete password setup on first login. Magic-link JWT carries `scope: "password_setup"` and is rejected by all other endpoints. `PasswordSetupRoute` guard in `packages/auth` enforces this. `PasswordSetupForm` lives in `packages/ui` — no app defines its own version.
 
-**Rule 11 — Student onboarding has two distinct, independent gates.**
-- Gate 1 (global): Dashboard inaccessible until `student_profiles.is_learning_profile_complete = TRUE`. Enforced by `OnboardingRoute` in `packages/auth`.
-- Gate 2 (per-class): Class content locked until `class_enrollments.onboarding_diagnostic_status = 'COMPLETED'` for that enrollment. Enforced by `require_diagnostic_complete(class_id)` API dependency and ClassCard UI.
-- These gates are **independent**. Completing one class diagnostic does not unlock another.
+**Rule 11 — Student onboarding has one gate; study plans require diagnostic completion.**
+- Gate 1 (learning profile): Dashboard inaccessible until `student_profiles.is_learning_profile_complete = TRUE`. Enforced by `OnboardingRoute` in `packages/auth`.
+- Class content: Immediately accessible after enrollment — no diagnostic gate.
+- Study plans: Only generated after student completes the diagnostic for that class. Teachers cannot assign study plans until diagnostic is completed. This is enforced at the service layer.
 
 **Rule 12 — KaihleAdmin `school_id` bypass must always be explicit.**
 ```python
@@ -320,15 +320,16 @@ LLM_LESSON_PLAN_API_BASE=http://your-llm-server:8000
 
 ---
 
-## 10. Diagnostic Assessment — Two Tiers (CRITICAL)
+## 10. Diagnostic Assessment
 
-| | Tier 1 — Onboarding Diagnostic | Tier 2 — Progress Check |
-|---|---|---|
-| Created by | System (Celery: `create_class_diagnostic_task`) | Teacher via API |
-| `is_system_generated` | TRUE | FALSE |
-| Scope | ALL topics for subject + grade | Specific topics teacher selects |
-| Blocks class content? | YES — until COMPLETED on that enrollment | NO |
-| Updates gap states? | YES | YES |
+Diagnostic assessments are teacher-created optional assessments that measure student readiness and generate personalized study plans.
+
+| | Diagnostic Assessment |
+|---|---|
+| Created by | Teacher via API (design_tier1_diagnostic) |
+| Purpose | Measure student readiness, unlock personalized study plans |
+| Content access | Does NOT block — students can access all class content immediately |
+| Study plans | Only generated after diagnostic is completed |
 
 ---
 

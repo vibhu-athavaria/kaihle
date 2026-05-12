@@ -23,6 +23,7 @@ from app.schemas.study_plans import (
     StudyPlanResponse,
 )
 from app.services import study_plan_service as sp_service
+from app.services.study_plan_service import DiagnosticNotCompletedError
 
 router = APIRouter(tags=["study-plans"])
 
@@ -54,14 +55,20 @@ async def assign_study_plans(
     if class_.teacher_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this class")
 
-    plans = await sp_service.create_bulk_study_plans(
-        config=body,
-        class_id=class_id,
-        assigned_by=current_user.id,
-        db=db,
-    )
+    try:
+        result = await sp_service.create_bulk_study_plans(
+            config=body,
+            class_id=class_id,
+            assigned_by=current_user.id,
+            db=db,
+        )
+    except DiagnosticNotCompletedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Student must complete the diagnostic assessment before study plans can be assigned",
+        ) from exc
 
-    return StudyPlanAssignResponse(plans=plans)
+    return result
 
 
 # ── Student: view own plans ───────────────────────────────────────────────────

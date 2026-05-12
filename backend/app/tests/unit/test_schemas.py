@@ -338,14 +338,18 @@ class TestSchemaInstantiation:
         assert r.student_ids is None
 
     def test_study_plan_assign_response(self):
+        class_id = uuid.uuid4()
         r = StudyPlanAssignResponse(
+            class_id=class_id,
             status="generating",
             plans=[
                 {"plan_id": uuid.uuid4(), "student_id": uuid.uuid4(), "status": "GENERATING"},
             ],
+            skipped=[],
         )
         assert r.status == "generating"
         assert len(r.plans) == 1
+        assert r.class_id == class_id
 
     def test_quiz_submit_request(self):
         r = QuizSubmitRequest(
