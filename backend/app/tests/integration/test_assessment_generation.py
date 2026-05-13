@@ -172,7 +172,7 @@ async def test_full_creation_flow_when_valid_then_assessment_and_bridge_rows_in_
     body = AssessmentCreateRequest(
         title="Test Progress Check",
         topic_ids=[],
-        question_count=6,
+        questions_per_topic=3,
         assessment_type=AssessmentType.PROGRESS_CHECK,
         difficulty_min=1.0,
         difficulty_max=5.0,
@@ -185,9 +185,9 @@ async def test_full_creation_flow_when_valid_then_assessment_and_bridge_rows_in_
     stored = await db_session.get(Assessment, assessment.id)
     assert stored is not None
     assert stored.status == AssessmentStatus.DRAFT
-    assert stored.is_system_generated is False
     assert stored.school_id == test_school.id
-    assert stored.question_count == 6
+    assert stored.question_count == 3
+    assert stored.created_by == teacher.id
 
     # Verify bridge rows
     bridge_count = (
@@ -197,7 +197,7 @@ async def test_full_creation_flow_when_valid_then_assessment_and_bridge_rows_in_
             )
         )
     ).scalar()
-    assert bridge_count == 6
+    assert bridge_count == 3
 
 
 @pytest.mark.asyncio
@@ -212,7 +212,7 @@ async def test_create_and_publish_flow_then_status_transitions_correctly(
     body = AssessmentCreateRequest(
         title="Quiz 1",
         topic_ids=[],
-        question_count=3,
+        questions_per_topic=3,
         assessment_type=AssessmentType.PROGRESS_CHECK,
     )
 
@@ -244,7 +244,7 @@ async def test_create_when_topic_filter_then_only_matching_topics_sampled(
     body = AssessmentCreateRequest(
         title="Algebra Only",
         topic_ids=[curriculum_topics[0].id],
-        question_count=3,
+        questions_per_topic=3,
         assessment_type=AssessmentType.TOPIC_SPECIFIC,
     )
 
@@ -285,7 +285,7 @@ async def test_create_when_insufficient_questions_then_raises_and_no_row_in_db(
     body = AssessmentCreateRequest(
         title="Too Many",
         topic_ids=[],
-        question_count=10,  # request 10, only 2 available
+        questions_per_topic=10,  # request 10, only 2 available
         assessment_type=AssessmentType.PROGRESS_CHECK,
     )
 
@@ -312,7 +312,7 @@ async def test_publish_and_close_full_lifecycle_in_db(db_session: AsyncSession, 
     body = AssessmentCreateRequest(
         title="Lifecycle Test",
         topic_ids=[],
-        question_count=3,
+        questions_per_topic=3,
         assessment_type=AssessmentType.PROGRESS_CHECK,
     )
 

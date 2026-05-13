@@ -78,26 +78,48 @@ class AssessmentWithClassResponse(BaseModel):
 
 
 class AssessmentCreateRequest(BaseModel):
-    title: str | None = None  # Auto-generated from type+class+subject when omitted
+    title: str | None = None
     topic_ids: list[UUID]
-    question_count: int = 20
-    assessment_type: str = "PROGRESS_CHECK"  # DIAGNOSTIC | TOPIC_SPECIFIC | PROGRESS_CHECK
-    difficulty_min: float = 1.0
-    difficulty_max: float = 5.0
+    questions_per_topic: int = Field(2, ge=1, le=20)
+    assessment_type: str = "PROGRESS_CHECK"
+    minimum_difficulty: int = Field(1, ge=1, le=5)
+    maximum_difficulty: int = Field(5, ge=1, le=5)
+    question_types: list[str] = Field(default_factory=lambda: ["MCQ", "TRUE_FALSE"])
+    time_limit_minutes: int | None = Field(None, ge=1, le=300)
     deadline: datetime | None = None
 
 
 class DesignTier1DiagnosticRequest(BaseModel):
     """Request body for teacher-designed Tier 1 diagnostic.
 
-    Teachers pick which curriculum topics to include (topic-level granularity).
-    Questions are sampled from the bank using the same pool logic as system-generated
-    diagnostics, but scoped to the selected topics.
+    Topics may come from the class's current grade or the previous grade (grade.level - 1).
+    Minimum 3 questions per topic enforced for statistically reliable placement.
     """
 
     topic_ids: list[UUID] = Field(..., min_length=1, description="Curriculum topic IDs to include")
-    question_count: int = Field(20, ge=5, le=60, description="Questions per attempt (student sees this many)")
+    questions_per_topic: int = Field(5, ge=3, le=20)
+    time_limit_minutes: int | None = Field(None, ge=1, le=300)
+    question_types: list[str] = Field(default_factory=lambda: ["MCQ", "TRUE_FALSE"])
+    minimum_difficulty: int = Field(1, ge=1, le=5)
+    maximum_difficulty: int = Field(5, ge=1, le=5)
     deadline: datetime | None = None
+
+
+class TopicAvailability(BaseModel):
+    curriculum_topic_id: UUID
+    topic_name: str
+    grade_level: int
+    available_questions: int
+    per_difficulty_available: dict[int, int]
+    fulfillable: bool
+
+
+class TopicAvailabilityRequest(BaseModel):
+    topic_ids: list[UUID] = Field(..., min_length=1)
+    questions_per_topic: int = Field(2, ge=1)
+    minimum_difficulty: int = Field(1, ge=1, le=5)
+    maximum_difficulty: int = Field(5, ge=1, le=5)
+    question_types: list[str] = Field(default_factory=lambda: ["MCQ", "TRUE_FALSE"])
 
 
 class StudentAttemptSummary(BaseModel):

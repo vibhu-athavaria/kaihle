@@ -29,8 +29,6 @@ async def system_diagnostic_assessment(
         title="Tier 1 Diagnostic",
         assessment_type="DIAGNOSTIC",
         status="ACTIVE",
-        is_system_generated=True,  # This is the key - system-generated diagnostic
-        config={"num_questions": 10, "tier": 1},
     )
     db_session.add(assessment)
     await db_session.commit()
@@ -262,51 +260,6 @@ class TestCheckAndUpdateOnboardingCompleteIntegration:
     ) -> None:
         """Test that False is returned when no student attempt exists."""
         # Don't create any attempt
-
-        service = OnboardingService(db_session)
-        result = await service.check_and_update_onboarding_complete(
-            student_id=test_user.id,
-            class_id=test_class.id,
-        )
-
-        assert result is False
-
-        # Verify enrollment was NOT updated
-        await db_session.refresh(class_enrollment_pending)
-        assert class_enrollment_pending.onboarding_diagnostic_status == OnboardingStatus.PENDING
-
-    @pytest.mark.asyncio
-    async def test_returns_false_when_diagnostic_not_system_generated(
-        self,
-        db_session: AsyncSession,
-        test_user: User,
-        test_class: Class,
-        test_teacher: User,
-        test_school: School,
-        class_enrollment_pending: ClassEnrollment,
-    ) -> None:
-        """Test that False is returned when assessment is not system-generated."""
-        # Create a non-system-generated assessment
-        assessment = Assessment(
-            class_id=test_class.id,
-            school_id=test_school.id,
-            created_by=test_teacher.id,
-            title="Teacher Created Assessment",
-            assessment_type="DIAGNOSTIC",
-            status="ACTIVE",
-            is_system_generated=False,  # Not system-generated
-        )
-        db_session.add(assessment)
-        await db_session.commit()
-
-        # Create completed attempt
-        attempt = StudentAttempt(
-            assessment_id=assessment.id,
-            student_id=test_user.id,
-            status="COMPLETED",
-        )
-        db_session.add(attempt)
-        await db_session.commit()
 
         service = OnboardingService(db_session)
         result = await service.check_and_update_onboarding_complete(

@@ -148,9 +148,7 @@ async def _create_draft_assessment(
         title="Test Assessment",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.DRAFT,
-        is_system_generated=False,
         question_count=question_count,
-        config={},
     )
     db.add(assessment)
     await db.flush()
@@ -189,9 +187,7 @@ async def test_list_class_assessments_when_teacher_own_class_then_returns_200_wi
         title="Active Assessment",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=False,
         question_count=3,
-        config={},
     )
     db_session.add(active_assessment)
     await db_session.flush()
@@ -263,9 +259,7 @@ async def test_list_class_assessments_when_student_then_draft_excluded(
         title="Draft Assessment",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.DRAFT,
-        is_system_generated=False,
         question_count=5,
-        config={},
     )
     active = Assessment(
         id=uuid.uuid4(),
@@ -275,9 +269,7 @@ async def test_list_class_assessments_when_student_then_draft_excluded(
         title="Active Assessment",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=False,
         question_count=5,
-        config={},
     )
     db_session.add_all([draft, active])
     await db_session.commit()
@@ -313,9 +305,7 @@ async def test_list_class_assessments_when_student_then_system_generated_tier1_i
         title="Onboarding Diagnostic",
         assessment_type="DIAGNOSTIC",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=True,
         question_count=5,
-        config={"max_questions_per_attempt": 20},
     )
     db_session.add(system_assessment)
     await db_session.commit()
@@ -329,7 +319,6 @@ async def test_list_class_assessments_when_student_then_system_generated_tier1_i
     data = response.json()
     returned_ids = [item["id"] for item in data["data"]]
     assert str(system_assessment.id) in returned_ids
-    assert data["data"][0]["is_system_generated"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +340,7 @@ async def test_create_assessment_when_teacher_owns_class_then_201_draft(
     payload = {
         "title": "My Progress Check",
         "topic_ids": [],
-        "question_count": 5,
+        "questions_per_topic": 5,
         "assessment_type": "PROGRESS_CHECK",
         "difficulty_min": 1.0,
         "difficulty_max": 5.0,
@@ -366,7 +355,6 @@ async def test_create_assessment_when_teacher_owns_class_then_201_draft(
     assert response.status_code == 201
     data = response.json()
     assert data["status"] == "DRAFT"
-    assert data["is_system_generated"] is False
     assert data["title"] == "My Progress Check"
     assert data["question_count"] == 5
 
@@ -395,7 +383,7 @@ async def test_create_assessment_when_teacher_does_not_own_class_then_403(
     payload = {
         "title": "Unauthorized Check",
         "topic_ids": [],
-        "question_count": 5,
+        "questions_per_topic": 5,
         "assessment_type": "PROGRESS_CHECK",
     }
 
@@ -422,7 +410,7 @@ async def test_create_assessment_when_insufficient_questions_then_422(
     payload = {
         "title": "Too Big Check",
         "topic_ids": [],
-        "question_count": 10,  # request more than available
+        "questions_per_topic": 10,  # request more than available
         "assessment_type": "PROGRESS_CHECK",
     }
 
@@ -461,9 +449,7 @@ async def test_get_assessment_when_different_school_then_403(
         title="School A Assessment",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.DRAFT,
-        is_system_generated=False,
         question_count=5,
-        config={},
     )
     db_session.add(assessment)
 
@@ -507,9 +493,7 @@ async def test_get_assessment_when_student_then_correct_answer_excluded(
         title="Active Check",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=False,
         question_count=0,
-        config={},
     )
     db_session.add(assessment)
     await db_session.commit()

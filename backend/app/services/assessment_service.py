@@ -15,7 +15,7 @@ import random
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypedDict, cast
 
 import structlog
 from sqlalchemy import and_, delete, func, select
@@ -25,11 +25,12 @@ from app.models.assessment import (
     Assessment,
     AssessmentSelectedQuestion,
     AssessmentStatus,
+    AssessmentTopicConfig,
     AssessmentType,
     AttemptStatus,
     StudentAttempt,
 )
-from app.models.curriculum import CurriculumTopic, QuestionBank, Subject, Subtopic
+from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
 from app.schemas.assessments import (
@@ -37,6 +38,7 @@ from app.schemas.assessments import (
     AssessmentResultsSummary,
     DesignTier1DiagnosticRequest,
     StudentAttemptSummary,
+    TopicAvailability,
 )
 
 logger = structlog.get_logger()
@@ -86,7 +88,6 @@ class TeacherNotClassOwnerError(Exception):
 MAX_DIAGNOSTIC_POOL = 60
 
 # Maximum questions a student actually answers in one diagnostic attempt.
-# Stored in assessment config; enforced by the student-facing API.
 MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT = 20
 
 
@@ -216,11 +217,11 @@ class AssessmentService:
     # ── Class-level: create diagnostic assessment ────────────────────────
 
     async def create_class_diagnostic(self, class_id: uuid.UUID) -> Assessment:
-        """Create or retrieve a Tier 1 DIAGNOSTIC assessment for a class.
+        """[DEPRECATED] Create or retrieve a system-generated Tier 1 DIAGNOSTIC assessment.
 
-        Called when a class is created. Selects a pool of up to MAX_DIAGNOSTIC_POOL
-        questions spanning all curriculum topics for the class's subject+grade.
-        Idempotent — returns existing assessment if one already exists.
+        Superseded by design_tier1_diagnostic() — teachers now design diagnostics
+        explicitly via the wizard UI. This method remains only to support existing
+        integration tests and legacy Celery tasks. Do not call from new code.
 
         Args:
             class_id: The class UUID.
@@ -321,14 +322,15 @@ class AssessmentService:
     ) -> Assessment:
         """Create a teacher-designed Tier 1 diagnostic for a class.
 
+        Topics may come from the class's current grade or the previous grade (level - 1).
+        Questions are sampled DIAGNOSTIC_QUESTIONS_PER_DIFFICULTY per difficulty level per topic.
+
         Replaces any previously created teacher-designed diagnostic for this class
-        (idempotent replace — deletes DRAFT predecessor). Only one teacher-designed
-        Tier 1 per class at a time; ACTIVE/CLOSED ones cannot be replaced.
+        (idempotent replace — deletes DRAFT predecessor). ACTIVE/CLOSED ones cannot be replaced.
 
         Raises:
             TeacherNotClassOwnerError: If teacher does not own the class.
-            ValueError: If class not found or existing diagnostic is not DRAFT.
-            InsufficientQuestionsError: If question bank has too few questions.
+            ValueError: If class not found, topic grade invalid, or existing diagnostic is not DRAFT.
         """
         class_ = (
             await self.db.execute(select(Class).where(Class.id == class_id, Class.school_id == school_id))
@@ -361,31 +363,79 @@ class AssessmentService:
             await self.db.delete(existing)
             await self.db.flush()
 
-        # Sample questions scoped to selected topics
+        # Resolve the class grade level (single query)
+        class_grade_level: int | None = (
+            await self.db.execute(select(Grade.level).where(Grade.id == class_.grade_id))
+        ).scalar_one_or_none()
+        if class_grade_level is None:
+            raise ValueError(f"Grade not found for class_id={class_id}")
+        allowed_levels = {class_grade_level, class_grade_level - 1}
+
+        # Validate topic grades — bulk query to avoid N+1
+        topic_grade_rows = (
+            await self.db.execute(
+                select(
+                    CurriculumTopic.id.label("curriculum_topic_id"),
+                    Grade.level.label("grade_level"),
+                    Grade.id.label("grade_id"),
+                )
+                .join(Grade, Grade.id == CurriculumTopic.grade_id)
+                .where(CurriculumTopic.id.in_(body.topic_ids))
+            )
+        ).all()
+
+        topic_grade_map: dict[uuid.UUID, tuple[int, uuid.UUID]] = {}
+        for row in topic_grade_rows:
+            topic_grade_map[row.curriculum_topic_id] = (row.grade_level, row.grade_id)
+
+        for topic_id in body.topic_ids:
+            if topic_id not in topic_grade_map:
+                raise ValueError(f"Topic {topic_id} not found")
+            grade_level, _ = topic_grade_map[topic_id]
+            if grade_level not in allowed_levels:
+                raise ValueError(
+                    f"Topic {topic_id} belongs to grade level {grade_level}, "
+                    f"which is not the current grade ({class_grade_level}) or previous grade ({class_grade_level - 1})"
+                )
+
+        # Sample questions: body.questions_per_topic per difficulty level per topic
         q = (
             select(QuestionBank.id, Subtopic.curriculum_topic_id, QuestionBank.difficulty_level)
             .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
-            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
             .where(
-                CurriculumTopic.id.in_(body.topic_ids),
+                Subtopic.curriculum_topic_id.in_(body.topic_ids),
                 QuestionBank.is_active.is_(True),
+                QuestionBank.question_type.in_(body.question_types),
+                QuestionBank.difficulty_level.between(body.minimum_difficulty, body.maximum_difficulty),
             )
         )
         rows = (await self.db.execute(q)).all()
-        pool_size = min(MAX_DIAGNOSTIC_POOL, len(rows))
-        if pool_size < body.question_count:
-            raise InsufficientQuestionsError(
-                requested=body.question_count,
-                available=pool_size,
-                criteria={"topic_ids": [str(t) for t in body.topic_ids]},
-            )
+
+        # Group questions by (topic_id, difficulty)
+        by_topic_diff: dict[tuple[uuid.UUID, int], list[uuid.UUID]] = {}
+        for qid, tid, diff in rows:
+            level = int(diff) if diff is not None else 3
+            key = (tid, level)
+            by_topic_diff.setdefault(key, []).append(qid)
 
         rng = random.Random(str(class_id) + str(sorted(str(t) for t in body.topic_ids)))  # noqa: S311
-        selected_ids = _sample_pool_with_difficulty_distribution(
-            [(r[0], r[1], r[2]) for r in rows],
-            pool_size,
-            rng,
-        )
+        selected_ids: list[uuid.UUID] = []
+        # Pool is intentionally large: sample questions_per_topic per difficulty
+        # level per topic so different students receive different subsets.
+        pool_per_diff = body.questions_per_topic
+        topics_with_questions: set[uuid.UUID] = set()
+        for topic_id in body.topic_ids:
+            for diff in range(body.minimum_difficulty, body.maximum_difficulty + 1):
+                candidates = by_topic_diff.get((topic_id, diff), [])
+                if not candidates:
+                    continue
+                take = min(pool_per_diff, len(candidates))
+                selected_ids.extend(rng.sample(candidates, take))
+                topics_with_questions.add(topic_id)
+
+        # student_facing_count is capped to topics that actually have questions
+        # so the attempt service doesn't over-cap the student's question view.
+        student_facing_count = body.questions_per_topic * len(topics_with_questions)
 
         assessment = Assessment(
             school_id=school_id,
@@ -394,7 +444,12 @@ class AssessmentService:
             title=f"Tier 1 Diagnostic — {class_.name}",
             assessment_type=AssessmentType.DIAGNOSTIC,
             status=AssessmentStatus.DRAFT,
-            question_count=body.question_count,
+            question_count=student_facing_count,
+            questions_per_topic=body.questions_per_topic,
+            time_limit_minutes=body.time_limit_minutes if body.time_limit_minutes is not None else 0,
+            question_types=body.question_types,
+            minimum_difficulty=body.minimum_difficulty,
+            maximum_difficulty=body.maximum_difficulty,
             deadline=body.deadline,
             created_at=datetime.now(UTC),
             instructions=None,
@@ -411,14 +466,105 @@ class AssessmentService:
                 )
             )
 
+        for topic_id in body.topic_ids:
+            _, grade_id = topic_grade_map[topic_id]
+            self.db.add(
+                AssessmentTopicConfig(
+                    assessment_id=assessment.id,
+                    curriculum_topic_id=topic_id,
+                    grade_id=grade_id,
+                )
+            )
+
         logger.info(
             "tier1_diagnostic_designed",
             class_id=str(class_id),
             assessment_id=str(assessment.id),
             topic_count=len(body.topic_ids),
-            pool_size=len(selected_ids),
+            question_count=len(selected_ids),
         )
         return assessment
+
+    async def check_topic_availability(
+        self,
+        class_id: uuid.UUID,
+        school_id: uuid.UUID,
+        topic_ids: list[uuid.UUID],
+        questions_per_topic: int,
+        minimum_difficulty: int,
+        maximum_difficulty: int,
+        question_types: list[str],
+    ) -> list[TopicAvailability]:
+        """Return per-topic question availability for a diagnostic configuration.
+
+        For each topic_id, counts available questions by difficulty level within
+        the given difficulty range and question types. Returns TopicAvailability
+        with fulfillable=True when available_questions >= questions_per_topic.
+        """
+        rows = (
+            await self.db.execute(
+                select(
+                    Subtopic.curriculum_topic_id.label("curriculum_topic_id"),
+                    CurriculumTopic.topic_id.label("topic_name"),  # resolved later via Topic.name join
+                    Grade.level.label("grade_level"),
+                    Grade.id.label("grade_id"),
+                    QuestionBank.difficulty_level.label("difficulty"),
+                    func.count(QuestionBank.id).label("count"),
+                )
+                .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
+                .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                .join(Grade, Grade.id == CurriculumTopic.grade_id)
+                .where(
+                    Subtopic.curriculum_topic_id.in_(topic_ids),
+                    QuestionBank.is_active.is_(True),
+                    QuestionBank.question_type.in_(question_types),
+                    QuestionBank.difficulty_level.between(minimum_difficulty, maximum_difficulty),
+                )
+                .group_by(
+                    Subtopic.curriculum_topic_id,
+                    CurriculumTopic.topic_id,
+                    Grade.level,
+                    Grade.id,
+                    QuestionBank.difficulty_level,
+                )
+            )
+        ).all()
+
+        class _TopicAgg(TypedDict):
+            grade_level: int
+            per_difficulty: dict[int, int]
+            total: int
+
+        # Aggregate by topic
+        topic_data: dict[uuid.UUID, _TopicAgg] = {}
+        for row in rows:
+            tid: uuid.UUID = row.curriculum_topic_id
+            if tid not in topic_data:
+                topic_data[tid] = {
+                    "grade_level": int(row.grade_level),  # type: ignore[arg-type]
+                    "per_difficulty": {},
+                    "total": 0,
+                }
+            diff = int(row.difficulty) if row.difficulty is not None else 0  # type: ignore[arg-type]
+            count = int(cast(Any, row.count))
+            topic_data[tid]["per_difficulty"][diff] = count
+            topic_data[tid]["total"] += count
+
+        # Build result for every requested topic (include topics with zero questions)
+        result = []
+        for tid in topic_ids:
+            data = topic_data.get(tid, _TopicAgg(grade_level=0, per_difficulty={}, total=0))
+            result.append(
+                TopicAvailability(
+                    curriculum_topic_id=tid,
+                    topic_name=str(tid),  # name resolution deferred to route layer
+                    grade_level=data["grade_level"],
+                    available_questions=data["total"],
+                    per_difficulty_available=data["per_difficulty"],
+                    fulfillable=data["total"] >= questions_per_topic,
+                )
+            )
+        return result
 
     # ── Student-level: create attempt on enrollment ──────────────────────
 
@@ -621,6 +767,7 @@ class AssessmentService:
             raise TeacherNotClassOwnerError(f"Teacher {teacher_id} does not own class {class_id}")
 
         # Step 2 — Build question filter via Subtopic join (QuestionBank has no direct topic FK)
+        total_questions = body.questions_per_topic * max(len(body.topic_ids), 1)
         q = (
             select(QuestionBank.id, Subtopic.curriculum_topic_id, QuestionBank.difficulty_level)
             .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
@@ -629,25 +776,25 @@ class AssessmentService:
                 CurriculumTopic.subject_id == class_.subject_id,
                 CurriculumTopic.grade_id == class_.grade_id,
                 QuestionBank.is_active.is_(True),
-                QuestionBank.difficulty_level.between(body.difficulty_min, body.difficulty_max),
+                QuestionBank.difficulty_level.between(body.minimum_difficulty, body.maximum_difficulty),
+                QuestionBank.question_type.in_(body.question_types),
             )
         )
         if body.topic_ids:
             q = q.where(CurriculumTopic.id.in_(body.topic_ids))
 
-        # Step 3 — Sample a pool of body.question_count questions distributed across
-        # difficulty levels. Error only when the bank has fewer than question_count.
+        # Step 3 — Sample a pool distributed across difficulty levels.
         rows = (await self.db.execute(q)).all()
-        if len(rows) < body.question_count:
+        if len(rows) < total_questions:
             raise InsufficientQuestionsError(
-                requested=body.question_count,
+                requested=total_questions,
                 available=len(rows),
                 criteria={
                     "subject_id": str(class_.subject_id),
                     "grade_id": str(class_.grade_id),
                     "topic_ids": [str(t) for t in body.topic_ids],
-                    "difficulty_min": body.difficulty_min,
-                    "difficulty_max": body.difficulty_max,
+                    "minimum_difficulty": body.minimum_difficulty,
+                    "maximum_difficulty": body.maximum_difficulty,
                 },
             )
 
@@ -655,7 +802,7 @@ class AssessmentService:
         topic_ids_key = ",".join(sorted(str(t) for t in body.topic_ids))
         config_hash = int(
             hashlib.sha256(
-                f"{body.assessment_type}:{body.difficulty_min}:{body.difficulty_max}:{topic_ids_key}".encode()
+                f"{body.assessment_type}:{body.minimum_difficulty}:{body.maximum_difficulty}:{topic_ids_key}".encode()
             ).hexdigest(),
             16,
         )
@@ -664,7 +811,7 @@ class AssessmentService:
 
         selected_ids = _sample_pool_with_difficulty_distribution(
             [(row[0], row[1], row[2]) for row in rows],
-            body.question_count,
+            total_questions,
             rng,
         )
 
@@ -685,9 +832,12 @@ class AssessmentService:
             assessment_type=body.assessment_type,
             status=AssessmentStatus.DRAFT,
             title=title,
-            question_count=body.question_count,
-            minimum_difficulty=body.difficulty_min,
-            maximum_difficulty=body.difficulty_max,
+            question_count=len(selected_ids),
+            questions_per_topic=body.questions_per_topic,
+            minimum_difficulty=body.minimum_difficulty,
+            maximum_difficulty=body.maximum_difficulty,
+            question_types=body.question_types,
+            time_limit_minutes=body.time_limit_minutes if body.time_limit_minutes is not None else 0,
             deadline=body.deadline,
         )
         self.db.add(assessment)
@@ -704,12 +854,22 @@ class AssessmentService:
         ]
         self.db.add_all(bridge_rows)
 
+        # Step 7 — Create assessment_topic_config rows (grade = class grade)
+        for topic_id in body.topic_ids:
+            self.db.add(
+                AssessmentTopicConfig(
+                    assessment_id=assessment.id,
+                    curriculum_topic_id=topic_id,
+                    grade_id=class_.grade_id,
+                )
+            )
+
         logger.info(
             "assessment_created",
             assessment_id=str(assessment.id),
             class_id=str(class_id),
             teacher_id=str(teacher_id),
-            question_count=body.question_count,
+            question_count=len(selected_ids),
             assessment_type=body.assessment_type,
         )
         return assessment

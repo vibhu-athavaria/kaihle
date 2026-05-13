@@ -178,18 +178,15 @@ async def _create_assessment(
     school: School,
     class_: Class,
     teacher: User,
-    is_system_generated: bool = False,
 ) -> Assessment:
     assessment = Assessment(
         id=uuid.uuid4(),
         school_id=school.id,
         class_id=class_.id,
-        created_by=None if is_system_generated else teacher.id,
+        created_by=teacher.id,
         title="Test Assessment",
         assessment_type=AssessmentType.DIAGNOSTIC,
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=is_system_generated,
-        config={"num_questions": 10},
     )
     db.add(assessment)
     await db.flush()
@@ -295,7 +292,7 @@ class TestGapStatesUpdated:
         db_session: AsyncSession,
         school: School,
     ) -> None:
-        """10 correct responses → mastery=1.0 (first attempt, not system-generated)."""
+        """10 correct responses on a DIAGNOSTIC → mastery=0.7 (diagnostic applies 0.7 confidence damper)."""
         curriculum, grade, subject, ct, subtopic = await _create_curriculum_chain(db_session, school)
         teacher = await _create_teacher(db_session, school)
         class_ = await _create_class(db_session, school, curriculum, grade, subject, teacher)
@@ -315,7 +312,7 @@ class TestGapStatesUpdated:
         db_session.add(student)
         await db_session.flush()
 
-        assessment = await _create_assessment(db_session, school, class_, teacher, is_system_generated=False)
+        assessment = await _create_assessment(db_session, school, class_, teacher)
         attempt = await _create_attempt(db_session, assessment, student)
 
         for q in questions:
@@ -332,7 +329,7 @@ class TestGapStatesUpdated:
         )
         gap_state = gs_result.scalar_one_or_none()
         assert gap_state is not None
-        assert gap_state.mastery_score == pytest.approx(1.0, abs=1e-9)
+        assert gap_state.mastery_score == pytest.approx(0.7, abs=1e-9)
         assert gap_state.needs_review is False
 
     @pytest.mark.asyncio
