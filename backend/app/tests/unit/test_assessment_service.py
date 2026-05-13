@@ -59,18 +59,18 @@ def _make_class(school_id: uuid.UUID, teacher_id: uuid.UUID) -> SimpleNamespace:
 def _make_request(
     title: str | None = "Test Assessment",
     topic_ids: list[uuid.UUID] | None = None,
-    question_count: int = 5,
+    questions_per_topic: int = 5,
     assessment_type: str = AssessmentType.PROGRESS_CHECK,
-    difficulty_min: float = 1.0,
-    difficulty_max: float = 5.0,
+    minimum_difficulty: int = 1,
+    maximum_difficulty: int = 5,
 ) -> AssessmentCreateRequest:
     return AssessmentCreateRequest(
         title=title,
-        topic_ids=topic_ids or [],
-        question_count=question_count,
+        topic_ids=topic_ids or [uuid.uuid4()],
+        questions_per_topic=questions_per_topic,
         assessment_type=assessment_type,
-        difficulty_min=difficulty_min,
-        difficulty_max=difficulty_max,
+        minimum_difficulty=minimum_difficulty,
+        maximum_difficulty=maximum_difficulty,
     )
 
 
@@ -99,7 +99,7 @@ class TestCreateAssessment:
         class_ = _make_class(school_id, teacher_id)
         class_.id = class_id
 
-        body = _make_request(question_count=5)
+        body = _make_request(questions_per_topic=5)
         rows = _make_question_rows(10)
 
         mock_class_result = MagicMock()
@@ -114,7 +114,7 @@ class TestCreateAssessment:
         assert assessment.school_id == school_id
         assert assessment.class_id == class_id
         assert assessment.created_by == teacher_id
-        assert assessment.question_count == 5
+        assert assessment.question_count == 5  # questions_per_topic=5, 1 topic
         mock_db.add.assert_called()
         mock_db.add_all.assert_called()
         mock_db.flush.assert_called()
@@ -162,8 +162,8 @@ class TestCreateAssessment:
         class_ = _make_class(school_id, teacher_id)
         class_.id = class_id
 
-        body = _make_request(question_count=10)
-        rows = _make_question_rows(3)  # only 3, but 10 requested
+        body = _make_request(questions_per_topic=10)
+        rows = _make_question_rows(3)  # only 3, but 10 requested (1 topic × questions_per_topic=10)
 
         mock_class_result = MagicMock()
         mock_class_result.scalar_one_or_none.return_value = class_
@@ -191,15 +191,16 @@ class TestCreateAssessment:
         class_ = _make_class(school_id, teacher_id)
         class_.id = class_id
 
+        # 3 topics × 4 questions each
+        topic1, topic2, topic3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+
         body = _make_request(
             title="Diagnostic",
-            topic_ids=[],
-            question_count=6,
+            topic_ids=[topic1, topic2, topic3],
+            questions_per_topic=2,
             assessment_type=AssessmentType.DIAGNOSTIC,
         )
 
-        # 3 topics × 4 questions each
-        topic1, topic2, topic3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
         rows = _make_question_rows(4, topic1) + _make_question_rows(4, topic2) + _make_question_rows(4, topic3)
 
         mock_class_result = MagicMock()
@@ -238,20 +239,20 @@ class TestCreateAssessment:
         class_ = _make_class(school_id, teacher_id)
         class_.id = class_id
 
-        body = _make_request(question_count=3, difficulty_min=1.0, difficulty_max=2.5)
+        body = _make_request(questions_per_topic=3, minimum_difficulty=1, maximum_difficulty=2)
         rows = _make_question_rows(10)
 
         mock_class_result = MagicMock()
         mock_class_result.scalar_one_or_none.return_value = class_
         mock_questions_result = MagicMock()
         mock_questions_result.all.return_value = rows
-        mock_db.execute = AsyncMock(side_effect=[mock_class_result, mock_questions_result])
+        mock_db.execute = AsyncMock(side_effect=[mock_class_result, mock_questions_result, MagicMock()])
 
         assessment = await service.create_assessment(school_id, teacher_id, class_id, body)
 
-        # Two execute calls: class lookup + question query
-        assert mock_db.execute.call_count == 2
-        assert assessment.question_count == 3
+        # Two execute calls: class lookup + question query (+ optional subject title)
+        assert mock_db.execute.call_count >= 2
+        assert assessment.question_count == 3  # questions_per_topic=3, 1 topic
 
 
 # ---------------------------------------------------------------------------
