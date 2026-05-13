@@ -151,10 +151,10 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-[#374151] truncate">
+          <p className="text-sm font-semibold text-[#374151] truncate">
             {topic.topic_name}
           </p>
-          <p className="text-[11px] text-brand-muted mt-px">
+          <p className="text-xs text-brand-muted mt-px">
             {topic.subtopic_count} subtopic
             {topic.subtopic_count !== 1 ? "s" : ""} · Seq.{" "}
             {topic.sequence_order + 1}
@@ -162,7 +162,7 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
         </div>
 
         {isCovered ? (
-          <span className="flex-shrink-0 bg-[#f0fdf4] border border-[#d4e4d8] rounded-full px-[10px] py-[3px] text-[10px] font-bold text-[#1a5c38] whitespace-nowrap">
+          <span className="flex-shrink-0 bg-[#f0fdf4] border border-[#d4e4d8] rounded-full px-[10px] py-[3px] text-xs font-bold text-[#1a5c38] whitespace-nowrap">
             ✓ Covered
           </span>
         ) : (
@@ -170,7 +170,7 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
             type="button"
             disabled={mutating === topic.id}
             onClick={() => handleMarkCovered(topic)}
-            className="flex-shrink-0 bg-white border border-[#e5e7eb] rounded-full px-[10px] py-1 text-[10px] font-semibold text-[#6b7280] hover:border-brand-gold hover:text-brand-gold transition-colors disabled:opacity-50 whitespace-nowrap"
+            className="flex-shrink-0 bg-white border border-[#e5e7eb] rounded-full px-[10px] py-1 text-xs font-semibold text-[#6b7280] hover:border-brand-gold hover:text-brand-gold transition-colors disabled:opacity-50 whitespace-nowrap"
           >
             Mark covered
           </button>
@@ -181,7 +181,7 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
             type="button"
             disabled={mutating === topic.id}
             onClick={() => handleMarkCovered(topic)}
-            className="flex-shrink-0 bg-white border border-[#e5e7eb] rounded-full px-[10px] py-1 text-[10px] font-semibold text-[#6b7280] hover:border-brand-gold hover:text-brand-gold transition-colors disabled:opacity-50 whitespace-nowrap"
+            className="flex-shrink-0 bg-white border border-[#e5e7eb] rounded-full px-[10px] py-1 text-xs font-semibold text-[#6b7280] hover:border-brand-gold hover:text-brand-gold transition-colors disabled:opacity-50 whitespace-nowrap"
           >
             Unmark
           </button>
@@ -206,7 +206,7 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
         <h3 className="font-display font-bold text-lg text-brand-ink mb-1">
           Choose and order your topics
         </h3>
-        <p className="text-xs text-brand-body">
+        <p className="text-sm text-brand-body">
           Select all topics you'll cover this year. Reorder with the arrows.
           Mark any you've already taught as covered — they'll appear first.
         </p>
@@ -299,7 +299,7 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
                     <p className="text-xs font-semibold text-brand-ink truncate">
                       {t.topic_name}
                     </p>
-                    <p className="text-[10px] text-brand-muted">
+                    <p className="text-xs text-brand-muted">
                       {t.subtopic_count} subtopic
                       {t.subtopic_count !== 1 ? "s" : ""}
                     </p>
@@ -309,7 +309,7 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
                     disabled={mutating === t.curriculum_topic_id}
                     onClick={() => handleAdd(t)}
                     aria-label={`Add ${t.topic_name}`}
-                    className="flex-shrink-0 rounded-full bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white transition-all px-3 py-1 text-[10px] font-bold disabled:opacity-50"
+                    className="flex-shrink-0 rounded-full bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white transition-all px-3 py-1 text-xs font-bold disabled:opacity-50"
                   >
                     + Add
                   </button>
@@ -355,7 +355,7 @@ function DiagnosticBuilderStep({ classId, onBack, onDone }: Step2Props) {
   const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(
     new Set(),
   );
-  const [questionsPerTopic, setQuestionsPerTopic] = useState(2);
+  const [questionsPerTopic, setQuestionsPerTopic] = useState(5);
   const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>(null);
   const [questionTypes, setQuestionTypes] = useState<string[]>(["MCQ"]);
   const [minimumDifficulty, setMinimumDifficulty] = useState(1);
@@ -508,24 +508,24 @@ function DiagnosticBuilderStep({ classId, onBack, onDone }: Step2Props) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="font-display font-bold text-[17px] text-brand-ink mb-1">
+        <h3 className="font-display font-bold text-lg text-brand-ink mb-1">
           Design your Tier 1 diagnostic
         </h3>
-        <p className="text-[12px] text-brand-body">
+        <p className="text-sm text-brand-body">
           Choose topics to baseline — include previous grade topics to check
           prior knowledge. Configure how many questions per topic and timing.
         </p>
       </div>
 
       {/* Locked warning */}
-      <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[6px] px-3 py-[9px] text-[11px] text-[#92400e]">
+      <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[6px] px-3 py-[9px] text-xs text-[#92400e]">
         ⚠ Once a student submits an attempt, this diagnostic is locked and
         cannot be edited.
       </div>
 
       {/* Amber warning banner (warn topics) */}
       {warnTopics.length > 0 && (
-        <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[8px] px-3 py-[10px] text-[11px] text-[#92400e] flex gap-2 items-start">
+        <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[8px] px-3 py-[10px] text-xs text-[#92400e] flex gap-2 items-start">
           <span>⚠</span>
           <span>
             {warnTopics.length} topic
@@ -543,12 +543,14 @@ function DiagnosticBuilderStep({ classId, onBack, onDone }: Step2Props) {
           <div className="border border-[#e5e7eb] rounded-[8px] overflow-hidden">
             {/* Card header */}
             <div className="px-[14px] py-[10px] bg-[#f9fafb] border-b border-[#e5e7eb] flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#374151]">
+              <span className="text-xs font-bold text-[#374151]">
                 Select topics to test
               </span>
-              <span className="text-[11px] text-brand-muted">
-                {selectedTopicIds.size} selected · ~{estimatedTotal} questions
-                total
+              <span className="text-xs text-brand-muted">
+                {selectedTopicIds.size} selected ·{" "}
+                <span className="font-bold text-brand-ink">
+                  ~{estimatedTotal} questions total
+                </span>
               </span>
             </div>
 
@@ -595,12 +597,12 @@ function DiagnosticBuilderStep({ classId, onBack, onDone }: Step2Props) {
 
             {/* Summary bar */}
             <div className="px-[14px] py-[7px] bg-[rgba(245,234,208,0.3)] border-t border-[#e5e7eb] flex items-center justify-between">
-              <span className="text-[11px] font-bold text-brand-ink">
+              <span className="text-xs font-bold text-brand-ink">
                 {selectedTopicIds.size} topic
                 {selectedTopicIds.size !== 1 ? "s" : ""} selected
               </span>
               {errorTopics.length + warnTopics.length > 0 && (
-                <span className="text-[11px] text-[#92400e]">
+                <span className="text-xs text-[#92400e]">
                   {errorTopics.length + warnTopics.length} topic
                   {errorTopics.length + warnTopics.length !== 1 ? "s" : ""} need
                   attention ⚠
@@ -677,7 +679,7 @@ export function ClassSetupWizard({
         if (!open) handleClose();
       }}
       title="Class Curriculum Setup"
-      maxWidth="xl"
+      maxWidth="3xl"
     >
       <div className="mt-2">
         {/* Step indicator */}

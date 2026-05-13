@@ -401,7 +401,7 @@ class AssessmentService:
                     f"which is not the current grade ({class_grade_level}) or previous grade ({class_grade_level - 1})"
                 )
 
-        # Sample questions: DIAGNOSTIC_QUESTIONS_PER_DIFFICULTY per difficulty per topic
+        # Sample questions: body.questions_per_topic per difficulty level per topic
         q = (
             select(QuestionBank.id, Subtopic.curriculum_topic_id, QuestionBank.difficulty_level)
             .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
@@ -423,11 +423,18 @@ class AssessmentService:
 
         rng = random.Random(str(class_id) + str(sorted(str(t) for t in body.topic_ids)))  # noqa: S311
         selected_ids: list[uuid.UUID] = []
+        # Pool is intentionally large: sample questions_per_topic per difficulty
+        # level per topic so different students receive different subsets.
+        pool_per_diff = body.questions_per_topic
         for topic_id in body.topic_ids:
             for diff in range(body.minimum_difficulty, body.maximum_difficulty + 1):
                 candidates = by_topic_diff.get((topic_id, diff), [])
-                take = min(DIAGNOSTIC_QUESTIONS_PER_DIFFICULTY, len(candidates))
+                take = min(pool_per_diff, len(candidates))
                 selected_ids.extend(rng.sample(candidates, take))
+
+        # Each student answers questions_per_topic questions per topic.
+        # The pool above is larger so students get variety across attempts.
+        student_facing_count = body.questions_per_topic * len(body.topic_ids)
 
         assessment = Assessment(
             school_id=school_id,
@@ -436,7 +443,7 @@ class AssessmentService:
             title=f"Tier 1 Diagnostic — {class_.name}",
             assessment_type=AssessmentType.DIAGNOSTIC,
             status=AssessmentStatus.DRAFT,
-            question_count=len(selected_ids),
+            question_count=student_facing_count,
             questions_per_topic=body.questions_per_topic,
             time_limit_minutes=body.time_limit_minutes if body.time_limit_minutes is not None else 0,
             question_types=body.question_types,

@@ -45,7 +45,7 @@ export function TopicGroupSection({
           <span className="text-[10px]">{open ? "▾" : "▸"}</span>
           <span>{gradeLabel}</span>
           {!open && selectedCount > 0 && (
-            <span className="text-[10px] font-medium normal-case tracking-normal text-brand-muted ml-1">
+            <span className="text-xs font-medium normal-case tracking-normal text-brand-muted ml-1">
               {selectedCount} selected
             </span>
           )}
@@ -56,7 +56,7 @@ export function TopicGroupSection({
             e.stopPropagation();
             onSelectAll();
           }}
-          className={`text-[10px] font-bold ${selectAllColor} hover:opacity-70 transition-opacity min-h-[24px] px-1`}
+          className={`text-xs font-bold ${selectAllColor} hover:opacity-70 transition-opacity min-h-[44px] px-1`}
           aria-label={`Select all topics in ${gradeLabel}`}
         >
           Select all

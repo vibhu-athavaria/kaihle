@@ -120,7 +120,10 @@ def _make_grade_and_topic_mocks(topic_id: uuid.UUID, grade_level: int = 8) -> tu
 
 
 @pytest.mark.asyncio
-async def test_design_tier1_when_insufficient_questions_then_raises_insufficient_error() -> None:
+async def test_design_tier1_when_thin_pool_then_creates_assessment_with_student_facing_count() -> None:
+    # Pool has only 1 question per difficulty (5 total across levels 1–5).
+    # student_facing_count = questions_per_topic × topics = 2 × 1 = 2.
+    # question_count stores the student-facing number, not the pool size.
     db = _make_db()
     school_id = uuid.uuid4()
     teacher_id = uuid.uuid4()
@@ -132,15 +135,11 @@ async def test_design_tier1_when_insufficient_questions_then_raises_insufficient
     result2 = MagicMock()
     result2.scalar_one_or_none.return_value = None
     result_grade, result_topic_grades = _make_grade_and_topic_mocks(topic_id)
-    # Only 1 question per difficulty level (5 total) — need 2×5=10 for questions_per_topic=2, min=1, max=5
     result_questions = MagicMock()
     result_questions.all.return_value = [(uuid.uuid4(), topic_id, float(d)) for d in range(1, 6)]
     db.execute = AsyncMock(side_effect=[result1, result2, result_grade, result_topic_grades, result_questions])
 
     service = AssessmentService(db)
-    # questions_per_topic=2, 5 difficulty levels → need 10 total, only 5 available
-    # But new logic never raises InsufficientQuestionsError for diagnostics — it uses what's available.
-    # This test verifies the assessment is created with available count, not raises.
     body = DesignTier1DiagnosticRequest(topic_ids=[topic_id], questions_per_topic=2)
     assessment = await service.design_tier1_diagnostic(
         class_id=fake_class.id,
@@ -148,8 +147,8 @@ async def test_design_tier1_when_insufficient_questions_then_raises_insufficient
         teacher_id=teacher_id,
         body=body,
     )
-    # 5 questions selected (1 per difficulty since only 1 available each)
-    assert assessment.question_count == 5
+    # student_facing_count = 2 (questions_per_topic) × 1 (topic) = 2
+    assert assessment.question_count == 2
 
 
 @pytest.mark.asyncio
