@@ -292,9 +292,11 @@ class ClassTopicService:
 
         prev_level = current_level - 1
 
-        # Resolve previous grade id (may not exist for grade 1)
-        prev_grade_result = await self.db.execute(select(Grade.id).where(Grade.level == prev_level))
-        prev_grade_id: uuid.UUID | None = prev_grade_result.scalar_one_or_none()
+        # Resolve previous grade id — only query if prev_level is valid (>= 1)
+        prev_grade_id: uuid.UUID | None = None
+        if prev_level >= 1:
+            prev_grade_result = await self.db.execute(select(Grade.id).where(Grade.level == prev_level))
+            prev_grade_id = prev_grade_result.scalar_one_or_none()
 
         # Query topics for both grades in one go
         grade_ids = [class_.grade_id]

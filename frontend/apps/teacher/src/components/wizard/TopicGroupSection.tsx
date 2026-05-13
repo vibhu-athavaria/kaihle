@@ -34,12 +34,16 @@ export function TopicGroupSection({
 
   const selectAllColor = isCurrent ? "text-brand-gold" : "text-brand-primary";
 
+  const sectionId = `topic-group-${gradeLabel.replace(/\s+/g, "-").toLowerCase()}`;
+
   return (
     <>
       <div
         className={`${headerClass} flex items-center justify-between cursor-pointer select-none`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        aria-controls={sectionId}
+        role="button"
       >
         <div className="flex items-center gap-[6px] flex-1">
           <span className="text-[10px]">{open ? "▾" : "▸"}</span>
@@ -63,16 +67,18 @@ export function TopicGroupSection({
         </button>
       </div>
 
-      {open &&
-        topics.map((topic) => (
-          <TopicRow
-            key={topic.curriculum_topic_id}
-            topic={topic}
-            selected={selectedIds.has(topic.curriculum_topic_id)}
-            questionsPerTopic={questionsPerTopic}
-            onToggle={() => onToggle(topic.curriculum_topic_id)}
-          />
-        ))}
+      <div id={sectionId}>
+        {open &&
+          topics.map((topic) => (
+            <TopicRow
+              key={topic.curriculum_topic_id}
+              topic={topic}
+              selected={selectedIds.has(topic.curriculum_topic_id)}
+              questionsPerTopic={questionsPerTopic}
+              onToggle={() => onToggle(topic.curriculum_topic_id)}
+            />
+          ))}
+      </div>
     </>
   );
 }

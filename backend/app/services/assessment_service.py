@@ -90,9 +90,6 @@ MAX_DIAGNOSTIC_POOL = 60
 # Maximum questions a student actually answers in one diagnostic attempt.
 MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT = 20
 
-# Questions sampled per topic per difficulty level in a teacher-designed Tier 1 diagnostic.
-DIAGNOSTIC_QUESTIONS_PER_DIFFICULTY = 2
-
 
 def _sample_by_topic(
     rows: list[tuple[uuid.UUID, uuid.UUID]],
@@ -426,15 +423,19 @@ class AssessmentService:
         # Pool is intentionally large: sample questions_per_topic per difficulty
         # level per topic so different students receive different subsets.
         pool_per_diff = body.questions_per_topic
+        topics_with_questions: set[uuid.UUID] = set()
         for topic_id in body.topic_ids:
             for diff in range(body.minimum_difficulty, body.maximum_difficulty + 1):
                 candidates = by_topic_diff.get((topic_id, diff), [])
+                if not candidates:
+                    continue
                 take = min(pool_per_diff, len(candidates))
                 selected_ids.extend(rng.sample(candidates, take))
+                topics_with_questions.add(topic_id)
 
-        # Each student answers questions_per_topic questions per topic.
-        # The pool above is larger so students get variety across attempts.
-        student_facing_count = body.questions_per_topic * len(body.topic_ids)
+        # student_facing_count is capped to topics that actually have questions
+        # so the attempt service doesn't over-cap the student's question view.
+        student_facing_count = body.questions_per_topic * len(topics_with_questions)
 
         assessment = Assessment(
             school_id=school_id,
