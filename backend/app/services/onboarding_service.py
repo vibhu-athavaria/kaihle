@@ -15,7 +15,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.questionnaire_config import get_option_by_key
-from app.models.assessment import Assessment, StudentAttempt
+from app.models.assessment import Assessment, AssessmentType, StudentAttempt
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import Class, ClassEnrollment
 from app.models.user import OnboardingStatus, StudentProfile, User, UserRole
@@ -497,7 +497,7 @@ class OnboardingService:
     ) -> bool:
         """Check if the student completed the diagnostic for a specific class.
 
-        Finds the Tier 1 diagnostic assessment for the class (is_system_generated = TRUE),
+        Finds the Tier 1 diagnostic assessment for the class (assessment_type = DIAGNOSTIC),
         checks if the student_attempt for that assessment is COMPLETED,
         and if so, updates the class_enrollment status to COMPLETED.
 
@@ -516,7 +516,7 @@ class OnboardingService:
             .join(Assessment, Assessment.id == StudentAttempt.assessment_id)
             .where(
                 Assessment.class_id == class_id,
-                Assessment.is_system_generated.is_(True),
+                Assessment.assessment_type == AssessmentType.DIAGNOSTIC,
                 StudentAttempt.student_id == student_id,
                 StudentAttempt.status == "COMPLETED",
             )

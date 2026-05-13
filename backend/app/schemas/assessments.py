@@ -35,10 +35,14 @@ class AssessmentResponse(BaseModel):
     class_id: UUID
     title: str
     assessment_type: str  # "DIAGNOSTIC" | "PROGRESS_CHECK"
-    is_system_generated: bool  # True = Tier 1, False = Tier 2
     status: str  # "DRAFT" | "ACTIVE" | "CLOSED"
     topic_ids: list[UUID]
-    question_count: int
+    question_count: int | None
+    questions_per_topic: int
+    minimum_difficulty: int
+    maximum_difficulty: int
+    question_types: list[str]
+    time_limit_minutes: int
     created_at: datetime
     published_at: datetime | None
     deadline: datetime | None
@@ -60,10 +64,14 @@ class AssessmentWithClassResponse(BaseModel):
     class_name: str
     title: str
     assessment_type: str
-    is_system_generated: bool
     status: str
     topic_ids: list[UUID]
-    question_count: int
+    question_count: int | None
+    questions_per_topic: int
+    minimum_difficulty: int
+    maximum_difficulty: int
+    question_types: list[str]
+    time_limit_minutes: int
     created_at: datetime
     published_at: datetime | None
     deadline: datetime | None

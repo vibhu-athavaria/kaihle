@@ -151,12 +151,11 @@ class AttemptService:
         # Step 3 — load questions in order, stripped of correct answers
         questions = await self._load_questions(assessment.id, strip_answers=True)
 
-        # Apply per-student question limit from assessment config.
+        # Apply per-student question limit from assessment.question_count.
         # The pool may have up to MAX_DIAGNOSTIC_POOL questions; each student
-        # sees at most max_questions_per_attempt. Sample is seeded by student_id
+        # sees at most question_count. Sample is seeded by student_id
         # so the same student always sees the same subset on revisit.
-        config = assessment.config or {}
-        max_per_attempt = config.get("num_questions")
+        max_per_attempt = assessment.question_count
         if max_per_attempt and len(questions) > max_per_attempt:
             rng = _random.Random(str(student_id))
             questions = rng.sample(questions, max_per_attempt)
@@ -441,7 +440,7 @@ class AttemptService:
         if attempt.status == AttemptStatus.COMPLETED:
             raise AttemptAlreadyCompletedError(f"Attempt {attempt_id} is already completed")
 
-        # Load assessment for is_system_generated flag
+        # Load assessment to check type
         assessment_result = await self.db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
         assessment = assessment_result.scalar_one()
 
@@ -537,11 +536,11 @@ class AttemptService:
             score=score_pct,
             total=total,
             correct=correct,
-            is_system_generated=assessment.is_system_generated,
+            is_diagnostic=assessment.assessment_type == AssessmentType.DIAGNOSTIC,
         )
 
         # Tier 1 diagnostic: update enrollment onboarding status
-        if assessment.is_system_generated:
+        if assessment.assessment_type == AssessmentType.DIAGNOSTIC:
             await onboarding_service.check_and_update_onboarding_complete(
                 student_id=student_id,
                 class_id=assessment.class_id,

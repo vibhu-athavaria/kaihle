@@ -158,6 +158,7 @@ class GapService:
         """
         from app.models.assessment import (
             Assessment,
+            AssessmentType,
             AttemptStatus,
             StudentAttempt,
             StudentResponse,
@@ -189,7 +190,7 @@ class GapService:
             logger.warning("calculate_gap_states_skipped_assessment_not_found", attempt_id=attempt_id_str)
             return {"attempt_id": attempt_id_str, "subtopics_updated": 0}
 
-        is_system_generated: bool = assessment.is_system_generated
+        is_diagnostic: bool = assessment.assessment_type == AssessmentType.DIAGNOSTIC
 
         # Step 3: Load responses
         responses_result = await self.db.execute(
@@ -264,7 +265,7 @@ class GapService:
             historical = hist_result.all()
 
             if len(historical) == 0:
-                mastery = current_score * 0.7 if is_system_generated else current_score * 1.0
+                mastery = current_score * 0.7 if is_diagnostic else current_score * 1.0
                 rolling_count = 1
             elif len(historical) == 1:
                 mastery = (current_score * 0.65) + (historical[0][0] * 0.35)

@@ -58,7 +58,6 @@ def sample_assessment(sample_attempt):
         title="Test Assessment",
         assessment_type=AssessmentType.PROGRESS_CHECK,
         status=AssessmentStatus.ACTIVE,
-        config={"num_questions": 10},
         question_count=10,
     )
 

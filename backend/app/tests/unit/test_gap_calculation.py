@@ -46,11 +46,13 @@ def _make_assessment(
     class_id: uuid.UUID,
     is_system_generated: bool = False,
 ) -> SimpleNamespace:
+    from app.models.assessment import AssessmentType
+
     return SimpleNamespace(
         id=uuid.uuid4(),
         school_id=school_id,
         class_id=class_id,
-        is_system_generated=is_system_generated,
+        assessment_type=AssessmentType.DIAGNOSTIC if is_system_generated else AssessmentType.PROGRESS_CHECK,
     )
 
 

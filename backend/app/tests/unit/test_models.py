@@ -91,24 +91,6 @@ class TestStudentLearningProfile:
 class TestAssessment:
     """Tests for Assessment model."""
 
-    def test_is_system_generated_column_default(self) -> None:
-        """Test that is_system_generated column defaults to False at DB level."""
-        col = Assessment.__table__.c.is_system_generated
-        # The default should be the SQL false() construct
-        assert col.default is not None
-
-    def test_explicit_is_system_generated_true(self) -> None:
-        """Test that is_system_generated can be set to True."""
-        assessment = Assessment(
-            class_id=uuid.uuid4(),
-            created_by=uuid.uuid4(),
-            title="Test Assessment",
-            assessment_type="DIAGNOSTIC",
-            is_system_generated=True,
-        )
-
-        assert assessment.is_system_generated is True
-
     def test_status_column_default(self) -> None:
         """Test that status column defaults to DRAFT."""
         col = Assessment.__table__.c.status
