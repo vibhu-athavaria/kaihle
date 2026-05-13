@@ -148,7 +148,6 @@ async def _create_draft_assessment(
         title="Test Assessment",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.DRAFT,
-        is_system_generated=False,
         question_count=question_count,
         config={},
     )
@@ -189,7 +188,6 @@ async def test_list_class_assessments_when_teacher_own_class_then_returns_200_wi
         title="Active Assessment",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=False,
         question_count=3,
         config={},
     )
@@ -263,7 +261,6 @@ async def test_list_class_assessments_when_student_then_draft_excluded(
         title="Draft Assessment",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.DRAFT,
-        is_system_generated=False,
         question_count=5,
         config={},
     )
@@ -275,7 +272,6 @@ async def test_list_class_assessments_when_student_then_draft_excluded(
         title="Active Assessment",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=False,
         question_count=5,
         config={},
     )
@@ -313,7 +309,6 @@ async def test_list_class_assessments_when_student_then_system_generated_tier1_i
         title="Onboarding Diagnostic",
         assessment_type="DIAGNOSTIC",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=True,
         question_count=5,
         config={"max_questions_per_attempt": 20},
     )
@@ -329,7 +324,6 @@ async def test_list_class_assessments_when_student_then_system_generated_tier1_i
     data = response.json()
     returned_ids = [item["id"] for item in data["data"]]
     assert str(system_assessment.id) in returned_ids
-    assert data["data"][0]["is_system_generated"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +360,6 @@ async def test_create_assessment_when_teacher_owns_class_then_201_draft(
     assert response.status_code == 201
     data = response.json()
     assert data["status"] == "DRAFT"
-    assert data["is_system_generated"] is False
     assert data["title"] == "My Progress Check"
     assert data["question_count"] == 5
 
@@ -461,7 +454,6 @@ async def test_get_assessment_when_different_school_then_403(
         title="School A Assessment",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.DRAFT,
-        is_system_generated=False,
         question_count=5,
         config={},
     )
@@ -507,7 +499,6 @@ async def test_get_assessment_when_student_then_correct_answer_excluded(
         title="Active Check",
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=False,
         question_count=0,
         config={},
     )

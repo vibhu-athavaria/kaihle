@@ -258,7 +258,6 @@ async def test_diagnostic_endpoint_when_diagnostic_pending_then_returns_200(
         title="Diagnostic Assessment",
         assessment_type="DIAGNOSTIC",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=True,
         config={},
     )
     db_session.add(diag_assessment)
@@ -500,7 +499,6 @@ async def test_diagnostic_endpoint_always_accessible_for_in_progress_student(
         title="Diagnostic Assessment InProgress",
         assessment_type="DIAGNOSTIC",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=True,
         config={},
     )
     db_session.add(diag_assessment)

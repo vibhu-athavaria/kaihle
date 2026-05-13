@@ -120,7 +120,10 @@ def _make_grade_and_topic_mocks(topic_id: uuid.UUID, grade_level: int = 8) -> tu
 
 
 @pytest.mark.asyncio
-async def test_design_tier1_when_insufficient_questions_then_raises_insufficient_error() -> None:
+async def test_design_tier1_when_thin_pool_then_creates_assessment_with_student_facing_count() -> None:
+    # Pool has only 1 question per difficulty (5 total across levels 1–5).
+    # student_facing_count = questions_per_topic × topics_with_questions = 3 × 1 = 3.
+    # question_count stores the student-facing number, not the pool size.
     db = _make_db()
     school_id = uuid.uuid4()
     teacher_id = uuid.uuid4()
@@ -132,24 +135,20 @@ async def test_design_tier1_when_insufficient_questions_then_raises_insufficient
     result2 = MagicMock()
     result2.scalar_one_or_none.return_value = None
     result_grade, result_topic_grades = _make_grade_and_topic_mocks(topic_id)
-    # Only 1 question per difficulty level (5 total) — need 2×5=10 for questions_per_topic=2, min=1, max=5
     result_questions = MagicMock()
     result_questions.all.return_value = [(uuid.uuid4(), topic_id, float(d)) for d in range(1, 6)]
     db.execute = AsyncMock(side_effect=[result1, result2, result_grade, result_topic_grades, result_questions])
 
     service = AssessmentService(db)
-    # questions_per_topic=2, 5 difficulty levels → need 10 total, only 5 available
-    # But new logic never raises InsufficientQuestionsError for diagnostics — it uses what's available.
-    # This test verifies the assessment is created with available count, not raises.
-    body = DesignTier1DiagnosticRequest(topic_ids=[topic_id], questions_per_topic=2)
+    body = DesignTier1DiagnosticRequest(topic_ids=[topic_id], questions_per_topic=3)
     assessment = await service.design_tier1_diagnostic(
         class_id=fake_class.id,
         school_id=school_id,
         teacher_id=teacher_id,
         body=body,
     )
-    # 5 questions selected (1 per difficulty since only 1 available each)
-    assert assessment.question_count == 5
+    # student_facing_count = 3 (questions_per_topic) × 1 (topic_with_questions) = 3
+    assert assessment.question_count == 3
 
 
 @pytest.mark.asyncio
@@ -171,7 +170,7 @@ async def test_design_tier1_when_valid_then_creates_draft_assessment() -> None:
     db.execute = AsyncMock(side_effect=[result1, result2, result_grade, result_topic_grades, result_questions])
 
     service = AssessmentService(db)
-    body = DesignTier1DiagnosticRequest(topic_ids=[topic_id], questions_per_topic=2)
+    body = DesignTier1DiagnosticRequest(topic_ids=[topic_id], questions_per_topic=3)
     assessment = await service.design_tier1_diagnostic(
         class_id=fake_class.id,
         school_id=school_id,
@@ -213,7 +212,7 @@ async def test_design_tier1_when_existing_draft_then_replaces_it() -> None:
     )
 
     service = AssessmentService(db)
-    body = DesignTier1DiagnosticRequest(topic_ids=[topic_id], questions_per_topic=2)
+    body = DesignTier1DiagnosticRequest(topic_ids=[topic_id], questions_per_topic=3)
 
     with patch(
         "app.services.assessment_service.delete",
@@ -375,7 +374,7 @@ async def test_design_tier1_when_bank_has_2_per_difficulty_then_selects_2_per_di
     service = AssessmentService(db)
     body = DesignTier1DiagnosticRequest(
         topic_ids=topic_ids,
-        questions_per_topic=2,
+        questions_per_topic=3,
         minimum_difficulty=1,
         maximum_difficulty=5,
     )
@@ -389,8 +388,8 @@ async def test_design_tier1_when_bank_has_2_per_difficulty_then_selects_2_per_di
     # Bridge rows = all db.add calls after the first (assessment itself)
     add_calls = db.add.call_args_list
     bridge_calls = [c for c in add_calls if hasattr(c[0][0], "question_id")]
-    # 3 topics × 5 levels × 2 per level = 30
-    assert len(bridge_calls) == 30
+    # 3 topics × 5 levels × 3 per level (questions_per_topic) = 45
+    assert len(bridge_calls) == 45
 
 
 @pytest.mark.asyncio
@@ -426,7 +425,7 @@ async def test_design_tier1_when_bank_short_on_difficulty_then_uses_available() 
     )
 
     service = AssessmentService(db)
-    body = DesignTier1DiagnosticRequest(topic_ids=[topic_id], questions_per_topic=2)
+    body = DesignTier1DiagnosticRequest(topic_ids=[topic_id], questions_per_topic=3)
 
     # Should not raise InsufficientQuestionsError — uses what's available
     assessment = await service.design_tier1_diagnostic(
@@ -443,7 +442,7 @@ async def test_design_tier1_when_bank_short_on_difficulty_then_uses_available() 
 
 @pytest.mark.asyncio
 async def test_check_topic_availability_when_topic_has_enough_then_fulfillable_true() -> None:
-    """Topic with 10 questions at each difficulty → fulfillable when questions_per_topic=2."""
+    """Topic with 10 questions at each difficulty → fulfillable when questions_per_topic=3."""
     db = _make_db()
     topic_id = uuid.uuid4()
     grade_id = uuid.uuid4()
@@ -464,7 +463,7 @@ async def test_check_topic_availability_when_topic_has_enough_then_fulfillable_t
         class_id=uuid.uuid4(),
         school_id=uuid.uuid4(),
         topic_ids=[topic_id],
-        questions_per_topic=2,
+        questions_per_topic=3,
         minimum_difficulty=1,
         maximum_difficulty=5,
         question_types=["MCQ", "TRUE_FALSE"],

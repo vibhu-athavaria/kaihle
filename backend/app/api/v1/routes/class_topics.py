@@ -110,6 +110,23 @@ async def list_class_topics(
 
 
 @router.get(
+    "/classes/{class_id}/topics/diagnostic",
+    response_model=dict[str, object],
+)
+async def list_topics_for_diagnostic(
+    class_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, object]:
+    """Return current and previous grade topics for the diagnostic wizard topic picker."""
+    service = ClassTopicService(db)
+    try:
+        return await service.list_topics_for_diagnostic(class_id)
+    except ClassTopicNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get(
     "/classes/{class_id}/topics/available",
     response_model=list[dict[str, object]],
 )
