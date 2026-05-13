@@ -93,11 +93,11 @@ class DesignTier1DiagnosticRequest(BaseModel):
     """Request body for teacher-designed Tier 1 diagnostic.
 
     Topics may come from the class's current grade or the previous grade (grade.level - 1).
-    Questions are sampled 2 per difficulty level per topic (DIAGNOSTIC_QUESTIONS_PER_DIFFICULTY).
+    Minimum 3 questions per topic enforced for statistically reliable placement.
     """
 
     topic_ids: list[UUID] = Field(..., min_length=1, description="Curriculum topic IDs to include")
-    questions_per_topic: int = Field(2, ge=1, le=20)
+    questions_per_topic: int = Field(5, ge=3, le=20)
     time_limit_minutes: int | None = Field(None, ge=1, le=300)
     question_types: list[str] = Field(default_factory=lambda: ["MCQ", "TRUE_FALSE"])
     minimum_difficulty: int = Field(1, ge=1, le=5)

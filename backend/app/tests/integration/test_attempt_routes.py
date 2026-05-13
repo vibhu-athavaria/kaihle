@@ -244,7 +244,6 @@ async def active_assessment(
         title="Test Active Assessment",
         assessment_type="DIAGNOSTIC",
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=True,
         config={},
     )
     db_session.add(a)

@@ -172,7 +172,7 @@ async def test_full_creation_flow_when_valid_then_assessment_and_bridge_rows_in_
     body = AssessmentCreateRequest(
         title="Test Progress Check",
         topic_ids=[],
-        question_count=6,
+        questions_per_topic=3,
         assessment_type=AssessmentType.PROGRESS_CHECK,
         difficulty_min=1.0,
         difficulty_max=5.0,
@@ -185,9 +185,9 @@ async def test_full_creation_flow_when_valid_then_assessment_and_bridge_rows_in_
     stored = await db_session.get(Assessment, assessment.id)
     assert stored is not None
     assert stored.status == AssessmentStatus.DRAFT
-    assert stored.is_system_generated is False
     assert stored.school_id == test_school.id
-    assert stored.question_count == 6
+    assert stored.question_count == 3
+    assert stored.created_by == teacher.id
 
     # Verify bridge rows
     bridge_count = (
@@ -197,7 +197,7 @@ async def test_full_creation_flow_when_valid_then_assessment_and_bridge_rows_in_
             )
         )
     ).scalar()
-    assert bridge_count == 6
+    assert bridge_count == 3
 
 
 @pytest.mark.asyncio

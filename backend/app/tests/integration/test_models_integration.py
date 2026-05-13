@@ -379,7 +379,6 @@ class TestModelCRUD:
             created_by=test_teacher.id,
             title="Math Diagnostic",
             assessment_type="DIAGNOSTIC",
-            is_system_generated=False,
             config={"num_questions": 10},
         )
         db_session.add(assessment)
@@ -388,7 +387,7 @@ class TestModelCRUD:
         result = await db_session.execute(select(Assessment).where(Assessment.id == assessment.id))
         fetched = result.scalar_one()
         assert fetched.title == "Math Diagnostic"
-        assert fetched.is_system_generated is False
+        assert fetched.created_by is not None
 
     async def test_student_attempt_crud(
         self,

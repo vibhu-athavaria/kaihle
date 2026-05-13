@@ -159,7 +159,7 @@ async def test_create_class_diagnostic_when_new_class_then_assessment_created(
     test_subject: Subject,
     test_teacher: User,
 ) -> None:
-    """Creates an ACTIVE is_system_generated assessment with question pool."""
+    """Creates an ACTIVE assessment with question pool."""
     class_, topics, questions = await _setup_full_class(
         db_session, test_school, test_curriculum, test_grade, test_subject, test_teacher
     )
@@ -379,5 +379,5 @@ async def test_create_attempt_when_no_diagnostic_exists_then_raises(
     service = AssessmentService(db_session)
     # Deliberately skip create_class_diagnostic
 
-    with pytest.raises(ValueError, match="No system-generated diagnostic found"):
+    with pytest.raises(ValueError, match="No active diagnostic found"):
         await service.create_diagnostic_attempt(student.id, class_.id)

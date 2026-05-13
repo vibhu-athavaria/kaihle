@@ -90,9 +90,6 @@ MAX_DIAGNOSTIC_POOL = 60
 # Maximum questions a student actually answers in one diagnostic attempt.
 MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT = 20
 
-# Questions sampled per topic per difficulty level in a teacher-designed Tier 1 diagnostic.
-DIAGNOSTIC_QUESTIONS_PER_DIFFICULTY = 2
-
 
 def _sample_by_topic(
     rows: list[tuple[uuid.UUID, uuid.UUID]],
@@ -220,11 +217,11 @@ class AssessmentService:
     # ── Class-level: create diagnostic assessment ────────────────────────
 
     async def create_class_diagnostic(self, class_id: uuid.UUID) -> Assessment:
-        """Create or retrieve a Tier 1 DIAGNOSTIC assessment for a class.
+        """[DEPRECATED] Create or retrieve a system-generated Tier 1 DIAGNOSTIC assessment.
 
-        Called when a class is created. Selects a pool of up to MAX_DIAGNOSTIC_POOL
-        questions spanning all curriculum topics for the class's subject+grade.
-        Idempotent — returns existing assessment if one already exists.
+        Superseded by design_tier1_diagnostic() — teachers now design diagnostics
+        explicitly via the wizard UI. This method remains only to support existing
+        integration tests and legacy Celery tasks. Do not call from new code.
 
         Args:
             class_id: The class UUID.
@@ -401,7 +398,7 @@ class AssessmentService:
                     f"which is not the current grade ({class_grade_level}) or previous grade ({class_grade_level - 1})"
                 )
 
-        # Sample questions: DIAGNOSTIC_QUESTIONS_PER_DIFFICULTY per difficulty per topic
+        # Sample questions: body.questions_per_topic per difficulty level per topic
         q = (
             select(QuestionBank.id, Subtopic.curriculum_topic_id, QuestionBank.difficulty_level)
             .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
@@ -423,11 +420,22 @@ class AssessmentService:
 
         rng = random.Random(str(class_id) + str(sorted(str(t) for t in body.topic_ids)))  # noqa: S311
         selected_ids: list[uuid.UUID] = []
+        # Pool is intentionally large: sample questions_per_topic per difficulty
+        # level per topic so different students receive different subsets.
+        pool_per_diff = body.questions_per_topic
+        topics_with_questions: set[uuid.UUID] = set()
         for topic_id in body.topic_ids:
             for diff in range(body.minimum_difficulty, body.maximum_difficulty + 1):
                 candidates = by_topic_diff.get((topic_id, diff), [])
-                take = min(DIAGNOSTIC_QUESTIONS_PER_DIFFICULTY, len(candidates))
+                if not candidates:
+                    continue
+                take = min(pool_per_diff, len(candidates))
                 selected_ids.extend(rng.sample(candidates, take))
+                topics_with_questions.add(topic_id)
+
+        # student_facing_count is capped to topics that actually have questions
+        # so the attempt service doesn't over-cap the student's question view.
+        student_facing_count = body.questions_per_topic * len(topics_with_questions)
 
         assessment = Assessment(
             school_id=school_id,
@@ -436,7 +444,7 @@ class AssessmentService:
             title=f"Tier 1 Diagnostic — {class_.name}",
             assessment_type=AssessmentType.DIAGNOSTIC,
             status=AssessmentStatus.DRAFT,
-            question_count=len(selected_ids),
+            question_count=student_facing_count,
             questions_per_topic=body.questions_per_topic,
             time_limit_minutes=body.time_limit_minutes if body.time_limit_minutes is not None else 0,
             question_types=body.question_types,
