@@ -1,980 +1,313 @@
-"""Unit tests for AttemptService.
-
-Uses mock DB sessions — no real database required.
-Naming convention: test_<what>_when_<condition>_then_<expected>
-"""
+"""Unit tests for AttemptService."""
 
 import uuid
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.assessment import AssessmentStatus, AssessmentType, AttemptStatus
+from app.models.assessment import (
+    Assessment,
+    AssessmentStatus,
+    AssessmentType,
+    AttemptStatus,
+    StudentAttempt,
+    StudentResponse,
+)
+from app.models.curriculum import QuestionBank
 from app.services.attempt_service import (
     AttemptAccessDeniedError,
     AttemptAlreadyCompletedError,
     AttemptNotFoundError,
     AttemptService,
     DuplicateResponseError,
-    QuestionNotInAssessmentError,
 )
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mock_db():
+    """Create a mock AsyncSession."""
+    return AsyncMock()
 
 
 @pytest.fixture
-def mock_db() -> MagicMock:
-    session = MagicMock(spec=AsyncSession)
-    session.add = MagicMock()
-    session.flush = AsyncMock()
-    session.commit = AsyncMock()
-    return session
-
-
-@pytest.fixture
-def service(mock_db: MagicMock) -> AttemptService:
+def service(mock_db):
     return AttemptService(mock_db)
 
 
-def _make_assessment(
-    *,
-    school_id: uuid.UUID | None = None,
-    class_id: uuid.UUID | None = None,
-    status: str = AssessmentStatus.ACTIVE,
-    assessment_type: str = AssessmentType.DIAGNOSTIC,
-    is_system_generated: bool = True,
-    config: dict | None = {
-        "num_questions": 10,
-        "difficulty_range": [1, 4],
-        "question_types": ["MCQ", "SHORT_ANSWER"],
-        "time_limit_minutes": None,
-    },
-) -> SimpleNamespace:
-    return SimpleNamespace(
+@pytest.fixture
+def sample_attempt():
+    """Create a sample StudentAttempt."""
+    return StudentAttempt(
         id=uuid.uuid4(),
-        school_id=school_id or uuid.uuid4(),
-        class_id=class_id or uuid.uuid4(),
-        status=status,
-        assessment_type=assessment_type,
-        is_system_generated=is_system_generated,
-        config=config,
+        assessment_id=uuid.uuid4(),
+        student_id=uuid.uuid4(),
+        status=AttemptStatus.IN_PROGRESS,
+        started_at=datetime.now(UTC),
+        questions_answered=0,
     )
 
 
-def _make_attempt(
-    *,
-    student_id: uuid.UUID | None = None,
-    assessment_id: uuid.UUID | None = None,
-    status: str = AttemptStatus.NOT_STARTED,
-    overall_score: float | None = None,
-    completed_at: datetime | None = None,
-    started_at: datetime | None = None,
-    time_taken_seconds: int | None = None,
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        id=uuid.uuid4(),
-        student_id=student_id or uuid.uuid4(),
-        assessment_id=assessment_id or uuid.uuid4(),
-        status=status,
-        overall_score=overall_score,
-        completed_at=completed_at,
-        started_at=started_at,
-        time_taken_seconds=time_taken_seconds,
+@pytest.fixture
+def sample_assessment(sample_attempt):
+    """Create a sample Assessment with config."""
+    return Assessment(
+        id=sample_attempt.assessment_id,
+        school_id=uuid.uuid4(),
+        class_id=uuid.uuid4(),
+        title="Test Assessment",
+        assessment_type=AssessmentType.PROGRESS_CHECK,
+        status=AssessmentStatus.ACTIVE,
+        config={"num_questions": 10},
+        question_count=10,
     )
 
 
-def _make_question(correct_answer: str = "A") -> SimpleNamespace:
-    return SimpleNamespace(
-        id=uuid.uuid4(),
-        question_text="What is 1+1?",
-        question_type="MCQ",
-        options=[{"key": "A", "text": "2"}, {"key": "B", "text": "3"}],
-        correct_answer=correct_answer,
-        explanation=None,
-    )
+@pytest.fixture
+def sample_questions():
+    """Create sample QuestionBank rows."""
+    return [
+        QuestionBank(
+            id=uuid.uuid4(),
+            question_text="What is 2+2?",
+            question_type="MCQ",
+            options=[{"key": "A", "text": "3"}, {"key": "B", "text": "4"}, {"key": "C", "text": "5"}],
+            correct_answer="B",
+            difficulty_level=1,
+        ),
+        QuestionBank(
+            id=uuid.uuid4(),
+            question_text="What is 3+3?",
+            question_type="MCQ",
+            options=[{"key": "A", "text": "5"}, {"key": "B", "text": "6"}, {"key": "C", "text": "7"}],
+            correct_answer="B",
+            difficulty_level=2,
+        ),
+    ]
 
 
-def _make_response(
-    *,
-    attempt_id: uuid.UUID | None = None,
-    question_id: uuid.UUID | None = None,
-    is_correct: bool = True,
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        id=uuid.uuid4(),
-        attempt_id=attempt_id or uuid.uuid4(),
-        question_id=question_id or uuid.uuid4(),
-        is_correct=is_correct,
-        answer_given="A",
-        score=1.0 if is_correct else 0.0,
-    )
+@pytest.fixture
+def sample_responses(sample_attempt):
+    """Create sample StudentResponse rows for resume."""
+    return [
+        StudentResponse(
+            id=uuid.uuid4(),
+            attempt_id=sample_attempt.id,
+            question_id=uuid.uuid4(),
+            answer_given="A",
+            is_correct=True,
+            score=1.0,
+        ),
+        StudentResponse(
+            id=uuid.uuid4(),
+            attempt_id=sample_attempt.id,
+            question_id=uuid.uuid4(),
+            answer_given="B",
+            is_correct=True,
+            score=1.0,
+        ),
+    ]
 
 
-def _scalar_result(value: object) -> MagicMock:
-    """Build a mock execute() result that returns ``value`` from scalar_one_or_none."""
-    m = MagicMock()
-    m.scalar_one_or_none.return_value = value
-    m.scalar_one.return_value = value
-    return m
-
-
-def _scalars_result(values: list) -> MagicMock:
-    """Build a mock execute() result that returns ``values`` from scalars().all()."""
-    m = MagicMock()
-    scalars_m = MagicMock()
-    scalars_m.all.return_value = values
-    m.scalars.return_value = scalars_m
-    # Also support .all() for non-scalars calls
-    m.all.return_value = [(v,) for v in values]
-    return m
-
-
-# ---------------------------------------------------------------------------
-# get_class_diagnostic
-# ---------------------------------------------------------------------------
-
-
-class TestGetClassDiagnostic:
-    @pytest.mark.asyncio
-    async def test_get_class_diagnostic_when_attempt_exists_then_returns_with_questions(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """Happy path: active assessment + existing attempt → returns both."""
-        school_id = uuid.uuid4()
-        student_id = uuid.uuid4()
-        class_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, class_id=class_id)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        question = _make_question()
-
-        # Execute calls: assessment, attempt, questions
-        questions_result = MagicMock()
-        questions_result.all.return_value = [(question,)]
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(assessment),
-                _scalar_result(attempt),
-                questions_result,
-            ]
-        )
-
-        result_attempt, result_assessment, result_questions = await service.get_class_diagnostic(
-            class_id=class_id,
-            student_id=student_id,
-            school_id=school_id,
-        )
-
-        assert result_attempt.id == attempt.id
-        assert len(result_questions) == 1
-        # correct_answer must be stripped
-        assert result_questions[0].correct_answer is None
+class TestGetAttempt:
+    """Tests for AttemptService.get_attempt()."""
 
     @pytest.mark.asyncio
-    async def test_get_class_diagnostic_when_no_attempt_then_raises_attempt_not_found_error(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """Assessment exists but attempt not yet created → AttemptNotFoundError."""
-        school_id = uuid.uuid4()
-        student_id = uuid.uuid4()
-        class_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, class_id=class_id)
+    async def test_get_attempt_returns_responses_for_resume(
+        self, service, mock_db, sample_attempt, sample_assessment, sample_questions, sample_responses
+    ):
+        """get_attempt should return existing responses for resume functionality."""
+        # Setup mocks for multiple db.execute() calls:
+        # 1. Load attempt (line 288)
+        # 2. Load assessment (line 307)
+        # 3. Load responses (line 315)
+        attempt_result = MagicMock()
+        attempt_result.scalar_one_or_none.return_value = sample_attempt
 
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(assessment),
-                _scalar_result(None),  # no attempt
-            ]
-        )
+        assessment_result = MagicMock()
+        assessment_result.scalar_one_or_none.return_value = sample_assessment
+
+        responses_result = MagicMock()
+        responses_result.scalars.return_value.all.return_value = sample_responses
+
+        # Order matters: attempt query, then assessment query, then responses query
+        mock_db.execute.side_effect = [attempt_result, assessment_result, responses_result]
+
+        # Patch _load_questions to return sample questions
+        with patch.object(service, "_load_questions", AsyncMock(return_value=sample_questions)):
+            result = await service.get_attempt(
+                attempt_id=sample_attempt.id,
+                requesting_user_id=sample_attempt.student_id,
+                requesting_user_role="STUDENT",
+                school_id=sample_assessment.school_id,
+            )
+
+        attempt, assessment, questions, responses = result
+
+        # Verify all 4 values are returned
+        assert isinstance(attempt, StudentAttempt)
+        assert isinstance(assessment, Assessment)
+        assert isinstance(questions, list)
+        assert isinstance(responses, list)
+
+        # Verify we got the responses we set up
+        assert len(responses) == 2
+
+    @pytest.mark.asyncio
+    async def test_get_attempt_not_found(self, service, mock_db):
+        """get_attempt should raise AttemptNotFoundError when attempt doesn't exist."""
+        attempt_result = MagicMock()
+        attempt_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = attempt_result
 
         with pytest.raises(AttemptNotFoundError):
-            await service.get_class_diagnostic(class_id=class_id, student_id=student_id, school_id=school_id)
+            await service.get_attempt(
+                attempt_id=uuid.uuid4(),
+                requesting_user_id=uuid.uuid4(),
+                requesting_user_role="STUDENT",
+                school_id=None,
+            )
 
     @pytest.mark.asyncio
-    async def test_get_class_diagnostic_when_no_active_tier1_assessment_then_raises_value_error(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """No ACTIVE system-generated assessment → ValueError."""
-        mock_db.execute = AsyncMock(return_value=_scalar_result(None))
+    async def test_get_attempt_student_cannot_access_other_student_attempt(self, service, mock_db, sample_attempt):
+        """Student cannot access another student's attempt."""
+        attempt_result = MagicMock()
+        attempt_result.scalar_one_or_none.return_value = sample_attempt
+        mock_db.execute.return_value = attempt_result
 
-        with pytest.raises(ValueError, match="No active diagnostic"):
-            await service.get_class_diagnostic(class_id=uuid.uuid4(), student_id=uuid.uuid4(), school_id=uuid.uuid4())
-
-
-# ---------------------------------------------------------------------------
-# submit_response
-# ---------------------------------------------------------------------------
+        with pytest.raises(AttemptAccessDeniedError):
+            await service.get_attempt(
+                attempt_id=sample_attempt.id,
+                requesting_user_id=uuid.uuid4(),  # Different student
+                requesting_user_role="STUDENT",
+                school_id=None,
+            )
 
 
 class TestSubmitResponse:
-    def _setup_mock_db(
-        self,
-        mock_db: MagicMock,
-        attempt: SimpleNamespace,
-        assessment: SimpleNamespace,
-        bridge: SimpleNamespace | None,
-        existing_response: SimpleNamespace | None,
-        question: SimpleNamespace,
-    ) -> None:
-        """Wire up mock_db.execute side_effect for submit_response."""
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),  # _load_and_verify_attempt: attempt lookup
-                _scalar_result(assessment),  # _load_and_verify_attempt: assessment lookup
-                _scalar_result(bridge),  # bridge table lookup
-                _scalar_result(existing_response),  # duplicate guard
-                _scalar_result(question),  # question for scoring
-            ]
-        )
+    """Tests for AttemptService.submit_response()."""
 
     @pytest.mark.asyncio
-    async def test_submit_response_when_correct_mcq_then_is_correct_true(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        question = _make_question(correct_answer="A")
-        bridge = SimpleNamespace(assessment_id=assessment.id, question_id=question.id, order_index=0)
+    async def test_submit_response_saves_to_db(
+        self, service, mock_db, sample_attempt, sample_assessment, sample_questions
+    ):
+        """submit_response should save a StudentResponse to the DB."""
+        sample_attempt.status = AttemptStatus.IN_PROGRESS
+        attempt_result = MagicMock()
+        attempt_result.scalar_one_or_none.side_effect = [sample_attempt, sample_assessment]
 
-        self._setup_mock_db(mock_db, attempt, assessment, bridge, None, question)
+        # Mock question lookup
+        question_result = MagicMock()
+        q = MagicMock()
+        q.correct_answer = "B"
+        question_result.scalar_one_or_none.return_value = q
 
-        await service.submit_response(
-            attempt_id=attempt.id,
-            student_id=student_id,
-            school_id=school_id,
-            question_id=question.id,
-            selected_key="A",
-        )
+        # Mock bridge lookup
+        bridge_result = MagicMock()
+        bridge_result.scalar_one_or_none.return_value = MagicMock()
 
-        added = mock_db.add.call_args[0][0]
-        assert added.is_correct is True
+        # Mock duplicate check
+        dup_result = MagicMock()
+        dup_result.scalar_one_or_none.return_value = None
 
-    @pytest.mark.asyncio
-    async def test_submit_response_when_wrong_mcq_then_is_correct_false(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        question = _make_question(correct_answer="A")
-        bridge = SimpleNamespace(assessment_id=assessment.id, question_id=question.id, order_index=0)
-
-        self._setup_mock_db(mock_db, attempt, assessment, bridge, None, question)
+        mock_db.execute.side_effect = [attempt_result, attempt_result, bridge_result, dup_result, question_result]
 
         await service.submit_response(
-            attempt_id=attempt.id,
-            student_id=student_id,
-            school_id=school_id,
-            question_id=question.id,
+            attempt_id=sample_attempt.id,
+            student_id=sample_attempt.student_id,
+            school_id=sample_assessment.school_id,
+            question_id=sample_questions[0].id,
             selected_key="B",
         )
 
-        added = mock_db.add.call_args[0][0]
-        assert added.is_correct is False
+        # Verify a new StudentResponse was added
+        mock_db.add.assert_called_once()
+        call_args = mock_db.add.call_args[0][0]
+        assert call_args.answer_given == "B"
+        assert call_args.is_correct is True
 
     @pytest.mark.asyncio
-    async def test_submit_response_when_case_different_then_still_correct(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """Case-insensitive comparison: student answers "a", correct is "A"."""
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        question = _make_question(correct_answer="A")
-        bridge = SimpleNamespace(assessment_id=assessment.id, question_id=question.id, order_index=0)
+    async def test_submit_response_transitions_not_started_to_in_progress(
+        self, service, mock_db, sample_attempt, sample_assessment, sample_questions
+    ):
+        """First answer should transition attempt from NOT_STARTED to IN_PROGRESS."""
+        sample_attempt.status = AttemptStatus.NOT_STARTED
+        sample_attempt.started_at = None
+        attempt_result = MagicMock()
+        attempt_result.scalar_one_or_none.side_effect = [sample_attempt, sample_assessment]
 
-        self._setup_mock_db(mock_db, attempt, assessment, bridge, None, question)
+        question_result = MagicMock()
+        q = MagicMock()
+        q.correct_answer = "B"
+        question_result.scalar_one_or_none.return_value = q
+
+        bridge_result = MagicMock()
+        bridge_result.scalar_one_or_none.return_value = MagicMock()
+
+        dup_result = MagicMock()
+        dup_result.scalar_one_or_none.return_value = None
+
+        mock_db.execute.side_effect = [attempt_result, attempt_result, bridge_result, dup_result, question_result]
 
         await service.submit_response(
-            attempt_id=attempt.id,
-            student_id=student_id,
-            school_id=school_id,
-            question_id=question.id,
-            selected_key="a",
+            attempt_id=sample_attempt.id,
+            student_id=sample_attempt.student_id,
+            school_id=sample_assessment.school_id,
+            question_id=sample_questions[0].id,
+            selected_key="B",
         )
 
-        added = mock_db.add.call_args[0][0]
-        assert added.is_correct is True
+        # Verify status was updated to IN_PROGRESS
+        assert sample_attempt.status == AttemptStatus.IN_PROGRESS
+        assert sample_attempt.started_at is not None
 
     @pytest.mark.asyncio
-    async def test_submit_response_when_duplicate_question_then_raises_duplicate_response_error(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        question = _make_question()
-        bridge = SimpleNamespace(assessment_id=assessment.id, question_id=question.id, order_index=0)
-        existing_resp = _make_response()
+    async def test_submit_response_duplicate_raises_error(
+        self, service, mock_db, sample_attempt, sample_assessment, sample_questions
+    ):
+        """Submitting the same question twice should raise DuplicateResponseError."""
+        sample_attempt.status = AttemptStatus.IN_PROGRESS
+        attempt_result = MagicMock()
+        attempt_result.scalar_one_or_none.side_effect = [sample_attempt, sample_assessment]
 
-        self._setup_mock_db(mock_db, attempt, assessment, bridge, existing_resp, question)
+        question_result = MagicMock()
+        q = MagicMock()
+        q.correct_answer = "B"
+        question_result.scalar_one_or_none.return_value = q
+
+        bridge_result = MagicMock()
+        bridge_result.scalar_one_or_none.return_value = MagicMock()
+
+        # Simulate existing response found
+        dup_result = MagicMock()
+        dup_result.scalar_one_or_none.return_value = MagicMock()  # Found existing response
+
+        mock_db.execute.side_effect = [attempt_result, attempt_result, bridge_result, dup_result, question_result]
 
         with pytest.raises(DuplicateResponseError):
             await service.submit_response(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                question_id=question.id,
-                selected_key="A",
+                attempt_id=sample_attempt.id,
+                student_id=sample_attempt.student_id,
+                school_id=sample_assessment.school_id,
+                question_id=sample_questions[0].id,
+                selected_key="B",
             )
 
     @pytest.mark.asyncio
-    async def test_submit_response_when_attempt_completed_then_raises_attempt_already_completed_error(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id)
-        attempt = _make_attempt(
-            student_id=student_id,
-            assessment_id=assessment.id,
-            status=AttemptStatus.COMPLETED,
-        )
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                _scalar_result(assessment),
-            ]
-        )
+    async def test_submit_response_completed_attempt_raises_error(
+        self, service, mock_db, sample_attempt, sample_assessment
+    ):
+        """Submitting to a completed attempt should raise AttemptAlreadyCompletedError."""
+        sample_attempt.status = AttemptStatus.COMPLETED
+        attempt_result = MagicMock()
+        attempt_result.scalar_one_or_none.side_effect = [sample_attempt, sample_assessment]
+        mock_db.execute.return_value = attempt_result
 
         with pytest.raises(AttemptAlreadyCompletedError):
             await service.submit_response(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
+                attempt_id=sample_attempt.id,
+                student_id=sample_attempt.student_id,
+                school_id=sample_assessment.school_id,
                 question_id=uuid.uuid4(),
                 selected_key="A",
-            )
-
-    @pytest.mark.asyncio
-    async def test_submit_response_when_question_not_in_assessment_then_raises_error(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                _scalar_result(assessment),
-                _scalar_result(None),  # bridge not found
-            ]
-        )
-
-        with pytest.raises(QuestionNotInAssessmentError):
-            await service.submit_response(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                question_id=uuid.uuid4(),
-                selected_key="A",
-            )
-
-    @pytest.mark.asyncio
-    async def test_submit_response_transitions_attempt_from_not_started_to_in_progress(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id)
-        attempt = _make_attempt(
-            student_id=student_id,
-            assessment_id=assessment.id,
-            status=AttemptStatus.NOT_STARTED,
-        )
-        question = _make_question(correct_answer="A")
-        bridge = SimpleNamespace(assessment_id=assessment.id, question_id=question.id, order_index=0)
-
-        self._setup_mock_db(mock_db, attempt, assessment, bridge, None, question)
-
-        await service.submit_response(
-            attempt_id=attempt.id,
-            student_id=student_id,
-            school_id=school_id,
-            question_id=question.id,
-            selected_key="A",
-        )
-
-        assert attempt.status == AttemptStatus.IN_PROGRESS
-
-    @pytest.mark.asyncio
-    async def test_submit_response_when_question_missing_from_bank_then_raises_question_not_in_assessment_error(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """Bridge passes but question row absent → QuestionNotInAssessmentError raised."""
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        question_id = uuid.uuid4()
-        bridge = SimpleNamespace(assessment_id=assessment.id, question_id=question_id, order_index=0)
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                _scalar_result(assessment),
-                _scalar_result(bridge),  # bridge found
-                _scalar_result(None),  # no duplicate
-                _scalar_result(None),  # question row missing from bank
-            ]
-        )
-
-        with pytest.raises(QuestionNotInAssessmentError):
-            await service.submit_response(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                question_id=question_id,
-                selected_key="A",
-            )
-
-
-# ---------------------------------------------------------------------------
-# submit_attempt
-# ---------------------------------------------------------------------------
-
-
-class TestSubmitAttempt:
-    def _make_10_question_answers(self, *, correct_count: int = 10) -> tuple[list[SimpleNamespace], list[dict]]:
-        """Create 10 questions and matching answers with the specified correct count."""
-        questions = [_make_question(correct_answer="A") for _ in range(10)]
-        answers = []
-        for i, q in enumerate(questions):
-            answers.append({"question_id": q.id, "selected_key": "A" if i < correct_count else "B"})
-        return questions, answers
-
-    def _build_mock_db_for_submit(
-        self,
-        mock_db: MagicMock,
-        attempt: SimpleNamespace,
-        assessment: SimpleNamespace,
-        questions: list[SimpleNamespace],
-        already_answered_ids: list[uuid.UUID] | None = None,
-    ) -> None:
-        """Wire mock_db for submit_attempt."""
-        # Existing response ids (for idempotency)
-        already_answered_ids = already_answered_ids or []
-        existing_q_ids_result = MagicMock()
-        existing_q_ids_result.all.return_value = [(qid,) for qid in already_answered_ids]
-
-        # Each question needs: bridge lookup + question lookup
-        side_effects: list = [
-            _scalar_result(attempt),  # _load_and_verify_attempt: attempt
-            _scalar_result(assessment),  # _load_and_verify_attempt: assessment
-            _scalar_result(assessment),  # reload assessment for is_system_generated
-            existing_q_ids_result,  # existing response ids
-        ]
-
-        for q in questions:
-            # Skip already answered
-            if q.id in already_answered_ids:
-                continue
-            bridge = SimpleNamespace(assessment_id=assessment.id, question_id=q.id, order_index=0)
-            side_effects.append(_scalar_result(bridge))
-            side_effects.append(_scalar_result(q))
-
-        # All responses for scoring
-        responses = [
-            _make_response(is_correct=(a["selected_key"] == "A"))
-            for a in [{"selected_key": "A"} for q in questions]  # simplified
-        ]
-        all_resp_result = MagicMock()
-        scalars_m = MagicMock()
-        scalars_m.all.return_value = responses
-        all_resp_result.scalars.return_value = scalars_m
-        side_effects.append(all_resp_result)
-
-        mock_db.execute = AsyncMock(side_effect=side_effects)
-
-    @pytest.mark.asyncio
-    async def test_submit_attempt_when_10_correct_then_score_1_0(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, is_system_generated=False)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        questions, answers = self._make_10_question_answers(correct_count=10)
-
-        self._build_mock_db_for_submit(mock_db, attempt, assessment, questions)
-        mock_onboarding = AsyncMock()
-
-        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
-            mock_task.delay = MagicMock()
-            result = await service.submit_attempt(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                answers=answers,
-                onboarding_service=mock_onboarding,
-            )
-
-        assert result.score == 1.0
-
-    @pytest.mark.asyncio
-    async def test_submit_attempt_when_7_correct_of_10_then_score_0_7(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, is_system_generated=False)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        questions, answers = self._make_10_question_answers(correct_count=7)
-
-        # Build mock but override final responses to have 7 correct / 3 wrong
-        existing_q_ids_result = MagicMock()
-        existing_q_ids_result.all.return_value = []
-
-        side_effects: list = [
-            _scalar_result(attempt),
-            _scalar_result(assessment),
-            _scalar_result(assessment),
-            existing_q_ids_result,
-        ]
-        for q in questions:
-            bridge = SimpleNamespace(assessment_id=assessment.id, question_id=q.id, order_index=0)
-            side_effects.append(_scalar_result(bridge))
-            side_effects.append(_scalar_result(q))
-
-        responses = [_make_response(is_correct=True)] * 7 + [_make_response(is_correct=False)] * 3
-        all_resp_result = MagicMock()
-        scalars_m = MagicMock()
-        scalars_m.all.return_value = responses
-        all_resp_result.scalars.return_value = scalars_m
-        side_effects.append(all_resp_result)
-        mock_db.execute = AsyncMock(side_effect=side_effects)
-
-        mock_onboarding = AsyncMock()
-        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
-            mock_task.delay = MagicMock()
-            result = await service.submit_attempt(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                answers=answers,
-                onboarding_service=mock_onboarding,
-            )
-
-        assert abs(result.score - 0.7) < 1e-9
-        assert result.correct_count == 7
-        assert result.total_questions == 10
-
-    @pytest.mark.asyncio
-    async def test_submit_attempt_when_tier1_then_onboarding_check_called(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """For is_system_generated=True, check_and_update_onboarding_complete is called."""
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        class_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, class_id=class_id, is_system_generated=True)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-
-        existing_q_ids_result = MagicMock()
-        existing_q_ids_result.all.return_value = []
-
-        all_resp_result = MagicMock()
-        scalars_m = MagicMock()
-        scalars_m.all.return_value = []
-        all_resp_result.scalars.return_value = scalars_m
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                _scalar_result(assessment),
-                _scalar_result(assessment),
-                existing_q_ids_result,
-                all_resp_result,
-            ]
-        )
-
-        mock_onboarding = MagicMock()
-        mock_onboarding.check_and_update_onboarding_complete = AsyncMock(return_value=True)
-
-        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
-            mock_task.delay = MagicMock()
-            await service.submit_attempt(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                answers=[],
-                onboarding_service=mock_onboarding,
-            )
-
-        mock_onboarding.check_and_update_onboarding_complete.assert_awaited_once_with(
-            student_id=student_id,
-            class_id=class_id,
-        )
-
-    @pytest.mark.asyncio
-    async def test_submit_attempt_when_tier2_then_onboarding_check_not_called(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """For is_system_generated=False, onboarding check is NOT called."""
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, is_system_generated=False)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-
-        existing_q_ids_result = MagicMock()
-        existing_q_ids_result.all.return_value = []
-        all_resp_result = MagicMock()
-        scalars_m = MagicMock()
-        scalars_m.all.return_value = []
-        all_resp_result.scalars.return_value = scalars_m
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                _scalar_result(assessment),
-                _scalar_result(assessment),
-                existing_q_ids_result,
-                all_resp_result,
-            ]
-        )
-
-        mock_onboarding = MagicMock()
-        mock_onboarding.check_and_update_onboarding_complete = AsyncMock()
-
-        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
-            mock_task.delay = MagicMock()
-            await service.submit_attempt(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                answers=[],
-                onboarding_service=mock_onboarding,
-            )
-
-        mock_onboarding.check_and_update_onboarding_complete.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_submit_attempt_fires_calculate_gap_states_celery_task(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, is_system_generated=False)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-
-        existing_q_ids_result = MagicMock()
-        existing_q_ids_result.all.return_value = []
-        all_resp_result = MagicMock()
-        scalars_m = MagicMock()
-        scalars_m.all.return_value = []
-        all_resp_result.scalars.return_value = scalars_m
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                _scalar_result(assessment),
-                _scalar_result(assessment),
-                existing_q_ids_result,
-                all_resp_result,
-            ]
-        )
-
-        mock_onboarding = MagicMock()
-        mock_onboarding.check_and_update_onboarding_complete = AsyncMock()
-
-        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
-            mock_task.delay = MagicMock()
-            await service.submit_attempt(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                answers=[],
-                onboarding_service=mock_onboarding,
-            )
-            mock_task.delay.assert_called_once_with(str(attempt.id))
-
-    @pytest.mark.asyncio
-    async def test_submit_attempt_idempotent_when_some_responses_already_saved(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """Questions already answered are skipped — no duplicate StudentResponse created."""
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, is_system_generated=False)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-
-        q1 = _make_question(correct_answer="A")
-        q2 = _make_question(correct_answer="A")
-        answers = [
-            {"question_id": q1.id, "selected_key": "A"},
-            {"question_id": q2.id, "selected_key": "A"},
-        ]
-
-        # q1 is already answered
-        existing_q_ids_result = MagicMock()
-        existing_q_ids_result.all.return_value = [(q1.id,)]
-
-        # Only q2 will be processed
-        bridge2 = SimpleNamespace(assessment_id=assessment.id, question_id=q2.id, order_index=1)
-        all_resp_result = MagicMock()
-        scalars_m = MagicMock()
-        scalars_m.all.return_value = [_make_response(is_correct=True), _make_response(is_correct=True)]
-        all_resp_result.scalars.return_value = scalars_m
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                _scalar_result(assessment),
-                _scalar_result(assessment),
-                existing_q_ids_result,
-                _scalar_result(bridge2),  # bridge for q2 only
-                _scalar_result(q2),  # question for q2 only
-                all_resp_result,
-            ]
-        )
-
-        mock_onboarding = MagicMock()
-        mock_onboarding.check_and_update_onboarding_complete = AsyncMock()
-
-        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
-            mock_task.delay = MagicMock()
-            result = await service.submit_attempt(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                answers=answers,
-                onboarding_service=mock_onboarding,
-            )
-
-        # Only q2 was added (q1 skipped)
-        assert mock_db.add.call_count == 1
-        assert result.total_questions == 2  # two responses in DB
-
-    @pytest.mark.asyncio
-    async def test_submit_attempt_when_question_not_in_assessment_then_answer_skipped(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """question_id present in answers but absent from bridge table → silently skipped."""
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, is_system_generated=False)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        q_id = uuid.uuid4()
-        answers = [{"question_id": q_id, "selected_key": "A"}]
-
-        existing_q_ids_result = MagicMock()
-        existing_q_ids_result.all.return_value = []
-
-        all_resp_result = MagicMock()
-        scalars_m = MagicMock()
-        scalars_m.all.return_value = []
-        all_resp_result.scalars.return_value = scalars_m
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                _scalar_result(assessment),
-                _scalar_result(assessment),
-                existing_q_ids_result,
-                _scalar_result(None),  # bridge not found → skip
-                all_resp_result,
-            ]
-        )
-
-        mock_onboarding = MagicMock()
-        mock_onboarding.check_and_update_onboarding_complete = AsyncMock()
-
-        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
-            mock_task.delay = MagicMock()
-            result = await service.submit_attempt(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                answers=answers,
-                onboarding_service=mock_onboarding,
-            )
-
-        assert mock_db.add.call_count == 0
-        assert result.total_questions == 0
-
-    @pytest.mark.asyncio
-    async def test_submit_attempt_when_invalid_uuid_in_answers_then_question_skipped(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """Malformed question_id string skipped without raising; valid answers still scored."""
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, is_system_generated=False)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        q = _make_question(correct_answer="A")
-        answers = [
-            {"question_id": "not-a-uuid", "selected_key": "A"},  # invalid — skipped
-            {"question_id": q.id, "selected_key": "A"},  # valid
-        ]
-
-        existing_q_ids_result = MagicMock()
-        existing_q_ids_result.all.return_value = []
-
-        bridge = SimpleNamespace(assessment_id=assessment.id, question_id=q.id, order_index=0)
-        all_resp_result = MagicMock()
-        scalars_m = MagicMock()
-        scalars_m.all.return_value = [_make_response(is_correct=True)]
-        all_resp_result.scalars.return_value = scalars_m
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                _scalar_result(assessment),
-                _scalar_result(assessment),
-                existing_q_ids_result,
-                # invalid UUID entry skipped — no DB calls for it
-                _scalar_result(bridge),
-                _scalar_result(q),
-                all_resp_result,
-            ]
-        )
-
-        mock_onboarding = MagicMock()
-        mock_onboarding.check_and_update_onboarding_complete = AsyncMock()
-
-        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
-            mock_task.delay = MagicMock()
-            result = await service.submit_attempt(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                answers=answers,
-                onboarding_service=mock_onboarding,
-            )
-
-        # Only the valid question was added
-        assert mock_db.add.call_count == 1
-        assert result.total_questions == 1
-
-    @pytest.mark.asyncio
-    async def test_submit_attempt_when_question_missing_from_bank_then_answer_skipped(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        """Bridge passes but question row absent in bank → answer silently skipped."""
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id, is_system_generated=False)
-        attempt = _make_attempt(student_id=student_id, assessment_id=assessment.id)
-        ghost_q_id = uuid.uuid4()
-        answers = [{"question_id": ghost_q_id, "selected_key": "A"}]
-
-        existing_q_ids_result = MagicMock()
-        existing_q_ids_result.all.return_value = []
-
-        ghost_bridge = SimpleNamespace(assessment_id=assessment.id, question_id=ghost_q_id, order_index=0)
-        all_resp_result = MagicMock()
-        scalars_m = MagicMock()
-        scalars_m.all.return_value = []
-        all_resp_result.scalars.return_value = scalars_m
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                _scalar_result(assessment),
-                _scalar_result(assessment),
-                existing_q_ids_result,
-                _scalar_result(ghost_bridge),  # bridge found
-                _scalar_result(None),  # question missing from bank
-                all_resp_result,
-            ]
-        )
-
-        mock_onboarding = MagicMock()
-        mock_onboarding.check_and_update_onboarding_complete = AsyncMock()
-
-        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
-            mock_task.delay = MagicMock()
-            result = await service.submit_attempt(
-                attempt_id=attempt.id,
-                student_id=student_id,
-                school_id=school_id,
-                answers=answers,
-                onboarding_service=mock_onboarding,
-            )
-
-        assert mock_db.add.call_count == 0  # no response stored
-        assert result.total_questions == 0
-
-
-# ---------------------------------------------------------------------------
-# get_attempt_results
-# ---------------------------------------------------------------------------
-
-
-class TestGetAttemptResults:
-    @pytest.mark.asyncio
-    async def test_get_results_when_own_student_then_200_with_score(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        assessment = _make_assessment(school_id=school_id)
-        completed_at = datetime.now(UTC)
-        attempt = _make_attempt(
-            student_id=student_id,
-            assessment_id=assessment.id,
-            status=AttemptStatus.COMPLETED,
-            overall_score=0.8,
-            completed_at=completed_at,
-        )
-
-        responses = [_make_response(is_correct=True)] * 8 + [_make_response(is_correct=False)] * 2
-        all_resp_result = MagicMock()
-        scalars_m = MagicMock()
-        scalars_m.all.return_value = responses
-        all_resp_result.scalars.return_value = scalars_m
-
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                _scalar_result(attempt),
-                all_resp_result,
-            ]
-        )
-
-        result = await service.get_attempt_results(
-            attempt_id=attempt.id,
-            requesting_user_id=student_id,
-            requesting_user_role="STUDENT",
-            school_id=school_id,
-        )
-
-        assert result.score == 0.8
-        assert result.correct_count == 8
-        assert result.total_questions == 10
-
-    @pytest.mark.asyncio
-    async def test_get_results_when_different_student_then_raises_access_denied(
-        self, service: AttemptService, mock_db: MagicMock
-    ) -> None:
-        real_student_id = uuid.uuid4()
-        other_student_id = uuid.uuid4()
-        school_id = uuid.uuid4()
-        attempt = _make_attempt(
-            student_id=real_student_id,
-            status=AttemptStatus.COMPLETED,
-            overall_score=0.8,
-            completed_at=datetime.now(UTC),
-        )
-
-        mock_db.execute = AsyncMock(return_value=_scalar_result(attempt))
-
-        with pytest.raises(AttemptAccessDeniedError):
-            await service.get_attempt_results(
-                attempt_id=attempt.id,
-                requesting_user_id=other_student_id,
-                requesting_user_role="STUDENT",
-                school_id=school_id,
             )

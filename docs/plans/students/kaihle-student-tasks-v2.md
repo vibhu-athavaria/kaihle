@@ -315,7 +315,6 @@ const handleScoresResolved = useCallback((scores: ResolvedSubjectScore[]) => {
 function isOnboardingComplete(status: OnboardingStatus): boolean {
   if (!status.learning_profile_complete) return false;
   // ALL diagnostics must be COMPLETED — even unrelated classes
-  return status.diagnostics_by_class.every((d) => d.status === "COMPLETED");
 }
 ```
 A student with Maths (COMPLETED) and Science (PENDING) cannot view their Maths assessment results. This is a retention-killing product decision masquerading as a guard.

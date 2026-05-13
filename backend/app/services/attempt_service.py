@@ -98,7 +98,7 @@ class AttemptService:
         class_id: uuid.UUID,
         student_id: uuid.UUID,
         school_id: uuid.UUID,
-    ) -> tuple[StudentAttempt, Assessment, list[QuestionBank]]:
+    ) -> tuple[StudentAttempt, Assessment, list[QuestionBank], list[StudentResponse]]:
         """Return the student's diagnostic attempt for a class.
 
         Args:
@@ -107,7 +107,7 @@ class AttemptService:
             school_id: The student's school (for multi-tenancy guard).
 
         Returns:
-            (StudentAttempt, Assessment, questions_without_correct_answer)
+            (StudentAttempt, Assessment, questions_without_correct_answer, existing_responses)
 
         Raises:
             ValueError: If no ACTIVE DIAGNOSTIC assessment is found for the class.
@@ -161,7 +161,13 @@ class AttemptService:
             rng = _random.Random(str(student_id))
             questions = rng.sample(questions, max_per_attempt)
 
-        return attempt, assessment, questions
+        # Load existing responses for resume
+        responses_result = await self.db.execute(
+            select(StudentResponse).where(StudentResponse.attempt_id == attempt.id)
+        )
+        responses = list(responses_result.scalars().all())
+
+        return attempt, assessment, questions, responses
 
     # ── Tier 2: lazy attempt creation ───────────────────────────────────
 
@@ -170,7 +176,7 @@ class AttemptService:
         assessment_id: uuid.UUID,
         student_id: uuid.UUID,
         school_id: uuid.UUID,
-    ) -> tuple[StudentAttempt, Assessment, list[QuestionBank]]:
+    ) -> tuple[StudentAttempt, Assessment, list[QuestionBank], list[StudentResponse]]:
         """Return existing attempt or create one if the student is enrolled.
 
         Used for Tier 2 (teacher-created) assessments where the attempt is
@@ -182,7 +188,7 @@ class AttemptService:
             school_id: The student's school (for multi-tenancy guard).
 
         Returns:
-            (StudentAttempt, Assessment, questions_without_correct_answer)
+            (StudentAttempt, Assessment, questions_without_correct_answer, existing_responses)
 
         Raises:
             ValueError: If assessment not found, not ACTIVE, or student not enrolled.
@@ -210,7 +216,14 @@ class AttemptService:
         existing_attempt = existing_result.scalar_one_or_none()
         if existing_attempt is not None:
             questions = await self._load_questions(assessment_id, strip_answers=True)
-            return existing_attempt, assessment, questions
+
+            # Load existing responses for resume
+            responses_result = await self.db.execute(
+                select(StudentResponse).where(StudentResponse.attempt_id == existing_attempt.id)
+            )
+            responses = list(responses_result.scalars().all())
+
+            return existing_attempt, assessment, questions, responses
 
         # Verify enrollment before creating
         enrollment_result = await self.db.execute(
@@ -240,7 +253,7 @@ class AttemptService:
         )
 
         questions = await self._load_questions(assessment_id, strip_answers=True)
-        return attempt, assessment, questions
+        return attempt, assessment, questions, []
 
     # ── Attempt retrieval ─────────────────────────────────────────────────
 
@@ -250,7 +263,7 @@ class AttemptService:
         requesting_user_id: uuid.UUID,
         requesting_user_role: UserRole,
         school_id: uuid.UUID | None,
-    ) -> tuple[StudentAttempt, Assessment, list[QuestionBank]]:
+    ) -> tuple[StudentAttempt, Assessment, list[QuestionBank], list[StudentResponse]]:
         """Return an existing attempt with its questions.
 
         Access rules:
@@ -265,7 +278,7 @@ class AttemptService:
             school_id: The requesting user's school ID (None for KAIHLE_ADMIN).
 
         Returns:
-            (StudentAttempt, Assessment, questions_without_correct_answer)
+            (StudentAttempt, Assessment, questions_without_correct_answer, existing_responses)
 
         Raises:
             AttemptNotFoundError: If attempt not found.
@@ -298,7 +311,13 @@ class AttemptService:
 
         questions = await self._load_questions(attempt.assessment_id, strip_answers=True)
 
-        return attempt, assessment, questions
+        # Load existing responses for resume
+        responses_result = await self.db.execute(
+            select(StudentResponse).where(StudentResponse.attempt_id == attempt_id)
+        )
+        responses = list(responses_result.scalars().all())
+
+        return attempt, assessment, questions, responses
 
     # ── Per-question response ────────────────────────────────────────────
 

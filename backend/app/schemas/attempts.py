@@ -8,6 +8,14 @@ from pydantic import BaseModel
 from app.schemas.assessments import AssessmentQuestion
 
 
+class StudentResponseItem(BaseModel):
+    """One saved response for a question — used to hydrate state on resume."""
+
+    question_id: UUID
+    selected_key: str
+    is_correct: bool | None = None  # None if not yet scored
+
+
 class AttemptResponse(BaseModel):
     id: UUID
     assessment_id: UUID
@@ -17,7 +25,9 @@ class AttemptResponse(BaseModel):
     started_at: datetime | None
     submitted_at: datetime | None
     score: float | None  # None until submitted and scored
-    questions: list[AssessmentQuestion]  # empty until attempt is started
+    questions: list[AssessmentQuestion]  # full pool for adaptive difficulty
+    num_questions: int  # configured question count to ask
+    responses: list[StudentResponseItem]  # previously saved answers for resuming
 
 
 class AnswerSubmitRequest(BaseModel):

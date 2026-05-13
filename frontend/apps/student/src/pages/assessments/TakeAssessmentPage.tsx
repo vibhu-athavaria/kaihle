@@ -123,10 +123,36 @@ export function TakeAssessmentPage() {
     }
   }, [attempt, attemptId, navigate]);
 
+  // ── Hydrate state from saved responses on load ─────────────────
+  const hasHydrated = useRef(false);
+  useEffect(() => {
+    if (!attempt || attempt.responses.length === 0 || hasHydrated.current)
+      return;
+    hasHydrated.current = true;
+
+    // Build answers map from saved responses
+    const savedAnswers: Record<string, string> = {};
+    for (const r of attempt.responses) {
+      savedAnswers[r.question_id] = r.selected_key;
+    }
+    setAnswers(savedAnswers);
+
+    // Find the first unanswered question to resume from
+    const questions = attempt.questions;
+    for (let i = 0; i < questions.length; i++) {
+      if (!savedAnswers[questions[i].question_id]) {
+        setCurrentIndex(i);
+        return;
+      }
+    }
+    // All questions answered — stay on last one (student can submit)
+    setCurrentIndex(Math.min(attempt.num_questions, questions.length) - 1);
+  }, [attempt]);
+
   // ── Derived values ───────────────────────────────────────────
   const questions = attempt?.questions ?? [];
   const currentQuestion = questions[currentIndex];
-  const totalQuestions = questions.length;
+  const totalQuestions = attempt?.num_questions ?? questions.length;
   const answeredCount = Object.keys(answers).length;
   const isLastQuestion = currentIndex === totalQuestions - 1;
   const selectedKey = currentQuestion
@@ -172,17 +198,19 @@ export function TakeAssessmentPage() {
         ...prev,
         [currentQuestion.question_id]: key,
       }));
-      // Auto-save immediately (fire-and-forget)
-      void saveCurrentAnswer(currentQuestion.question_id, key);
     },
-    [currentQuestion, saveCurrentAnswer],
+    [currentQuestion],
   );
 
   // ── Navigation helpers ───────────────────────────────────────
-  const goToNext = useCallback(() => {
+  const goToNext = useCallback(async () => {
     if (!currentQuestion) return;
+    const key = answers[currentQuestion.question_id];
+    if (key) {
+      await saveCurrentAnswer(currentQuestion.question_id, key);
+    }
     setCurrentIndex((i) => Math.min(i + 1, totalQuestions - 1));
-  }, [currentQuestion, totalQuestions]);
+  }, [answers, currentQuestion, saveCurrentAnswer, totalQuestions]);
 
   const goToPrev = useCallback(() => {
     setCurrentIndex((i) => Math.max(i - 1, 0));
@@ -468,7 +496,8 @@ export function TakeAssessmentPage() {
               <button
                 type="button"
                 onClick={goToNext}
-                className="flex items-center gap-1.5 bg-brand-primary text-white px-5 py-2.5 rounded-full font-sans text-sm hover:bg-brand-dark transition-colors min-h-[44px]"
+                disabled={!selectedKey}
+                className="flex items-center gap-1.5 bg-brand-primary text-white px-5 py-2.5 rounded-full font-sans text-sm hover:bg-brand-dark transition-colors min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
                 <ArrowRight className="w-4 h-4" aria-hidden="true" />
