@@ -31,7 +31,7 @@ from app.models.curriculum import (
 )
 from app.models.school import Class, School
 from app.models.user import StudentProfile, User, UserRole
-from app.services.assessment_service import MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT, AssessmentService
+from app.services.assessment_service import AssessmentService
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -168,13 +168,11 @@ async def test_create_class_diagnostic_when_new_class_then_assessment_created(
     assessment = await service.create_class_diagnostic(class_.id)
     await db_session.commit()
 
-    assert assessment.is_system_generated is True
     assert assessment.status == AssessmentStatus.ACTIVE
     assert assessment.assessment_type == AssessmentType.DIAGNOSTIC
     assert assessment.created_by is None
-    assert assessment.curriculum_topic_id is None
     assert assessment.class_id == class_.id
-    assert assessment.config["max_questions_per_attempt"] == MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT
+    assert assessment.question_count is not None
 
 
 @pytest.mark.asyncio
@@ -201,7 +199,7 @@ async def test_create_class_diagnostic_when_called_twice_then_no_duplicate(
     result = await db_session.execute(
         select(Assessment).where(
             Assessment.class_id == class_.id,
-            Assessment.is_system_generated.is_(True),
+            Assessment.assessment_type == AssessmentType.DIAGNOSTIC,
         )
     )
     assert len(result.scalars().all()) == 1

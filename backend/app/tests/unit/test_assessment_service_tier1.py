@@ -174,7 +174,6 @@ async def test_design_tier1_when_valid_then_creates_draft_assessment() -> None:
 
     assert assessment.status == AssessmentStatus.DRAFT
     assert assessment.assessment_type == AssessmentType.DIAGNOSTIC
-    assert assessment.is_system_generated is False
     assert assessment.created_by == teacher_id
     db.add.assert_called()
     db.flush.assert_called()
@@ -213,7 +212,7 @@ async def test_design_tier1_when_existing_draft_then_replaces_it() -> None:
         "app.services.assessment_service.delete",
         return_value=MagicMock(),
     ):
-        assessment = await service.design_tier1_diagnostic(
+        await service.design_tier1_diagnostic(
             class_id=fake_class.id,
             school_id=school_id,
             teacher_id=teacher_id,
@@ -221,4 +220,3 @@ async def test_design_tier1_when_existing_draft_then_replaces_it() -> None:
         )
 
     db.delete.assert_called_once_with(existing_assessment)
-    assert assessment.is_system_generated is False

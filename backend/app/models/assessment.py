@@ -1,15 +1,13 @@
 """Assessment-related SQLAlchemy models.
 
-Covers: assessments, assessment_selected_questions, student_attempts, student_responses,
-        student_attempt_subtopic_scores
+Covers: assessments, assessment_topic_config, assessment_selected_questions,
+        student_attempts, student_responses, student_attempt_subtopic_scores
 """
 
 import uuid
 from datetime import datetime
-from typing import Any
 
 from sqlalchemy import (
-    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -20,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -87,8 +85,6 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=True,
-        # NULL for system-generated Tier 1 diagnostics (is_system_generated=TRUE).
-        # Non-NULL for teacher-created assessments (is_system_generated=FALSE).
     )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     assessment_type: Mapped[str] = mapped_column(
@@ -113,31 +109,53 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
         nullable=False,
         default=AssessmentStatus.DRAFT,
     )
-    is_system_generated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # system generated logic has changed. Now all assessment will be generate by the request
-    curriculum_topic_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("curriculum_topics.id", ondelete="SET NULL"),
-    )
-    config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    # {
-    #   "num_questions": 10,
-    #   "difficulty_range": [1, 4],
-    #   "question_types": ["MCQ", "SHORT_ANSWER"],
-    #   "time_limit_minutes": null
-    # }
     instructions: Mapped[str | None] = mapped_column(Text)
-    diagnostic_topic_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
-        ARRAY(UUID(as_uuid=True)),
-        nullable=True,
-        default=None,
-        # Non-NULL for teacher-designed Tier 1 diagnostics: the curriculum_topic_ids
-        # the teacher selected. System samples questions from these topics only.
-        # NULL for legacy system-generated assessments and all Tier 2 assessments.
-    )
     question_count: Mapped[int | None] = mapped_column(Integer)
+    questions_per_topic: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    minimum_difficulty: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    maximum_difficulty: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    question_types: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=lambda: ["MCQ", "TRUE_FALSE"]
+    )
+    time_limit_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint("minimum_difficulty >= 1", name="chk_assessment_min_diff"),
+        CheckConstraint("maximum_difficulty <= 5", name="chk_assessment_max_diff"),
+        CheckConstraint("questions_per_topic >= 1", name="chk_assessment_qpt"),
+        CheckConstraint("time_limit_minutes >= 0", name="chk_assessment_time_limit"),
+    )
+
+
+class AssessmentTopicConfig(Base):
+    """Topics selected for an assessment, with their source grade.
+
+    Replaces the diagnostic_topic_ids ARRAY column. Each row records which
+    curriculum topic is included and which grade it came from — supporting
+    prior-grade topic selection (grade = class.grade - 1).
+    """
+
+    __tablename__ = "assessment_topic_config"
+
+    assessment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assessments.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    curriculum_topic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("curriculum_topics.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    grade_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("grades.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    __table_args__ = (Index("idx_atc_assessment", "assessment_id"),)
 
 
 class AssessmentSelectedQuestion(Base):

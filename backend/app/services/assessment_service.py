@@ -191,18 +191,10 @@ def _generate_title(body: AssessmentCreateRequest, class_name: str, subject_name
 
 
 def _make_system_assessment(class_id: uuid.UUID, school_id: uuid.UUID, title: str) -> Assessment:
-    """Construct a system-generated Assessment.
+    """Construct a system-generated Assessment (legacy — no longer used).
 
-    System-generated assessments have created_by=NULL, distinguished by
-    the is_system_generated=True flag.
-
-    Args:
-        class_id: The class this assessment belongs to.
-        school_id: The school this assessment belongs to (required by Rule 2).
-        title: Human-readable title.
-
-    Returns:
-        An unsaved Assessment instance with is_system_generated=True.
+    Kept for reference only; system-generated diagnostics are no longer created.
+    All assessments are now teacher-created via design_tier1_diagnostic.
     """
     return Assessment(
         id=uuid.uuid4(),
@@ -211,10 +203,7 @@ def _make_system_assessment(class_id: uuid.UUID, school_id: uuid.UUID, title: st
         created_by=None,
         title=title,
         assessment_type=AssessmentType.DIAGNOSTIC,
-        status=AssessmentStatus.ACTIVE,  # immediately active for students
-        is_system_generated=True,
-        curriculum_topic_id=None,  # broad sweep, not topic-specific
-        config={"max_questions_per_attempt": MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT},
+        status=AssessmentStatus.ACTIVE,
     )
 
 
@@ -253,7 +242,7 @@ class AssessmentService:
         existing = await self.db.execute(
             select(Assessment).where(
                 Assessment.class_id == class_.id,
-                Assessment.is_system_generated.is_(True),
+                Assessment.assessment_type == AssessmentType.DIAGNOSTIC,
             )
         )
         existing_assessment = existing.scalar_one_or_none()
@@ -312,6 +301,8 @@ class AssessmentService:
             )
             self.db.add(bridge)
 
+        assessment.question_count = len(question_ids)
+
         logger.info(
             "class_diagnostic_created",
             class_id=str(class_.id),
@@ -352,7 +343,6 @@ class AssessmentService:
             await self.db.execute(
                 select(Assessment).where(
                     Assessment.class_id == class_id,
-                    Assessment.is_system_generated.is_(False),
                     Assessment.assessment_type == AssessmentType.DIAGNOSTIC,
                 )
             )
@@ -403,10 +393,8 @@ class AssessmentService:
             created_by=teacher_id,
             title=f"Tier 1 Diagnostic — {class_.name}",
             assessment_type=AssessmentType.DIAGNOSTIC,
-            is_system_generated=False,
             status=AssessmentStatus.DRAFT,
             question_count=body.question_count,
-            diagnostic_topic_ids=body.topic_ids,
             deadline=body.deadline,
             created_at=datetime.now(UTC),
             instructions=None,
@@ -473,18 +461,19 @@ class AssessmentService:
         if student.school_id != class_.school_id:
             raise ValueError(f"Student school_id {student.school_id} does not match class school_id {class_.school_id}")
 
-        # Find the system-generated diagnostic for this class
+        # Find the active diagnostic for this class
         assessment_result = await self.db.execute(
             select(Assessment).where(
                 Assessment.class_id == class_.id,
-                Assessment.is_system_generated.is_(True),
+                Assessment.assessment_type == AssessmentType.DIAGNOSTIC,
+                Assessment.status == AssessmentStatus.ACTIVE,
             )
         )
         assessment = assessment_result.scalar_one_or_none()
         if assessment is None:
             raise ValueError(
-                f"No system-generated diagnostic found for class_id={class_id}. "
-                f"Ensure create_class_diagnostic() was called first."
+                f"No active diagnostic found for class_id={class_id}. "
+                f"Ensure the teacher has published a diagnostic first."
             )
 
         # Idempotency: check if attempt already exists for this student+assessment
@@ -687,12 +676,6 @@ class AssessmentService:
             subject_name = subject_result.scalar_one_or_none() or "Unknown Subject"
             title = _generate_title(body, class_.name, subject_name)
 
-        config_ = {
-            "num_questions": body.question_count,
-            "difficulty_range": [body.difficulty_min, body.difficulty_max],
-            "question_types": ["MCQ", "SHORT_ANSWER"],
-            "time_limit_minutes": None,
-        }
         # Step 5 — Create Assessment in DRAFT status
         assessment = Assessment(
             id=uuid.uuid4(),
@@ -700,12 +683,12 @@ class AssessmentService:
             class_id=class_id,
             created_by=teacher_id,
             assessment_type=body.assessment_type,
-            is_system_generated=False,
             status=AssessmentStatus.DRAFT,
             title=title,
             question_count=body.question_count,
+            minimum_difficulty=body.difficulty_min,
+            maximum_difficulty=body.difficulty_max,
             deadline=body.deadline,
-            config=config_,
         )
         self.db.add(assessment)
         await self.db.flush()  # get assessment.id without committing
@@ -913,12 +896,8 @@ class AssessmentService:
             # Teachers see all statuses — no additional filter
 
         elif requesting_user_role == UserRole.STUDENT:
-            # Students see only ACTIVE and CLOSED assessments,
-            # EXCEPT system-generated assessments which are always visible
-            base_q = base_q.where(
-                (Assessment.status.in_([AssessmentStatus.ACTIVE, AssessmentStatus.CLOSED]))
-                | (Assessment.is_system_generated.is_(True))
-            )
+            # Students see only ACTIVE and CLOSED assessments
+            base_q = base_q.where(Assessment.status.in_([AssessmentStatus.ACTIVE, AssessmentStatus.CLOSED]))
 
         # Apply optional status filter (for TEACHER, SCHOOL_ADMIN, KAIHLE_ADMIN)
         if status_filter and requesting_user_role != UserRole.STUDENT:
@@ -978,9 +957,13 @@ class AssessmentService:
                 "class_name": row[1],
                 "title": row[0].title,
                 "assessment_type": row[0].assessment_type,
-                "is_system_generated": row[0].is_system_generated,
                 "status": row[0].status,
                 "question_count": row[0].question_count,
+                "questions_per_topic": row[0].questions_per_topic,
+                "minimum_difficulty": row[0].minimum_difficulty,
+                "maximum_difficulty": row[0].maximum_difficulty,
+                "question_types": row[0].question_types,
+                "time_limit_minutes": row[0].time_limit_minutes,
                 "created_at": row[0].created_at,
                 "published_at": row[0].published_at,
                 "deadline": row[0].deadline,

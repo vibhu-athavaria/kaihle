@@ -111,7 +111,6 @@ class TestCreateAssessment:
         assessment = await service.create_assessment(school_id, teacher_id, class_id, body)
 
         assert assessment.status == AssessmentStatus.DRAFT
-        assert assessment.is_system_generated is False
         assert assessment.school_id == school_id
         assert assessment.class_id == class_id
         assert assessment.created_by == teacher_id
@@ -177,29 +176,6 @@ class TestCreateAssessment:
 
         assert exc_info.value.available == 3
         assert exc_info.value.requested == 10
-
-    @pytest.mark.asyncio
-    async def test_create_always_sets_is_system_generated_false(
-        self, service: AssessmentService, mock_db: MagicMock
-    ) -> None:
-        school_id = uuid.uuid4()
-        teacher_id = uuid.uuid4()
-        class_id = uuid.uuid4()
-        class_ = _make_class(school_id, teacher_id)
-        class_.id = class_id
-
-        body = _make_request(question_count=5)
-        rows = _make_question_rows(10)
-
-        mock_class_result = MagicMock()
-        mock_class_result.scalar_one_or_none.return_value = class_
-        mock_questions_result = MagicMock()
-        mock_questions_result.all.return_value = rows
-        mock_db.execute = AsyncMock(side_effect=[mock_class_result, mock_questions_result])
-
-        assessment = await service.create_assessment(school_id, teacher_id, class_id, body)
-
-        assert assessment.is_system_generated is False
 
     @pytest.mark.asyncio
     async def test_create_when_diagnostic_type_no_topic_ids_then_questions_span_multiple_topics(

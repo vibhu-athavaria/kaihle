@@ -104,9 +104,7 @@ async def get_class_diagnostic(
 
     diag_title = assessment.title if assessment else "Diagnostic Assessment"
 
-    # Get num_questions from config or question_count column
-    config = assessment.config or {}
-    num_questions = config.get("num_questions") or assessment.question_count or len(questions)
+    num_questions = assessment.question_count or len(questions)
 
     return AttemptResponse(
         id=attempt.id,
@@ -153,9 +151,7 @@ async def start_assessment(
 
     assessment_title = assessment.title if assessment else "Assessment"
 
-    # Get num_questions from config or question_count column
-    config = assessment.config or {}
-    num_questions = config.get("num_questions") or assessment.question_count or len(questions)
+    num_questions = assessment.question_count or len(questions)
 
     return AttemptResponse(
         id=attempt.id,
@@ -202,9 +198,7 @@ async def get_attempt(
 
     assessment_title = assessment.title if assessment else "Assessment"
 
-    # Get num_questions from config or question_count column
-    config = assessment.config or {}
-    num_questions = assessment.question_count or config.get("num_questions", 0)
+    num_questions = assessment.question_count or 0
 
     return AttemptResponse(
         id=attempt.id,

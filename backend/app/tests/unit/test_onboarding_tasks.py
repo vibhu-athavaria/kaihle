@@ -16,7 +16,6 @@ from app.models.assessment import AssessmentStatus, AssessmentType, AttemptStatu
 from app.models.user import OnboardingStatus
 from app.services.assessment_service import (
     MAX_DIAGNOSTIC_POOL,
-    MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT,
     AssessmentService,
     QuestionBankEmptyError,
 )
@@ -139,14 +138,12 @@ class TestCreateClassDiagnostic:
 
         service.db.add.assert_called_once()
         assessment = service.db.add.call_args[0][0]
-        assert assessment.is_system_generated is True
         assert assessment.created_by is None
         assert assessment.assessment_type == AssessmentType.DIAGNOSTIC
         assert assessment.status == AssessmentStatus.ACTIVE
-        assert assessment.curriculum_topic_id is None
         assert assessment.class_id == class_.id
         assert "Mathematics" in assessment.title
-        assert assessment.config["max_questions_per_attempt"] == MAX_DIAGNOSTIC_QUESTIONS_PER_ATTEMPT
+        assert assessment.question_count is not None
 
     @pytest.mark.asyncio
     async def test_when_subject_not_found_then_uses_unknown_subject_title(self, service: AssessmentService) -> None:
@@ -245,7 +242,7 @@ class TestCreateDiagnosticAttempt:
             side_effect=[mock_class, mock_student, mock_no_assessment]
         )
 
-        with pytest.raises(ValueError, match="No system-generated diagnostic found"):
+        with pytest.raises(ValueError, match="No active diagnostic found"):
             await service.create_diagnostic_attempt(student.id, class_.id)
 
     @pytest.mark.asyncio
