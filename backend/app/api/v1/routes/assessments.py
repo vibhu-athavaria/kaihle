@@ -31,6 +31,8 @@ from app.schemas.assessments import (
     AssessmentWithClassResponse,
     DesignTier1DiagnosticRequest,
     QuestionOption,
+    TopicAvailability,
+    TopicAvailabilityRequest,
 )
 from app.schemas.common import Page
 from app.services.assessment_service import (
@@ -234,6 +236,35 @@ async def create_assessment(
 
     base = _assessment_to_response(assessment)
     return AssessmentCreateResponse(**base.model_dump(), questions=questions)
+
+
+@router.post(
+    "/classes/{class_id}/assessments/topic-availability",
+    response_model=list[TopicAvailability],
+)
+async def check_topic_availability(
+    class_id: UUID,
+    body: TopicAvailabilityRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> list[TopicAvailability]:
+    """Return per-topic question availability for a diagnostic configuration.
+
+    Used by the wizard UI to warn teachers before they submit if a topic
+    doesn't have enough questions to fulfil the requested questions_per_topic.
+    """
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no school")
+    service = AssessmentService(db)
+    return await service.check_topic_availability(
+        class_id=class_id,
+        school_id=current_user.school_id,
+        topic_ids=body.topic_ids,
+        questions_per_topic=body.questions_per_topic,
+        minimum_difficulty=body.minimum_difficulty,
+        maximum_difficulty=body.maximum_difficulty,
+        question_types=body.question_types,
+    )
 
 
 @router.post(

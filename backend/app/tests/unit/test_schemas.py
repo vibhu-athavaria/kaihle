@@ -204,7 +204,7 @@ class TestSchemaInstantiation:
             topic_ids=[uuid.uuid4()],
         )
         assert r.title == "New Assessment"
-        assert r.question_count == 20  # default
+        assert r.questions_per_topic == 2  # default
 
     def test_attempt_response_not_started(self):
         a = AttemptResponse(

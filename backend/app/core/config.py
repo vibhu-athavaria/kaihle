@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
     resend_api_key: str = ""
-    from_email: str = "no-reply@kaihle.ai"
+    from_email: str = "no-reply@kaihle.com"
     google_api_key: str = ""
     openai_api_key: str = ""
     anthropic_api_key: str = ""
