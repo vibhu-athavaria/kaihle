@@ -7,7 +7,7 @@
  *   POST /api/v1/attempts/:attemptId/responses → save single answer
  *   POST /api/v1/attempts/:attemptId/submit    → submit entire attempt
  */
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 
 // ─────────────────────────────────────────────────────────────
@@ -30,6 +30,13 @@ export interface AttemptQuestion {
   subtopic_name: string;
 }
 
+/** One saved response — used to hydrate state on resume. */
+export interface StudentResponseItem {
+  question_id: string;
+  selected_key: string;
+  is_correct: boolean | null;
+}
+
 /** Status values mirroring AssessmentAttemptStatus enum in the backend. */
 export type AttemptStatus = "IN_PROGRESS" | "COMPLETED" | "TIMED_OUT";
 
@@ -46,7 +53,9 @@ export interface AttemptResponse {
   started_at: string; // ISO 8601
   submitted_at: string | null;
   score: number | null; // 0.0–1.0 or null while IN_PROGRESS
-  questions: AttemptQuestion[];
+  questions: AttemptQuestion[]; // full pool for adaptive difficulty
+  num_questions: number; // configured count to ask (not pool size)
+  responses: StudentResponseItem[]; // previously saved answers for resuming
 }
 
 /** One answer entry in the bulk-submit body. */
@@ -88,6 +97,7 @@ export function useAttempt(attemptId: string) {
       return res.data;
     },
     enabled: !!attemptId,
+    staleTime: 0, // always refetch on remount to get latest responses
     refetchOnWindowFocus: false, // don't disrupt mid-assessment
   });
 }
@@ -124,11 +134,18 @@ interface SubmitResponseVars {
  * Failures are surfaced via `isError` — they do NOT block page navigation.
  */
 export function useSubmitResponse() {
+  const queryClient = useQueryClient();
   return useMutation<void, Error, SubmitResponseVars>({
     mutationFn: async ({ attemptId, questionId, selectedKey }) => {
       await apiClient.post(`/api/v1/attempts/${attemptId}/responses`, {
         question_id: questionId,
         selected_key: selectedKey,
+      });
+    },
+    onSuccess: (_, variables) => {
+      // Invalidate attempt query so fresh data is loaded on return
+      queryClient.invalidateQueries({
+        queryKey: ["student", "attempt", variables.attemptId],
       });
     },
   });

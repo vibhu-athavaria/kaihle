@@ -528,3 +528,131 @@ async def test_regenerate_lesson_plan_when_plan_not_found_then_raises_404():
         )
 
     assert exc_info.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# _require_plan — school_id access control
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_require_plan_when_plan_found_but_wrong_school_then_raises_403():
+    """Plan exists and belongs to the teacher but class is in a different school."""
+    teacher_id = uuid.uuid4()
+    school_id = uuid.uuid4()
+    plan = _make_plan(teacher_id=teacher_id)
+    plan.class_id = uuid.uuid4()  # class belongs to other_school_id
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            _scalar(plan),  # plan found by teacher_id
+            _scalar(None),  # class with (plan.class_id, school_id) not found → 403
+        ]
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_lesson_plan(
+            plan_id=plan.id,
+            teacher_id=teacher_id,
+            school_id=school_id,
+            db=mock_db,
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_require_plan_when_school_id_none_then_skips_school_check():
+    """school_id=None (KAIHLE_ADMIN) bypasses the class school verification."""
+    teacher_id = uuid.uuid4()
+    plan = _make_plan(teacher_id=teacher_id)
+    plan.focus_subtopic_ids = []
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(
+        side_effect=[
+            _scalar(plan),  # _require_plan: plan found
+            _scalars([]),  # _fetch_subtopic_context
+            _rows([]),  # _fetch_class_names
+        ]
+    )
+
+    # Should NOT raise — school_id=None means no class school check
+    response = await get_lesson_plan(
+        plan_id=plan.id,
+        teacher_id=teacher_id,
+        school_id=None,
+        db=mock_db,
+    )
+
+    # Response returned successfully
+    assert response is not None
+
+
+# ---------------------------------------------------------------------------
+# _fetch_subtopic_context — sorting and empty list
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_subtopic_context_when_ids_out_of_order_then_sorts_by_input_order():
+    """Results should be sorted to match the order of subtopic_ids, not DB order."""
+    from app.services.lesson_plan_service import _fetch_subtopic_context
+
+    s1 = uuid.uuid4()
+    s2 = uuid.uuid4()
+    s3 = uuid.uuid4()
+
+    row1 = MagicMock()
+    row1.id = s2
+    row1.name = "Topic B"
+    row1.topic_name = "Parent Topic"
+
+    row2 = MagicMock()
+    row2.id = s1
+    row2.name = "Topic A"
+    row2.topic_name = "Parent Topic"
+
+    row3 = MagicMock()
+    row3.id = s3
+    row3.name = "Topic C"
+    row3.topic_name = "Parent Topic"
+
+    mock_db = AsyncMock()
+    # rows returned in DB order (s3, s1, s2) — not matching input order
+    mock_db.execute = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[row3, row1, row2])))
+
+    result = await _fetch_subtopic_context([s1, s2, s3], mock_db)
+
+    # Should be sorted by input order: s1, s2, s3
+    assert result[0].subtopic_id == s1
+    assert result[1].subtopic_id == s2
+    assert result[2].subtopic_id == s3
+
+
+@pytest.mark.asyncio
+async def test_fetch_subtopic_context_when_empty_ids_then_returns_empty():
+    """Returns [] immediately when subtopic_ids is empty — no DB query."""
+    from app.services.lesson_plan_service import _fetch_subtopic_context
+
+    mock_db = AsyncMock()
+    result = await _fetch_subtopic_context([], mock_db)
+    assert result == []
+    mock_db.execute.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _fetch_class_names — empty list
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_class_names_when_empty_ids_then_returns_empty_dict():
+    """Returns {} immediately when class_ids is empty — no DB query."""
+    from app.services.lesson_plan_service import _fetch_class_names
+
+    mock_db = AsyncMock()
+    result = await _fetch_class_names([], mock_db)
+    assert result == {}
+    mock_db.execute.assert_not_called()

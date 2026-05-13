@@ -213,6 +213,8 @@ class TestSchemaInstantiation:
             submitted_at=None,
             score=None,
             questions=[],
+            num_questions=10,
+            responses=[],
         )
         assert a.status == "NOT_STARTED"
         assert a.questions == []
@@ -228,6 +230,8 @@ class TestSchemaInstantiation:
             submitted_at=None,
             score=None,
             questions=[],
+            num_questions=10,
+            responses=[],
         )
         assert a.status == "IN_PROGRESS"
         assert a.started_at is not None

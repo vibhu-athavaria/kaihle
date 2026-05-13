@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.curriculum import Curriculum
 from app.models.school import School, SchoolCurriculum
+from app.models.user import User, UserRole
 from app.schemas.school import SchoolCreate, SchoolUpdate
 from app.services.school_service import SchoolService
 
@@ -428,6 +429,21 @@ class TestAddSchoolCurriculum:
         assert old_sc.is_primary is False  # cleared
         assert sc.is_primary is True
 
+    @pytest.mark.asyncio
+    async def test_add_school_curriculum_when_school_not_found_then_raises_value_error(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Raises ValueError when the school does not exist."""
+        # Arrange
+        school_id = uuid.uuid4()
+        curriculum_id = uuid.uuid4()
+
+        mock_db.get = AsyncMock(return_value=None)  # school not found
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="School not found"):
+            await school_service.add_school_curriculum(school_id, curriculum_id, is_primary=False)
+
 
 class TestRemoveSchoolCurriculum:
     """Tests for SchoolService.remove_school_curriculum method."""
@@ -552,3 +568,79 @@ class TestSetPrimarySchoolCurriculum:
         # Act & Assert
         with pytest.raises(ValueError, match="not subscribed"):
             await school_service.set_primary_curriculum(school_id, curriculum_id)
+
+
+# =============================================================================
+# Additional SchoolService tests — improving coverage
+# =============================================================================
+
+
+class TestCreateSchoolAdditional:
+    """Additional coverage for create_school edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_create_school_when_admin_email_already_exists_then_raises_value_error(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Raises ValueError when the admin email is already registered."""
+        # Arrange
+        data = SchoolCreate(
+            name="New School",
+            slug="new-school",
+            country="Indonesia",
+            admin_email="existing@example.com",
+            admin_first_name="Admin",
+            admin_last_name="User",
+            admin_password="password123",
+        )
+        # First scalar call: no existing school with that slug
+        # Second scalar call: existing user found with that email
+        existing_user = User(email="existing@example.com", role=UserRole.SCHOOL_ADMIN)
+        mock_db.scalar = AsyncMock(side_effect=[None, existing_user])
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="already exists"):
+            await school_service.create_school(data)
+
+
+class TestGetSchoolWithAdmin:
+    """Tests for SchoolService.get_school_with_admin method."""
+
+    @pytest.mark.asyncio
+    async def test_get_school_with_admin_when_school_has_admin_then_returns_pair(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Returns (school, admin_user) tuple when school and admin exist."""
+        # Arrange
+        school_id = uuid.uuid4()
+        school = School(id=school_id, name="Test School", slug="test-school")
+        admin = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            email="admin@test.com",
+            role=UserRole.SCHOOL_ADMIN,
+        )
+
+        mock_db.get = AsyncMock(return_value=school)
+        mock_db.scalar = AsyncMock(return_value=admin)
+
+        # Act
+        result_school, result_admin = await school_service.get_school_with_admin(school_id)
+
+        # Assert
+        assert result_school.id == school_id
+        assert result_admin is not None
+        assert result_admin.email == "admin@test.com"
+
+    @pytest.mark.asyncio
+    async def test_get_school_with_admin_when_school_not_found_then_raises(
+        self, school_service: SchoolService, mock_db: MagicMock
+    ) -> None:
+        """Raises ValueError when the school does not exist."""
+        # Arrange
+        school_id = uuid.uuid4()
+        mock_db.get = AsyncMock(return_value=None)
+
+        # Act & Assert
+        with pytest.raises(ValueError, match="School not found"):
+            await school_service.get_school_with_admin(school_id)

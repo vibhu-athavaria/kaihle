@@ -92,7 +92,7 @@ async def get_class_diagnostic(
     assert current_user.school_id is not None, "Student must belong to a school"
     service = AttemptService(db)
     try:
-        attempt, assessment, questions = await service.get_class_diagnostic(
+        attempt, assessment, questions, _ = await service.get_class_diagnostic(
             class_id=class_id,
             student_id=current_user.id,
             school_id=current_user.school_id,
@@ -104,6 +104,10 @@ async def get_class_diagnostic(
 
     diag_title = assessment.title if assessment else "Diagnostic Assessment"
 
+    # Get num_questions from config or question_count column
+    config = assessment.config or {}
+    num_questions = config.get("num_questions") or assessment.question_count or len(questions)
+
     return AttemptResponse(
         id=attempt.id,
         assessment_id=attempt.assessment_id,
@@ -114,6 +118,8 @@ async def get_class_diagnostic(
         score=attempt.overall_score,
         title=diag_title,
         questions=_questions_to_schema(questions),
+        num_questions=num_questions,
+        responses=[],  # Will be loaded on subsequent GET /attempts/:id
     )
 
 
@@ -132,7 +138,7 @@ async def start_assessment(
     assert current_user.school_id is not None, "Student must belong to a school"
     service = AttemptService(db)
     try:
-        attempt, assessment, questions = await service.get_or_create_attempt(
+        attempt, assessment, questions, _ = await service.get_or_create_attempt(
             assessment_id=assessment_id,
             student_id=current_user.id,
             school_id=current_user.school_id,
@@ -147,6 +153,10 @@ async def start_assessment(
 
     assessment_title = assessment.title if assessment else "Assessment"
 
+    # Get num_questions from config or question_count column
+    config = assessment.config or {}
+    num_questions = config.get("num_questions") or assessment.question_count or len(questions)
+
     return AttemptResponse(
         id=attempt.id,
         assessment_id=attempt.assessment_id,
@@ -157,6 +167,8 @@ async def start_assessment(
         score=attempt.overall_score,
         title=assessment_title,
         questions=_questions_to_schema(questions),
+        num_questions=num_questions,
+        responses=[],
     )
 
 
@@ -177,7 +189,7 @@ async def get_attempt(
 
     service = AttemptService(db)
     try:
-        attempt, assessment, questions = await service.get_attempt(
+        attempt, assessment, questions, responses = await service.get_attempt(
             attempt_id=attempt_id,
             requesting_user_id=current_user.id,
             requesting_user_role=UserRole(current_user.role),
@@ -190,6 +202,10 @@ async def get_attempt(
 
     assessment_title = assessment.title if assessment else "Assessment"
 
+    # Get num_questions from config or question_count column
+    config = assessment.config or {}
+    num_questions = assessment.question_count or config.get("num_questions", 0)
+
     return AttemptResponse(
         id=attempt.id,
         assessment_id=attempt.assessment_id,
@@ -200,6 +216,11 @@ async def get_attempt(
         score=attempt.overall_score,
         title=assessment_title,
         questions=_questions_to_schema(questions),
+        num_questions=num_questions,
+        responses=[
+            {"question_id": r.question_id, "selected_key": r.answer_given, "is_correct": r.is_correct}
+            for r in responses
+        ],
     )
 
 
