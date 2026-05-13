@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Check, X } from "lucide-react";
 import { Button, Modal } from "@kaihle/ui";
 import {
@@ -13,6 +13,14 @@ import {
   type AvailableCurriculumTopic,
 } from "../../hooks/useClassTopics";
 import { usePublishAssessment } from "../../hooks/useClassAssessments";
+import { useClassTopicsWithGrades } from "../../hooks/useClassTopicsWithGrades";
+import {
+  useTopicAvailability,
+  type TopicAvailability,
+} from "../../hooks/useTopicAvailability";
+import { TopicGroupSection } from "../../components/wizard/TopicGroupSection";
+import { AssessmentConfigPanel } from "../../components/wizard/AssessmentConfigPanel";
+import type { TopicWithAvailability } from "../../components/wizard/TopicRow";
 
 interface ClassSetupWizardProps {
   classId: string;
@@ -331,54 +339,148 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
   );
 }
 
-// ── Step 2: Diagnostic builder ────────────────────────────────────────────────
+// ── Step 2: Diagnostic builder (redesigned) ──────────────────────────────────
 
 interface Step2Props {
   classId: string;
-  classTopics: ClassTopicItem[];
   onBack: () => void;
   onDone: () => void;
 }
 
-const QUESTIONS_PER_TOPIC = 10;
+function DiagnosticBuilderStep({ classId, onBack, onDone }: Step2Props) {
+  const { data: gradeTopics, isLoading: loadingTopics } =
+    useClassTopicsWithGrades(classId);
 
-function DiagnosticBuilderStep({
-  classId,
-  classTopics,
-  onBack,
-  onDone,
-}: Step2Props) {
-  const sorted = useMemo(
-    () => [...classTopics].sort((a, b) => a.sequence_order - b.sequence_order),
-    [classTopics],
-  );
-
+  // ── Config state ────────────────────────────────────────────────────────────
   const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(
-    () => new Set(sorted.map((t) => t.curriculum_topic_id)),
+    new Set(),
   );
+  const [questionsPerTopic, setQuestionsPerTopic] = useState(2);
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>(null);
+  const [questionTypes, setQuestionTypes] = useState<string[]>(["MCQ"]);
+  const [minimumDifficulty, setMinimumDifficulty] = useState(1);
+  const [maximumDifficulty, setMaximumDifficulty] = useState(5);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  // Debounced topic IDs for the availability query (300ms)
+  const [debouncedTopicIds, setDebouncedTopicIds] = useState<string[]>([]);
+  const [debouncedQpt, setDebouncedQpt] = useState(questionsPerTopic);
+  const [debouncedMin, setDebouncedMin] = useState(minimumDifficulty);
+  const [debouncedMax, setDebouncedMax] = useState(maximumDifficulty);
+  const [debouncedTypes, setDebouncedTypes] = useState(questionTypes);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedTopicIds(Array.from(selectedTopicIds));
+      setDebouncedQpt(questionsPerTopic);
+      setDebouncedMin(minimumDifficulty);
+      setDebouncedMax(maximumDifficulty);
+      setDebouncedTypes(questionTypes);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [
+    selectedTopicIds,
+    questionsPerTopic,
+    minimumDifficulty,
+    maximumDifficulty,
+    questionTypes,
+  ]);
+
+  const { data: availability, isLoading: availLoading } = useTopicAvailability({
+    classId,
+    topicIds: debouncedTopicIds,
+    questionsPerTopic: debouncedQpt,
+    minimumDifficulty: debouncedMin,
+    maximumDifficulty: debouncedMax,
+    questionTypes: debouncedTypes,
+  });
+
+  // Build availability map keyed by curriculum_topic_id
+  const availMap = useMemo(() => {
+    const m = new Map<string, TopicAvailability>();
+    availability?.forEach((a) => m.set(a.curriculum_topic_id, a));
+    return m;
+  }, [availability]);
+
+  // Merge availability into topic objects
+  function enrichTopics(
+    topics: {
+      curriculum_topic_id: string;
+      topic_name: string;
+      grade_level: number;
+      subtopic_count: number;
+    }[],
+  ): TopicWithAvailability[] {
+    return topics.map((t) => ({
+      ...t,
+      availability: availMap.get(t.curriculum_topic_id),
+      availabilityLoading:
+        availLoading && selectedTopicIds.has(t.curriculum_topic_id),
+    }));
+  }
+
+  const currentTopics = enrichTopics(gradeTopics?.current_grade_topics ?? []);
+  const previousTopics = enrichTopics(gradeTopics?.previous_grade_topics ?? []);
+
+  const toggleTopic = useCallback((id: string) => {
+    setSelectedTopicIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAllCurrent = useCallback(() => {
+    setSelectedTopicIds((prev) => {
+      const next = new Set(prev);
+      currentTopics.forEach((t) => next.add(t.curriculum_topic_id));
+      return next;
+    });
+  }, [currentTopics]);
+
+  const selectAllPrevious = useCallback(() => {
+    setSelectedTopicIds((prev) => {
+      const next = new Set(prev);
+      previousTopics.forEach((t) => next.add(t.curriculum_topic_id));
+      return next;
+    });
+  }, [previousTopics]);
+
+  // Validation
+  const selectedAvailabilities = Array.from(selectedTopicIds)
+    .map((id) => availMap.get(id))
+    .filter((a): a is TopicAvailability => a !== undefined);
+
+  const errorTopics = selectedAvailabilities.filter(
+    (a) => a.available_questions === 0,
+  );
+  const warnTopics = selectedAvailabilities.filter(
+    (a) =>
+      a.available_questions > 0 && a.available_questions < questionsPerTopic,
+  );
+
+  const canSubmit =
+    selectedTopicIds.size > 0 &&
+    errorTopics.length === 0 &&
+    questionTypes.length > 0 &&
+    minimumDifficulty <= maximumDifficulty;
 
   const designDiagnostic = useDesignTier1Diagnostic(classId);
   const publishAssessment = usePublishAssessment(classId);
 
-  const totalQuestions = selectedTopicIds.size * QUESTIONS_PER_TOPIC;
-
-  const covered = sorted.filter((t) => t.is_covered);
-  const upcoming = sorted.filter((t) => !t.is_covered);
-
-  function toggleTopic(curriculumTopicId: string) {
-    setSelectedTopicIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(curriculumTopicId)) next.delete(curriculumTopicId);
-      else next.add(curriculumTopicId);
-      return next;
-    });
-  }
-
   async function handleSubmit() {
-    if (selectedTopicIds.size === 0) {
-      setError("Select at least one topic for the diagnostic.");
+    if (!canSubmit) {
+      if (selectedTopicIds.size === 0)
+        setError("Select at least one topic for the diagnostic.");
+      else if (errorTopics.length > 0)
+        setError(
+          "Remove topics with no questions in the bank before publishing.",
+        );
+      else if (questionTypes.length === 0)
+        setError("Select at least one question type.");
+      else setError("Minimum difficulty cannot exceed maximum.");
       return;
     }
     setError("");
@@ -386,127 +488,145 @@ function DiagnosticBuilderStep({
     try {
       const assessment = await designDiagnostic.mutateAsync({
         topic_ids: Array.from(selectedTopicIds),
-        question_count: totalQuestions,
+        questions_per_topic: questionsPerTopic,
+        time_limit_minutes: timeLimitMinutes,
+        question_types: questionTypes,
+        minimum_difficulty: minimumDifficulty,
+        maximum_difficulty: maximumDifficulty,
       });
       await publishAssessment.mutateAsync(String(assessment.id));
       onDone();
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes("422")) {
-        setError(
-          "Not enough questions in the bank for these topics. Try selecting fewer topics.",
-        );
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
+    } catch {
+      setError("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
   }
 
-  function TopicDiagRow({
-    topic,
-    isCovered,
-  }: {
-    topic: ClassTopicItem;
-    isCovered: boolean;
-  }) {
-    const checked = selectedTopicIds.has(topic.curriculum_topic_id);
-    return (
-      <label
-        className={[
-          "flex items-center gap-3 px-[14px] py-3 border-b border-[#f3f4f6] last:border-b-0 cursor-pointer",
-          !checked ? "opacity-60" : "",
-        ].join(" ")}
-      >
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={() => toggleTopic(topic.curriculum_topic_id)}
-          className="w-4 h-4 rounded border-brand-border text-brand-gold accent-[#c9932a] focus:ring-[#c9932a] flex-shrink-0"
-        />
-        <div className="flex-1 min-w-0">
-          <p
-            className={[
-              "text-[13px] font-semibold truncate",
-              checked ? "text-[#374151]" : "text-[#9ca3af]",
-            ].join(" ")}
-          >
-            {topic.topic_name}
-          </p>
-          <p
-            className={[
-              "text-[11px] mt-px",
-              checked ? "text-brand-muted" : "text-[#d1d5db]",
-            ].join(" ")}
-          >
-            ~{QUESTIONS_PER_TOPIC} questions · Mixed difficulty
-          </p>
-        </div>
-        {isCovered && checked && (
-          <span className="flex-shrink-0 bg-[#f0fdf4] border border-[#d4e4d8] rounded-full px-[10px] py-[3px] text-[10px] font-bold text-[#1a5c38] whitespace-nowrap">
-            Covered
-          </span>
-        )}
-        {!checked && (
-          <span className="flex-shrink-0 text-[10px] text-brand-muted">
-            Unselected
-          </span>
-        )}
-      </label>
-    );
-  }
+  const estimatedTotal = selectedTopicIds.size * questionsPerTopic;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div>
-        <h3 className="font-display font-bold text-lg text-brand-ink mb-1">
+        <h3 className="font-display font-bold text-[17px] text-brand-ink mb-1">
           Design your Tier 1 diagnostic
         </h3>
-        <p className="text-xs text-brand-body">
-          Select the topics to test. The system picks ~{QUESTIONS_PER_TOPIC}{" "}
-          questions per topic across difficulty levels. Covered topics are
-          included by default — good for knowledge refresh.
+        <p className="text-[12px] text-brand-body">
+          Choose topics to baseline — include previous grade topics to check
+          prior knowledge. Configure how many questions per topic and timing.
         </p>
       </div>
 
-      {/* Warning box */}
+      {/* Locked warning */}
       <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[6px] px-3 py-[9px] text-[11px] text-[#92400e]">
         ⚠ Once a student submits an attempt, this diagnostic is locked and
         cannot be edited.
       </div>
 
-      {/* Topic list */}
-      <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
-        <div className="px-[14px] py-[10px] bg-[#f9fafb] border-b border-[#e5e7eb] flex items-center justify-between">
-          <span className="text-[11px] font-bold text-[#374151]">
-            Topics to include in diagnostic
-          </span>
-          <span className="text-[11px] text-brand-muted">
-            Est. ~{totalQuestions} questions total
+      {/* Amber warning banner (warn topics) */}
+      {warnTopics.length > 0 && (
+        <div className="bg-[#fffbeb] border border-[#fde68a] rounded-[8px] px-3 py-[10px] text-[11px] text-[#92400e] flex gap-2 items-start">
+          <span>⚠</span>
+          <span>
+            {warnTopics.length} topic
+            {warnTopics.length !== 1 ? "s" : ""} have fewer questions than
+            requested. The diagnostic will use what&apos;s available for those
+            topics.
           </span>
         </div>
+      )}
 
-        {covered.length > 0 && (
-          <>
-            <div className="px-[14px] py-2 text-[10px] font-bold uppercase tracking-[0.6px] bg-[#f0fdf4] border-b border-[#d4e4d8] text-[#1a5c38]">
-              Covered topics (refresh knowledge)
+      {/* Two-column layout */}
+      <div className="flex gap-5 items-start">
+        {/* LEFT: topic picker */}
+        <div className="flex-1 min-w-0">
+          <div className="border border-[#e5e7eb] rounded-[8px] overflow-hidden">
+            {/* Card header */}
+            <div className="px-[14px] py-[10px] bg-[#f9fafb] border-b border-[#e5e7eb] flex items-center justify-between">
+              <span className="text-[11px] font-bold text-[#374151]">
+                Select topics to test
+              </span>
+              <span className="text-[11px] text-brand-muted">
+                {selectedTopicIds.size} selected · ~{estimatedTotal} questions
+                total
+              </span>
             </div>
-            {covered.map((t) => (
-              <TopicDiagRow key={t.id} topic={t} isCovered={true} />
-            ))}
-          </>
-        )}
 
-        {upcoming.length > 0 && (
-          <>
-            <div className="px-[14px] py-2 text-[10px] font-bold uppercase tracking-[0.6px] bg-[#fffbeb] border-b border-[#fde68a] text-[#92400e]">
-              Upcoming topics
+            {loadingTopics ? (
+              <div className="p-3 space-y-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="h-10 bg-gray-100 rounded animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : (
+              <>
+                {/* Current grade section */}
+                {currentTopics.length > 0 && (
+                  <TopicGroupSection
+                    gradeLabel={`Current Grade (Grade ${gradeTopics!.current_grade_level})`}
+                    isCurrent={true}
+                    topics={currentTopics}
+                    selectedIds={selectedTopicIds}
+                    questionsPerTopic={questionsPerTopic}
+                    onToggle={toggleTopic}
+                    onSelectAll={selectAllCurrent}
+                    defaultOpen={true}
+                  />
+                )}
+
+                {/* Previous grade section */}
+                {previousTopics.length > 0 && (
+                  <TopicGroupSection
+                    gradeLabel={`Previous Grade (Grade ${gradeTopics!.previous_grade_level})`}
+                    isCurrent={false}
+                    topics={previousTopics}
+                    selectedIds={selectedTopicIds}
+                    questionsPerTopic={questionsPerTopic}
+                    onToggle={toggleTopic}
+                    onSelectAll={selectAllPrevious}
+                    defaultOpen={false}
+                  />
+                )}
+              </>
+            )}
+
+            {/* Summary bar */}
+            <div className="px-[14px] py-[7px] bg-[rgba(245,234,208,0.3)] border-t border-[#e5e7eb] flex items-center justify-between">
+              <span className="text-[11px] font-bold text-brand-ink">
+                {selectedTopicIds.size} topic
+                {selectedTopicIds.size !== 1 ? "s" : ""} selected
+              </span>
+              {errorTopics.length + warnTopics.length > 0 && (
+                <span className="text-[11px] text-[#92400e]">
+                  {errorTopics.length + warnTopics.length} topic
+                  {errorTopics.length + warnTopics.length !== 1 ? "s" : ""} need
+                  attention ⚠
+                </span>
+              )}
             </div>
-            {upcoming.map((t) => (
-              <TopicDiagRow key={t.id} topic={t} isCovered={false} />
-            ))}
-          </>
-        )}
+          </div>
+        </div>
+
+        {/* RIGHT: config panel (sticky) */}
+        <div className="w-[236px] flex-shrink-0">
+          <AssessmentConfigPanel
+            questionsPerTopic={questionsPerTopic}
+            onQuestionsPerTopicChange={setQuestionsPerTopic}
+            timeLimitMinutes={timeLimitMinutes}
+            onTimeLimitChange={setTimeLimitMinutes}
+            questionTypes={questionTypes}
+            onQuestionTypesChange={setQuestionTypes}
+            minimumDifficulty={minimumDifficulty}
+            maximumDifficulty={maximumDifficulty}
+            onDifficultyChange={(min, max) => {
+              setMinimumDifficulty(min);
+              setMaximumDifficulty(max);
+            }}
+          />
+        </div>
       </div>
 
       {error && (
@@ -523,7 +643,7 @@ function DiagnosticBuilderStep({
           type="button"
           variant="primary"
           loading={submitting}
-          disabled={submitting || selectedTopicIds.size === 0}
+          disabled={submitting || !canSubmit}
           onClick={handleSubmit}
         >
           Publish Diagnostic &amp; Finish Setup
@@ -542,7 +662,6 @@ export function ClassSetupWizard({
   initialStep = 1,
 }: ClassSetupWizardProps) {
   const [step, setStep] = useState<Step>(initialStep);
-  const { data: classTopics = [] } = useClassTopics(classId);
   const [done, setDone] = useState(false);
 
   function handleClose() {
@@ -650,7 +769,6 @@ export function ClassSetupWizard({
         ) : (
           <DiagnosticBuilderStep
             classId={classId}
-            classTopics={classTopics}
             onBack={() => setStep(1)}
             onDone={() => setDone(true)}
           />

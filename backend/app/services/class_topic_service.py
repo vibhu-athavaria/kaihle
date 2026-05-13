@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.class_topic import ClassTopic
-from app.models.curriculum import CurriculumTopic, Subtopic, Topic
+from app.models.curriculum import CurriculumTopic, Grade, Subtopic, Topic
 from app.models.school import Class
 from app.schemas.class_topic import (
     ClassTopicAdd,
@@ -267,3 +267,85 @@ class ClassTopicService:
             }
             for row in result.all()
         ]
+
+    async def list_topics_for_diagnostic(
+        self,
+        class_id: uuid.UUID,
+    ) -> dict[str, object]:
+        """Return curriculum topics for the diagnostic topic picker.
+
+        Returns two groups: current grade and previous grade (level - 1).
+        Unlike list_curriculum_topics_for_class, this returns ALL topics
+        for both grades regardless of whether they're in the teacher's class list.
+        Used by the diagnostic wizard to let teachers select cross-grade topics.
+        """
+        class_result = await self.db.execute(select(Class).where(Class.id == class_id))
+        class_ = class_result.scalar_one_or_none()
+        if class_ is None:
+            raise ClassTopicNotFoundError(f"Class {class_id} not found")
+
+        # Resolve current grade level
+        grade_result = await self.db.execute(select(Grade.level).where(Grade.id == class_.grade_id))
+        current_level: int | None = grade_result.scalar_one_or_none()
+        if current_level is None:
+            raise ClassTopicNotFoundError(f"Grade not found for class {class_id}")
+
+        prev_level = current_level - 1
+
+        # Resolve previous grade id (may not exist for grade 1)
+        prev_grade_result = await self.db.execute(select(Grade.id).where(Grade.level == prev_level))
+        prev_grade_id: uuid.UUID | None = prev_grade_result.scalar_one_or_none()
+
+        # Query topics for both grades in one go
+        grade_ids = [class_.grade_id]
+        if prev_grade_id is not None:
+            grade_ids.append(prev_grade_id)
+
+        result = await self.db.execute(
+            select(
+                CurriculumTopic.id.label("curriculum_topic_id"),
+                Topic.name.label("topic_name"),
+                CurriculumTopic.grade_id,
+                Grade.level.label("grade_level"),
+                func.count(Subtopic.id).label("subtopic_count"),
+            )
+            .join(Topic, Topic.id == CurriculumTopic.topic_id)
+            .join(Grade, Grade.id == CurriculumTopic.grade_id)
+            .outerjoin(Subtopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
+            .where(
+                CurriculumTopic.curriculum_id == class_.curriculum_id,
+                CurriculumTopic.subject_id == class_.subject_id,
+                CurriculumTopic.grade_id.in_(grade_ids),
+                CurriculumTopic.is_active.is_(True),
+            )
+            .group_by(CurriculumTopic.id, Topic.name, CurriculumTopic.grade_id, Grade.level)
+            .order_by(Grade.level.desc(), CurriculumTopic.sequence_order)
+        )
+        rows = result.all()
+
+        current_topics = [
+            {
+                "curriculum_topic_id": str(row.curriculum_topic_id),
+                "topic_name": row.topic_name,
+                "grade_level": row.grade_level,
+                "subtopic_count": row.subtopic_count,
+            }
+            for row in rows
+            if row.grade_level == current_level
+        ]
+        previous_topics = [
+            {
+                "curriculum_topic_id": str(row.curriculum_topic_id),
+                "topic_name": row.topic_name,
+                "grade_level": row.grade_level,
+                "subtopic_count": row.subtopic_count,
+            }
+            for row in rows
+            if row.grade_level == prev_level
+        ]
+        return {
+            "current_grade_level": current_level,
+            "previous_grade_level": prev_level,
+            "current_grade_topics": current_topics,
+            "previous_grade_topics": previous_topics,
+        }

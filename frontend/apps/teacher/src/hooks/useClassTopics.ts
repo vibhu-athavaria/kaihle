@@ -126,13 +126,20 @@ export function useReorderClassTopics(classId: string) {
   });
 }
 
+export interface DesignTier1DiagnosticPayload {
+  topic_ids: string[];
+  questions_per_topic: number;
+  time_limit_minutes: number | null;
+  question_types: string[];
+  minimum_difficulty: number;
+  maximum_difficulty: number;
+  deadline?: string | null;
+}
+
 export function useDesignTier1Diagnostic(classId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: {
-      topic_ids: string[];
-      question_count: number;
-    }) => {
+    mutationFn: async (payload: DesignTier1DiagnosticPayload) => {
       const res = await apiClient.post(
         `/api/v1/classes/${classId}/diagnostics/tier1`,
         payload,
