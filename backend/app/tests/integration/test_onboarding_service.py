@@ -29,7 +29,6 @@ async def system_diagnostic_assessment(
         title="Tier 1 Diagnostic",
         assessment_type="DIAGNOSTIC",
         status="ACTIVE",
-        config={"num_questions": 10, "tier": 1},
     )
     db_session.add(assessment)
     await db_session.commit()

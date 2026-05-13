@@ -149,7 +149,6 @@ async def _create_draft_assessment(
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.DRAFT,
         question_count=question_count,
-        config={},
     )
     db.add(assessment)
     await db.flush()
@@ -189,7 +188,6 @@ async def test_list_class_assessments_when_teacher_own_class_then_returns_200_wi
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.ACTIVE,
         question_count=3,
-        config={},
     )
     db_session.add(active_assessment)
     await db_session.flush()
@@ -262,7 +260,6 @@ async def test_list_class_assessments_when_student_then_draft_excluded(
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.DRAFT,
         question_count=5,
-        config={},
     )
     active = Assessment(
         id=uuid.uuid4(),
@@ -273,7 +270,6 @@ async def test_list_class_assessments_when_student_then_draft_excluded(
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.ACTIVE,
         question_count=5,
-        config={},
     )
     db_session.add_all([draft, active])
     await db_session.commit()
@@ -310,7 +306,6 @@ async def test_list_class_assessments_when_student_then_system_generated_tier1_i
         assessment_type="DIAGNOSTIC",
         status=AssessmentStatus.ACTIVE,
         question_count=5,
-        config={"max_questions_per_attempt": 20},
     )
     db_session.add(system_assessment)
     await db_session.commit()
@@ -345,7 +340,7 @@ async def test_create_assessment_when_teacher_owns_class_then_201_draft(
     payload = {
         "title": "My Progress Check",
         "topic_ids": [],
-        "question_count": 5,
+        "questions_per_topic": 5,
         "assessment_type": "PROGRESS_CHECK",
         "difficulty_min": 1.0,
         "difficulty_max": 5.0,
@@ -388,7 +383,7 @@ async def test_create_assessment_when_teacher_does_not_own_class_then_403(
     payload = {
         "title": "Unauthorized Check",
         "topic_ids": [],
-        "question_count": 5,
+        "questions_per_topic": 5,
         "assessment_type": "PROGRESS_CHECK",
     }
 
@@ -415,7 +410,7 @@ async def test_create_assessment_when_insufficient_questions_then_422(
     payload = {
         "title": "Too Big Check",
         "topic_ids": [],
-        "question_count": 10,  # request more than available
+        "questions_per_topic": 10,  # request more than available
         "assessment_type": "PROGRESS_CHECK",
     }
 
@@ -455,7 +450,6 @@ async def test_get_assessment_when_different_school_then_403(
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.DRAFT,
         question_count=5,
-        config={},
     )
     db_session.add(assessment)
 
@@ -500,7 +494,6 @@ async def test_get_assessment_when_student_then_correct_answer_excluded(
         assessment_type="PROGRESS_CHECK",
         status=AssessmentStatus.ACTIVE,
         question_count=0,
-        config={},
     )
     db_session.add(assessment)
     await db_session.commit()

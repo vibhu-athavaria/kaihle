@@ -153,7 +153,6 @@ async def _create_assessment(
         assessment_type="PROGRESS_CHECK",
         status=status,
         question_count=3,
-        config={},
     )
     db.add(assessment)
     await db.flush()

@@ -212,7 +212,7 @@ async def test_create_and_publish_flow_then_status_transitions_correctly(
     body = AssessmentCreateRequest(
         title="Quiz 1",
         topic_ids=[],
-        question_count=3,
+        questions_per_topic=3,
         assessment_type=AssessmentType.PROGRESS_CHECK,
     )
 
@@ -244,7 +244,7 @@ async def test_create_when_topic_filter_then_only_matching_topics_sampled(
     body = AssessmentCreateRequest(
         title="Algebra Only",
         topic_ids=[curriculum_topics[0].id],
-        question_count=3,
+        questions_per_topic=3,
         assessment_type=AssessmentType.TOPIC_SPECIFIC,
     )
 
@@ -285,7 +285,7 @@ async def test_create_when_insufficient_questions_then_raises_and_no_row_in_db(
     body = AssessmentCreateRequest(
         title="Too Many",
         topic_ids=[],
-        question_count=10,  # request 10, only 2 available
+        questions_per_topic=10,  # request 10, only 2 available
         assessment_type=AssessmentType.PROGRESS_CHECK,
     )
 
@@ -312,7 +312,7 @@ async def test_publish_and_close_full_lifecycle_in_db(db_session: AsyncSession, 
     body = AssessmentCreateRequest(
         title="Lifecycle Test",
         topic_ids=[],
-        question_count=3,
+        questions_per_topic=3,
         assessment_type=AssessmentType.PROGRESS_CHECK,
     )
 

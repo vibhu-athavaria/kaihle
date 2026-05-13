@@ -379,7 +379,6 @@ class TestModelCRUD:
             created_by=test_teacher.id,
             title="Math Diagnostic",
             assessment_type="DIAGNOSTIC",
-            config={"num_questions": 10},
         )
         db_session.add(assessment)
         await db_session.commit()

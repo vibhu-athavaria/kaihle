@@ -427,7 +427,6 @@ async def test_assessment(
         title="Test Assessment",
         assessment_type="DIAGNOSTIC",
         status="DRAFT",
-        config={"num_questions": 10},
     )
     db_session.add(assessment)
     await db_session.commit()
