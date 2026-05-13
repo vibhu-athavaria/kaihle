@@ -152,7 +152,6 @@ async def _create_assessment(
         title=title,
         assessment_type="PROGRESS_CHECK",
         status=status,
-        is_system_generated=False,
         question_count=3,
         config={},
     )

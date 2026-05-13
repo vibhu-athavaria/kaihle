@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.models.assessment import AssessmentType
 from app.services.gap_service import GapService
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -41,18 +42,12 @@ def _make_attempt(
     )
 
 
-def _make_assessment(
-    school_id: uuid.UUID,
-    class_id: uuid.UUID,
-    is_system_generated: bool = False,
-) -> SimpleNamespace:
-    from app.models.assessment import AssessmentType
-
+def _make_assessment(school_id: uuid.UUID, class_id: uuid.UUID, assessment_type: AssessmentType) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
         school_id=school_id,
         class_id=class_id,
-        assessment_type=AssessmentType.DIAGNOSTIC if is_system_generated else AssessmentType.PROGRESS_CHECK,
+        assessment_type=assessment_type,
     )
 
 
@@ -211,15 +206,10 @@ class TestMasteryWeightingFormulas:
     the mathematical results by invoking the same logic directly.
     """
 
-    def _compute_mastery(
-        self,
-        current_score: float,
-        historical: list[float],
-        is_system_generated: bool = False,
-    ) -> float:
+    def _compute_mastery(self, current_score: float, historical: list[float], is_diagnostic: bool = False) -> float:
         """Replicate the weighting formula from gap_tasks.py."""
         if len(historical) == 0:
-            if is_system_generated:
+            if is_diagnostic:
                 mastery = current_score * 0.7
             else:
                 mastery = current_score * 1.0
@@ -239,7 +229,7 @@ class TestMasteryWeightingFormulas:
         mastery = self._compute_mastery(
             current_score=1.0,
             historical=[],
-            is_system_generated=False,
+            is_diagnostic=False,
         )
         assert mastery == 1.0
 
@@ -250,7 +240,7 @@ class TestMasteryWeightingFormulas:
         mastery = self._compute_mastery(
             current_score=1.0,
             historical=[],
-            is_system_generated=True,
+            is_diagnostic=True,
         )
         assert mastery == pytest.approx(0.7)
 
@@ -308,7 +298,7 @@ class TestMasteryWeightingFormulas:
         mastery = self._compute_mastery(
             current_score=3 / 5,
             historical=[],
-            is_system_generated=False,
+            is_diagnostic=False,
         )
         assert mastery == pytest.approx(0.6, abs=1e-9)
 
@@ -635,7 +625,7 @@ class TestCalculateGapStatesForAttempt:
     async def test_when_no_responses_then_returns_zero_subtopics_updated(self) -> None:
         """Attempt completed but no StudentResponse rows → early return."""
         student_id = uuid.uuid4()
-        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4())
+        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4(), AssessmentType.DIAGNOSTIC)
         attempt = _make_attempt(assessment.id, student_id, status="COMPLETED")
 
         call_count = [0]
@@ -665,7 +655,7 @@ class TestCalculateGapStatesForAttempt:
         student_id = uuid.uuid4()
         sub1 = uuid.uuid4()
         q1 = uuid.uuid4()
-        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4(), is_system_generated=False)
+        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4(), assessment_type=AssessmentType.PROGRESS_CHECK)
         attempt = _make_attempt(assessment.id, student_id, status="COMPLETED")
         responses = [_make_response(q1, is_correct=True)]
 
@@ -685,7 +675,7 @@ class TestCalculateGapStatesForAttempt:
         """Question not in question→subtopic map → error logged, subtopic skipped."""
         student_id = uuid.uuid4()
         q_unknown = uuid.uuid4()
-        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4())
+        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4(), AssessmentType.PROGRESS_CHECK)
         attempt = _make_attempt(assessment.id, student_id, status="COMPLETED")
         responses = [_make_response(q_unknown, is_correct=True)]
 
@@ -701,12 +691,12 @@ class TestCalculateGapStatesForAttempt:
         assert result["subtopics_updated"] == 0
 
     @pytest.mark.asyncio
-    async def test_when_system_generated_first_attempt_then_mastery_weighted_at_0_7(self) -> None:
-        """Tier 1 diagnostic (is_system_generated=True) → mastery = score * 0.7."""
+    async def test_when_first_diagnostic_attempt_then_mastery_weighted_at_0_7(self) -> None:
+        """Tier 1 diagnostic → mastery = score * 0.7."""
         student_id = uuid.uuid4()
         sub1 = uuid.uuid4()
         q1 = uuid.uuid4()
-        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4(), is_system_generated=True)
+        assessment = _make_assessment(uuid.uuid4(), uuid.uuid4(), assessment_type=AssessmentType.DIAGNOSTIC)
         attempt = _make_attempt(assessment.id, student_id, status="COMPLETED")
         responses = [_make_response(q1, is_correct=True)]  # 100% correct
 

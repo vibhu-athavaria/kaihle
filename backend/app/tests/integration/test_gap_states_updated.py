@@ -178,17 +178,15 @@ async def _create_assessment(
     school: School,
     class_: Class,
     teacher: User,
-    is_system_generated: bool = False,
 ) -> Assessment:
     assessment = Assessment(
         id=uuid.uuid4(),
         school_id=school.id,
         class_id=class_.id,
-        created_by=None if is_system_generated else teacher.id,
+        created_by=teacher.id,
         title="Test Assessment",
         assessment_type=AssessmentType.DIAGNOSTIC,
         status=AssessmentStatus.ACTIVE,
-        is_system_generated=is_system_generated,
         config={"num_questions": 10},
     )
     db.add(assessment)
@@ -315,7 +313,7 @@ class TestGapStatesUpdated:
         db_session.add(student)
         await db_session.flush()
 
-        assessment = await _create_assessment(db_session, school, class_, teacher, is_system_generated=False)
+        assessment = await _create_assessment(db_session, school, class_, teacher)
         attempt = await _create_attempt(db_session, assessment, student)
 
         for q in questions:

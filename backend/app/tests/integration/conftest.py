@@ -427,7 +427,6 @@ async def test_assessment(
         title="Test Assessment",
         assessment_type="DIAGNOSTIC",
         status="DRAFT",
-        is_system_generated=False,
         config={"num_questions": 10},
     )
     db_session.add(assessment)

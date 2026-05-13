@@ -220,11 +220,11 @@ class AssessmentService:
     # ── Class-level: create diagnostic assessment ────────────────────────
 
     async def create_class_diagnostic(self, class_id: uuid.UUID) -> Assessment:
-        """Create or retrieve a Tier 1 DIAGNOSTIC assessment for a class.
+        """[DEPRECATED] Create or retrieve a system-generated Tier 1 DIAGNOSTIC assessment.
 
-        Called when a class is created. Selects a pool of up to MAX_DIAGNOSTIC_POOL
-        questions spanning all curriculum topics for the class's subject+grade.
-        Idempotent — returns existing assessment if one already exists.
+        Superseded by design_tier1_diagnostic() — teachers now design diagnostics
+        explicitly via the wizard UI. This method remains only to support existing
+        integration tests and legacy Celery tasks. Do not call from new code.
 
         Args:
             class_id: The class UUID.
