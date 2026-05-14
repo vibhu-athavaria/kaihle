@@ -21,6 +21,8 @@ import { AdminGrades } from "./pages/AdminGrades";
 import { AdminQuestionReview } from "./pages/AdminQuestionReview";
 import { VideoReviewQueue } from "./pages/content/VideoReviewQueue";
 import { VideoReviewDetail } from "./pages/content/VideoReviewDetail";
+import { ScriptsPage } from "./pages/scripts/ScriptsPage";
+import { ScriptDetailPage } from "./pages/scripts/ScriptDetailPage";
 
 export default function App() {
   return (
@@ -68,6 +70,11 @@ export default function App() {
                       <Route
                         path="content/videos/:subtopicId"
                         element={<VideoReviewDetail />}
+                      />
+                      <Route path="scripts" element={<ScriptsPage />} />
+                      <Route
+                        path="scripts/:scriptName"
+                        element={<ScriptDetailPage />}
                       />
                       <Route
                         index
