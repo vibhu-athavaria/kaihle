@@ -14,6 +14,7 @@ import {
   BookOpen,
   Library,
   GraduationCap,
+  Terminal,
 } from "lucide-react";
 import { NavItem } from "./NavItem";
 
@@ -124,6 +125,7 @@ const adminSections: NavSection[] = [
     items: [
       { label: "Logs", href: "/kaihle-admin/logs", icon: Archive },
       { label: "Config", href: "/kaihle-admin/config", icon: Cog },
+      { label: "Scripts", href: "/kaihle-admin/scripts", icon: Terminal },
     ],
   },
 ];

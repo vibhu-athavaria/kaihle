@@ -33,6 +33,7 @@ Teachers/KAIHLE_ADMIN can update applicable_tiers after review.
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
@@ -76,6 +77,18 @@ SKIP_EXPLANATIONS = os.environ.get("SKIP_EXPLANATIONS", "false").lower() in (
 SKIP_QUIZZES = os.environ.get("SKIP_QUIZZES", "false").lower() in ("1", "true", "yes")
 
 CURRICULUM_PATH = Path(__file__).parent.parent / "data" / "curriculum" / "cambridge_v1.json"
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+
+parser = argparse.ArgumentParser(description="Seed subtopic content to database")
+parser.add_argument("--limit", type=int, default=None, help="Limit number of subtopics to process (for testing)")
+parser.add_argument("--dry-run", action="store_true", help="Dry run without making DB changes")
+parser.add_argument("--skip-videos", action="store_true", help="Skip video generation")
+parser.add_argument("--skip-explanations", action="store_true", help="Skip explanation generation")
+parser.add_argument("--skip-quizzes", action="store_true", help="Skip quiz generation")
+args = parser.parse_args()
 
 # ---------------------------------------------------------------------------
 # Database setup
@@ -551,6 +564,11 @@ def main() -> None:
     if not subtopics:
         log.error("No subtopics loaded — aborting")
         return
+
+    # Apply limit if specified
+    if args.limit:
+        subtopics = subtopics[: args.limit]
+        log.info("Limited to %d subtopics for testing", args.limit)
 
     session = get_session()
     try:
