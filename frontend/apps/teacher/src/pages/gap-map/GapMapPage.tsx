@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { Download } from "lucide-react";
 import { useClassGapMap } from "../../hooks/useClassGapMap";
 import { useClass } from "../../hooks/useClass";
+import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { GapMapCell } from "../../components/gap-map/GapMapCell";
 import { LearningProfileSidePanel } from "../../components/gap-map/LearningProfileSidePanel";
 
@@ -10,6 +11,9 @@ export function GapMapPage() {
   const { classId } = useParams<{ classId: string }>();
   const { data: currentClass } = useClass(classId);
   const subjectId = currentClass?.subject_id ?? null;
+  const { data: assessments } = useClassAssessments(classId);
+  const hasDiagnostic =
+    assessments?.some((a) => a.assessment_type === "DIAGNOSTIC") ?? false;
 
   const [selectedStudent, setSelectedStudent] = useState<{
     studentId: string;
@@ -143,7 +147,7 @@ export function GapMapPage() {
         </div>
       )}
 
-      {!isLoading && data && students.length === 0 && (
+      {!isLoading && data && students.length === 0 && !hasDiagnostic && (
         <div className="bg-white rounded-2xl border border-brand-border p-12 text-center">
           <span className="text-4xl mb-3" role="img" aria-label="chart">
             📊
@@ -152,16 +156,30 @@ export function GapMapPage() {
             No gap data yet
           </p>
           <p className="text-sm text-brand-muted mb-4">
-            Run a Diagnostic assessment first — the Gap Map builds automatically
-            from results. It shows exactly where each student has gaps against
-            their curriculum topics.
+            Design a Tier 1 Diagnostic first — the Gap Map populates
+            automatically once students complete it.
           </p>
           <Link
-            to="/teacher/assessments/new"
+            to={`/teacher/classes/${classId}`}
             className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark focus-visible:ring-2 focus-visible:ring-brand-gold rounded transition-colors"
           >
-            Create a Diagnostic →
+            Design diagnostic →
           </Link>
+        </div>
+      )}
+
+      {!isLoading && data && students.length === 0 && hasDiagnostic && (
+        <div className="bg-white rounded-2xl border border-brand-border p-12 text-center">
+          <span className="text-4xl mb-3" role="img" aria-label="hourglass">
+            ⏳
+          </span>
+          <p className="font-display font-semibold text-brand-ink mb-2">
+            Waiting for students to complete the diagnostic
+          </p>
+          <p className="text-sm text-brand-muted">
+            The diagnostic is ready — results will appear here automatically as
+            students submit their responses.
+          </p>
         </div>
       )}
 
