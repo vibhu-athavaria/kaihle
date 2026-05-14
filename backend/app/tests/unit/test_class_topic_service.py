@@ -354,3 +354,106 @@ async def test_list_curriculum_topics_for_class_when_none_existing_then_returns_
     assert len(topics) == 1
     assert topics[0]["topic_name"] == "Algebra"
     assert topics[0]["subtopic_count"] == 3
+
+
+# ─── list_topics_for_diagnostic ───────────────────────────────────────────────
+
+
+def _make_topic_row(name: str, grade_level: int, subtopic_count: int = 2) -> MagicMock:
+    row = MagicMock()
+    row.curriculum_topic_id = uuid.uuid4()
+    row.topic_name = name
+    row.grade_level = grade_level
+    row.subtopic_count = subtopic_count
+    return row
+
+
+@pytest.mark.asyncio
+async def test_list_topics_for_diagnostic_when_class_not_found_then_raises() -> None:
+    db = _make_db()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    db.execute = AsyncMock(return_value=result)
+
+    service = ClassTopicService(db)
+    with pytest.raises(ClassTopicNotFoundError):
+        await service.list_topics_for_diagnostic(uuid.uuid4())
+
+
+@pytest.mark.asyncio
+async def test_list_topics_for_diagnostic_when_same_curriculum_then_returns_both_grades() -> None:
+    db = _make_db()
+    class_id = uuid.uuid4()
+
+    fake_class = MagicMock()
+    fake_class.curriculum_id = uuid.uuid4()
+    fake_class.subject_id = uuid.uuid4()
+    fake_class.grade_id = uuid.uuid4()
+    fake_class.school_id = uuid.uuid4()
+
+    # execute call 1: fetch class
+    r_class = MagicMock()
+    r_class.scalar_one_or_none.return_value = fake_class
+
+    # execute call 2: fetch current grade level
+    r_level = MagicMock()
+    r_level.scalar_one_or_none.return_value = 9
+
+    # execute call 3: fetch prev grade id
+    prev_grade_id = uuid.uuid4()
+    r_prev_id = MagicMock()
+    r_prev_id.scalar_one_or_none.return_value = prev_grade_id
+
+    # execute call 4: current grade topics
+    curr_row = _make_topic_row("Functions", grade_level=9)
+    r_curr = MagicMock()
+    r_curr.all.return_value = [curr_row]
+
+    # execute call 5: previous grade topics
+    prev_row = _make_topic_row("Algebra", grade_level=8)
+    r_prev = MagicMock()
+    r_prev.all.return_value = [prev_row]
+
+    db.execute = AsyncMock(side_effect=[r_class, r_level, r_prev_id, r_curr, r_prev])
+
+    service = ClassTopicService(db)
+    result = await service.list_topics_for_diagnostic(class_id)
+
+    assert result["current_grade_level"] == 9
+    assert result["previous_grade_level"] == 8
+    assert len(result["current_grade_topics"]) == 1
+    assert result["current_grade_topics"][0]["topic_name"] == "Functions"
+    assert len(result["previous_grade_topics"]) == 1
+    assert result["previous_grade_topics"][0]["topic_name"] == "Algebra"
+
+
+@pytest.mark.asyncio
+async def test_list_topics_for_diagnostic_when_grade_level_1_then_no_previous_query() -> None:
+    """At grade level 1 (no prior grade), previous query must be skipped entirely."""
+    db = _make_db()
+
+    fake_class = MagicMock()
+    fake_class.curriculum_id = uuid.uuid4()
+    fake_class.subject_id = uuid.uuid4()
+    fake_class.grade_id = uuid.uuid4()
+    fake_class.school_id = uuid.uuid4()
+
+    r_class = MagicMock()
+    r_class.scalar_one_or_none.return_value = fake_class
+
+    r_level = MagicMock()
+    r_level.scalar_one_or_none.return_value = 1  # no prev grade
+
+    curr_row = _make_topic_row("Numbers", grade_level=1)
+    r_curr = MagicMock()
+    r_curr.all.return_value = [curr_row]
+
+    # Only 3 execute calls expected — no prev-grade-id lookup, no prev-topics query
+    db.execute = AsyncMock(side_effect=[r_class, r_level, r_curr])
+
+    service = ClassTopicService(db)
+    result = await service.list_topics_for_diagnostic(uuid.uuid4())
+
+    assert result["previous_grade_topics"] == []
+    assert len(result["current_grade_topics"]) == 1
+    assert db.execute.call_count == 3

@@ -2,14 +2,16 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.models.class_topic import ClassTopic
-from app.models.curriculum import CurriculumTopic, Grade, Subtopic, Topic
-from app.models.school import Class
+from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic, Topic
+from app.models.school import Class, SchoolCurriculum
 from app.schemas.class_topic import (
     ClassTopicAdd,
     ClassTopicReorder,
@@ -271,7 +273,7 @@ class ClassTopicService:
     async def list_topics_for_diagnostic(
         self,
         class_id: uuid.UUID,
-    ) -> dict[str, object]:
+    ) -> dict[str, Any]:
         """Return curriculum topics for the diagnostic topic picker.
 
         Returns two groups: current grade and previous grade (level - 1).
@@ -298,12 +300,8 @@ class ClassTopicService:
             prev_grade_result = await self.db.execute(select(Grade.id).where(Grade.level == prev_level))
             prev_grade_id = prev_grade_result.scalar_one_or_none()
 
-        # Query topics for both grades in one go
-        grade_ids = [class_.grade_id]
-        if prev_grade_id is not None:
-            grade_ids.append(prev_grade_id)
-
-        result = await self.db.execute(
+        # Current grade: same curriculum as the class
+        current_result = await self.db.execute(
             select(
                 CurriculumTopic.id.label("curriculum_topic_id"),
                 Topic.name.label("topic_name"),
@@ -317,13 +315,49 @@ class ClassTopicService:
             .where(
                 CurriculumTopic.curriculum_id == class_.curriculum_id,
                 CurriculumTopic.subject_id == class_.subject_id,
-                CurriculumTopic.grade_id.in_(grade_ids),
+                CurriculumTopic.grade_id == class_.grade_id,
                 CurriculumTopic.is_active.is_(True),
             )
             .group_by(CurriculumTopic.id, Topic.name, CurriculumTopic.grade_id, Grade.level)
-            .order_by(Grade.level.desc(), CurriculumTopic.sequence_order)
+            .order_by(CurriculumTopic.sequence_order)
         )
-        rows = result.all()
+        current_rows = current_result.all()
+
+        # Previous grade: any curriculum the school has enrolled in.
+        # Needed because grade boundaries can cross curricula (e.g. IGCSE Grade 9
+        # → Cambridge Lower Secondary Grade 8 under a different curriculum_id).
+        previous_rows: list[Any] = []
+        if prev_grade_id is not None:
+            school_curricula_subq = select(SchoolCurriculum.curriculum_id).where(
+                SchoolCurriculum.school_id == class_.school_id
+            )
+            # Use an alias to join Subject twice: once for the class's subject (to get its
+            # family code), once for the topic's subject (to match by family code).
+            # This handles cross-curriculum boundaries e.g. IGCSE BIO → Lower Secondary SCI.
+            ClassSubject = aliased(Subject)
+            prev_result = await self.db.execute(
+                select(
+                    CurriculumTopic.id.label("curriculum_topic_id"),
+                    Topic.name.label("topic_name"),
+                    CurriculumTopic.grade_id,
+                    Grade.level.label("grade_level"),
+                    func.count(Subtopic.id).label("subtopic_count"),
+                )
+                .join(Topic, Topic.id == CurriculumTopic.topic_id)
+                .join(Grade, Grade.id == CurriculumTopic.grade_id)
+                .join(Subject, Subject.id == CurriculumTopic.subject_id)
+                .join(ClassSubject, ClassSubject.id == class_.subject_id)
+                .outerjoin(Subtopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
+                .where(
+                    CurriculumTopic.curriculum_id.in_(school_curricula_subq),
+                    Subject.subject_family_code == ClassSubject.subject_family_code,
+                    CurriculumTopic.grade_id == prev_grade_id,
+                    CurriculumTopic.is_active.is_(True),
+                )
+                .group_by(CurriculumTopic.id, Topic.name, CurriculumTopic.grade_id, Grade.level)
+                .order_by(CurriculumTopic.sequence_order)
+            )
+            previous_rows = list(prev_result.all())
 
         current_topics = [
             {
@@ -332,8 +366,7 @@ class ClassTopicService:
                 "grade_level": row.grade_level,
                 "subtopic_count": row.subtopic_count,
             }
-            for row in rows
-            if row.grade_level == current_level
+            for row in current_rows
         ]
         previous_topics = [
             {
@@ -342,8 +375,7 @@ class ClassTopicService:
                 "grade_level": row.grade_level,
                 "subtopic_count": row.subtopic_count,
             }
-            for row in rows
-            if row.grade_level == prev_level
+            for row in previous_rows
         ]
         return {
             "current_grade_level": current_level,

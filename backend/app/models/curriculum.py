@@ -56,6 +56,9 @@ class Subject(Base, UUIDMixin, TimestampMixin):
 
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     code: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    # Groups subjects that share a knowledge domain across curriculum boundaries.
+    # E.g. BIO/CHEM/PHY/SCI all share "SCI"; used for cross-curriculum diagnostic topic lookup.
+    subject_family_code: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     description: Mapped[str | None] = mapped_column(Text)
     icon: Mapped[str | None] = mapped_column(String(50))
     color: Mapped[str | None] = mapped_column(String(7))
