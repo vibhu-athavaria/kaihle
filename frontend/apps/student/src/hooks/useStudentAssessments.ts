@@ -6,7 +6,6 @@ interface AssessmentApiResponse {
   class_id: string;
   title: string;
   assessment_type: string;
-  is_system_generated: boolean;
   status: string;
   question_count: number;
   deadline: string | null;
@@ -35,7 +34,6 @@ export interface AssessmentItem {
   classId: string;
   title: string;
   assessmentType: "DIAGNOSTIC" | "PROGRESS_CHECK";
-  isSystemGenerated: boolean;
   status: "DRAFT" | "ACTIVE" | "CLOSED";
   questionCount: number;
   deadline: string | null;
@@ -116,8 +114,9 @@ export function useStudentAssessments(
     attempt: AttemptHistoryItem | undefined,
   ): AttemptStatus {
     if (!attempt) return "NOT_STARTED";
-    if (attempt.status === "SUBMITTED") return "COMPLETED";
-    return "IN_PROGRESS";
+    if (attempt.status === "COMPLETED") return "COMPLETED";
+    if (attempt.status === "IN_PROGRESS") return "IN_PROGRESS";
+    return "NOT_STARTED";
   }
 
   const allAssessments: AssessmentItem[] = assessmentQueries
@@ -129,7 +128,6 @@ export function useStudentAssessments(
         classId: a.class_id,
         title: a.title,
         assessmentType: toAssessmentType(a.assessment_type),
-        isSystemGenerated: a.is_system_generated,
         status: toAssessmentStatus(a.status),
         questionCount: a.question_count,
         deadline: a.deadline,
@@ -140,8 +138,12 @@ export function useStudentAssessments(
       };
     });
 
-  const diagnostics = allAssessments.filter((a) => a.isSystemGenerated);
-  const teacherAssessments = allAssessments.filter((a) => !a.isSystemGenerated);
+  const diagnostics = allAssessments.filter(
+    (a) => a.assessmentType === "DIAGNOSTIC",
+  );
+  const teacherAssessments = allAssessments.filter(
+    (a) => a.assessmentType !== "DIAGNOSTIC",
+  );
 
   const newCount = teacherAssessments.filter(
     (a) => a.status === "ACTIVE" && a.attemptStatus === "NOT_STARTED",

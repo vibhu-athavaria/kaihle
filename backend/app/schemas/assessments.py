@@ -46,6 +46,9 @@ class AssessmentResponse(BaseModel):
     created_at: datetime
     published_at: datetime | None
     deadline: datetime | None
+    # Populated only when the requesting user is a STUDENT
+    attempt_status: str | None = None  # "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED"
+    attempt_id: UUID | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -128,7 +131,20 @@ class StudentAttemptSummary(BaseModel):
     student_name: str
     score: float | None
     submitted_at: datetime | None
-    status: Literal["SUBMITTED", "IN_PROGRESS", "NOT_STARTED"]
+    status: Literal["COMPLETED", "IN_PROGRESS", "NOT_STARTED"]
+
+
+class TopicBreakdownItem(BaseModel):
+    """Per-topic aggregated performance for an assessment result summary.
+
+    Aggregated across all students who completed this assessment.
+    Sorted weakest-first so the teacher's eye lands on gaps immediately.
+    """
+
+    topic_name: str
+    correct_count: int
+    total_count: int
+    avg_score: float  # correct_count / total_count, 0.0–1.0
 
 
 class AssessmentResultsSummary(BaseModel):
@@ -140,3 +156,4 @@ class AssessmentResultsSummary(BaseModel):
     total_students: int
     submitted_count: int
     attempts: list[StudentAttemptSummary]
+    topic_breakdown: list[TopicBreakdownItem] = []

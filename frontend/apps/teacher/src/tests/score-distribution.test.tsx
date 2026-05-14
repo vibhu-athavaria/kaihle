@@ -12,12 +12,12 @@ function makeAttempt(
   overrides: Partial<StudentAttemptSummary> = {},
 ): StudentAttemptSummary {
   return {
-    attemptId: `attempt-${Math.random()}`,
-    studentId: `student-${Math.random()}`,
-    studentName: "Test Student",
+    attempt_id: `attempt-${Math.random()}`,
+    student_id: `student-${Math.random()}`,
+    student_name: "Test Student",
     score: 0.75,
-    submittedAt: new Date().toISOString(),
-    status: "SUBMITTED",
+    submitted_at: new Date().toISOString(),
+    status: "COMPLETED",
     ...overrides,
   };
 }
@@ -26,10 +26,10 @@ describe("ScoreDistributionChart", () => {
   test("test_reteach_banner_when_over_30pct_needs_work_then_banner_visible", () => {
     // 4 submitted, 2 score < 0.4 → 50% needs work > 30% threshold
     const attempts: StudentAttemptSummary[] = [
-      makeAttempt({ score: 0.2, status: "SUBMITTED" }), // needs work
-      makeAttempt({ score: 0.3, status: "SUBMITTED" }), // needs work
-      makeAttempt({ score: 0.75, status: "SUBMITTED" }), // strong
-      makeAttempt({ score: 0.6, status: "SUBMITTED" }), // developing
+      makeAttempt({ score: 0.2, status: "COMPLETED" }), // needs work
+      makeAttempt({ score: 0.3, status: "COMPLETED" }), // needs work
+      makeAttempt({ score: 0.75, status: "COMPLETED" }), // strong
+      makeAttempt({ score: 0.6, status: "COMPLETED" }), // developing
     ];
 
     render(<ScoreDistributionChart attempts={attempts} />);
@@ -43,10 +43,10 @@ describe("ScoreDistributionChart", () => {
     // 10 submitted, 3 score < 0.4 → exactly 30% — NOT > 30%, banner hidden
     const attempts: StudentAttemptSummary[] = [
       ...Array.from({ length: 3 }, () =>
-        makeAttempt({ score: 0.2, status: "SUBMITTED" }),
+        makeAttempt({ score: 0.2, status: "COMPLETED" }),
       ), // needs work
       ...Array.from({ length: 7 }, () =>
-        makeAttempt({ score: 0.8, status: "SUBMITTED" }),
+        makeAttempt({ score: 0.8, status: "COMPLETED" }),
       ), // strong
     ];
 
@@ -60,10 +60,10 @@ describe("ScoreDistributionChart", () => {
   test("test_reteach_banner_when_under_30pct_needs_work_then_banner_hidden", () => {
     // 4 submitted, 1 scores < 0.4 → 25% needs work < 30% threshold
     const attempts: StudentAttemptSummary[] = [
-      makeAttempt({ score: 0.3, status: "SUBMITTED" }), // needs work
-      makeAttempt({ score: 0.75, status: "SUBMITTED" }), // strong
-      makeAttempt({ score: 0.8, status: "SUBMITTED" }), // strong
-      makeAttempt({ score: 0.6, status: "SUBMITTED" }), // developing
+      makeAttempt({ score: 0.3, status: "COMPLETED" }), // needs work
+      makeAttempt({ score: 0.75, status: "COMPLETED" }), // strong
+      makeAttempt({ score: 0.8, status: "COMPLETED" }), // strong
+      makeAttempt({ score: 0.6, status: "COMPLETED" }), // developing
     ];
 
     render(<ScoreDistributionChart attempts={attempts} />);
@@ -90,7 +90,7 @@ describe("ScoreDistributionChart", () => {
   test("test_reteach_banner_when_all_submitted_need_work_then_banner_visible", () => {
     // All 5 submitted score < 0.4 → 100% needs work
     const attempts: StudentAttemptSummary[] = Array.from({ length: 5 }, () =>
-      makeAttempt({ score: 0.15, status: "SUBMITTED" }),
+      makeAttempt({ score: 0.15, status: "COMPLETED" }),
     );
 
     render(<ScoreDistributionChart attempts={attempts} />);
@@ -102,8 +102,8 @@ describe("ScoreDistributionChart", () => {
 
   test("test_chart_when_rendered_then_has_role_img_and_aria_label", () => {
     const attempts = [
-      makeAttempt({ score: 0.8, status: "SUBMITTED" }),
-      makeAttempt({ score: 0.5, status: "SUBMITTED" }),
+      makeAttempt({ score: 0.8, status: "COMPLETED" }),
+      makeAttempt({ score: 0.5, status: "COMPLETED" }),
     ];
 
     render(<ScoreDistributionChart attempts={attempts} />);

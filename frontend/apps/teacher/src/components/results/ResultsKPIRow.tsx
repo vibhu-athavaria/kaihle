@@ -60,7 +60,7 @@ export function ResultsKPIRow({
     );
   }
 
-  const submitted = attempts.filter((a) => a.status === "SUBMITTED");
+  const submitted = attempts.filter((a) => a.status === "COMPLETED");
   const submittedCount = submitted.length;
 
   // Class average
@@ -162,14 +162,14 @@ export function ResultsKPIRow({
       {/* Highest */}
       <KPICard
         label="Highest"
-        ariaLabel={`Highest: ${highest?.studentName ?? "—"}, ${
+        ariaLabel={`Highest: ${highest?.student_name ?? "—"}, ${
           highest?.score !== null && highest?.score !== undefined
             ? Math.round(highest.score * 100)
             : 0
         }%, ${highestStyle.label}`}
       >
         <div className="font-display text-[1.75rem] leading-none text-brand-ink truncate">
-          {highest?.studentName ?? "—"}
+          {highest?.student_name ?? "—"}
         </div>
         {highest && (
           <div className={`text-xs mt-1 ${highestStyle.textClass}`}>

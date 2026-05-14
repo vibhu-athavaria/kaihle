@@ -161,6 +161,8 @@ interface SubmitAttemptVars {
 /**
  * Submits the entire attempt with all collected answers.
  * Triggers scoring on the backend and returns the result summary.
+ * Invalidates the attempts list and classes list so the assessment page
+ * immediately reflects the COMPLETED status without a manual refresh.
  */
 export function useSubmitAttempt() {
   const queryClient = useQueryClient();

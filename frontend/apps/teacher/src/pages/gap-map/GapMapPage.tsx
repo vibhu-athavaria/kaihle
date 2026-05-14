@@ -1,21 +1,15 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Download } from "lucide-react";
-import { useAuth } from "@kaihle/auth";
 import { useClassGapMap } from "../../hooks/useClassGapMap";
-import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
+import { useClass } from "../../hooks/useClass";
 import { GapMapCell } from "../../components/gap-map/GapMapCell";
 import { LearningProfileSidePanel } from "../../components/gap-map/LearningProfileSidePanel";
 
 export function GapMapPage() {
   const { classId } = useParams<{ classId: string }>();
-  const { user } = useAuth();
-  const schoolId = user?.school_id ?? null;
-  const { data: dashboardData } = useTeacherDashboard(schoolId);
-
-  // Find this class from teacher's class list to get subject_id
-  const currentClass = dashboardData?.classes.find((c) => c.id === classId);
-  const subjectId = currentClass?.subjectId ?? null;
+  const { data: currentClass } = useClass(classId);
+  const subjectId = currentClass?.subject_id ?? null;
 
   const [selectedStudent, setSelectedStudent] = useState<{
     studentId: string;
@@ -81,10 +75,10 @@ export function GapMapPage() {
     const a = document.createElement("a");
     const dateStr = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `gap-map-${currentClass.name.replace(
+    a.download = `gap-map-${(currentClass?.name ?? "class").replace(
       /\s+/g,
       "-",
-    )}-${currentClass.subjectName.replace(/\s+/g, "-")}-${dateStr}.csv`;
+    )}-${(currentClass?.subject_name ?? "subject").replace(/\s+/g, "-")}-${dateStr}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -130,7 +124,7 @@ export function GapMapPage() {
         </h1>
         <p className="text-sm text-brand-muted">
           {currentClass
-            ? `${currentClass.name} — ${currentClass.subjectName}`
+            ? `${currentClass.name} — ${currentClass.subject_name}`
             : "Class mastery heatmap by subtopic"}
         </p>
       </div>

@@ -24,6 +24,7 @@ from app.models.user import ParentStudent, User, UserRole
 from app.schemas.assessments import AssessmentQuestion, QuestionOption
 from app.schemas.attempts import (
     AnswerSubmitRequest,
+    AttemptDetailResponse,
     AttemptResponse,
     AttemptResultResponse,
     AttemptSubmitRequest,
@@ -306,6 +307,35 @@ async def get_attempt_results(
     school_id = current_user.school_id if current_user.school_id is not None else _uuid.UUID(int=0)
     try:
         return await service.get_attempt_results(
+            attempt_id=attempt_id,
+            requesting_user_id=current_user.id,
+            requesting_user_role=current_user.role,
+            school_id=school_id,
+        )
+    except AttemptAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/attempts/{attempt_id}/detail", response_model=AttemptDetailResponse)
+async def get_attempt_detail(
+    attempt_id: UUID,
+    current_user: CurrentUser = Depends(require_full_access),
+    db: AsyncSession = Depends(get_db),
+) -> AttemptDetailResponse:
+    """Return per-question breakdown for teacher review of a completed attempt.
+
+    Includes question text, subtopic name, topic name, difficulty level,
+    the key selected by the student, and the correct key.
+
+    Access: students may only view their own results. Teachers and admins
+    may view any result within their school.
+    """
+    service = AttemptService(db)
+    school_id = current_user.school_id if current_user.school_id is not None else _uuid.UUID(int=0)
+    try:
+        return await service.get_attempt_detail(
             attempt_id=attempt_id,
             requesting_user_id=current_user.id,
             requesting_user_role=current_user.role,

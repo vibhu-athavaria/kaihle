@@ -26,7 +26,6 @@ const TEACHER_ASSESSMENT = {
   class_id: "cls-1",
   title: "Chapter 3 Quiz",
   assessment_type: "PROGRESS_CHECK",
-  is_system_generated: false,
   status: "ACTIVE",
   question_count: 10,
   deadline: null,
@@ -38,7 +37,6 @@ const DIAGNOSTIC_ASSESSMENT = {
   class_id: "cls-1",
   title: "Onboarding Diagnostic",
   assessment_type: "DIAGNOSTIC",
-  is_system_generated: true,
   status: "ACTIVE",
   question_count: 20,
   deadline: null,
@@ -99,7 +97,7 @@ describe("useStudentAssessments", () => {
     expect(result.current.newCount).toBe(1);
   });
 
-  it("test_useStudentAssessments_when_attempt_submitted_then_newCount_is_0", async () => {
+  it("test_useStudentAssessments_when_attempt_completed_then_newCount_is_0", async () => {
     mockGet.mockImplementation((url: string) => {
       if (url.includes("/classes/")) {
         return Promise.resolve({ data: { data: [TEACHER_ASSESSMENT] } });
@@ -110,7 +108,7 @@ describe("useStudentAssessments", () => {
             {
               attempt_id: "att-1",
               assessment_id: "assess-1",
-              status: "SUBMITTED",
+              status: "COMPLETED",
               score: 0.8,
             },
           ],
@@ -185,7 +183,6 @@ describe("useStudentAssessments", () => {
       class_id: "cls-2",
       title: "Physics Quiz",
       assessment_type: "PROGRESS_CHECK",
-      is_system_generated: false,
       status: "ACTIVE",
       question_count: 5,
       deadline: null,

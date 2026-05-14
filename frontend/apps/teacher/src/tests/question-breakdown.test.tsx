@@ -12,11 +12,14 @@ function makeQuestion(
   overrides: Partial<QuestionAttempt> = {},
 ): QuestionAttempt {
   return {
-    questionId: `q-${Math.random()}`,
-    questionText: "What is 2 + 2?",
-    selectedAnswer: "4",
-    correctAnswer: "4",
-    isCorrect: true,
+    question_id: `q-${Math.random()}`,
+    question_text: "What is 2 + 2?",
+    subtopic_name: "Arithmetic",
+    topic_name: "Numbers",
+    difficulty_level: 2,
+    selected_key: "A",
+    correct_answer: "A",
+    is_correct: true,
     position: 1,
     ...overrides,
   };
@@ -25,12 +28,12 @@ function makeQuestion(
 function makeQuestions(count: number, allCorrect = true): QuestionAttempt[] {
   return Array.from({ length: count }, (_, i) =>
     makeQuestion({
-      questionId: `q-${i}`,
-      questionText: `Question ${i + 1}`,
+      question_id: `q-${i}`,
+      question_text: `Question ${i + 1}`,
       position: i + 1,
-      isCorrect: allCorrect,
-      selectedAnswer: allCorrect ? "4" : "3",
-      correctAnswer: "4",
+      is_correct: allCorrect,
+      selected_key: allCorrect ? "A" : "B",
+      correct_answer: "A",
     }),
   );
 }
@@ -39,9 +42,9 @@ describe("QuestionBreakdown", () => {
   test("test_correct_answer_when_is_correct_then_shows_only_answer_row", () => {
     const questions = [
       makeQuestion({
-        isCorrect: true,
-        selectedAnswer: "4",
-        correctAnswer: "4",
+        is_correct: true,
+        selected_key: "A",
+        correct_answer: "A",
       }),
     ];
     render(<QuestionBreakdown questions={questions} />);
@@ -56,9 +59,9 @@ describe("QuestionBreakdown", () => {
   test("test_wrong_answer_when_is_incorrect_then_shows_given_and_correct_rows", () => {
     const questions = [
       makeQuestion({
-        isCorrect: false,
-        selectedAnswer: "3",
-        correctAnswer: "4",
+        is_correct: false,
+        selected_key: "B",
+        correct_answer: "A",
       }),
     ];
     render(<QuestionBreakdown questions={questions} />);
@@ -69,6 +72,19 @@ describe("QuestionBreakdown", () => {
     expect(screen.getByText("Correct:")).toBeInTheDocument();
     // "Answer:" row must NOT appear (it's for correct answers only)
     expect(screen.queryByText("Answer:")).not.toBeInTheDocument();
+  });
+
+  test("test_subtopic_chip_when_rendered_then_shows_subtopic_name", () => {
+    const questions = [makeQuestion({ subtopic_name: "Linear Equations" })];
+    render(<QuestionBreakdown questions={questions} />);
+    expect(screen.getByText("Linear Equations")).toBeInTheDocument();
+  });
+
+  test("test_difficulty_dots_when_difficulty_3_then_3_filled_dots_rendered", () => {
+    const questions = [makeQuestion({ difficulty_level: 3 })];
+    render(<QuestionBreakdown questions={questions} />);
+    // aria-label on the dots container
+    expect(screen.getByLabelText("Difficulty 3 of 5")).toBeInTheDocument();
   });
 
   test("test_pagination_when_6_or_fewer_questions_then_no_expand_button", () => {
