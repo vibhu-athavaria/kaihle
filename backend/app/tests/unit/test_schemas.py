@@ -87,6 +87,7 @@ class TestSchemaInstantiation:
             subject_id=uuid.uuid4(),
             generated_at=datetime.utcnow(),
             nodes=[],
+            has_student_data=False,
         )
         assert g.nodes == []
 
@@ -106,6 +107,8 @@ class TestSchemaInstantiation:
             subtopic_name="Test Subtopic",
             topic_id=uuid.uuid4(),
             topic_name="Test Topic",
+            grade_id=uuid.uuid4(),
+            grade_name="Grade 7",
             class_average=None,
             student_count=0,
             student_scores=[],

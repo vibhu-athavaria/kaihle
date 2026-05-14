@@ -67,6 +67,8 @@ class TestGetClassGapMap:
             subtopic_name="Algebra",
             topic_id=topic_id,
             topic_name="Maths",
+            grade_id=grade_id,
+            grade_name="Grade 7",
         )
         subtopics_result = MagicMock()
         subtopics_result.all.return_value = [subtopic_row]
@@ -107,7 +109,12 @@ class TestGetClassGapMap:
         db.scalar.return_value = _make_class(class_id, school_id, grade_id)
 
         subtopic_row = SimpleNamespace(
-            subtopic_id=subtopic_id, subtopic_name="Algebra", topic_id=topic_id, topic_name="Maths"
+            subtopic_id=subtopic_id,
+            subtopic_name="Algebra",
+            topic_id=topic_id,
+            topic_name="Maths",
+            grade_id=grade_id,
+            grade_name="Grade 7",
         )
         subtopics_result = MagicMock()
         subtopics_result.all.return_value = [subtopic_row]

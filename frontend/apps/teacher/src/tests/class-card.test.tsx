@@ -49,21 +49,21 @@ describe("ClassCard", () => {
     renderWithRouter(<ClassCard {...defaultProps} avgMastery={0.85} />);
     expect(screen.getByText("Strong")).toBeInTheDocument();
     const pct = screen.getByText("85%");
-    expect(pct).toHaveClass("text-brand-green");
+    expect(pct).toHaveClass("text-brand-green-dark");
   });
 
   test("test_class_card_when_developing_mastery_then_shows_developing_label_and_amber_text", () => {
     renderWithRouter(<ClassCard {...defaultProps} avgMastery={0.55} />);
     expect(screen.getByText("Developing")).toBeInTheDocument();
     const pct = screen.getByText("55%");
-    expect(pct).toHaveClass("text-brand-amber");
+    expect(pct).toHaveClass("text-brand-amber-dark");
   });
 
   test("test_class_card_when_needs_work_mastery_then_shows_needs_work_label_and_red_text", () => {
     renderWithRouter(<ClassCard {...defaultProps} avgMastery={0.25} />);
     expect(screen.getByText("Needs Work")).toBeInTheDocument();
     const pct = screen.getByText("25%");
-    expect(pct).toHaveClass("text-brand-red");
+    expect(pct).toHaveClass("text-brand-red-dark");
   });
 
   test("test_class_card_when_null_mastery_then_shows_not_assessed", () => {

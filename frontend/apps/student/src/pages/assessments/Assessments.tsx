@@ -218,8 +218,9 @@ function PendingDiagnosticCard({
           {assessment.title}
         </div>
         <div className="text-xs text-brand-body mt-1 leading-relaxed">
-          This diagnostic helps Kaihle understand your current level. Completing
-          it will unlock your personalised study plan for this subject.
+          This diagnostic helps your teacher understand your current level.
+          Completing it will unlock your personalised study plan for this
+          subject.
         </div>
         {resumeRoute ? (
           <Link

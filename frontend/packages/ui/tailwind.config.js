@@ -71,15 +71,18 @@ export default {
 
           // Mastery Strong — use these for Strong dots/bars (NOT emerald-*)
           green: "#16a34a",
-          "green-light": "#dcfce7",
+          "green-light": "#bbf7d0", // more saturated — readable heatmap cells
+          "green-dark": "#15803d", // text ON green-light bg (4.9:1 contrast)
 
           // Mastery Developing
           amber: "#f59e0b",
-          "amber-light": "#fef3c7",
+          "amber-light": "#fde68a", // more saturated — visible amber cells
+          "amber-dark": "#92400e", // text ON amber-light bg (5.6:1 contrast)
 
           // Mastery Needs Work
           red: "#ef4444",
-          "red-light": "#fee2e2",
+          "red-light": "#fecaca", // more saturated — visible red cells
+          "red-dark": "#b91c1c", // text ON red-light bg (6.4:1 contrast)
 
           // Gold — accent, Teacher primary action, developing states
           gold: "#c9932a",
@@ -89,8 +92,8 @@ export default {
 
           // Text
           ink: "#1a2016", // primary text (Teacher, Student, School Admin)
-          body: "#4a5240", // secondary body text
-          muted: "#9ca3af", // placeholder, disabled
+          body: "#374232", // secondary body text — darker for readability
+          muted: "#6b7280", // placeholder, disabled — darkened from #9ca3af
 
           // Surfaces
           bg: "#f5f7f1", // page background (Teacher, School Admin)
@@ -98,9 +101,9 @@ export default {
           "green-pale": "#f0fdf4", // very light green tint (badges, highlights)
 
           // Borders
-          border: "#e5e7eb", // default border (Teacher, Student)
-          "border-soft": "#f3f4f6", // subtle separator
-          "row-divider": "#f0f5ee", // table row separator (green-tinted)
+          border: "#d1d5db", // default border — slightly stronger than before
+          "border-soft": "#e5e7eb", // subtle separator
+          "row-divider": "#e8efe6", // table row separator (green-tinted)
         },
 
         // ── KAIHLE ADMIN TOKENS ──────────────────────────────
@@ -112,8 +115,8 @@ export default {
           border: "#eaecf0", // all borders
           mark: "#374151", // logo mark background (gray-700)
           ink: "#111827", // primary text (gray-900)
-          muted: "#9ca3af", // section labels, secondary
-          subtle: "#6b7280", // inactive nav items (gray-500)
+          muted: "#6b7280", // section labels, secondary — darkened for contrast
+          subtle: "#4b5563", // inactive nav items — darkened from gray-500
         },
 
         // ── SCHOOL ADMIN TOKENS ──────────────────────────────
@@ -134,8 +137,8 @@ export default {
           bg: "#f5f7f1", // page background
           sidebar: "#ffffff", // sidebar
           border: "#e5e7eb", // borders — neutral gray (same as brand-border)
-          muted: "#9ca3af", // section labels (same as brand-muted)
-          body: "#4a5240", // secondary text, inactive nav
+          muted: "#6b7280", // section labels — darkened for contrast
+          body: "#374232", // secondary text, inactive nav — darker for readability
           "nav-active": "#fffbeb",
         },
 

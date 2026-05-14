@@ -23,6 +23,79 @@ import { StudentResultsTable } from "../../components/results/StudentResultsTabl
 import { TopicPerformanceBreakdown } from "../../components/results/TopicPerformanceBreakdown";
 import { ChevronLeft, Map } from "lucide-react";
 
+interface DiagnosticStatusCalloutProps {
+  submittedCount: number;
+  totalStudents: number;
+  classId: string;
+}
+
+function DiagnosticStatusCallout({
+  submittedCount,
+  totalStudents,
+  classId,
+}: DiagnosticStatusCalloutProps) {
+  const allSubmitted = submittedCount > 0 && submittedCount >= totalStudents;
+  const someSubmitted = submittedCount > 0 && submittedCount < totalStudents;
+
+  if (submittedCount === 0) {
+    return (
+      <div className="flex items-center gap-4 bg-gray-50 border border-brand-border rounded-2xl px-5 py-4">
+        <Map className="w-5 h-5 text-brand-muted shrink-0" aria-hidden="true" />
+        <p className="text-sm text-brand-muted">
+          Diagnostic is live — waiting for students to submit their responses.
+          Results will appear here as they come in.
+        </p>
+      </div>
+    );
+  }
+
+  if (someSubmitted) {
+    return (
+      <div className="flex items-center gap-4 bg-blue-50 border border-blue-200 rounded-2xl px-5 py-4">
+        <Map className="w-5 h-5 text-blue-600 shrink-0" aria-hidden="true" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-blue-800">
+            {submittedCount} of {totalStudents} students have submitted
+          </p>
+          <p className="text-xs text-blue-600 mt-0.5">
+            Gap Map is updating as results come in.
+          </p>
+        </div>
+        <Link
+          to={`/teacher/classes/${classId}/gap-map`}
+          className="shrink-0 text-sm font-bold text-blue-700 hover:text-blue-900 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded"
+        >
+          View Gap Map →
+        </Link>
+      </div>
+    );
+  }
+
+  if (allSubmitted) {
+    return (
+      <div className="flex items-center gap-4 bg-blue-50 border border-blue-200 rounded-2xl px-5 py-4">
+        <Map className="w-5 h-5 text-blue-600 shrink-0" aria-hidden="true" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-blue-800">
+            All students have submitted — diagnostic results are complete
+          </p>
+          <p className="text-xs text-blue-600 mt-0.5">
+            View the Gap Map to see personalised placement for each student.
+          </p>
+        </div>
+        <Link
+          to={`/teacher/classes/${classId}/gap-map`}
+          className="shrink-0 text-sm font-bold text-blue-700 hover:text-blue-900 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded"
+        >
+          View Gap Map →
+        </Link>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 // ── Assessment type badge config ──────────────────────────────────────────
 
 const TYPE_BADGE: Record<string, { label: string; className: string }> = {
@@ -110,23 +183,11 @@ function AssessmentResultsContent({ assessmentId }: { assessmentId: string }) {
 
       {/* Gap Map callout — only for diagnostic assessments */}
       {data?.assessment_type === "DIAGNOSTIC" && data.class_id && (
-        <div className="flex items-center gap-4 bg-blue-50 border border-blue-200 rounded-2xl px-5 py-4">
-          <Map className="w-5 h-5 text-blue-600 shrink-0" aria-hidden="true" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-blue-800">
-              Diagnostic results are ready
-            </p>
-            <p className="text-xs text-blue-600 mt-0.5">
-              View the Gap Map to see personalised placement for each student.
-            </p>
-          </div>
-          <Link
-            to={`/teacher/classes/${data.class_id}/gap-map`}
-            className="shrink-0 text-sm font-bold text-blue-700 hover:text-blue-900 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded"
-          >
-            View Gap Map →
-          </Link>
-        </div>
+        <DiagnosticStatusCallout
+          submittedCount={data.submitted_count}
+          totalStudents={data.total_students}
+          classId={data.class_id}
+        />
       )}
 
       {/* KPI summary row */}

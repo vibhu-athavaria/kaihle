@@ -1,15 +1,10 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import {
-  getMasteryStyle,
-  scoreToPercent,
-  getSubjectColor,
-} from "@kaihle/types"; // getMasteryStyle + scoreToPercent used for class-level avg display
+import { getSubjectColor } from "@kaihle/types";
 import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { useClassEnrollments } from "../../hooks/useClassEnrollments";
-import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
+import { useClass } from "../../hooks/useClass";
 import { useClassTopics } from "../../hooks/useClassTopics";
-import { useAuth } from "@kaihle/auth";
 import { statusBadge } from "../../utils/assessment";
 import {
   ArrowLeft,
@@ -25,11 +20,8 @@ import { ClassSetupWizard } from "./ClassSetupWizard";
 
 export function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
-  const { user } = useAuth();
-  const schoolId = user?.school_id ?? null;
 
-  const { data: dashboardData, isLoading: dashboardLoading } =
-    useTeacherDashboard(schoolId);
+  const { data: cls, isLoading: classLoading } = useClass(classId);
   const { data: assessments, isLoading: assessmentsLoading } =
     useClassAssessments(classId);
   const { data: students = [], isLoading: studentsLoading } =
@@ -40,9 +32,7 @@ export function ClassDetailPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardInitialStep, setWizardInitialStep] = useState<1 | 2>(1);
 
-  const cls = dashboardData?.classes.find((c) => c.id === classId);
-
-  if (dashboardLoading || !cls) {
+  if (classLoading || !cls) {
     return (
       <div className="p-6 animate-pulse">
         <div className="h-4 w-20 bg-gray-200 rounded mb-4" />
@@ -56,9 +46,8 @@ export function ClassDetailPage() {
     );
   }
 
-  const { dotClass, textClass, label } = getMasteryStyle(cls.avgMastery);
-  const displayPct = scoreToPercent(cls.avgMastery);
-  const subjectColor = getSubjectColor(cls.subjectName);
+  const subjectColor = getSubjectColor(cls.subject_name);
+  const studentCount = studentsLoading ? null : students.length;
 
   const sortedStudents = [...students].sort((a, b) =>
     `${a.first_name} ${a.last_name}`.localeCompare(
@@ -102,17 +91,14 @@ export function ClassDetailPage() {
             </h1>
           </div>
           <div className="flex items-center gap-4 text-sm text-brand-muted">
-            <span>{cls.subjectName}</span>
+            <span>{cls.subject_name}</span>
             <span>·</span>
-            <span>{cls.gradeName}</span>
+            <span>{cls.grade_name}</span>
             <span>·</span>
             <span>
-              {cls.studentCount} student{cls.studentCount !== 1 ? "s" : ""}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${dotClass}`} />
-              <span className={`font-semibold ${textClass}`}>{displayPct}</span>
-              <span>{label}</span>
+              {studentCount !== null
+                ? `${studentCount} student${studentCount !== 1 ? "s" : ""}`
+                : "—"}
             </span>
           </div>
         </div>

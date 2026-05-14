@@ -18,6 +18,8 @@ class GapMapNode(BaseModel):
     subtopic_name: str
     topic_id: UUID
     topic_name: str
+    grade_id: UUID
+    grade_name: str
     class_average: float | None  # None = no students assessed on this subtopic yet
     student_count: int
     student_scores: list[StudentGapScore]
@@ -28,6 +30,7 @@ class ClassGapMap(BaseModel):
     subject_id: UUID
     generated_at: datetime
     nodes: list[GapMapNode]
+    has_student_data: bool  # True if any student has a gap_state row for this class
 
 
 class StudentSubtopicScore(BaseModel):
