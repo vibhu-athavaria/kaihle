@@ -8,7 +8,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, CheckCircle, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle, Clock, X } from "lucide-react";
 import { StudentLayout, Modal, Skeleton } from "@kaihle/ui";
 import {
   useAttempt,
@@ -17,6 +17,46 @@ import {
   type AttemptAnswer,
 } from "../../hooks/useAttempt";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
+
+// ─────────────────────────────────────────────────────────────
+//  Countdown timer hook
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns remaining seconds based on a server-side startedAt timestamp and a
+ * limit in minutes. Ticks every second. Returns null when the assessment is
+ * untimed (limitMinutes === 0) or startedAt is not yet available.
+ */
+function useCountdown(
+  startedAt: string | null,
+  limitMinutes: number,
+): number | null {
+  const computeRemaining = useCallback(() => {
+    if (!startedAt || limitMinutes === 0) return null;
+    const deadline = new Date(startedAt).getTime() + limitMinutes * 60 * 1000;
+    return Math.max(0, Math.floor((deadline - Date.now()) / 1000));
+  }, [startedAt, limitMinutes]);
+
+  const [seconds, setSeconds] = useState<number | null>(computeRemaining);
+
+  useEffect(() => {
+    if (!startedAt || limitMinutes === 0) return;
+    // Sync immediately in case stale state from previous render
+    setSeconds(computeRemaining());
+    const id = setInterval(() => {
+      setSeconds(computeRemaining());
+    }, 1000);
+    return () => clearInterval(id);
+  }, [startedAt, limitMinutes, computeRemaining]);
+
+  return seconds;
+}
+
+function formatCountdown(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
 // ─────────────────────────────────────────────────────────────
 //  Save indicator
@@ -106,7 +146,11 @@ export function TakeAssessmentPage() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showTimesUpModal, setShowTimesUpModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const hasAutoSubmitted = useRef(false);
+  // tracks when the current question was first shown — resets on navigation
+  const questionOpenedAt = useRef<number>(Date.now());
 
   // ref to track if we've already redirected for COMPLETED attempts
   const hasRedirected = useRef(false);
@@ -114,6 +158,17 @@ export function TakeAssessmentPage() {
   // ── Mutations ─────────────────────────────────────────────
   const submitResponseMutation = useSubmitResponse();
   const submitAttemptMutation = useSubmitAttempt();
+
+  // Reset the per-question timer whenever the student moves to a new question
+  useEffect(() => {
+    questionOpenedAt.current = Date.now();
+  }, [currentIndex]);
+
+  // ── Countdown timer ─────────────────────────────────────────
+  const secondsRemaining = useCountdown(
+    attempt?.started_at ?? null,
+    attempt?.time_limit_minutes ?? 0,
+  );
 
   // ── Redirect if already COMPLETED ──────────────────────────
   useEffect(() => {
@@ -166,6 +221,7 @@ export function TakeAssessmentPage() {
   // ── Auto-save on Next click ──────────────────────────────────
   const saveCurrentAnswer = useCallback(
     async (questionId: string, key: string) => {
+      const timeTakenMs = Date.now() - questionOpenedAt.current;
       setSaveState("saving");
       let attempts = 0;
       while (attempts < 2) {
@@ -174,6 +230,7 @@ export function TakeAssessmentPage() {
             attemptId,
             questionId,
             selectedKey: key,
+            timeTakenMs,
           });
           setSaveState("saved");
           // Reset to idle after 2 s
@@ -215,6 +272,46 @@ export function TakeAssessmentPage() {
   const goToPrev = useCallback(() => {
     setCurrentIndex((i) => Math.max(i - 1, 0));
   }, []);
+
+  // ── Timed-out auto-submit ────────────────────────────────────
+  const doTimedOutSubmit = useCallback(async () => {
+    if (hasAutoSubmitted.current) return;
+    hasAutoSubmitted.current = true;
+    setShowTimesUpModal(true);
+    setIsSubmitting(true);
+    const answersArray: AttemptAnswer[] = Object.entries(answers).map(
+      ([question_id, selected_key]) => ({ question_id, selected_key }),
+    );
+    try {
+      const result = await submitAttemptMutation.mutateAsync({
+        attemptId,
+        answers: answersArray,
+        timed_out: true,
+      });
+      setIsSubmitting(false);
+      // Modal stays open — student dismisses it, then navigates to results
+      // Store result in sessionStorage so the modal "View results" button can pass it
+      sessionStorage.setItem(
+        `attempt_result_${attemptId}`,
+        JSON.stringify(result),
+      );
+    } catch {
+      hasAutoSubmitted.current = false;
+      setIsSubmitting(false);
+      setShowTimesUpModal(false);
+    }
+  }, [answers, attemptId, submitAttemptMutation]);
+
+  // Fire auto-submit the moment the timer reaches 0
+  useEffect(() => {
+    if (
+      secondsRemaining === 0 &&
+      !hasAutoSubmitted.current &&
+      attempt?.status !== "COMPLETED"
+    ) {
+      void doTimedOutSubmit();
+    }
+  }, [secondsRemaining, doTimedOutSubmit, attempt?.status]);
 
   // ── Submit flow ──────────────────────────────────────────────
   // doSubmit is declared FIRST so handleSubmitRequest can list it as a dep
@@ -333,9 +430,30 @@ export function TakeAssessmentPage() {
           </h1>
 
           <div className="flex items-center gap-3">
+            {/* Countdown timer badge — only shown for timed assessments */}
+            {secondsRemaining !== null && (
+              <span
+                className={[
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full font-sans text-sm font-semibold tabular-nums",
+                  secondsRemaining <= 0
+                    ? "bg-red-600 text-white"
+                    : secondsRemaining <= attempt!.time_limit_minutes * 60 * 0.1
+                      ? "bg-red-600 text-white animate-pulse"
+                      : secondsRemaining <=
+                          attempt!.time_limit_minutes * 60 * 0.2
+                        ? "bg-amber-500 text-white"
+                        : "bg-brand-primary text-white",
+                ].join(" ")}
+                aria-live="polite"
+                aria-label={`Time remaining: ${formatCountdown(Math.max(0, secondsRemaining))}`}
+              >
+                <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+                {formatCountdown(Math.max(0, secondsRemaining))}
+              </span>
+            )}
             {/* Q X / total indicator */}
             {!isLoading && totalQuestions > 0 && (
-              <span className="font-sans text-sm text-brand-muted whitespace-nowrap">
+              <span className="font-sans text-sm font-semibold text-brand-ink whitespace-nowrap">
                 Q{currentIndex + 1}&nbsp;/&nbsp;{totalQuestions}
               </span>
             )}
@@ -559,6 +677,33 @@ export function TakeAssessmentPage() {
             className="px-4 py-2 rounded-full bg-brand-primary text-white font-sans text-sm hover:bg-brand-dark min-h-[44px] transition-colors"
           >
             Submit anyway
+          </button>
+        </div>
+      </Modal>
+
+      {/* ── Time's up modal ──────────────────────────────────── */}
+      <Modal
+        open={showTimesUpModal}
+        onOpenChange={() => {}}
+        title="Time's up!"
+        maxWidth="sm"
+      >
+        <p className="font-sans text-sm text-brand-body mb-5">
+          Your time has run out. Any unanswered questions have been marked as
+          incorrect. Your results are ready to view.
+        </p>
+        <div className="flex justify-end">
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={() =>
+              navigate(`/student/assessments/${attemptId}/results`, {
+                replace: true,
+              })
+            }
+            className="px-5 py-2 rounded-full bg-brand-primary text-white font-sans text-sm hover:bg-brand-dark min-h-[44px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? "Submitting…" : "View results"}
           </button>
         </div>
       </Modal>

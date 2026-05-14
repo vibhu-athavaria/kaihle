@@ -35,7 +35,13 @@ from app.models.assessment import (
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subtopic, Topic
 from app.models.school import ClassEnrollment
 from app.models.user import UserRole
-from app.schemas.attempts import AttemptDetailResponse, AttemptResultResponse, QuestionDetailItem
+from app.schemas.attempts import (
+    AttemptDetailResponse,
+    AttemptResultResponse,
+    AttemptReviewItem,
+    AttemptReviewResponse,
+    QuestionDetailItem,
+)
 
 logger = structlog.get_logger()
 
@@ -316,6 +322,12 @@ class AttemptService:
         )
         responses = list(responses_result.scalars().all())
 
+        # Start the clock the moment the student opens the assessment.
+        # This ensures the timer is accurate even if the student hasn't answered yet.
+        if attempt.started_at is None and attempt.status != AttemptStatus.COMPLETED:
+            attempt.started_at = datetime.now(UTC)
+            await self.db.flush()
+
         return attempt, assessment, questions, responses
 
     # ── Per-question response ────────────────────────────────────────────
@@ -327,6 +339,7 @@ class AttemptService:
         school_id: uuid.UUID,
         question_id: uuid.UUID,
         selected_key: str,
+        time_taken_ms: int | None = None,
     ) -> None:
         """Record a single answer for an in-progress attempt.
 
@@ -339,6 +352,7 @@ class AttemptService:
             school_id: The student's school (multi-tenancy guard).
             question_id: The question being answered.
             selected_key: The option key the student chose (e.g. "A").
+            time_taken_ms: Milliseconds the student spent on this question (optional).
 
         Raises:
             ValueError: If attempt not found or belongs to a different student/school.
@@ -387,7 +401,7 @@ class AttemptService:
             is_correct=is_correct,
             score=1.0 if is_correct else 0.0,
             scored_by=ScoredBy.RULE,
-            time_taken_ms=None,
+            time_taken_ms=time_taken_ms,
         )
         self.db.add(response)
 
@@ -412,6 +426,7 @@ class AttemptService:
         school_id: uuid.UUID,
         answers: list[dict[str, object]],
         onboarding_service: _OnboardingServiceProtocol,
+        timed_out: bool = False,
     ) -> AttemptResultResponse:
         """Submit all answers and finalise the attempt.
 
@@ -505,6 +520,41 @@ class AttemptService:
             self.db.add(response)
 
         await self.db.flush()
+
+        # When the client timer expired, mark every unanswered question as wrong.
+        # This ensures the score denominator covers all questions, not just answered ones.
+        if timed_out:
+            answered_result = await self.db.execute(
+                select(StudentResponse.question_id).where(StudentResponse.attempt_id == attempt_id)
+            )
+            answered_ids: set[uuid.UUID] = {row[0] for row in answered_result.all()}
+
+            all_question_ids_result = await self.db.execute(
+                select(AssessmentSelectedQuestion.question_id).where(
+                    AssessmentSelectedQuestion.assessment_id == attempt.assessment_id
+                )
+            )
+            unanswered_rows = [q_id for (q_id,) in all_question_ids_result.all() if q_id not in answered_ids]
+            for q_id in unanswered_rows:
+                self.db.add(
+                    StudentResponse(
+                        id=uuid.uuid4(),
+                        attempt_id=attempt_id,
+                        question_id=q_id,
+                        answer_given="",
+                        is_correct=False,
+                        score=0.0,
+                        scored_by=ScoredBy.RULE,
+                        time_taken_ms=None,
+                    )
+                )
+
+            await self.db.flush()
+            logger.info(
+                "timed_out_unanswered_marked_wrong",
+                attempt_id=str(attempt_id),
+                unanswered_count=len(unanswered_rows),
+            )
 
         # Compute score from all stored responses
         all_responses_result = await self.db.execute(
@@ -743,6 +793,122 @@ class AttemptService:
             submitted_at=attempt.completed_at,
             status=attempt.status.value if hasattr(attempt.status, "value") else str(attempt.status),
             questions=questions,
+        )
+
+    async def get_attempt_review(
+        self,
+        attempt_id: uuid.UUID,
+        student_id: uuid.UUID,
+        school_id: uuid.UUID,
+    ) -> AttemptReviewResponse:
+        """Return the per-question review for a student after they complete an attempt.
+
+        Only the owning student may call this. Only available once the attempt is COMPLETED.
+
+        Args:
+            attempt_id: The StudentAttempt UUID.
+            student_id: The requesting student (ownership check).
+            school_id: The student's school (multi-tenancy guard).
+
+        Returns:
+            AttemptReviewResponse with every question, the student's selection, and correct answer.
+
+        Raises:
+            AttemptNotFoundError: Attempt not found or doesn't belong to this student/school.
+            AttemptAccessDeniedError: Ownership mismatch.
+            ValueError: Attempt not yet completed.
+        """
+        attempt = await self.db.get(StudentAttempt, attempt_id)
+        if attempt is None or attempt.student_id != student_id:
+            raise AttemptAccessDeniedError("Access denied")
+
+        if attempt.status != AttemptStatus.COMPLETED:
+            raise ValueError("Attempt not yet completed")
+
+        assessment = await self.db.get(Assessment, attempt.assessment_id)
+        if assessment is None or assessment.school_id != school_id:
+            raise AttemptAccessDeniedError("Access denied")
+
+        # Load all responses for this attempt
+        responses_result = await self.db.execute(
+            select(StudentResponse).where(StudentResponse.attempt_id == attempt_id)
+        )
+        responses = responses_result.scalars().all()
+        response_map = {r.question_id: r for r in responses}
+        question_ids = list(response_map.keys())
+
+        # Load question details with subtopic and topic names
+        rows = (
+            await self.db.execute(
+                select(
+                    QuestionBank.id.label("id"),
+                    QuestionBank.question_text.label("question_text"),
+                    QuestionBank.correct_answer.label("correct_answer"),
+                    QuestionBank.difficulty_level.label("difficulty_level"),
+                    QuestionBank.options.label("options"),
+                    Subtopic.name.label("subtopic_name"),
+                    Topic.name.label("topic_name"),
+                )
+                .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
+                .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                .join(Topic, Topic.id == CurriculumTopic.topic_id)
+                .where(QuestionBank.id.in_(question_ids))
+            )
+        ).all()
+
+        question_map = {row.id: row for row in rows}
+
+        review_items: list[AttemptReviewItem] = []
+        for position, (q_id, resp) in enumerate(response_map.items(), start=1):
+            row = question_map.get(q_id)
+            if row is None:
+                continue
+
+            raw_options: list[dict[str, str]] = row.options or []
+            options_list = sorted(raw_options, key=lambda o: o.get("key", ""))
+
+            selected = resp.answer_given if resp.answer_given else None
+
+            review_items.append(
+                AttemptReviewItem(
+                    position=position,
+                    question_id=q_id,
+                    question_text=row.question_text,
+                    subtopic_name=row.subtopic_name,
+                    topic_name=row.topic_name,
+                    difficulty_level=row.difficulty_level or 0,
+                    options=options_list,
+                    selected_key=selected,
+                    correct_answer=row.correct_answer,
+                    is_correct=bool(resp.is_correct),
+                )
+            )
+
+        review_items.sort(key=lambda item: item.position)
+
+        total = len(review_items)
+        correct = sum(1 for item in review_items if item.is_correct)
+
+        logger.info(
+            "attempt_review_fetched",
+            attempt_id=str(attempt_id),
+            student_id=str(student_id),
+            question_count=total,
+        )
+
+        return AttemptReviewResponse(
+            attempt_id=attempt_id,
+            assessment_id=attempt.assessment_id,
+            title=assessment.title,
+            score=attempt.overall_score if attempt.overall_score is not None else 0.0,
+            correct_count=correct,
+            total_questions=total,
+            time_limit_minutes=assessment.time_limit_minutes,
+            timed_out=assessment.time_limit_minutes > 0
+            and attempt.completed_at is not None
+            and attempt.started_at is not None
+            and (attempt.completed_at - attempt.started_at).total_seconds() > assessment.time_limit_minutes * 60,
+            questions=review_items,
         )
 
     # ── Internal helpers ─────────────────────────────────────────────────

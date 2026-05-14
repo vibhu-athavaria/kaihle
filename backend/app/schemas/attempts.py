@@ -28,17 +28,49 @@ class AttemptResponse(BaseModel):
     questions: list[AssessmentQuestion]  # full pool for adaptive difficulty
     num_questions: int  # configured question count to ask
     responses: list[StudentResponseItem]  # previously saved answers for resuming
+    time_limit_minutes: int  # 0 = untimed
 
 
 class AnswerSubmitRequest(BaseModel):
     question_id: UUID
     selected_key: str  # the option key the student chose
+    time_taken_ms: int | None = None  # milliseconds spent on this question; None = not tracked
 
 
 class AttemptSubmitRequest(BaseModel):
     """Submit all answers at once — used when student clicks final Submit."""
 
     answers: list[AnswerSubmitRequest]
+    timed_out: bool = False  # True when the client timer expired; backend marks unanswered questions wrong
+
+
+class AttemptReviewItem(BaseModel):
+    """Per-question result for the student review screen shown after submission."""
+
+    position: int  # 1-based order in this attempt
+    question_id: UUID
+    question_text: str
+    subtopic_name: str
+    topic_name: str
+    difficulty_level: int  # 1–5
+    options: list[dict[str, str]]  # [{"key": "A", "text": "..."}]
+    selected_key: str | None  # None if student never answered (timed out)
+    correct_answer: str  # the key that is correct
+    is_correct: bool
+
+
+class AttemptReviewResponse(BaseModel):
+    """Full per-question breakdown returned to the student after submission."""
+
+    attempt_id: UUID
+    assessment_id: UUID
+    title: str
+    score: float  # 0.0–1.0
+    correct_count: int
+    total_questions: int
+    time_limit_minutes: int
+    timed_out: bool
+    questions: list[AttemptReviewItem]
 
 
 class AttemptResultResponse(BaseModel):

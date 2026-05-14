@@ -222,6 +222,7 @@ class TestSchemaInstantiation:
             questions=[],
             num_questions=10,
             responses=[],
+            time_limit_minutes=0,
         )
         assert a.status == "NOT_STARTED"
         assert a.questions == []
@@ -239,6 +240,7 @@ class TestSchemaInstantiation:
             questions=[],
             num_questions=10,
             responses=[],
+            time_limit_minutes=30,
         )
         assert a.status == "IN_PROGRESS"
         assert a.started_at is not None

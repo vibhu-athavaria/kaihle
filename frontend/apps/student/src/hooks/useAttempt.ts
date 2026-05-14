@@ -56,6 +56,7 @@ export interface AttemptResponse {
   questions: AttemptQuestion[]; // full pool for adaptive difficulty
   num_questions: number; // configured count to ask (not pool size)
   responses: StudentResponseItem[]; // previously saved answers for resuming
+  time_limit_minutes: number; // 0 = untimed
 }
 
 /** One answer entry in the bulk-submit body. */
@@ -130,6 +131,7 @@ interface SubmitResponseVars {
   attemptId: string;
   questionId: string;
   selectedKey: string;
+  timeTakenMs?: number; // milliseconds spent on this question
 }
 
 /**
@@ -140,10 +142,11 @@ interface SubmitResponseVars {
 export function useSubmitResponse() {
   const queryClient = useQueryClient();
   return useMutation<void, Error, SubmitResponseVars>({
-    mutationFn: async ({ attemptId, questionId, selectedKey }) => {
+    mutationFn: async ({ attemptId, questionId, selectedKey, timeTakenMs }) => {
       await apiClient.post(`/api/v1/attempts/${attemptId}/responses`, {
         question_id: questionId,
         selected_key: selectedKey,
+        time_taken_ms: timeTakenMs ?? null,
       });
     },
     onSuccess: (_, variables) => {
@@ -160,6 +163,39 @@ export function useSubmitResponse() {
 interface SubmitAttemptVars {
   attemptId: string;
   answers: AttemptAnswer[];
+  timed_out?: boolean;
+}
+
+// ─── Per-question review after submission ────────────────────
+
+export interface ReviewOption {
+  key: string;
+  text: string;
+}
+
+export interface AttemptReviewItem {
+  position: number;
+  question_id: string;
+  question_text: string;
+  subtopic_name: string;
+  topic_name: string;
+  difficulty_level: number;
+  options: ReviewOption[];
+  selected_key: string | null; // null = student never answered (timed out)
+  correct_answer: string;
+  is_correct: boolean;
+}
+
+export interface AttemptReviewResponse {
+  attempt_id: string;
+  assessment_id: string;
+  title: string;
+  score: number;
+  correct_count: number;
+  total_questions: number;
+  time_limit_minutes: number;
+  timed_out: boolean;
+  questions: AttemptReviewItem[];
 }
 
 /**
@@ -171,10 +207,10 @@ interface SubmitAttemptVars {
 export function useSubmitAttempt() {
   const queryClient = useQueryClient();
   return useMutation<AttemptResultResponse, Error, SubmitAttemptVars>({
-    mutationFn: async ({ attemptId, answers }) => {
+    mutationFn: async ({ attemptId, answers, timed_out = false }) => {
       const res = await apiClient.post<AttemptResultResponse>(
         `/api/v1/attempts/${attemptId}/submit`,
-        { answers },
+        { answers, timed_out },
       );
       return res.data;
     },
@@ -186,5 +222,23 @@ export function useSubmitAttempt() {
       // Bust classes so onboarding_diagnostic_status updates after a diagnostic submit.
       queryClient.invalidateQueries({ queryKey: ["student", "classes"] });
     },
+  });
+}
+
+/**
+ * Fetches the per-question review for a completed attempt.
+ * Only accessible by the owning student after submission.
+ */
+export function useAttemptReview(attemptId: string) {
+  return useQuery<AttemptReviewResponse>({
+    queryKey: ["student", "attempt", attemptId, "review"],
+    queryFn: async () => {
+      const res = await apiClient.get<AttemptReviewResponse>(
+        `/api/v1/attempts/${attemptId}/review`,
+      );
+      return res.data;
+    },
+    enabled: !!attemptId,
+    staleTime: Infinity, // review data never changes once the attempt is COMPLETED
   });
 }

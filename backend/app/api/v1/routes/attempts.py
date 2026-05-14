@@ -27,6 +27,7 @@ from app.schemas.attempts import (
     AttemptDetailResponse,
     AttemptResponse,
     AttemptResultResponse,
+    AttemptReviewResponse,
     AttemptSubmitRequest,
     StudentAttemptHistoryItem,
 )
@@ -119,6 +120,7 @@ async def get_class_diagnostic(
         questions=_questions_to_schema(questions),
         num_questions=num_questions,
         responses=[],  # Will be loaded on subsequent GET /attempts/:id
+        time_limit_minutes=assessment.time_limit_minutes if assessment else 0,
     )
 
 
@@ -166,6 +168,7 @@ async def start_assessment(
         questions=_questions_to_schema(questions),
         num_questions=num_questions,
         responses=[],
+        time_limit_minutes=assessment.time_limit_minutes if assessment else 0,
     )
 
 
@@ -197,8 +200,10 @@ async def get_attempt(
     except AttemptAccessDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied") from exc
 
-    assessment_title = assessment.title if assessment else "Assessment"
+    # Commit the started_at side-effect set by the service when the student first opens the attempt
+    await db.commit()
 
+    assessment_title = assessment.title if assessment else "Assessment"
     num_questions = assessment.question_count or 0
 
     return AttemptResponse(
@@ -216,6 +221,7 @@ async def get_attempt(
             {"question_id": r.question_id, "selected_key": r.answer_given, "is_correct": r.is_correct}
             for r in responses
         ],
+        time_limit_minutes=assessment.time_limit_minutes if assessment else 0,
     )
 
 
@@ -240,6 +246,7 @@ async def submit_response(
             school_id=current_user.school_id,
             question_id=body.question_id,
             selected_key=body.selected_key,
+            time_taken_ms=body.time_taken_ms,
         )
         await db.commit()
     except AttemptAlreadyCompletedError as exc:
@@ -280,6 +287,7 @@ async def submit_attempt(
             school_id=current_user.school_id,
             answers=answers,
             onboarding_service=onboarding_service,
+            timed_out=body.timed_out,
         )
         await db.commit()
     except AttemptAlreadyCompletedError as exc:
@@ -316,6 +324,31 @@ async def get_attempt_results(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied") from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/attempts/{attempt_id}/review", response_model=AttemptReviewResponse)
+async def get_attempt_review(
+    attempt_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.STUDENT)),
+    db: AsyncSession = Depends(get_db),
+) -> AttemptReviewResponse:
+    """Return the full per-question review for a student after completing an attempt.
+
+    Shows every question, what the student selected, what the correct answer was,
+    and whether it was correct. Only accessible by the owning student on a COMPLETED attempt.
+    """
+    assert current_user.school_id is not None, "Student must belong to a school"
+    service = AttemptService(db)
+    try:
+        return await service.get_attempt_review(
+            attempt_id=attempt_id,
+            student_id=current_user.id,
+            school_id=current_user.school_id,
+        )
+    except AttemptAccessDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/attempts/{attempt_id}/detail", response_model=AttemptDetailResponse)
