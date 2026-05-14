@@ -26,6 +26,7 @@ from app.schemas.students import (
     ConceptGuideResponse,
     McqAnswerRequest,
     McqAnswerResponse,
+    StudentAssessmentItem,
     StudentClassResponse,
     StudentInfoResponse,
 )
@@ -129,6 +130,26 @@ async def get_my_classes(
 
     logger.info("my_classes_requested", student_id=str(current_user.id))
     return await UserService(db).get_student_classes(current_user)
+
+
+@router.get("/me/assessments", response_model=list[StudentAssessmentItem])
+async def get_my_assessments(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[StudentAssessmentItem]:
+    """Get all assessments across the student's active enrolled classes.
+
+    Returns ACTIVE and CLOSED assessments with attempt_status joined server-side.
+    NOT_STARTED when no attempt row exists; IN_PROGRESS or COMPLETED otherwise.
+
+    Raises:
+        403: If user is not a student.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+
+    logger.info("my_assessments_requested", student_id=str(current_user.id))
+    return await UserService(db).get_my_assessments(current_user)
 
 
 @router.post("/me/concept-guide", response_model=ConceptGuideResponse)

@@ -1,7 +1,7 @@
 import { useAuth } from "@kaihle/auth";
 import { useStudentInfo } from "./useStudentInfo";
 import { useMyClasses, type StudentClassResponse } from "./useMyClasses";
-import { useStudentAssessments } from "./useStudentAssessments";
+import { useMyAssessments } from "./useMyAssessments";
 
 export interface SidebarClass {
   id: string;
@@ -48,9 +48,13 @@ export function useStudentLayoutProps(): StudentLayoutProps {
 
   const classes = Array.isArray(classesData) ? classesData : [];
 
-  const classIds = classes.map((cls: StudentClassResponse) => cls.id);
-
-  const { newCount } = useStudentAssessments(classIds, studentInfo?.id);
+  const { data: assessments } = useMyAssessments();
+  const newCount = (assessments ?? []).filter(
+    (a) =>
+      a.status === "ACTIVE" &&
+      a.assessmentType !== "DIAGNOSTIC" &&
+      a.attemptStatus === "NOT_STARTED",
+  ).length;
 
   const firstName = studentInfo?.firstName ?? "";
   const lastName = studentInfo?.lastName ?? "";

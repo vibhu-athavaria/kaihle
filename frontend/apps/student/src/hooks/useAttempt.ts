@@ -110,12 +110,16 @@ export function useAttempt(attemptId: string) {
  * Used for teacher-created (Tier 2) assessments where no attemptId exists yet.
  */
 export function useStartAssessment() {
+  const queryClient = useQueryClient();
   return useMutation<AttemptResponse, Error, string>({
     mutationFn: async (assessmentId: string) => {
       const res = await apiClient.post<AttemptResponse>(
         `/api/v1/assessments/${assessmentId}/start`,
       );
       return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student", "assessments"] });
     },
   });
 }
@@ -177,9 +181,10 @@ export function useSubmitAttempt() {
     onSuccess: () => {
       // Bust dashboard so action_items and diagnostic_status reflect completion.
       queryClient.invalidateQueries({ queryKey: ["student", "dashboard"] });
-      // Bust attempt history so attemptStatus in the assessments list page
-      // updates from IN_PROGRESS → COMPLETED without waiting out the staleTime.
-      queryClient.invalidateQueries({ queryKey: ["student", "attempts"] });
+      // Bust unified assessments query so attemptStatus reflects COMPLETED immediately.
+      queryClient.invalidateQueries({ queryKey: ["student", "assessments"] });
+      // Bust classes so onboarding_diagnostic_status updates after a diagnostic submit.
+      queryClient.invalidateQueries({ queryKey: ["student", "classes"] });
     },
   });
 }
