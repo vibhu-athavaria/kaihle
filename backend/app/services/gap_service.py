@@ -19,7 +19,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.curriculum import CurriculumTopic, Subtopic, Topic
+from app.models.curriculum import CurriculumTopic, Grade, Subtopic, Topic
 from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User
@@ -344,6 +344,12 @@ class GapService:
                 detail=f"Class {class_id} not found in school {school_id}",
             )
 
+        # Subquery: subtopic IDs that have gap_state rows for this class.
+        # The Tier 1 diagnostic covers current AND previous grade subtopics, so
+        # gap_states may reference subtopics outside class_.grade_id. We include
+        # any subtopic that was actually assessed so they appear in the heatmap.
+        assessed_subtopic_ids = select(GapState.subtopic_id).where(GapState.class_id == class_id).scalar_subquery()
+
         subtopic_rows = (
             await self.db.execute(
                 select(
@@ -351,14 +357,18 @@ class GapService:
                     Subtopic.name.label("subtopic_name"),
                     Topic.id.label("topic_id"),
                     Topic.name.label("topic_name"),
+                    CurriculumTopic.grade_id.label("grade_id"),
+                    Grade.name.label("grade_name"),
                 )
                 .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
                 .join(Topic, Topic.id == CurriculumTopic.topic_id)
+                .join(Grade, Grade.id == CurriculumTopic.grade_id)
                 .where(
                     CurriculumTopic.subject_id == subject_id,
-                    CurriculumTopic.grade_id == class_.grade_id,
                     CurriculumTopic.is_active.is_(True),
                     Subtopic.is_active.is_(True),
+                    # Current grade curriculum OR assessed via diagnostic
+                    ((CurriculumTopic.grade_id == class_.grade_id) | (Subtopic.id.in_(assessed_subtopic_ids))),
                 )
                 .order_by(Topic.name, Subtopic.name)
             )
@@ -404,6 +414,8 @@ class GapService:
             nodes.append(
                 GapMapNode(
                     subtopic_id=st.subtopic_id,
+                    grade_id=st.grade_id,
+                    grade_name=st.grade_name,
                     subtopic_name=st.subtopic_name,
                     topic_id=st.topic_id,
                     topic_name=st.topic_name,
@@ -418,6 +430,7 @@ class GapService:
             subject_id=subject_id,
             generated_at=datetime.now(UTC),
             nodes=nodes,
+            has_student_data=len(gap_rows) > 0,
         )
 
     async def get_student_gap_map(

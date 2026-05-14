@@ -17,5 +17,8 @@ export const useClassGapMap = (
       return response.data;
     },
     enabled: !!classId && !!subjectId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 15_000,
+    refetchInterval: (query) => {
+      return query.state.data?.has_student_data ? false : 15_000;
+    },
   });

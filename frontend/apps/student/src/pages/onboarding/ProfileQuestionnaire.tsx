@@ -79,7 +79,7 @@ export function ProfileQuestionnaire() {
         responses,
       });
       reset();
-      await queryClient.invalidateQueries({
+      await queryClient.refetchQueries({
         queryKey: ["student", "onboarding-status"],
       });
       navigate("/student/dashboard");

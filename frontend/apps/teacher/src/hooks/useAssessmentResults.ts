@@ -82,7 +82,13 @@ export function useAssessmentResults(assessmentId: string) {
       );
       return res.data;
     },
-    staleTime: 60_000,
+    staleTime: 15_000,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 15_000;
+      // Stop polling once all students have submitted
+      return data.submitted_count >= data.total_students ? false : 15_000;
+    },
     enabled: !!assessmentId,
   });
 }

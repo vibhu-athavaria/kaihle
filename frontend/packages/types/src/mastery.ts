@@ -40,10 +40,10 @@ export interface MasteryStyle {
  * @returns MasteryStyle with Tailwind classes and label
  *
  * Bands (per CONSTITUTION §10 and DESIGN_SYSTEM.md §2):
- *   > 0.7   → Strong      (#16a34a — brand-green)
- *   0.4–0.7 → Developing  (#f59e0b — brand-amber)
- *   < 0.4   → Needs Work  (#ef4444 — brand-red)
- *   null    → Not assessed (#9ca3af — brand-muted)
+ *   > 0.7   → Strong      (dot: brand-green, text: brand-green-dark)
+ *   0.4–0.7 → Developing  (dot: brand-amber, text: brand-amber-dark)
+ *   < 0.4   → Needs Work  (dot: brand-red,   text: brand-red-dark)
+ *   null    → Not assessed (brand-muted)
  */
 export function getMasteryStyle(score: number | null): MasteryStyle {
   if (score === null) {
@@ -59,7 +59,7 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
   if (score > 0.7) {
     return {
       dotClass: "bg-brand-green",
-      textClass: "text-brand-green",
+      textClass: "text-brand-green-dark",
       bgClass: "bg-brand-green-light",
       label: "Strong",
       strokeColour: "#16a34a",
@@ -69,20 +69,20 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
   if (score >= 0.4) {
     return {
       dotClass: "bg-brand-amber",
-      textClass: "text-brand-amber",
+      textClass: "text-brand-amber-dark",
       bgClass: "bg-brand-amber-light",
       label: "Developing",
       strokeColour: "#f59e0b",
-      fillColour: "#d97706",
+      fillColour: "#92400e",
     };
   }
   return {
     dotClass: "bg-brand-red",
-    textClass: "text-brand-red",
+    textClass: "text-brand-red-dark",
     bgClass: "bg-brand-red-light",
     label: "Needs Work",
     strokeColour: "#ef4444",
-    fillColour: "#dc2626",
+    fillColour: "#b91c1c",
   };
 }
 

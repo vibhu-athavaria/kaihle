@@ -1,19 +1,194 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Download } from "lucide-react";
+import { getMasteryStyle, scoreToPercent } from "@kaihle/types";
 import { useClassGapMap } from "../../hooks/useClassGapMap";
 import { useClass } from "../../hooks/useClass";
 import { useClassAssessments } from "../../hooks/useClassAssessments";
-import { GapMapCell } from "../../components/gap-map/GapMapCell";
+import { useClassEnrollments } from "../../hooks/useClassEnrollments";
 import { LearningProfileSidePanel } from "../../components/gap-map/LearningProfileSidePanel";
+
+// ── Heat cell ─────────────────────────────────────────────────────────────────
+
+function HeatCell({
+  score,
+  label: ariaLabel,
+  onClick,
+  variant = "default",
+}: {
+  score: number | null;
+  label: string;
+  onClick?: () => void;
+  variant?: "default" | "summary";
+}) {
+  const { bgClass, textClass, label } = getMasteryStyle(score);
+  const pct = scoreToPercent(score);
+
+  const baseClass = [
+    "w-full h-14 flex flex-col items-center justify-center gap-0.5 rounded select-none",
+    bgClass,
+    textClass,
+    variant === "summary" ? "ring-1 ring-inset ring-black/10" : "",
+  ].join(" ");
+
+  if (!onClick) {
+    return (
+      <div className={baseClass} aria-label={ariaLabel}>
+        {score !== null ? (
+          <>
+            <span className="text-sm font-bold leading-none">{pct}</span>
+            <span className="text-[10px] font-medium leading-none opacity-70">
+              {label}
+            </span>
+          </>
+        ) : (
+          <span className="text-xs font-medium opacity-40">—</span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className={[
+        baseClass,
+        "transition-all hover:scale-[1.06] hover:shadow-lg hover:z-10 relative",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1",
+      ].join(" ")}
+    >
+      {score !== null ? (
+        <>
+          <span className="text-sm font-bold leading-none">{pct}</span>
+          <span className="text-[10px] font-medium leading-none opacity-70">
+            {label}
+          </span>
+        </>
+      ) : (
+        <span className="text-xs font-medium opacity-40">—</span>
+      )}
+    </button>
+  );
+}
+
+// ── Avg badge (used in student header + bottom row) ───────────────────────────
+
+function AvgBadge({ score }: { score: number | null }) {
+  const { bgClass, textClass } = getMasteryStyle(score);
+  return (
+    <span
+      className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${bgClass} ${textClass}`}
+    >
+      {score !== null ? scoreToPercent(score) : "—"}
+    </span>
+  );
+}
+
+// ── Legend ────────────────────────────────────────────────────────────────────
+
+const LEGEND_SCORES: Array<[number | null, string]> = [
+  [0.8, "Strong"],
+  [0.55, "Developing"],
+  [0.2, "Needs Work"],
+  [null, "Not assessed"],
+];
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export function GapMapPage() {
   const { classId } = useParams<{ classId: string }>();
   const { data: currentClass } = useClass(classId);
   const subjectId = currentClass?.subject_id ?? null;
+
   const { data: assessments } = useClassAssessments(classId);
+  const { data: enrollments = [] } = useClassEnrollments(classId);
+  const { data, isLoading, isError } = useClassGapMap(
+    classId ?? null,
+    subjectId,
+  );
+
   const hasDiagnostic =
     assessments?.some((a) => a.assessment_type === "DIAGNOSTIC") ?? false;
+  const hasAnyStudentData = data?.has_student_data ?? false;
+
+  const completedCount = enrollments.filter(
+    (e) => e.diagnostic_completed,
+  ).length;
+  const totalCount = enrollments.length;
+  const pendingCount = totalCount - completedCount;
+
+  // Collect all students across all nodes (a student in any node appears as a column)
+  const studentMap = new Map<string, string>();
+  data?.nodes?.forEach((n: any) =>
+    n.student_scores.forEach((s: any) =>
+      studentMap.set(s.student_id, s.student_name),
+    ),
+  );
+  const students = Array.from(studentMap.entries()).map(([id, name]) => ({
+    student_id: id,
+    student_name: name,
+  }));
+
+  // Group nodes: grade → topic → subtopic rows
+  type TopicGroup = { topicId: string; topicName: string; nodes: any[] };
+  type GradeGroup = {
+    gradeId: string;
+    gradeName: string;
+    topics: TopicGroup[];
+  };
+
+  const gradeGroups: GradeGroup[] = [];
+  const gradeIndexMap = new Map<string, number>();
+  const topicIndexMap = new Map<string, number>(); // "gradeId:topicId" → index in grade.topics
+
+  data?.nodes?.forEach((n: any) => {
+    if (!gradeIndexMap.has(n.grade_id)) {
+      gradeIndexMap.set(n.grade_id, gradeGroups.length);
+      gradeGroups.push({
+        gradeId: n.grade_id,
+        gradeName: n.grade_name,
+        topics: [],
+      });
+    }
+    const gradeGroup = gradeGroups[gradeIndexMap.get(n.grade_id)!];
+    const topicKey = `${n.grade_id}:${n.topic_id}`;
+    if (!topicIndexMap.has(topicKey)) {
+      topicIndexMap.set(topicKey, gradeGroup.topics.length);
+      gradeGroup.topics.push({
+        topicId: n.topic_id,
+        topicName: n.topic_name,
+        nodes: [],
+      });
+    }
+    gradeGroup.topics[topicIndexMap.get(topicKey)!].nodes.push(n);
+  });
+
+  // Per-topic class average (avg of node.class_average within topic)
+  const topicClassAvg = (nodes: any[]): number | null => {
+    const avgs = nodes
+      .map((n: any) => n.class_average)
+      .filter((x: number | null): x is number => x !== null);
+    return avgs.length > 0
+      ? avgs.reduce((a: number, b: number) => a + b, 0) / avgs.length
+      : null;
+  };
+
+  // Per-student overall average across all nodes
+  const studentOverallAvg = (studentId: string): number | null => {
+    const scores =
+      data?.nodes
+        ?.map(
+          (n: any) =>
+            n.student_scores.find((s: any) => s.student_id === studentId)
+              ?.mastery_score ?? null,
+        )
+        .filter((x: number | null): x is number => x !== null) ?? [];
+    return scores.length > 0
+      ? scores.reduce((a: number, b: number) => a + b, 0) / scores.length
+      : null;
+  };
 
   const [selectedStudent, setSelectedStudent] = useState<{
     studentId: string;
@@ -26,27 +201,18 @@ export function GapMapPage() {
   } | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
 
-  const { data, isLoading, isError } = useClassGapMap(
-    classId ?? null,
-    subjectId,
-  );
-
-  const firstNode = data?.nodes?.[0];
-  const students = firstNode?.student_scores ?? [];
-
   const handleCellClick = (studentId: string, studentName: string) => {
     const subtopicScores =
       data?.nodes?.map((n: any) => {
-        const studentScore = n.student_scores.find(
+        const score = n.student_scores.find(
           (s: any) => s.student_id === studentId,
         );
         return {
           subtopicName: n.subtopic_name,
           topicName: n.topic_name,
-          masteryScore: studentScore?.mastery_score ?? null,
+          masteryScore: score?.mastery_score ?? null,
         };
       }) ?? [];
-
     setSelectedStudent({ studentId, studentName, subtopicScores });
     setPanelOpen(true);
   };
@@ -71,24 +237,22 @@ export function GapMapPage() {
         ]);
       }
     }
-    const csv = rows
-      .map((r) => r.map((cell) => `"${cell}"`).join(","))
-      .join("\n");
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const dateStr = new Date().toISOString().slice(0, 10);
     a.href = url;
-    a.download = `gap-map-${(currentClass?.name ?? "class").replace(
-      /\s+/g,
-      "-",
-    )}-${(currentClass?.subject_name ?? "subject").replace(/\s+/g, "-")}-${dateStr}.csv`;
+    a.download = `gap-map-${(currentClass.name ?? "class").replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
+  // Total columns = sticky-left subtopic + N students + sticky-right class avg
+  const totalCols = students.length + 2;
+
   return (
     <div className="p-6 space-y-6">
+      {/* ── Breadcrumb + export ──────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <nav
           className="flex items-center gap-2 text-sm text-brand-muted"
@@ -110,7 +274,7 @@ export function GapMapPage() {
           <span aria-hidden="true">/</span>
           <span className="text-brand-ink font-medium">Gap Map</span>
         </nav>
-        {data && (
+        {hasAnyStudentData && (
           <button
             type="button"
             onClick={handleExportCsv}
@@ -122,34 +286,53 @@ export function GapMapPage() {
         )}
       </div>
 
-      <div>
-        <h1 className="font-display font-bold text-2xl text-brand-ink">
-          Gap Map
-        </h1>
-        <p className="text-sm text-brand-muted">
-          {currentClass
-            ? `${currentClass.name} — ${currentClass.subject_name}`
-            : "Class mastery heatmap by subtopic"}
-        </p>
+      {/* ── Title + submission counter ────────────────────────────────────── */}
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h1 className="font-display font-bold text-2xl text-brand-ink">
+            Gap Map
+          </h1>
+          <p className="text-sm text-brand-muted mt-0.5">
+            {currentClass
+              ? `${currentClass.name} — ${currentClass.subject_name}`
+              : "Class mastery heatmap by subtopic"}
+          </p>
+        </div>
+        {hasDiagnostic && totalCount > 0 && (
+          <div className="text-right shrink-0">
+            <p className="text-sm font-semibold text-brand-ink">
+              {completedCount} of {totalCount} students
+            </p>
+            <p className="text-xs text-brand-muted">
+              {pendingCount > 0
+                ? `${pendingCount} yet to submit diagnostic`
+                : "All students submitted"}
+            </p>
+          </div>
+        )}
       </div>
 
+      {/* ── Error ───────────────────────────────────────────────────────── */}
       {isError && (
         <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm">
           Failed to load gap map data. Please try again.
         </div>
       )}
 
+      {/* ── Skeleton ─────────────────────────────────────────────────────── */}
       {isLoading && (
         <div className="animate-pulse space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-12 bg-gray-100 rounded-lg" />
+          <div className="h-8 bg-gray-100 rounded w-1/4 mb-4" />
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="h-14 bg-gray-100 rounded-lg" />
           ))}
         </div>
       )}
 
-      {!isLoading && data && students.length === 0 && !hasDiagnostic && (
+      {/* ── Empty: no diagnostic ─────────────────────────────────────────── */}
+      {!isLoading && data && !hasAnyStudentData && !hasDiagnostic && (
         <div className="bg-white rounded-2xl border border-brand-border p-12 text-center">
-          <span className="text-4xl mb-3" role="img" aria-label="chart">
+          <span className="text-4xl mb-3 block" role="img" aria-label="chart">
             📊
           </span>
           <p className="font-display font-semibold text-brand-ink mb-2">
@@ -161,121 +344,214 @@ export function GapMapPage() {
           </p>
           <Link
             to={`/teacher/classes/${classId}`}
-            className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark focus-visible:ring-2 focus-visible:ring-brand-gold rounded transition-colors"
+            className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark rounded transition-colors"
           >
             Design diagnostic →
           </Link>
         </div>
       )}
 
-      {!isLoading && data && students.length === 0 && hasDiagnostic && (
+      {/* ── Empty: waiting for students ──────────────────────────────────── */}
+      {!isLoading && data && !hasAnyStudentData && hasDiagnostic && (
         <div className="bg-white rounded-2xl border border-brand-border p-12 text-center">
-          <span className="text-4xl mb-3" role="img" aria-label="hourglass">
+          <span
+            className="text-4xl mb-3 block"
+            role="img"
+            aria-label="hourglass"
+          >
             ⏳
           </span>
           <p className="font-display font-semibold text-brand-ink mb-2">
             Waiting for students to complete the diagnostic
           </p>
           <p className="text-sm text-brand-muted">
-            The diagnostic is ready — results will appear here automatically as
-            students submit their responses.
+            Results will appear here automatically as students submit.
           </p>
+          {pendingCount > 0 && totalCount > 0 && (
+            <p className="text-xs text-brand-muted mt-3">
+              {pendingCount} of {totalCount} students yet to submit
+            </p>
+          )}
         </div>
       )}
 
-      {data && students.length > 0 && (
-        <div className="bg-white rounded-2xl border border-brand-border shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  <th className="sticky left-0 bg-white z-10 px-4 py-3 text-left text-xs font-bold uppercase tracking-widest text-role-teacher-muted border-b border-brand-border min-w-[200px]">
-                    Subtopic
-                  </th>
-                  {students.map((s: any) => (
-                    <th
-                      key={s.student_id}
-                      className="px-2 py-3 text-center text-xs font-bold uppercase tracking-widest text-role-teacher-muted border-b border-brand-border min-w-[60px]"
-                    >
-                      <div className="[writing-mode:vertical-rl] rotate-180">
-                        {s.student_name}
-                      </div>
+      {/* ── Heatmap ──────────────────────────────────────────────────────── */}
+      {data && hasAnyStudentData && (
+        <>
+          {/* Legend + hint */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-5">
+              {LEGEND_SCORES.map(([score, label]) => {
+                const { bgClass, textClass } = getMasteryStyle(score);
+                return (
+                  <div key={label} className="flex items-center gap-1.5">
+                    <span
+                      className={`w-4 h-4 rounded ${bgClass}`}
+                      aria-hidden="true"
+                    />
+                    <span className={`text-xs font-medium ${textClass}`}>
+                      {label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-brand-muted italic">
+              Click any cell to view that student's full learning profile
+            </p>
+          </div>
+
+          {pendingCount > 0 && (
+            <p className="text-xs text-brand-muted">
+              {pendingCount} student{pendingCount !== 1 ? "s" : ""} yet to
+              submit — their columns will appear once they complete the
+              diagnostic.
+            </p>
+          )}
+
+          {/* Table */}
+          <div className="bg-white rounded-2xl border border-brand-border shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                {/* ── Column headers ───────────────────────────────────────── */}
+                <thead>
+                  <tr className="bg-white">
+                    {/* Subtopic label — sticky left */}
+                    <th className="sticky left-0 z-30 bg-white px-4 py-3 text-left text-xs font-bold uppercase tracking-widest text-role-teacher-muted border-b border-brand-border min-w-[220px]">
+                      Subtopic
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.nodes?.map((node: any) => (
-                  <tr key={node.subtopic_id}>
-                    <td className="sticky left-0 bg-white z-10 px-4 py-2 text-sm text-brand-ink border-b border-brand-border">
-                      <div className="font-medium">{node.subtopic_name}</div>
-                      <div className="text-xs text-brand-muted">
-                        {node.topic_name}
-                      </div>
-                    </td>
-                    {node.student_scores.map((ss: any) => (
-                      <td
-                        key={ss.student_id}
-                        className="px-1 py-1 border-b border-brand-border"
-                      >
-                        <GapMapCell
-                          masteryScore={ss.mastery_score}
-                          studentId={ss.student_id}
-                          studentName={ss.student_name}
-                          subtopicName={node.subtopic_name}
-                          onClick={() =>
-                            handleCellClick(ss.student_id, ss.student_name)
-                          }
-                        />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-                {/* Class average — pinned bottom row (spec requirement) */}
-                <tr className="bg-brand-bg border-t-2 border-brand-border">
-                  <td className="sticky left-0 bg-brand-bg z-10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-role-teacher-muted border-b border-brand-border">
-                    Class Avg
-                  </td>
-                  {data.nodes?.length > 0 &&
-                    data.nodes[0].student_scores.map((ss: any) => {
-                      const allScores = data.nodes
-                        .map((n: any) => {
-                          const s = n.student_scores.find(
-                            (x: any) => x.student_id === ss.student_id,
-                          );
-                          return s?.mastery_score ?? null;
-                        })
-                        .filter((x: number | null): x is number => x !== null);
-                      const avg =
-                        allScores.length > 0
-                          ? allScores.reduce(
-                              (a: number, b: number) => a + b,
-                              0,
-                            ) / allScores.length
-                          : null;
+
+                    {/* Student names + their overall avg */}
+                    {students.map((s) => {
+                      const avg = studentOverallAvg(s.student_id);
                       return (
-                        <td
-                          key={ss.student_id}
-                          className="px-1 py-1 border-b border-brand-border text-center"
+                        <th
+                          key={s.student_id}
+                          className="px-1.5 py-3 text-center border-b border-brand-border min-w-[80px]"
                         >
-                          <span className="text-xs font-semibold text-brand-ink">
-                            {avg !== null ? `${Math.round(avg * 100)}%` : "—"}
-                          </span>
-                        </td>
+                          <div className="flex flex-col items-center gap-1.5">
+                            <div className="[writing-mode:vertical-rl] rotate-180 text-xs font-semibold text-role-teacher-muted whitespace-nowrap">
+                              {s.student_name}
+                            </div>
+                            <AvgBadge score={avg} />
+                          </div>
+                        </th>
                       );
                     })}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
-      {data && students.length > 0 && (
-        <p className="text-sm text-brand-muted mt-4">
-          Click any cell to view that student&apos;s learning profile and assign
-          a targeted study plan directly.
-        </p>
+                    {/* Class avg column header — sticky right */}
+                    <th className="sticky right-0 z-30 bg-gray-50 px-3 py-3 text-center text-xs font-bold uppercase tracking-widest text-role-teacher-muted border-b border-l border-brand-border min-w-[90px]">
+                      Class Avg
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {gradeGroups.map(({ gradeId, gradeName, topics }) => (
+                    <>
+                      {/* ── Grade header ──────────────────────────────── */}
+                      <tr key={`grade-${gradeId}`}>
+                        <td
+                          colSpan={totalCols}
+                          className="px-4 py-2 bg-brand-ink border-y border-brand-border"
+                        >
+                          <span className="text-xs font-bold uppercase tracking-widest text-white">
+                            {gradeName}
+                          </span>
+                        </td>
+                      </tr>
+
+                      {topics.map(({ topicId, topicName, nodes }) => {
+                        const topicAvg = topicClassAvg(nodes);
+                        return (
+                          <>
+                            {/* ── Topic section header ──────────────────── */}
+                            <tr key={`topic-${gradeId}-${topicId}`}>
+                              <td
+                                colSpan={totalCols}
+                                className="bg-brand-bg px-4 py-2 border-b border-brand-border"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-semibold text-brand-ink">
+                                    {topicName}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs text-brand-muted">
+                                      topic avg
+                                    </span>
+                                    <AvgBadge score={topicAvg} />
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+
+                            {/* ── Subtopic rows ──────────────────────────── */}
+                            {nodes.map((node: any) => (
+                              <tr
+                                key={node.subtopic_id}
+                                className="group hover:bg-amber-50/30 transition-colors"
+                              >
+                                <td className="sticky left-0 z-10 bg-white group-hover:bg-amber-50/30 px-4 py-1.5 text-sm text-brand-ink border-b border-brand-border transition-colors">
+                                  {node.subtopic_name}
+                                </td>
+                                {students.map((s) => {
+                                  const ss = node.student_scores.find(
+                                    (x: any) => x.student_id === s.student_id,
+                                  );
+                                  return (
+                                    <td
+                                      key={s.student_id}
+                                      className="px-1.5 py-1.5 border-b border-brand-border"
+                                    >
+                                      <HeatCell
+                                        score={ss?.mastery_score ?? null}
+                                        label={`${s.student_name} — ${node.subtopic_name}`}
+                                        onClick={() =>
+                                          handleCellClick(
+                                            s.student_id,
+                                            s.student_name,
+                                          )
+                                        }
+                                      />
+                                    </td>
+                                  );
+                                })}
+                                <td className="sticky right-0 z-10 bg-gray-50 px-1.5 py-1.5 border-b border-l border-brand-border">
+                                  <HeatCell
+                                    score={node.class_average}
+                                    label={`Class average — ${node.subtopic_name}`}
+                                    variant="summary"
+                                  />
+                                </td>
+                              </tr>
+                            ))}
+                          </>
+                        );
+                      })}
+                    </>
+                  ))}
+
+                  {/* ── Student average row ───────────────────────────────── */}
+                  <tr className="bg-brand-bg border-t-2 border-brand-border">
+                    <td className="sticky left-0 z-10 bg-brand-bg px-4 py-3 text-xs font-bold uppercase tracking-widest text-role-teacher-muted">
+                      Student Avg
+                    </td>
+                    {students.map((s) => (
+                      <td
+                        key={s.student_id}
+                        className="px-1.5 py-3 text-center"
+                      >
+                        <AvgBadge score={studentOverallAvg(s.student_id)} />
+                      </td>
+                    ))}
+                    {/* Empty corner */}
+                    <td className="sticky right-0 z-10 bg-brand-bg border-l border-brand-border" />
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       <LearningProfileSidePanel
