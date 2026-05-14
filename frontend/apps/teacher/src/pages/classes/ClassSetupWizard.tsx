@@ -565,6 +565,20 @@ function DiagnosticBuilderStep({ classId, onBack, onDone }: Step2Props) {
               </div>
             ) : (
               <>
+                {/* Previous grade section — shown first, open by default */}
+                {previousTopics.length > 0 && (
+                  <TopicGroupSection
+                    gradeLabel={`Previous Grade (Grade ${gradeTopics!.previous_grade_level})`}
+                    isCurrent={false}
+                    topics={previousTopics}
+                    selectedIds={selectedTopicIds}
+                    questionsPerTopic={questionsPerTopic}
+                    onToggle={toggleTopic}
+                    onSelectAll={selectAllPrevious}
+                    defaultOpen={true}
+                  />
+                )}
+
                 {/* Current grade section */}
                 {currentTopics.length > 0 && (
                   <TopicGroupSection
@@ -576,20 +590,6 @@ function DiagnosticBuilderStep({ classId, onBack, onDone }: Step2Props) {
                     onToggle={toggleTopic}
                     onSelectAll={selectAllCurrent}
                     defaultOpen={true}
-                  />
-                )}
-
-                {/* Previous grade section */}
-                {previousTopics.length > 0 && (
-                  <TopicGroupSection
-                    gradeLabel={`Previous Grade (Grade ${gradeTopics!.previous_grade_level})`}
-                    isCurrent={false}
-                    topics={previousTopics}
-                    selectedIds={selectedTopicIds}
-                    questionsPerTopic={questionsPerTopic}
-                    onToggle={toggleTopic}
-                    onSelectAll={selectAllPrevious}
-                    defaultOpen={false}
                   />
                 )}
               </>
