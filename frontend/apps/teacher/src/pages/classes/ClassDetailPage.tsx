@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import {
-  getMasteryStyle,
-  scoreToPercent,
-  getSubjectColor,
-} from "@kaihle/types";
+import { getSubjectColor } from "@kaihle/types";
 import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { useClassEnrollments } from "../../hooks/useClassEnrollments";
 import { useClass } from "../../hooks/useClass";
@@ -50,8 +46,6 @@ export function ClassDetailPage() {
     );
   }
 
-  const { dotClass, textClass, label } = getMasteryStyle(null);
-  const displayPct = scoreToPercent(null);
   const subjectColor = getSubjectColor(cls.subject_name);
   const studentCount = studentsLoading ? null : students.length;
 
@@ -105,11 +99,6 @@ export function ClassDetailPage() {
               {studentCount !== null
                 ? `${studentCount} student${studentCount !== 1 ? "s" : ""}`
                 : "—"}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${dotClass}`} />
-              <span className={`font-semibold ${textClass}`}>{displayPct}</span>
-              <span>{label}</span>
             </span>
           </div>
         </div>

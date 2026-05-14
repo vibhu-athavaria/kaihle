@@ -48,8 +48,8 @@ export interface MasteryStyle {
 export function getMasteryStyle(score: number | null): MasteryStyle {
   if (score === null) {
     return {
-      dotClass: "bg-brand-body",
-      textClass: "text-brand-body",
+      dotClass: "bg-brand-muted",
+      textClass: "text-brand-muted",
       bgClass: "bg-gray-50",
       label: "Not assessed",
       strokeColour: "#9ca3af",
