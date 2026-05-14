@@ -163,6 +163,7 @@ interface SubmitAttemptVars {
  * Triggers scoring on the backend and returns the result summary.
  */
 export function useSubmitAttempt() {
+  const queryClient = useQueryClient();
   return useMutation<AttemptResultResponse, Error, SubmitAttemptVars>({
     mutationFn: async ({ attemptId, answers }) => {
       const res = await apiClient.post<AttemptResultResponse>(
@@ -170,6 +171,13 @@ export function useSubmitAttempt() {
         { answers },
       );
       return res.data;
+    },
+    onSuccess: () => {
+      // Bust dashboard so action_items and diagnostic_status reflect completion.
+      queryClient.invalidateQueries({ queryKey: ["student", "dashboard"] });
+      // Bust attempt history so attemptStatus in the assessments list page
+      // updates from IN_PROGRESS → COMPLETED without waiting out the staleTime.
+      queryClient.invalidateQueries({ queryKey: ["student", "attempts"] });
     },
   });
 }

@@ -59,8 +59,8 @@ export function TopicRow({
         {selected && isWarn && (
           <p className="text-xs text-[#92400e] mt-px">
             ⚠ Only {avail!.available_questions} question
-            {avail!.available_questions !== 1 ? "s" : ""} available for the
-            selected difficulty range — need {questionsPerTopic}
+            {avail!.available_questions !== 1 ? "s" : ""} in bank — need{" "}
+            {questionsPerTopic}
           </p>
         )}
         {selected && isError && (

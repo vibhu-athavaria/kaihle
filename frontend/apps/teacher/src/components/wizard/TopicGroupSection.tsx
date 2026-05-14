@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { TopicRow, type TopicWithAvailability } from "./TopicRow";
 
 interface TopicGroupSectionProps {
@@ -46,11 +47,23 @@ export function TopicGroupSection({
         role="button"
       >
         <div className="flex items-center gap-[6px] flex-1">
-          <span className="text-[10px]">{open ? "▾" : "▸"}</span>
+          {open ? (
+            <ChevronDown
+              className="w-3.5 h-3.5 flex-shrink-0"
+              aria-hidden="true"
+            />
+          ) : (
+            <ChevronRight
+              className="w-3.5 h-3.5 flex-shrink-0"
+              aria-hidden="true"
+            />
+          )}
           <span>{gradeLabel}</span>
-          {!open && selectedCount > 0 && (
+          {!open && (
             <span className="text-xs font-medium normal-case tracking-normal text-brand-muted ml-1">
-              {selectedCount} selected
+              {selectedCount > 0
+                ? `${selectedCount} selected · click to expand`
+                : "click to expand"}
             </span>
           )}
         </div>

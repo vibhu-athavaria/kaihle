@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { OnboardingLayout } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
@@ -37,7 +38,8 @@ export function ProfileQuestionnaire() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { answers, setAnswer, toggleInterest } = useQuestionnaireStore();
+  const queryClient = useQueryClient();
+  const { answers, setAnswer, toggleInterest, reset } = useQuestionnaireStore();
 
   // Fetch questionnaire from API
   useEffect(() => {
@@ -75,6 +77,10 @@ export function ProfileQuestionnaire() {
 
       await apiClient.post("/api/v1/onboarding/questionnaire/submit", {
         responses,
+      });
+      reset();
+      await queryClient.invalidateQueries({
+        queryKey: ["student", "onboarding-status"],
       });
       navigate("/student/dashboard");
     } catch {

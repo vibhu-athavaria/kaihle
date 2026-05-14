@@ -1,44 +1,72 @@
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
 import { Button, Skeleton } from "@kaihle/ui";
 import { useAssessmentWizard } from "../../../hooks/useAssessmentWizard";
+import { useClassTopicsWithGrades } from "../../../hooks/useClassTopicsWithGrades";
+import type { DiagnosticTopicItem } from "../../../hooks/useClassTopicsWithGrades";
 
-interface Topic {
-  id: string;
-  name: string;
-}
-
-async function fetchTopicsForClass(
-  subjectId: string,
-  gradeId: string,
-  curriculumId: string,
-): Promise<Topic[]> {
-  const res = await apiClient.get(`/api/v1/subjects/${subjectId}/topics`, {
-    params: {
-      curriculum_id: curriculumId,
-      grade_id: gradeId,
-    },
-  });
-  return (res.data || []).map((t: { id: string; name: string }) => ({
-    id: t.id,
-    name: t.name,
-  }));
+function TopicSection({
+  label,
+  topics,
+  topicIds,
+  onToggle,
+}: {
+  label: string;
+  topics: DiagnosticTopicItem[];
+  topicIds: string[];
+  onToggle: (id: string) => void;
+}) {
+  if (topics.length === 0) return null;
+  return (
+    <div>
+      <p className="text-xs font-sans font-bold uppercase tracking-widest text-brand-muted mb-2 px-1">
+        {label}
+      </p>
+      <div className="border border-brand-border rounded-xl divide-y divide-brand-border-soft overflow-hidden">
+        {topics.map((topic) => {
+          const checked = topicIds.includes(topic.curriculum_topic_id);
+          return (
+            <label
+              key={topic.curriculum_topic_id}
+              className={[
+                "flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors",
+                "hover:bg-brand-gold-light/30",
+                checked ? "bg-brand-gold-light/20" : "bg-white",
+              ].join(" ")}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => onToggle(topic.curriculum_topic_id)}
+                className="w-4 h-4 rounded border-brand-border text-brand-gold focus:ring-brand-gold"
+                aria-label={topic.topic_name}
+              />
+              <span className="text-sm font-sans text-brand-ink flex-1">
+                {topic.topic_name}
+              </span>
+              {topic.subtopic_count > 0 && (
+                <span className="text-xs font-sans text-brand-muted">
+                  {topic.subtopic_count} subtopic
+                  {topic.subtopic_count !== 1 ? "s" : ""}
+                </span>
+              )}
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function Step2Topics() {
-  const { subjectId, gradeId, curriculumId, topicIds, setTopicIds, setStep } =
-    useAssessmentWizard();
+  const { classId, topicIds, setTopicIds, setStep } = useAssessmentWizard();
 
-  const {
-    data: topics = [],
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
-    queryKey: ["topics", subjectId, gradeId, curriculumId],
-    queryFn: () => fetchTopicsForClass(subjectId!, gradeId!, curriculumId!),
-    enabled: !!subjectId && !!gradeId && !!curriculumId,
-  });
+  const { data, isLoading, isError, refetch } = useClassTopicsWithGrades(
+    classId ?? undefined,
+  );
+
+  const currentTopics = data?.current_grade_topics ?? [];
+  const previousTopics = data?.previous_grade_topics ?? [];
+  const allTopics = [...previousTopics, ...currentTopics];
+  const allTopicIds = allTopics.map((t) => t.curriculum_topic_id);
 
   const canProceed = topicIds.length > 0;
 
@@ -51,10 +79,10 @@ export function Step2Topics() {
   }
 
   function toggleAll() {
-    if (topicIds.length === topics.length) {
+    if (topicIds.length === allTopicIds.length) {
       setTopicIds([]);
     } else {
-      setTopicIds(topics.map((t) => t.id));
+      setTopicIds(allTopicIds);
     }
   }
 
@@ -65,13 +93,13 @@ export function Step2Topics() {
           <p className="text-sm font-sans font-semibold text-brand-ink">
             Select Topics
           </p>
-          {topics.length > 0 && (
+          {allTopics.length > 0 && (
             <button
               type="button"
               onClick={toggleAll}
               className="text-xs font-sans font-bold text-brand-gold hover:text-brand-gold-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
             >
-              {topicIds.length === topics.length
+              {topicIds.length === allTopicIds.length
                 ? "Deselect all"
                 : "Select all"}
             </button>
@@ -100,42 +128,32 @@ export function Step2Topics() {
               Try again →
             </button>
           </div>
-        ) : topics.length === 0 ? (
+        ) : allTopics.length === 0 ? (
           <div className="border border-brand-border rounded-xl p-6 text-center">
             <p className="text-sm font-sans text-brand-muted">
               No topics defined for this subject and grade yet.
             </p>
           </div>
         ) : (
-          <div className="border border-brand-border rounded-xl divide-y divide-brand-border-soft overflow-hidden">
-            {topics.map((topic) => {
-              const checked = topicIds.includes(topic.id);
-              return (
-                <label
-                  key={topic.id}
-                  className={[
-                    "flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors",
-                    "hover:bg-brand-gold-light/30",
-                    checked ? "bg-brand-gold-light/20" : "bg-white",
-                  ].join(" ")}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleTopic(topic.id)}
-                    className="w-4 h-4 rounded border-brand-border text-brand-gold focus:ring-brand-gold"
-                    aria-label={topic.name}
-                  />
-                  <span className="text-sm font-sans text-brand-ink">
-                    {topic.name}
-                  </span>
-                </label>
-              );
-            })}
+          <div className="space-y-4">
+            {previousTopics.length > 0 && (
+              <TopicSection
+                label={`Grade ${data!.previous_grade_level} — Prior Year`}
+                topics={previousTopics}
+                topicIds={topicIds}
+                onToggle={toggleTopic}
+              />
+            )}
+            <TopicSection
+              label={`Grade ${data!.current_grade_level} — Current Year`}
+              topics={currentTopics}
+              topicIds={topicIds}
+              onToggle={toggleTopic}
+            />
           </div>
         )}
 
-        {topics.length > 0 && !canProceed && (
+        {allTopics.length > 0 && !canProceed && (
           <p className="mt-2 text-xs font-sans text-brand-red">
             Please select at least one topic to proceed.
           </p>
@@ -148,7 +166,6 @@ export function Step2Topics() {
         )}
       </div>
 
-      {/* Footer */}
       <div className="flex justify-between pt-2">
         <Button variant="secondary" onClick={() => setStep(1)}>
           Back
@@ -156,7 +173,7 @@ export function Step2Topics() {
         <Button
           variant="primary"
           className="bg-brand-gold hover:bg-brand-gold-dark"
-          disabled={isError || (topics.length > 0 && !canProceed)}
+          disabled={isError || (allTopics.length > 0 && !canProceed)}
           onClick={() => setStep(3)}
         >
           Next

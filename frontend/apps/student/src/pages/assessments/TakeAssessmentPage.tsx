@@ -353,47 +353,18 @@ export function TakeAssessmentPage() {
         </div>
 
         {/* ── Progress bar ─────────────────────────────────── */}
-        <div className="space-y-1">
+        <div
+          className="w-full bg-brand-border-soft rounded-full h-2"
+          role="progressbar"
+          aria-valuenow={Math.round(progressPct)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`${answeredCount} of ${totalQuestions} questions answered`}
+        >
           <div
-            className="w-full bg-brand-border-soft rounded-full h-2"
-            role="progressbar"
-            aria-valuenow={Math.round(progressPct)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={`${answeredCount} of ${totalQuestions} questions answered`}
-          >
-            <div
-              className="bg-brand-primary h-2 rounded-full transition-all duration-500"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-
-          {/* Save indicator */}
-          {saveState !== "idle" && (
-            <p
-              aria-live="polite"
-              className={[
-                "font-sans text-xs",
-                saveState === "saving" && "text-brand-muted",
-                saveState === "saved" && "text-brand-green",
-                saveState === "error" && "text-brand-red",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              {saveState === "saving" && "Saving…"}
-              {saveState === "saved" && (
-                <>
-                  <CheckCircle
-                    className="inline w-3 h-3 mr-0.5"
-                    aria-hidden="true"
-                  />
-                  Saved ✓
-                </>
-              )}
-              {saveState === "error" && "Save failed — check your connection"}
-            </p>
-          )}
+            className="bg-brand-primary h-2 rounded-full transition-all duration-500"
+            style={{ width: `${progressPct}%` }}
+          />
         </div>
 
         {/* ── Question card ─────────────────────────────────── */}
@@ -483,6 +454,32 @@ export function TakeAssessmentPage() {
               <ArrowLeft className="w-4 h-4" aria-hidden="true" />
               Back
             </button>
+
+            {/* Save indicator — always rendered to avoid layout shift */}
+            <p
+              aria-live="polite"
+              className={[
+                "font-sans text-xs transition-opacity duration-200",
+                saveState === "idle" ? "invisible" : "visible",
+                saveState === "saving" && "text-brand-muted",
+                saveState === "saved" && "text-brand-green",
+                saveState === "error" && "text-brand-red",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              {saveState === "saving" && "Saving…"}
+              {saveState === "saved" && (
+                <>
+                  <CheckCircle
+                    className="inline w-3 h-3 mr-0.5"
+                    aria-hidden="true"
+                  />
+                  Saved
+                </>
+              )}
+              {saveState === "error" && "Save failed"}
+            </p>
 
             {isLastQuestion ? (
               <button

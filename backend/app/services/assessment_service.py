@@ -30,7 +30,7 @@ from app.models.assessment import (
     AttemptStatus,
     StudentAttempt,
 )
-from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic
+from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic, Topic
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
 from app.schemas.assessments import (
@@ -501,63 +501,70 @@ class AssessmentService:
         the given difficulty range and question types. Returns TopicAvailability
         with fulfillable=True when available_questions >= questions_per_topic.
         """
+        # Single query: LEFT JOIN from CurriculumTopic outward so topics with zero
+        # questions are still returned (difficulty=NULL, count=0 for those rows).
         rows = (
             await self.db.execute(
                 select(
-                    Subtopic.curriculum_topic_id.label("curriculum_topic_id"),
-                    CurriculumTopic.topic_id.label("topic_name"),  # resolved later via Topic.name join
+                    CurriculumTopic.id.label("curriculum_topic_id"),
+                    Topic.name.label("topic_name"),
                     Grade.level.label("grade_level"),
-                    Grade.id.label("grade_id"),
                     QuestionBank.difficulty_level.label("difficulty"),
                     func.count(QuestionBank.id).label("count"),
                 )
-                .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
-                .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                .join(Topic, Topic.id == CurriculumTopic.topic_id)
                 .join(Grade, Grade.id == CurriculumTopic.grade_id)
-                .where(
-                    Subtopic.curriculum_topic_id.in_(topic_ids),
-                    QuestionBank.is_active.is_(True),
-                    QuestionBank.question_type.in_(question_types),
-                    QuestionBank.difficulty_level.between(minimum_difficulty, maximum_difficulty),
+                .outerjoin(Subtopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
+                .outerjoin(
+                    QuestionBank,
+                    and_(
+                        QuestionBank.subtopic_id == Subtopic.id,
+                        QuestionBank.is_active.is_(True),
+                        QuestionBank.question_type.in_(question_types),
+                        QuestionBank.difficulty_level.between(minimum_difficulty, maximum_difficulty),
+                    ),
                 )
+                .where(CurriculumTopic.id.in_(topic_ids))
                 .group_by(
-                    Subtopic.curriculum_topic_id,
-                    CurriculumTopic.topic_id,
+                    CurriculumTopic.id,
+                    Topic.name,
                     Grade.level,
-                    Grade.id,
                     QuestionBank.difficulty_level,
                 )
             )
         ).all()
 
         class _TopicAgg(TypedDict):
+            topic_name: str
             grade_level: int
             per_difficulty: dict[int, int]
             total: int
 
-        # Aggregate by topic
+        # Aggregate by topic — LEFT JOIN rows with difficulty=NULL are zero-question topics.
         topic_data: dict[uuid.UUID, _TopicAgg] = {}
         for row in rows:
             tid: uuid.UUID = row.curriculum_topic_id
             if tid not in topic_data:
                 topic_data[tid] = {
+                    "topic_name": str(row.topic_name),
                     "grade_level": int(row.grade_level),  # type: ignore[arg-type]
                     "per_difficulty": {},
                     "total": 0,
                 }
-            diff = int(row.difficulty) if row.difficulty is not None else 0  # type: ignore[arg-type]
-            count = int(cast(Any, row.count))
-            topic_data[tid]["per_difficulty"][diff] = count
-            topic_data[tid]["total"] += count
+            if row.difficulty is not None:
+                diff = int(row.difficulty)  # type: ignore[arg-type]
+                count = int(cast(Any, row.count))
+                topic_data[tid]["per_difficulty"][diff] = count
+                topic_data[tid]["total"] += count
 
-        # Build result for every requested topic (include topics with zero questions)
+        # Build result preserving the requested topic_ids order.
         result = []
         for tid in topic_ids:
-            data = topic_data.get(tid, _TopicAgg(grade_level=0, per_difficulty={}, total=0))
+            data = topic_data.get(tid, _TopicAgg(topic_name=str(tid), grade_level=0, per_difficulty={}, total=0))
             result.append(
                 TopicAvailability(
                     curriculum_topic_id=tid,
-                    topic_name=str(tid),  # name resolution deferred to route layer
+                    topic_name=data["topic_name"],
                     grade_level=data["grade_level"],
                     available_questions=data["total"],
                     per_difficulty_available=data["per_difficulty"],
