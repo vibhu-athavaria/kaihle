@@ -645,6 +645,7 @@ class UserService:
             .where(
                 ClassEnrollment.student_id == student.id,
                 ClassEnrollment.is_active.is_(True),
+                Class.is_active.is_(True),
             )
             .order_by(ClassEnrollment.enrolled_at)
         )
@@ -700,6 +701,7 @@ class UserService:
             .where(
                 ClassEnrollment.student_id == student.id,
                 ClassEnrollment.is_active.is_(True),
+                Class.is_active.is_(True),
             )
             .order_by(ClassEnrollment.enrolled_at)
         )

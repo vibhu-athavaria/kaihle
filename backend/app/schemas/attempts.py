@@ -50,6 +50,39 @@ class AttemptResultResponse(BaseModel):
     submitted_at: datetime
 
 
+class QuestionDetailItem(BaseModel):
+    """Per-question result for teacher review — includes subtopic and difficulty context."""
+
+    question_id: UUID
+    question_text: str
+    subtopic_name: str
+    topic_name: str
+    difficulty_level: int  # 1–5
+    selected_key: str | None  # None if student skipped
+    correct_answer: str  # the key (A/B/C/D) that is correct
+    is_correct: bool
+    position: int  # 1-based order in this attempt
+
+
+class AttemptDetailResponse(BaseModel):
+    """Full per-question breakdown for the teacher detail view.
+
+    Distinct from AttemptResultResponse (which is the lightweight aggregate
+    returned to the student after submit). This schema is for teacher review only.
+    """
+
+    attempt_id: UUID
+    assessment_id: UUID
+    assessment_title: str
+    assessment_type: str
+    student_id: UUID
+    student_name: str
+    score: float | None
+    submitted_at: datetime | None
+    status: str
+    questions: list[QuestionDetailItem]
+
+
 class StudentAttemptHistoryItem(BaseModel):
     attempt_id: UUID
     assessment_id: UUID

@@ -34,8 +34,8 @@ export function ScoreDistributionChart({
   attempts,
   isLoading = false,
 }: ScoreDistributionChartProps) {
-  const submitted = attempts.filter((a) => a.status === "SUBMITTED");
-  const notSubmitted = attempts.filter((a) => a.status !== "SUBMITTED");
+  const submitted = attempts.filter((a) => a.status === "COMPLETED");
+  const notSubmitted = attempts.filter((a) => a.status !== "COMPLETED");
 
   const strong = submitted.filter(
     (a) => a.score !== null && a.score > 0.7,

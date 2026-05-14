@@ -12,9 +12,34 @@ import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
 import { DashboardLayout } from "@kaihle/ui";
 import { useAttemptResult } from "../../hooks/useAssessmentResults";
+import type {
+  QuestionAttempt,
+  TopicBreakdownItem,
+} from "../../hooks/useAssessmentResults";
 import { ScoreRing } from "../../components/results/ScoreRing";
 import { QuestionBreakdown } from "../../components/results/QuestionBreakdown";
+import { TopicPerformanceBreakdown } from "../../components/results/TopicPerformanceBreakdown";
 import { ChevronLeft } from "lucide-react";
+
+function buildTopicBreakdown(
+  questions: QuestionAttempt[],
+): TopicBreakdownItem[] {
+  const map = new Map<string, { correct: number; total: number }>();
+  for (const q of questions) {
+    const entry = map.get(q.topic_name) ?? { correct: 0, total: 0 };
+    entry.total += 1;
+    if (q.is_correct) entry.correct += 1;
+    map.set(q.topic_name, entry);
+  }
+  return Array.from(map.entries())
+    .map(([topic_name, { correct, total }]) => ({
+      topic_name,
+      correct_count: correct,
+      total_count: total,
+      avg_score: total > 0 ? correct / total : 0,
+    }))
+    .sort((a, b) => a.avg_score - b.avg_score);
+}
 
 // ── Assessment type badge config ──────────────────────────────────────────
 
@@ -57,7 +82,7 @@ function StudentDetailContent({
   }
 
   const typeBadge = data
-    ? (TYPE_BADGE[data.assessmentType] ?? TYPE_BADGE["FINAL"])
+    ? (TYPE_BADGE[data.assessment_type] ?? TYPE_BADGE["FINAL"])
     : null;
 
   return (
@@ -90,7 +115,7 @@ function StudentDetailContent({
             <div>
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="font-display font-bold text-2xl text-brand-ink">
-                  {data?.studentName ?? "Student"}
+                  {data?.student_name ?? "Student"}
                 </h1>
                 {typeBadge && (
                   <span
@@ -101,12 +126,12 @@ function StudentDetailContent({
                 )}
               </div>
               <p className="text-sm text-brand-muted">
-                {data?.assessmentTitle ?? "Assessment"}
+                {data?.assessment_title ?? "Assessment"}
               </p>
-              {data?.submittedAt && (
+              {data?.submitted_at && (
                 <p className="text-xs text-brand-muted mt-1">
                   Submitted{" "}
-                  {new Date(data.submittedAt).toLocaleDateString("en-GB", {
+                  {new Date(data.submitted_at).toLocaleDateString("en-GB", {
                     day: "numeric",
                     month: "long",
                     year: "numeric",
@@ -119,6 +144,19 @@ function StudentDetailContent({
           </div>
         )}
       </div>
+
+      {/* Per-topic summary */}
+      {(isLoading || (data?.questions?.length ?? 0) > 0) && (
+        <div className="bg-white rounded-2xl border border-brand-border p-5">
+          <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-role-teacher-muted mb-4">
+            Topic summary
+          </h2>
+          <TopicPerformanceBreakdown
+            topics={buildTopicBreakdown(data?.questions ?? [])}
+            isLoading={isLoading}
+          />
+        </div>
+      )}
 
       {/* Question breakdown */}
       <div>

@@ -32,10 +32,10 @@ from app.models.assessment import (
     StudentAttempt,
     StudentResponse,
 )
-from app.models.curriculum import QuestionBank
+from app.models.curriculum import CurriculumTopic, QuestionBank, Subtopic, Topic
 from app.models.school import ClassEnrollment
 from app.models.user import UserRole
-from app.schemas.attempts import AttemptResultResponse
+from app.schemas.attempts import AttemptDetailResponse, AttemptResultResponse, QuestionDetailItem
 
 logger = structlog.get_logger()
 
@@ -619,6 +619,130 @@ class AttemptService:
             correct_count=correct,
             time_taken_seconds=attempt.time_taken_seconds,
             submitted_at=cast(datetime, attempt.completed_at),
+        )
+
+    async def get_attempt_detail(
+        self,
+        attempt_id: uuid.UUID,
+        requesting_user_id: uuid.UUID,
+        requesting_user_role: str,
+        school_id: uuid.UUID,
+    ) -> AttemptDetailResponse:
+        """Return per-question breakdown for teacher review of a completed attempt.
+
+        Includes subtopic name, topic name, difficulty level, the key selected by
+        the student, the correct key, and whether it was correct.
+
+        Access rules — same as get_attempt_results:
+        - STUDENT: only their own attempt.
+        - TEACHER / SCHOOL_ADMIN: attempt must belong to their school.
+        - KAIHLE_ADMIN: unrestricted (CONSTITUTION Rule 12).
+
+        Args:
+            attempt_id: The StudentAttempt UUID.
+            requesting_user_id: ID of the requesting user.
+            requesting_user_role: Role string.
+            school_id: Multi-tenancy guard (ignored for KAIHLE_ADMIN).
+
+        Returns:
+            AttemptDetailResponse with per-question breakdown.
+
+        Raises:
+            ValueError: Attempt not found or not yet completed.
+            AttemptAccessDeniedError: Cross-school or student own-attempt violation.
+        """
+        attempt = await self.db.get(StudentAttempt, attempt_id)
+        if attempt is None:
+            raise ValueError(f"Attempt not found: {attempt_id}")
+        if attempt.status != AttemptStatus.COMPLETED:
+            raise ValueError("Attempt not yet completed")
+
+        assessment = await self.db.get(Assessment, attempt.assessment_id)
+
+        # Authorization
+        if requesting_user_role == UserRole.STUDENT:
+            if attempt.student_id != requesting_user_id:
+                raise AttemptAccessDeniedError("Access denied")
+        elif requesting_user_role != UserRole.KAIHLE_ADMIN:
+            if assessment is None or assessment.school_id != school_id:
+                raise AttemptAccessDeniedError("Access denied")
+
+        # Load responses
+        responses_result = await self.db.execute(
+            select(StudentResponse).where(StudentResponse.attempt_id == attempt_id)
+        )
+        responses = responses_result.scalars().all()
+        response_map = {r.question_id: r for r in responses}
+        question_ids = list(response_map.keys())
+
+        # Load questions with subtopic and topic names via single JOIN query
+        rows = (
+            await self.db.execute(
+                select(
+                    QuestionBank.id.label("id"),
+                    QuestionBank.question_text.label("question_text"),
+                    QuestionBank.correct_answer.label("correct_answer"),
+                    QuestionBank.difficulty_level.label("difficulty_level"),
+                    Subtopic.name.label("subtopic_name"),
+                    Topic.name.label("topic_name"),
+                )
+                .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
+                .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                .join(Topic, Topic.id == CurriculumTopic.topic_id)
+                .where(QuestionBank.id.in_(question_ids))
+            )
+        ).all()
+
+        question_detail_map = {row.id: row for row in rows}
+
+        questions: list[QuestionDetailItem] = []
+        for position, (q_id, resp) in enumerate(response_map.items(), start=1):
+            row = question_detail_map.get(q_id)
+            if row is None:
+                continue
+            questions.append(
+                QuestionDetailItem(
+                    question_id=q_id,
+                    question_text=row.question_text,
+                    subtopic_name=row.subtopic_name,
+                    topic_name=row.topic_name,
+                    difficulty_level=row.difficulty_level or 0,
+                    selected_key=resp.answer_given,
+                    correct_answer=row.correct_answer,
+                    is_correct=bool(resp.is_correct),
+                    position=resp.position if hasattr(resp, "position") else position,
+                )
+            )
+
+        # Sort by position for consistent ordering
+        questions.sort(key=lambda q: q.position)
+
+        from app.models.user import User
+
+        user_result = await self.db.execute(
+            select(User.first_name, User.last_name).where(User.id == attempt.student_id)
+        )
+        user_row = user_result.one_or_none()
+        student_name = f"{user_row.first_name or ''} {user_row.last_name or ''}".strip() if user_row else "Unknown"
+
+        logger.info(
+            "attempt_detail_fetched",
+            attempt_id=str(attempt_id),
+            question_count=len(questions),
+            requesting_role=requesting_user_role,
+        )
+
+        return AttemptDetailResponse(
+            attempt_id=attempt_id,
+            assessment_id=attempt.assessment_id,
+            assessment_title=assessment.title if assessment else "",
+            assessment_type=assessment.assessment_type if assessment else "",
+            student_id=attempt.student_id,
+            student_name=student_name,
+            score=attempt.overall_score,
+            submitted_at=attempt.completed_at,
+            status=attempt.status.value if hasattr(attempt.status, "value") else str(attempt.status),
+            questions=questions,
         )
 
     # ── Internal helpers ─────────────────────────────────────────────────

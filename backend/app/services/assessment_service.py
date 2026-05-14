@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict, cast
 
 import structlog
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import Integer, and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import (
@@ -29,6 +29,7 @@ from app.models.assessment import (
     AssessmentType,
     AttemptStatus,
     StudentAttempt,
+    StudentResponse,
 )
 from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic, Topic
 from app.models.school import Class, ClassEnrollment
@@ -39,6 +40,7 @@ from app.schemas.assessments import (
     DesignTier1DiagnosticRequest,
     StudentAttemptSummary,
     TopicAvailability,
+    TopicBreakdownItem,
 )
 
 logger = structlog.get_logger()
@@ -1321,11 +1323,60 @@ class AssessmentService:
             for row in rows
         ]
 
+        # Step 6 — Topic-level performance aggregation across all completed attempts.
+        # Joins StudentResponse → QuestionBank → Subtopic → CurriculumTopic → Topic,
+        # filtered to responses for this assessment's attempt IDs only.
+        attempt_ids = [a.attempt_id for a in attempts if a.attempt_id is not None]
+        topic_breakdown: list[TopicBreakdownItem] = []
+        if attempt_ids:
+            topic_rows = (
+                await self.db.execute(
+                    select(
+                        Topic.name.label("topic_name"),
+                        Subtopic.name.label("subtopic_name"),
+                        func.sum(func.cast(StudentResponse.is_correct, Integer)).label("correct_count"),
+                        func.count(StudentResponse.id).label("total_count"),
+                    )
+                    .join(QuestionBank, QuestionBank.id == StudentResponse.question_id)
+                    .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
+                    .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                    .join(Topic, Topic.id == CurriculumTopic.topic_id)
+                    .where(StudentResponse.attempt_id.in_(attempt_ids))
+                    .group_by(Topic.name, Subtopic.name)
+                )
+            ).all()
+
+            # Aggregate rows by topic (multiple subtopics may share the same topic)
+            from collections import defaultdict
+
+            topic_totals: dict[str, tuple[int, int]] = defaultdict(lambda: (0, 0))
+            for row in topic_rows:
+                prev_correct, prev_total = topic_totals[row.topic_name]
+                topic_totals[row.topic_name] = (
+                    prev_correct + (row.correct_count or 0),
+                    prev_total + (row.total_count or 0),
+                )
+
+            topic_breakdown = sorted(
+                [
+                    TopicBreakdownItem(
+                        topic_name=name,
+                        correct_count=correct,
+                        total_count=total,
+                        avg_score=correct / total if total > 0 else 0.0,
+                    )
+                    for name, (correct, total) in topic_totals.items()
+                    if total > 0
+                ],
+                key=lambda t: t.avg_score,  # weakest first
+            )
+
+        submitted_count = sum(1 for a in attempts if a.status == "COMPLETED")
         logger.info(
             "assessment_results_fetched",
             assessment_id=str(assessment_id),
             total_students=len(attempts),
-            submitted_count=sum(1 for a in attempts if a.status == "SUBMITTED"),
+            submitted_count=submitted_count,
         )
 
         return AssessmentResultsSummary(
@@ -1335,8 +1386,9 @@ class AssessmentService:
             class_id=assessment.class_id,
             class_name=class_.name,
             total_students=len(attempts),
-            submitted_count=sum(1 for a in attempts if a.status == "SUBMITTED"),
+            submitted_count=submitted_count,
             attempts=attempts,
+            topic_breakdown=topic_breakdown,
         )
 
 

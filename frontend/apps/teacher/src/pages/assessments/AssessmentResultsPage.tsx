@@ -20,7 +20,8 @@ import { useAssessmentResults } from "../../hooks/useAssessmentResults";
 import { ResultsKPIRow } from "../../components/results/ResultsKPIRow";
 import { ScoreDistributionChart } from "../../components/results/ScoreDistributionChart";
 import { StudentResultsTable } from "../../components/results/StudentResultsTable";
-import { ChevronLeft } from "lucide-react";
+import { TopicPerformanceBreakdown } from "../../components/results/TopicPerformanceBreakdown";
+import { ChevronLeft, Map } from "lucide-react";
 
 // ── Assessment type badge config ──────────────────────────────────────────
 
@@ -57,13 +58,13 @@ function AssessmentResultsContent({ assessmentId }: { assessmentId: string }) {
   }
 
   const typeBadge = data
-    ? (TYPE_BADGE[data.assessmentType] ?? TYPE_BADGE["FINAL"])
+    ? (TYPE_BADGE[data.assessment_type] ?? TYPE_BADGE["FINAL"])
     : null;
 
   const attempts = data?.attempts ?? [];
 
-  const backHref = data?.classId
-    ? `/teacher/classes/${data.classId}/assessments`
+  const backHref = data?.class_id
+    ? `/teacher/classes/${data.class_id}/assessments`
     : "/teacher/assessments";
 
   return (
@@ -89,7 +90,7 @@ function AssessmentResultsContent({ assessmentId }: { assessmentId: string }) {
             <>
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="font-display font-bold text-2xl text-brand-ink">
-                  {data?.assessmentTitle ?? "Assessment Results"}
+                  {data?.assessment_title ?? "Assessment Results"}
                 </h1>
                 {typeBadge && (
                   <span
@@ -99,18 +100,39 @@ function AssessmentResultsContent({ assessmentId }: { assessmentId: string }) {
                   </span>
                 )}
               </div>
-              {data?.className && (
-                <p className="text-sm text-brand-muted">{data.className}</p>
+              {data?.class_name && (
+                <p className="text-sm text-brand-muted">{data.class_name}</p>
               )}
             </>
           )}
         </div>
       </div>
 
+      {/* Gap Map callout — only for diagnostic assessments */}
+      {data?.assessment_type === "DIAGNOSTIC" && data.class_id && (
+        <div className="flex items-center gap-4 bg-blue-50 border border-blue-200 rounded-2xl px-5 py-4">
+          <Map className="w-5 h-5 text-blue-600 shrink-0" aria-hidden="true" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-blue-800">
+              Diagnostic results are ready
+            </p>
+            <p className="text-xs text-blue-600 mt-0.5">
+              View the Gap Map to see personalised placement for each student.
+            </p>
+          </div>
+          <Link
+            to={`/teacher/classes/${data.class_id}/gap-map`}
+            className="shrink-0 text-sm font-bold text-blue-700 hover:text-blue-900 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded"
+          >
+            View Gap Map →
+          </Link>
+        </div>
+      )}
+
       {/* KPI summary row */}
       <ResultsKPIRow
         isLoading={isLoading}
-        totalStudents={data?.totalStudents ?? 0}
+        totalStudents={data?.total_students ?? 0}
         attempts={attempts}
       />
 
@@ -121,6 +143,19 @@ function AssessmentResultsContent({ assessmentId }: { assessmentId: string }) {
         </h2>
         <ScoreDistributionChart attempts={attempts} isLoading={isLoading} />
       </div>
+
+      {/* Topic performance breakdown */}
+      {(isLoading || (data?.topic_breakdown?.length ?? 0) > 0) && (
+        <div className="bg-white rounded-2xl border border-brand-border p-5">
+          <h2 className="font-sans text-xs font-bold uppercase tracking-widest text-role-teacher-muted mb-4">
+            Topic performance
+          </h2>
+          <TopicPerformanceBreakdown
+            topics={data?.topic_breakdown ?? []}
+            isLoading={isLoading}
+          />
+        </div>
+      )}
 
       {/* Student results table */}
       <div>

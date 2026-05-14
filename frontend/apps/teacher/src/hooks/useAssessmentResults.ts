@@ -8,49 +8,59 @@ import { apiClient } from "@kaihle/auth";
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface StudentAttemptSummary {
-  /** Assessment attempt ID */
-  attemptId: string;
-  studentId: string;
-  studentName: string;
+  attempt_id: string | null;
+  student_id: string;
+  student_name: string;
   /** Float 0.0–1.0, or null if not submitted */
   score: number | null;
-  submittedAt: string | null;
-  status: "SUBMITTED" | "IN_PROGRESS" | "NOT_STARTED";
+  submitted_at: string | null;
+  status: "COMPLETED" | "IN_PROGRESS" | "NOT_STARTED";
+}
+
+export interface TopicBreakdownItem {
+  topic_name: string;
+  correct_count: number;
+  total_count: number;
+  /** Fraction 0.0–1.0 */
+  avg_score: number;
 }
 
 export interface AssessmentResultsSummary {
-  assessmentId: string;
-  assessmentTitle: string;
-  assessmentType: "DIAGNOSTIC" | "TOPIC_SPECIFIC" | "PROGRESS_CHECK" | "FINAL";
-  classId: string;
-  className: string;
-  totalStudents: number;
-  submittedCount: number;
+  assessment_id: string;
+  assessment_title: string;
+  assessment_type: "DIAGNOSTIC" | "TOPIC_SPECIFIC" | "PROGRESS_CHECK" | "FINAL";
+  class_id: string;
+  class_name: string;
+  total_students: number;
+  submitted_count: number;
   attempts: StudentAttemptSummary[];
+  topic_breakdown: TopicBreakdownItem[];
 }
 
 export interface QuestionAttempt {
-  questionId: string;
-  questionText: string;
-  /** The answer the student chose */
-  selectedAnswer: string | null;
-  /** The correct answer */
-  correctAnswer: string;
-  isCorrect: boolean;
-  /** Position in assessment, 1-based */
+  question_id: string;
+  question_text: string;
+  subtopic_name: string;
+  topic_name: string;
+  difficulty_level: number; // 1–5
+  /** The key (A/B/C/D) the student chose, or null if skipped */
+  selected_key: string | null;
+  /** The key that is correct */
+  correct_answer: string;
+  is_correct: boolean;
   position: number;
 }
 
 export interface AttemptDetailResult {
-  attemptId: string;
-  assessmentId: string;
-  assessmentTitle: string;
-  assessmentType: "DIAGNOSTIC" | "TOPIC_SPECIFIC" | "PROGRESS_CHECK" | "FINAL";
-  studentId: string;
-  studentName: string;
+  attempt_id: string;
+  assessment_id: string;
+  assessment_title: string;
+  assessment_type: "DIAGNOSTIC" | "TOPIC_SPECIFIC" | "PROGRESS_CHECK" | "FINAL";
+  student_id: string;
+  student_name: string;
   score: number | null;
-  submittedAt: string | null;
-  status: "SUBMITTED" | "IN_PROGRESS" | "NOT_STARTED";
+  submitted_at: string | null;
+  status: "COMPLETED" | "IN_PROGRESS" | "NOT_STARTED";
   questions: QuestionAttempt[];
 }
 
@@ -83,9 +93,9 @@ export function useAssessmentResults(assessmentId: string) {
  */
 export function useAttemptResult(attemptId: string | undefined) {
   return useQuery<AttemptDetailResult>({
-    queryKey: ["attempt-result", attemptId],
+    queryKey: ["attempt-detail", attemptId],
     queryFn: async () => {
-      const res = await apiClient.get(`/api/v1/attempts/${attemptId}/results`);
+      const res = await apiClient.get(`/api/v1/attempts/${attemptId}/detail`);
       return res.data;
     },
     staleTime: 60_000,

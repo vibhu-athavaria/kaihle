@@ -58,7 +58,7 @@ export function StudentResultsTable({
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return q
-      ? attempts.filter((a) => a.studentName.toLowerCase().includes(q))
+      ? attempts.filter((a) => a.student_name.toLowerCase().includes(q))
       : attempts;
   }, [attempts, search]);
 
@@ -70,15 +70,15 @@ export function StudentResultsTable({
       case "score-desc":
         return arr.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
       case "name-asc":
-        return arr.sort((a, b) => a.studentName.localeCompare(b.studentName));
+        return arr.sort((a, b) => a.student_name.localeCompare(b.student_name));
       case "date-submitted":
         return arr.sort((a, b) => {
-          if (!a.submittedAt && !b.submittedAt) return 0;
-          if (!a.submittedAt) return 1;
-          if (!b.submittedAt) return -1;
+          if (!a.submitted_at && !b.submitted_at) return 0;
+          if (!a.submitted_at) return 1;
+          if (!b.submitted_at) return -1;
           return (
-            new Date(b.submittedAt).getTime() -
-            new Date(a.submittedAt).getTime()
+            new Date(b.submitted_at).getTime() -
+            new Date(a.submitted_at).getTime()
           );
         });
       default:
@@ -160,18 +160,18 @@ export function StudentResultsTable({
             <tbody className="divide-y divide-brand-border-soft">
               {sorted.map((attempt) => (
                 <tr
-                  key={attempt.attemptId}
+                  key={attempt.attempt_id ?? attempt.student_id}
                   className="hover:bg-brand-border-soft/50 transition-colors"
                 >
                   <td className="px-5 py-4 font-sans text-sm font-medium text-brand-ink">
-                    {attempt.studentName}
+                    {attempt.student_name}
                   </td>
                   <td className="px-5 py-4">
                     <ScorePill score={attempt.score} />
                   </td>
                   <td className="px-5 py-4 text-sm text-brand-muted hidden sm:table-cell">
-                    {attempt.submittedAt
-                      ? new Date(attempt.submittedAt).toLocaleDateString(
+                    {attempt.submitted_at
+                      ? new Date(attempt.submitted_at).toLocaleDateString(
                           "en-GB",
                           {
                             day: "numeric",
@@ -182,9 +182,9 @@ export function StudentResultsTable({
                       : "—"}
                   </td>
                   <td className="px-5 py-4 text-right">
-                    {attempt.status === "SUBMITTED" ? (
+                    {attempt.status === "COMPLETED" ? (
                       <Link
-                        to={`/teacher/assessments/${assessmentId}/results/${attempt.studentId}?attempt=${attempt.attemptId}`}
+                        to={`/teacher/assessments/${assessmentId}/results/${attempt.student_id}?attempt=${attempt.attempt_id}`}
                         className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 rounded"
                       >
                         View answers →

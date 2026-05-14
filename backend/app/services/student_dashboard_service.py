@@ -10,7 +10,7 @@ import structlog
 from sqlalchemy import and_, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.assessment import Assessment, AttemptStatus, StudentAttempt
+from app.models.assessment import Assessment, AssessmentStatus, AssessmentType, AttemptStatus, StudentAttempt
 from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic, Topic
 from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment
@@ -235,12 +235,14 @@ class StudentDashboardService:
                     and_(
                         StudentAttempt.assessment_id == Assessment.id,
                         StudentAttempt.student_id == student.id,
-                        StudentAttempt.status != AttemptStatus.COMPLETED,
                     ),
                 )
                 .where(
                     Assessment.class_id.in_(class_ids),
-                    # Assessment.is_system_generated.is_(False),  # noqa: E712
+                    Assessment.status == AssessmentStatus.ACTIVE,
+                    Assessment.assessment_type != AssessmentType.DIAGNOSTIC,
+                    # Only surface assessments not yet completed
+                    (StudentAttempt.id.is_(None) | (StudentAttempt.status != AttemptStatus.COMPLETED)),
                 )
                 .order_by(Assessment.created_at.desc())
             )

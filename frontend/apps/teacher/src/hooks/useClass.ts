@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 
-interface ClassDetail {
+export interface ClassDetail {
   id: string;
   name: string;
   grade_id: string;
   subject_id: string;
+  subject_name: string;
   curriculum_id: string;
   is_active: boolean;
 }
