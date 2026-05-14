@@ -1,5 +1,6 @@
 """Pydantic schemas for student-related API responses."""
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,13 +19,14 @@ class EnrolledClassInfo(BaseModel):
 
 
 class StudentInfoResponse(BaseModel):
-    """Response schema for GET /students/{student_id}/info.
+    """Response schema for GET /students/me/info and GET /students/{student_id}/info.
 
     Note: streak_days is not yet implemented and will always be null.
     """
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
+    id: UUID = Field(..., alias="id")
     first_name: str = Field(..., alias="firstName")
     last_name: str = Field(..., alias="lastName")
     email: str = Field(..., alias="email")
@@ -34,6 +36,28 @@ class StudentInfoResponse(BaseModel):
     streak_days: int | None = Field(None, alias="streakDays")
     is_enrolled: bool = Field(..., alias="isEnrolled")
     enrolled_classes: list[EnrolledClassInfo] = Field(default_factory=list, alias="enrolledClasses")
+
+
+class StudentAssessmentItem(BaseModel):
+    """One assessment entry for GET /students/me/assessments.
+
+    attempt_status is NOT_STARTED when no attempt row exists for this student.
+    """
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: UUID = Field(..., alias="id")
+    class_id: UUID = Field(..., alias="classId")
+    class_name: str = Field(..., alias="className")
+    title: str = Field(..., alias="title")
+    assessment_type: str = Field(..., alias="assessmentType")  # "DIAGNOSTIC" | "PROGRESS_CHECK"
+    status: str = Field(..., alias="status")  # "ACTIVE" | "CLOSED"
+    question_count: int | None = Field(None, alias="questionCount")
+    deadline: datetime | None = Field(None, alias="deadline")
+    published_at: datetime | None = Field(None, alias="publishedAt")
+    attempt_status: str = Field(..., alias="attemptStatus")  # "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED"
+    attempt_id: UUID | None = Field(None, alias="attemptId")
+    score: float | None = Field(None, alias="score")
 
 
 class StudentClassResponse(BaseModel):

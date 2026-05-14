@@ -9,10 +9,10 @@ import {
 import { StudentLayout } from "@kaihle/ui";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import {
-  useStudentAssessments,
-  type AssessmentItem,
+  useMyAssessments,
+  type MyAssessmentItem as AssessmentItem,
   type AttemptStatus,
-} from "../../hooks/useStudentAssessments";
+} from "../../hooks/useMyAssessments";
 import { useStartAssessment } from "../../hooks/useAttempt";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -309,27 +309,26 @@ function CompletedDiagnosticRow({
 export function Assessments() {
   const layout = useStudentLayoutProps();
 
-  const classMap = new Map<string, string>(
-    layout.sidebarClasses.map((c) => [c.id, c.name]),
-  );
-
-  const { diagnostics, teacherAssessments, isPending, isError } =
-    useStudentAssessments(
-      layout.sidebarClasses.map((c) => c.id),
-      layout.studentId,
-    );
+  const { data: assessmentsData, isPending, isError } = useMyAssessments();
+  const allAssessments = assessmentsData ?? [];
 
   const isPageLoading = layout.isLoading || isPending;
 
+  // Only show ACTIVE assessments on this page (CLOSED = future tab)
+  const activeAssessments = allAssessments.filter((a) => a.status === "ACTIVE");
+
   // Split diagnostics
-  const pendingDiagnostics = diagnostics.filter(
-    (d) => d.attemptStatus !== "COMPLETED",
+  const pendingDiagnostics = activeAssessments.filter(
+    (d) => d.assessmentType === "DIAGNOSTIC" && d.attemptStatus !== "COMPLETED",
   );
-  const completedDiagnostics = diagnostics.filter(
-    (d) => d.attemptStatus === "COMPLETED",
+  const completedDiagnostics = activeAssessments.filter(
+    (d) => d.assessmentType === "DIAGNOSTIC" && d.attemptStatus === "COMPLETED",
   );
 
-  // Split teacher assessments — sort upcoming by deadline (nulls last)
+  // Teacher assessments — split by completion, sort upcoming by deadline (nulls last)
+  const teacherAssessments = activeAssessments.filter(
+    (a) => a.assessmentType !== "DIAGNOSTIC",
+  );
   const upcomingTeacher = teacherAssessments
     .filter((a) => a.attemptStatus !== "COMPLETED")
     .sort((a, b) => {
@@ -405,14 +404,14 @@ export function Assessments() {
                     <PendingDiagnosticCard
                       key={d.id}
                       assessment={d}
-                      className={classMap.get(d.classId) ?? "Class"}
+                      className={d.className}
                     />
                   ))}
                   {completedDiagnostics.map((d) => (
                     <CompletedDiagnosticRow
                       key={d.id}
                       assessment={d}
-                      className={classMap.get(d.classId) ?? "Class"}
+                      className={d.className}
                     />
                   ))}
                 </div>
@@ -433,7 +432,7 @@ export function Assessments() {
                     <TeacherAssessmentCard
                       key={a.id}
                       assessment={a}
-                      className={classMap.get(a.classId) ?? "Class"}
+                      className={a.className}
                     />
                   ))}
                 </div>
@@ -454,7 +453,7 @@ export function Assessments() {
                     <TeacherAssessmentCard
                       key={a.id}
                       assessment={a}
-                      className={classMap.get(a.classId) ?? "Class"}
+                      className={a.className}
                     />
                   ))}
                 </div>

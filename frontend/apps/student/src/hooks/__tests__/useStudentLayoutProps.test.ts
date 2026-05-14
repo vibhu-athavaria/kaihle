@@ -20,9 +20,9 @@ jest.mock("../useMyClasses", () => ({
   useMyClasses: jest.fn(),
 }));
 
-jest.mock("../useStudentAssessments", () => ({
-  useStudentAssessments: jest.fn(() => ({
-    newCount: 0,
+jest.mock("../useMyAssessments", () => ({
+  useMyAssessments: jest.fn(() => ({
+    data: [],
     isPending: false,
     isError: false,
   })),
@@ -31,18 +31,23 @@ jest.mock("../useStudentAssessments", () => ({
 import { useAuth } from "@kaihle/auth";
 import { useStudentInfo } from "../useStudentInfo";
 import { useMyClasses } from "../useMyClasses";
-import { useStudentAssessments } from "../useStudentAssessments";
+import { useMyAssessments } from "../useMyAssessments";
 
 const mockUseAuth = useAuth as jest.Mock;
 const mockUseStudentInfo = useStudentInfo as jest.Mock;
 const mockUseMyClasses = useMyClasses as jest.Mock;
-const mockUseStudentAssessments = useStudentAssessments as jest.Mock;
+const mockUseMyAssessments = useMyAssessments as jest.Mock;
 
 describe("useStudentLayoutProps", () => {
   const mockLogout = jest.fn();
 
   beforeEach(() => {
     mockUseAuth.mockReturnValue({ logout: mockLogout });
+    mockUseMyAssessments.mockReturnValue({
+      data: [],
+      isPending: false,
+      isError: false,
+    });
   });
 
   afterEach(() => {
@@ -152,22 +157,16 @@ describe("useStudentLayoutProps", () => {
         lastName: "Doe",
         gradeName: "Grade 9",
         curriculumName: "Cambridge IGCSE",
-        enrolledClasses: [],
       },
       isLoading: false,
     });
     mockUseMyClasses.mockReturnValue({ data: [], isLoading: false });
-    mockUseStudentAssessments.mockReturnValue({
-      newCount: 0,
-      isPending: false,
-      isError: false,
-    });
 
     const { result } = renderHook(() => useStudentLayoutProps());
     expect(result.current.studentId).toBe("stu-123");
   });
 
-  it("test_useStudentLayoutProps_when_student_has_new_assessments_then_returns_assessmentBadge", () => {
+  it("test_useStudentLayoutProps_when_active_not_started_assessments_then_returns_correct_badge", () => {
     mockUseStudentInfo.mockReturnValue({
       data: {
         id: "stu-1",
@@ -175,21 +174,43 @@ describe("useStudentLayoutProps", () => {
         lastName: "Doe",
         gradeName: "Grade 9",
         curriculumName: "Cambridge IGCSE",
-        enrolledClasses: [],
       },
       isLoading: false,
     });
-    mockUseMyClasses.mockReturnValue({
-      data: [],
-      isLoading: false,
-    });
-    mockUseStudentAssessments.mockReturnValue({
-      newCount: 3,
+    mockUseMyClasses.mockReturnValue({ data: [], isLoading: false });
+    mockUseMyAssessments.mockReturnValue({
+      data: [
+        {
+          id: "a1",
+          status: "ACTIVE",
+          assessmentType: "PROGRESS_CHECK",
+          attemptStatus: "NOT_STARTED",
+        },
+        {
+          id: "a2",
+          status: "ACTIVE",
+          assessmentType: "PROGRESS_CHECK",
+          attemptStatus: "COMPLETED",
+        },
+        {
+          id: "a3",
+          status: "ACTIVE",
+          assessmentType: "DIAGNOSTIC",
+          attemptStatus: "NOT_STARTED",
+        },
+        {
+          id: "a4",
+          status: "CLOSED",
+          assessmentType: "PROGRESS_CHECK",
+          attemptStatus: "NOT_STARTED",
+        },
+      ],
       isPending: false,
       isError: false,
     });
 
     const { result } = renderHook(() => useStudentLayoutProps());
-    expect(result.current.assessmentBadge).toBe(3);
+    // Only ACTIVE + PROGRESS_CHECK + NOT_STARTED = a1
+    expect(result.current.assessmentBadge).toBe(1);
   });
 });

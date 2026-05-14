@@ -1163,3 +1163,124 @@ class TestCreateUserDirectCredentialsEmail:
 
         assert user is not None
         assert user.email == "newuser@school.edu"
+
+
+class TestGetStudentInfo:
+    """Tests for UserService.get_student_info."""
+
+    def _make_student(self) -> User:
+        student = MagicMock(spec=User)
+        student.id = uuid.uuid4()
+        student.first_name = "Josua"
+        student.last_name = "Tan"
+        student.email = "josua@school.edu"
+        student.school_id = uuid.uuid4()
+        return student
+
+    @pytest.mark.asyncio
+    async def test_get_student_info_when_enrolled_then_returns_id(
+        self, user_service: UserService, mock_db: MagicMock
+    ) -> None:
+        """get_student_info includes student.id in the response."""
+        student = self._make_student()
+        mock_db.execute = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+
+        result = await user_service.get_student_info(student)
+
+        assert result.id == student.id
+
+    @pytest.mark.asyncio
+    async def test_get_student_info_when_no_enrollments_then_not_enrolled(
+        self, user_service: UserService, mock_db: MagicMock
+    ) -> None:
+        """get_student_info returns is_enrolled=False when no active class enrollments exist."""
+        student = self._make_student()
+        mock_db.execute = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+
+        result = await user_service.get_student_info(student)
+
+        assert result.is_enrolled is False
+        assert result.enrolled_classes == []
+
+
+class TestGetMyAssessments:
+    """Tests for UserService.get_my_assessments."""
+
+    def _make_student(self) -> User:
+        student = MagicMock(spec=User)
+        student.id = uuid.uuid4()
+        student.school_id = uuid.uuid4()
+        return student
+
+    def _make_row(
+        self,
+        *,
+        attempt_id: uuid.UUID | None = None,
+        attempt_status_raw: Any = None,
+        score: float | None = None,
+    ) -> MagicMock:
+        from app.models.assessment import AssessmentStatus, AssessmentType, AttemptStatus
+
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.class_id = uuid.uuid4()
+        row.class_name = "Mathematics 9B"
+        row.title = "Algebra Quiz"
+        row.assessment_type = AssessmentType.PROGRESS_CHECK
+        row.status = AssessmentStatus.ACTIVE
+        row.question_count = 10
+        row.deadline = None
+        row.published_at = None
+        row.attempt_id = attempt_id
+        row.attempt_status_raw = attempt_status_raw or (AttemptStatus.COMPLETED if attempt_id else None)
+        row.score = score
+        return row
+
+    @pytest.mark.asyncio
+    async def test_get_my_assessments_when_no_attempt_then_not_started(
+        self, user_service: UserService, mock_db: MagicMock
+    ) -> None:
+        """get_my_assessments returns NOT_STARTED when no attempt row exists."""
+        student = self._make_student()
+        row = self._make_row(attempt_id=None)
+        mock_db.execute = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[row])))
+
+        result = await user_service.get_my_assessments(student)
+
+        assert len(result) == 1
+        assert result[0].attempt_status == "NOT_STARTED"
+        assert result[0].attempt_id is None
+
+    @pytest.mark.asyncio
+    async def test_get_my_assessments_when_attempt_completed_then_completed(
+        self, user_service: UserService, mock_db: MagicMock
+    ) -> None:
+        """get_my_assessments returns COMPLETED when attempt row has status COMPLETED."""
+        from app.models.assessment import AttemptStatus
+
+        student = self._make_student()
+        attempt_id = uuid.uuid4()
+        row = self._make_row(
+            attempt_id=attempt_id,
+            attempt_status_raw=AttemptStatus.COMPLETED,
+            score=0.85,
+        )
+        mock_db.execute = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[row])))
+
+        result = await user_service.get_my_assessments(student)
+
+        assert result[0].attempt_status == "COMPLETED"
+        assert result[0].attempt_id == attempt_id
+        assert result[0].score == 0.85
+
+    @pytest.mark.asyncio
+    async def test_get_my_assessments_when_no_enrollments_then_empty(
+        self, user_service: UserService, mock_db: MagicMock
+    ) -> None:
+        """get_my_assessments returns an empty list when the student has no active enrollments."""
+        student = self._make_student()
+        mock_db.execute = AsyncMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+
+        result = await user_service.get_my_assessments(student)
+
+        assert result == []

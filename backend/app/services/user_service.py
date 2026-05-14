@@ -4,7 +4,7 @@ import secrets
 import uuid
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -14,11 +14,12 @@ from app.core.security import (
     hash_token,
     store_magic_link_token,
 )
+from app.models.assessment import Assessment, AssessmentStatus, StudentAttempt
 from app.models.curriculum import Curriculum, Grade, Subject, Subtopic
 from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment, School
 from app.models.user import ParentStudent, StudentProfile, TeacherProfile, User, UserRole
-from app.schemas.students import EnrolledClassInfo, StudentClassResponse, StudentInfoResponse
+from app.schemas.students import EnrolledClassInfo, StudentAssessmentItem, StudentClassResponse, StudentInfoResponse
 from app.schemas.user import UserDirectCreate, UserInvite, UserSelfUpdate, UserUpdate
 from app.schemas.user_detail import (
     AssignedClassSummary,
@@ -679,6 +680,7 @@ class UserService:
             enrolled_class_count=len(enrolled_classes),
         )
         return StudentInfoResponse(
+            id=student.id,
             first_name=student.first_name or "",
             last_name=student.last_name or "",
             email=student.email,
@@ -723,6 +725,74 @@ class UserService:
             )
             for enrollment, class_, subject, grade, teacher in rows
         ]
+
+    async def get_my_assessments(self, student: User) -> list[StudentAssessmentItem]:
+        """Return all assessments across active enrolled classes with attempt status.
+
+        One SQL query — joins class_enrollments → assessments → student_attempts.
+        NOT_STARTED is computed here (no attempt row) rather than stored in the DB.
+        Returns both ACTIVE and CLOSED assessments so the frontend can render tabs.
+        """
+        query = (
+            select(
+                Assessment.id,
+                Assessment.class_id,
+                Class.name.label("class_name"),
+                Assessment.title,
+                Assessment.assessment_type,
+                Assessment.status,
+                Assessment.question_count,
+                Assessment.deadline,
+                Assessment.published_at,
+                StudentAttempt.id.label("attempt_id"),
+                StudentAttempt.status.label("attempt_status_raw"),
+                StudentAttempt.overall_score.label("score"),
+            )
+            .join(ClassEnrollment, ClassEnrollment.class_id == Assessment.class_id)
+            .join(Class, Class.id == Assessment.class_id)
+            .outerjoin(
+                StudentAttempt,
+                and_(
+                    StudentAttempt.assessment_id == Assessment.id,
+                    StudentAttempt.student_id == student.id,
+                ),
+            )
+            .where(
+                ClassEnrollment.student_id == student.id,
+                ClassEnrollment.is_active.is_(True),
+                Class.is_active.is_(True),
+                Assessment.status.in_([AssessmentStatus.ACTIVE, AssessmentStatus.CLOSED]),
+            )
+            .order_by(Assessment.published_at.desc())
+        )
+        rows = (await self.db.execute(query)).all()
+
+        result: list[StudentAssessmentItem] = []
+        for row in rows:
+            if row.attempt_id is None:
+                attempt_status = "NOT_STARTED"
+            else:
+                attempt_status = str(row.attempt_status_raw)
+
+            result.append(
+                StudentAssessmentItem(
+                    id=row.id,
+                    class_id=row.class_id,
+                    class_name=row.class_name,
+                    title=row.title,
+                    assessment_type=str(row.assessment_type),
+                    status=str(row.status),
+                    question_count=row.question_count,
+                    deadline=row.deadline,
+                    published_at=row.published_at,
+                    attempt_status=attempt_status,
+                    attempt_id=row.attempt_id,
+                    score=row.score,
+                )
+            )
+
+        logger.info("student_assessments_fetched", student_id=str(student.id), count=len(result))
+        return result
 
     async def list_platform_users(
         self,
