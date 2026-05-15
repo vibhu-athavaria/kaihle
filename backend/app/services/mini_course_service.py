@@ -127,7 +127,9 @@ class MiniCourseService:
                 duration_seconds=video_content.video_duration_seconds,
             )
 
-        content_status: Literal["ready", "unavailable"] = "ready" if explanation_item is not None else "unavailable"
+        content_status: Literal["ready", "generating", "unavailable"] = (
+            "ready" if explanation_item is not None else "unavailable"
+        )
 
         return SubtopicCourseResponse(
             subtopic_id=subtopic_id,
@@ -222,10 +224,11 @@ class MiniCourseService:
 
         Ordering: interest-matched row first (CASE score 0), generic fallback (score 1).
         """
-        priority_expr = case(
-            (SubtopicContent.interest_category_id == interest_category_id, 0),
-            else_=1,
-        )
+        if interest_category_id is not None:
+            match_cond = SubtopicContent.interest_category_id == interest_category_id
+        else:
+            match_cond = SubtopicContent.interest_category_id.is_(None)
+        priority_expr = case((match_cond, 0), else_=1)
         result = await self.db.execute(
             select(SubtopicContent)
             .where(
