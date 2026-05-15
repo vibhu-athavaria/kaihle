@@ -15,6 +15,7 @@ venv
 .ruff_cache/
 CLAUDE.local.md
 .superpowers/
+docs/curriculum_research/*
 docs/superpowers/*
 docs/design/specs/*
 docs/design/mockups/*
