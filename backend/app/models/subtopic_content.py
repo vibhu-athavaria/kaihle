@@ -120,6 +120,11 @@ class SubtopicContent(Base, UUIDMixin, TimestampMixin):
         nullable=True,
     )
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rejection_teacher_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Student feedback aggregates (denormalised for read performance)
+    thumbs_up_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    thumbs_down_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     # Status flags
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true", index=True)
