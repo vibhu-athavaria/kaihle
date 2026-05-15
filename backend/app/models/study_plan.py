@@ -63,7 +63,6 @@ class StudyPlan(Base, UUIDMixin, TimestampMixin):
             StudyPlanStatus.COMPLETED,
             StudyPlanStatus.ABANDONED,
             name="study_plan_status",
-            native_enum=False,
         ),
         nullable=False,
         default=StudyPlanStatus.GENERATING,
@@ -101,7 +100,6 @@ class StudyPlanResource(Base, UUIDMixin, TimestampMixin):
             ResourceType.ARTICLE,
             ResourceType.INTERACTIVE,
             name="resource_type",
-            native_enum=False,
         ),
         nullable=False,
     )

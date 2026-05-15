@@ -33,7 +33,7 @@ class ClassEnrollment(Base):
     enrolled_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     onboarding_diagnostic_status: Mapped[str] = mapped_column(
-        Enum("PENDING", "IN_PROGRESS", "COMPLETED", name="onboarding_status", native_enum=False),
+        Enum("PENDING", "IN_PROGRESS", "COMPLETED", name="onboarding_status"),
         nullable=False,
         server_default="PENDING",
     )

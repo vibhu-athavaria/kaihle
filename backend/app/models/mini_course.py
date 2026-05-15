@@ -9,7 +9,6 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
-    DateTime,
     Float,
     ForeignKey,
     Index,
@@ -17,7 +16,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -51,7 +50,7 @@ class SubtopicCourseProgress(Base):
         nullable=False,
     )
     last_visited_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        TIMESTAMP(timezone=True),
         nullable=False,
         server_default="now()",
     )
