@@ -312,6 +312,26 @@ class CurriculumPatcher:
         self.stats.curriculum_topics += 1
         return row.id
 
+    _DIFFICULTY_STR_MAP: dict[str, int] = {
+        "easy": 1,
+        "low": 1,
+        "beginner": 1,
+        "medium": 3,
+        "moderate": 3,
+        "hard": 4,
+        "difficult": 4,
+        "high": 4,
+        "advanced": 5,
+        "expert": 5,
+    }
+
+    def _coerce_difficulty(self, value: int | str | None) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return value
+        return self._DIFFICULTY_STR_MAP.get(str(value).lower(), 3)
+
     async def _get_or_create_subtopic(
         self,
         curriculum_topic_id: uuid.UUID,
@@ -336,7 +356,7 @@ class CurriculumPatcher:
             canonical_code=canonical_code,
             learning_objective=data["learning_objective"],
             bloom_taxonomy_level=data.get("bloom_taxonomy_level"),
-            difficulty_level=data.get("difficulty_level"),
+            difficulty_level=self._coerce_difficulty(data.get("difficulty_level")),
             estimated_minutes=data.get("estimated_minutes"),
             sequence_order=data.get("sequence_order"),
             embedding=None,
