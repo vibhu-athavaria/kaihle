@@ -147,7 +147,7 @@ export function ResetPasswordPage({
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
-                {showPassword ? <Eye size={16} /> : <EyeOff size={16} />}
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
             {passwordValue.length > 0 && (
@@ -192,7 +192,7 @@ export function ResetPasswordPage({
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
                 aria-label={showConfirm ? "Hide password" : "Show password"}
               >
-                {showConfirm ? <Eye size={16} /> : <EyeOff size={16} />}
+                {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
             {formState.errors.confirm_password && (

@@ -54,6 +54,7 @@ from app.models.curriculum import (  # noqa: E402
     SubtopicPrerequisite,
     Topic,
 )
+from app.models.interest_category import InterestCategory  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -133,6 +134,23 @@ class CurriculumSeeder:
         self._subtopic_name_map: dict[tuple[str, str, int], dict[str, uuid.UUID]] = {}
 
     # ── Generic helpers ─────────────────────────────────────────────────
+
+    async def _seed_interest_categories(self) -> None:
+        """Upsert the four canonical interest categories. Idempotent."""
+        categories = [
+            ("sports_movement", "Sports & Movement"),
+            ("tech_gaming", "Technology & Gaming"),
+            ("nature_animals", "Nature & Animals"),
+            ("arts_culture", "Arts & Culture"),
+        ]
+        for name, description in categories:
+            result = await self.db.execute(select(InterestCategory).where(InterestCategory.name == name))
+            if result.scalar_one_or_none() is None:
+                self.db.add(InterestCategory(id=uuid.uuid4(), name=name, description=description))
+                log.info("interest_category_created", name=name)
+            else:
+                log.debug("interest_category_already_exists", name=name)
+        await self.db.flush()
 
     async def _get_or_create_curriculum(self, data: dict) -> uuid.UUID:
         """Fetch existing or insert new Curriculum row. Returns its UUID."""
@@ -394,6 +412,9 @@ class CurriculumSeeder:
 
     async def seed(self, data: dict) -> None:
         """Seed all tables in FK dependency order."""
+
+        # ── 0. Interest categories ───────────────────────────────────────
+        await self._seed_interest_categories()
 
         # ── 1. Curricula ────────────────────────────────────────────────
         log.info("seeding_curricula", count=len(data["curricula"]))

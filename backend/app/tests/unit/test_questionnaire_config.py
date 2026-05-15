@@ -158,55 +158,55 @@ class TestGetCompatibleInterests:
 class TestGetInterestCategory:
     """Tests for get_interest_category() — maps interest keys to category names."""
 
-    def test_sports_maps_to_sports_fitness(self) -> None:
+    def test_sports_maps_to_sports_movement(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("sports") == "Sports & Fitness"
+        assert get_interest_category("sports") == "sports_movement"
 
-    def test_music_maps_to_music_arts(self) -> None:
+    def test_music_maps_to_arts_culture(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("music") == "Music & Arts"
+        assert get_interest_category("music") == "arts_culture"
 
-    def test_art_maps_to_music_arts(self) -> None:
+    def test_art_maps_to_arts_culture(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("art") == "Music & Arts"
+        assert get_interest_category("art") == "arts_culture"
 
-    def test_nature_maps_to_nature_science(self) -> None:
+    def test_nature_maps_to_nature_animals(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("nature") == "Nature & Science"
+        assert get_interest_category("nature") == "nature_animals"
 
-    def test_animals_maps_to_nature_science(self) -> None:
+    def test_animals_maps_to_nature_animals(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("animals") == "Nature & Science"
+        assert get_interest_category("animals") == "nature_animals"
 
-    def test_cooking_maps_to_everyday_life(self) -> None:
+    def test_cooking_maps_to_nature_animals(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("cooking") == "Everyday Life"
+        assert get_interest_category("cooking") == "nature_animals"
 
-    def test_fashion_maps_to_everyday_life(self) -> None:
+    def test_fashion_maps_to_arts_culture(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("fashion") == "Everyday Life"
+        assert get_interest_category("fashion") == "arts_culture"
 
-    def test_technology_maps_to_tech_innovation(self) -> None:
+    def test_technology_maps_to_tech_gaming(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("technology") == "Technology & Innovation"
+        assert get_interest_category("technology") == "tech_gaming"
 
-    def test_gaming_maps_to_tech_innovation(self) -> None:
+    def test_gaming_maps_to_tech_gaming(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("gaming") == "Technology & Innovation"
+        assert get_interest_category("gaming") == "tech_gaming"
 
-    def test_travel_maps_to_adventure_exploration(self) -> None:
+    def test_travel_maps_to_nature_animals(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("travel") == "Adventure & Exploration"
+        assert get_interest_category("travel") == "nature_animals"
 
     def test_unknown_key_returns_none(self) -> None:
         from app.core.questionnaire_config import get_interest_category
@@ -216,8 +216,8 @@ class TestGetInterestCategory:
     def test_case_insensitive(self) -> None:
         from app.core.questionnaire_config import get_interest_category
 
-        assert get_interest_category("SPORTS") == "Sports & Fitness"
-        assert get_interest_category("Music") == "Music & Arts"
+        assert get_interest_category("SPORTS") == "sports_movement"
+        assert get_interest_category("Music") == "arts_culture"
 
     def test_all_known_interest_keys_have_a_category(self) -> None:
         from app.core.questionnaire_config import get_interest_category
@@ -241,12 +241,5 @@ class TestGetAllInterestCategories:
     def test_returns_all_expected_categories(self) -> None:
         from app.core.questionnaire_config import get_all_interest_categories
 
-        expected = {
-            "Adventure & Exploration",
-            "Music & Arts",
-            "Nature & Science",
-            "Everyday Life",
-            "Sports & Fitness",
-            "Technology & Innovation",
-        }
+        expected = {"sports_movement", "tech_gaming", "nature_animals", "arts_culture"}
         assert set(get_all_interest_categories()) == expected

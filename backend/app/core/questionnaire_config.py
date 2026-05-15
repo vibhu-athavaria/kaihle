@@ -286,54 +286,47 @@ def get_option_by_key(question_id: str, option_key: str) -> dict[str, Any] | Non
 # ---------------------------------------------------------------------------
 # Interest category mapping
 # ---------------------------------------------------------------------------
-# Used to tag subtopic_content with interest categories for personalisation.
-# Maps interest keys to category names.
-# v1 fine-grained keys and v2 canonical category keys are both supported.
-# Service layer resolves names to UUIDs.
+# Maps student interest keys → interest_category_enum values (DB-level enum).
+# Values must exactly match the interest_category_enum PostgreSQL type:
+#   sports_movement | tech_gaming | nature_animals | arts_culture
 
 INTEREST_KEY_TO_CATEGORY: dict[str, str] = {
-    # v1 fine-grained keys (backward compatibility)
-    "travel": "Adventure & Exploration",
-    "music": "Music & Arts",
-    "art": "Music & Arts",
-    "nature": "Nature & Science",
-    "animals": "Nature & Science",
-    "cooking": "Everyday Life",
-    "sports": "Sports & Fitness",
-    "technology": "Technology & Innovation",
-    "gaming": "Technology & Innovation",
-    "fashion": "Everyday Life",
-    # v2 canonical category keys
-    "sports_movement": "Sports & Fitness",
-    "tech_gaming": "Technology & Innovation",
-    "nature_animals": "Nature & Science",
-    "arts_culture": "Music & Arts",
+    "travel": "nature_animals",  # exploration, geography, ecosystems
+    "music": "arts_culture",
+    "art": "arts_culture",
+    "nature": "nature_animals",
+    "animals": "nature_animals",
+    "cooking": "nature_animals",  # applied chemistry/biology
+    "sports": "sports_movement",
+    "technology": "tech_gaming",
+    "gaming": "tech_gaming",
+    "fashion": "arts_culture",  # design, creative expression
+    # canonical enum keys map to themselves
+    "sports_movement": "sports_movement",
+    "tech_gaming": "tech_gaming",
+    "nature_animals": "nature_animals",
+    "arts_culture": "arts_culture",
 }
 
 
 def get_interest_category(interest_key: str) -> str | None:
-    """Return the interest category name for a given interest key.
-
-    Used when tagging subtopic_content rows with an interest_category_id
-    during content generation so that content can be personalised for
-    students who share that interest.
+    """Return the interest_category_enum value for a student interest key.
 
     Args:
-        interest_key: An interest option key from the onboarding questionnaire.
-                     Supports both v1 fine-grained keys (e.g. "sports", "music")
-                     and v2 canonical category keys (e.g. "sports_movement").
+        interest_key: An interest key from the onboarding questionnaire or
+                      a canonical enum value (e.g. "sports_movement").
 
     Returns:
-        The matching interest category name, or None if the key is unknown.
+        A valid interest_category_enum string, or None if the key is unknown.
 
     Example:
-        get_interest_category("sports")          → "Sports & Fitness"
-        get_interest_category("sports_movement") → "Sports & Fitness"
+        get_interest_category("sports")          → "sports_movement"
+        get_interest_category("sports_movement") → "sports_movement"
         get_interest_category("unknown")         → None
     """
     return INTEREST_KEY_TO_CATEGORY.get(interest_key.lower())
 
 
 def get_all_interest_categories() -> list[str]:
-    """Return the set of all distinct interest category names."""
+    """Return all distinct interest_category_enum values."""
     return sorted(set(INTEREST_KEY_TO_CATEGORY.values()))

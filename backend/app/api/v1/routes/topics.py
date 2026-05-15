@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models.curriculum import CurriculumTopic, Topic
 from app.models.user import UserRole
+from app.tasks.mini_course_tasks import generate_topic_mini_course as celery_mini_course_task
 
 router = APIRouter(tags=["topics"])
 
@@ -53,9 +54,7 @@ async def generate_topic_mini_course(
         )
 
     # Enqueue the generation task — thin handler, no business logic here
-    from app.tasks.mini_course_tasks import generate_topic_mini_course as celery_task
-
     school_id = str(current_user.school_id) if current_user.school_id else ""
-    task = celery_task.delay(topic_id=str(topic_id), school_id=school_id)
+    task = celery_mini_course_task.delay(topic_id=str(topic_id), school_id=school_id)
 
     return {"task_id": task.id, "status": "queued"}
