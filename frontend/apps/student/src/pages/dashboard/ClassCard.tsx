@@ -110,7 +110,8 @@ export function ClassCard({ data }: ClassCardProps) {
         >
           Topics
         </Link>
-        <Link
+        {/* Study plan and My progress hidden for M5 MVP — backend kept alive */}
+        {/* <Link
           to={`/student/classes/${data.class_id}/study-plan`}
           className="text-xs font-semibold text-brand-body hover:text-brand-primary transition-colors"
           onClick={(e) => e.stopPropagation()}
@@ -123,7 +124,7 @@ export function ClassCard({ data }: ClassCardProps) {
           onClick={(e) => e.stopPropagation()}
         >
           My progress
-        </Link>
+        </Link> */}
       </div>
     </div>
   );
