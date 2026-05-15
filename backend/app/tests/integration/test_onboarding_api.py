@@ -251,24 +251,23 @@ async def test_full_onboarding_flow(
 
     # 3. Submit questionnaire responses
     responses: list[dict[str, Any]] = [
-        {"question_id": "q1", "answer_key": "watch_video"},
-        {"question_id": "q2", "answer_key": "see_diagrams"},
-        {"question_id": "q3", "answer_key": "solo"},
-        {"question_id": "q4", "answer_key": "short"},
-        {"question_id": "q5", "answer_key": "concept_first"},
-        {"question_id": "q6_to_q10", "answer_keys": ["sports", "music", "gaming"]},
+        {"question_id": "q1", "answer_key": "see_diagram"},
+        {"question_id": "q2", "answer_key": "draw_it"},
+        {"question_id": "q3", "answer_key": "find_example"},
+        {"question_id": "q4", "answer_key": "solo_quiet"},
+        {"question_id": "q5", "answer_key": "big_picture"},
+        {"question_id": "q6", "answer_key": "sports_movement"},
+        {"question_id": "q7", "answer_key": "persists"},
     ]
 
     updated_profile = await service.save_questionnaire_response(test_student.id, responses)
 
     # 4. Verify scores
-    assert updated_profile.modality_scores["visual"] == 1.0
-    assert updated_profile.modality_scores["auditory"] == 0.0
+    assert updated_profile.modality_scores["dominant"] == "visual"
     assert updated_profile.work_style["prefers_solo"] is True
-    assert updated_profile.work_style["short_sessions"] is True
     assert updated_profile.work_style["concept_first"] is True
     assert updated_profile.work_style["task_based"] is False
-    assert updated_profile.interests == ["sports", "music", "gaming"]
+    assert updated_profile.interests == ["sports_movement"]
     assert updated_profile.completed_at is not None
 
     # 5. Check onboarding status after profile completion

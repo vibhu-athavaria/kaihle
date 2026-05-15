@@ -194,8 +194,8 @@ class TestGetQuestionnaire:
         data = response.json()
         assert "version" in data
         assert "questions" in data
-        assert data["version"] == "v1"
-        assert len(data["questions"]) == 6
+        assert data["version"] == "v2"
+        assert len(data["questions"]) == 7
 
     @pytest.mark.asyncio
     async def test_quest_03_authenticated_kaihle_admin_retrieves_questionnaire(
@@ -229,8 +229,8 @@ class TestGetQuestionnaire:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["version"] == "v1"
-        assert len(data["questions"]) == 6
+        assert data["version"] == "v2"
+        assert len(data["questions"]) == 7
 
         for question in data["questions"]:
             assert "id" in question
@@ -243,7 +243,8 @@ class TestGetQuestionnaire:
                 assert "key" in option
                 assert "text" in option
 
-                if question["id"] != "q6_to_q10":
+                # q6 (interest) and q7 (challenge_response) options don't have maps_to
+                if question["id"] not in ("q6", "q7"):
                     assert "maps_to" in option
 
     @pytest.mark.asyncio
@@ -306,15 +307,16 @@ class TestSubmitQuestionnaire:
         client: AsyncClient,
         auth_headers_student: dict[str, str],
     ) -> None:
-        """SUB-01: Student submits valid responses (6 question groups) → 200 with scores."""
+        """SUB-01: Student submits valid responses (7 questions) → 200 with scores."""
         submit_data = {
             "responses": [
-                {"question_id": "q1", "answer_key": "watch_video"},
-                {"question_id": "q2", "answer_key": "see_diagrams"},
-                {"question_id": "q3", "answer_key": "solo"},
-                {"question_id": "q4", "answer_key": "short"},
-                {"question_id": "q5", "answer_key": "concept_first"},
-                {"question_id": "q6_to_q10", "answer_keys": ["sports", "music"]},
+                {"question_id": "q1", "answer_key": "see_diagram"},
+                {"question_id": "q2", "answer_key": "draw_it"},
+                {"question_id": "q3", "answer_key": "find_example"},
+                {"question_id": "q4", "answer_key": "solo_quiet"},
+                {"question_id": "q5", "answer_key": "big_picture"},
+                {"question_id": "q6", "answer_key": "sports_movement"},
+                {"question_id": "q7", "answer_key": "persists"},
             ]
         }
 
@@ -330,7 +332,7 @@ class TestSubmitQuestionnaire:
         assert "modality_scores" in data
         assert "work_style" in data
         assert "interests" in data
-        assert data["interests"] == ["sports", "music"]
+        assert data["interests"] == ["sports_movement"]
 
     @pytest.mark.asyncio
     async def test_sub_02_student_submits_with_all_modality_types(
@@ -338,15 +340,16 @@ class TestSubmitQuestionnaire:
         client: AsyncClient,
         auth_headers_student: dict[str, str],
     ) -> None:
-        """SUB-02: Student submits with all modality types → 200, correct scores."""
+        """SUB-02: Student submits kinesthetic answers → 200, dominant=kinesthetic."""
         submit_data = {
             "responses": [
-                {"question_id": "q1", "answer_key": "try_it_out"},
-                {"question_id": "q2", "answer_key": "do_exercise"},
-                {"question_id": "q3", "answer_key": "group"},
-                {"question_id": "q4", "answer_key": "long"},
-                {"question_id": "q5", "answer_key": "task_based"},
-                {"question_id": "q6_to_q10", "answer_keys": ["gaming", "technology"]},
+                {"question_id": "q1", "answer_key": "try_problems"},
+                {"question_id": "q2", "answer_key": "show_example"},
+                {"question_id": "q3", "answer_key": "try_different"},
+                {"question_id": "q4", "answer_key": "with_friends"},
+                {"question_id": "q5", "answer_key": "dive_in"},
+                {"question_id": "q6", "answer_key": "tech_gaming"},
+                {"question_id": "q7", "answer_key": "paces"},
             ]
         }
 
@@ -358,9 +361,8 @@ class TestSubmitQuestionnaire:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["modality_scores"]["kinesthetic"] == 1.0
+        assert data["modality_scores"]["dominant"] == "kinesthetic"
         assert data["work_style"]["prefers_solo"] is False
-        assert data["work_style"]["short_sessions"] is False
         assert data["work_style"]["concept_first"] is False
         assert data["work_style"]["task_based"] is True
 
@@ -370,29 +372,16 @@ class TestSubmitQuestionnaire:
         client: AsyncClient,
         auth_headers_student: dict[str, str],
     ) -> None:
-        """SUB-03: Student submits with all interests selected (10) → 200."""
+        """SUB-03: Student submits with interest selected → 200, single interest returned."""
         submit_data = {
             "responses": [
-                {"question_id": "q1", "answer_key": "watch_video"},
-                {"question_id": "q2", "answer_key": "see_diagrams"},
-                {"question_id": "q3", "answer_key": "solo"},
-                {"question_id": "q4", "answer_key": "short"},
-                {"question_id": "q5", "answer_key": "concept_first"},
-                {
-                    "question_id": "q6_to_q10",
-                    "answer_keys": [
-                        "sports",
-                        "music",
-                        "gaming",
-                        "animals",
-                        "cooking",
-                        "art",
-                        "technology",
-                        "nature",
-                        "fashion",
-                        "travel",
-                    ],
-                },
+                {"question_id": "q1", "answer_key": "see_diagram"},
+                {"question_id": "q2", "answer_key": "draw_it"},
+                {"question_id": "q3", "answer_key": "find_example"},
+                {"question_id": "q4", "answer_key": "solo_quiet"},
+                {"question_id": "q5", "answer_key": "big_picture"},
+                {"question_id": "q6", "answer_key": "nature_animals"},
+                {"question_id": "q7", "answer_key": "persists"},
             ]
         }
 
@@ -404,7 +393,8 @@ class TestSubmitQuestionnaire:
 
         assert response.status_code == 200
         data = response.json()
-        assert len(data["interests"]) == 10
+        assert len(data["interests"]) == 1
+        assert data["interests"] == ["nature_animals"]
 
     @pytest.mark.asyncio
     async def test_sub_04_student_resubmits_idempotent(
@@ -415,12 +405,13 @@ class TestSubmitQuestionnaire:
         """SUB-04: Student re-submits (idempotent) → 200, same profile ID."""
         submit_data = {
             "responses": [
-                {"question_id": "q1", "answer_key": "watch_video"},
-                {"question_id": "q2", "answer_key": "see_diagrams"},
-                {"question_id": "q3", "answer_key": "solo"},
-                {"question_id": "q4", "answer_key": "short"},
-                {"question_id": "q5", "answer_key": "concept_first"},
-                {"question_id": "q6_to_q10", "answer_keys": ["sports", "music"]},
+                {"question_id": "q1", "answer_key": "see_diagram"},
+                {"question_id": "q2", "answer_key": "draw_it"},
+                {"question_id": "q3", "answer_key": "find_example"},
+                {"question_id": "q4", "answer_key": "solo_quiet"},
+                {"question_id": "q5", "answer_key": "big_picture"},
+                {"question_id": "q6", "answer_key": "arts_culture"},
+                {"question_id": "q7", "answer_key": "persists"},
             ]
         }
 
@@ -452,15 +443,16 @@ class TestSubmitQuestionnaire:
         client: AsyncClient,
         auth_headers_student: dict[str, str],
     ) -> None:
-        """SUB-05: Student submits with partial interests → 200."""
+        """SUB-05: Student submits with one interest selected → 200."""
         submit_data = {
             "responses": [
-                {"question_id": "q1", "answer_key": "watch_video"},
-                {"question_id": "q2", "answer_key": "see_diagrams"},
-                {"question_id": "q3", "answer_key": "solo"},
-                {"question_id": "q4", "answer_key": "short"},
-                {"question_id": "q5", "answer_key": "concept_first"},
-                {"question_id": "q6_to_q10", "answer_keys": ["sports"]},
+                {"question_id": "q1", "answer_key": "see_diagram"},
+                {"question_id": "q2", "answer_key": "draw_it"},
+                {"question_id": "q3", "answer_key": "find_example"},
+                {"question_id": "q4", "answer_key": "solo_quiet"},
+                {"question_id": "q5", "answer_key": "big_picture"},
+                {"question_id": "q6", "answer_key": "sports_movement"},
+                {"question_id": "q7", "answer_key": "paces"},
             ]
         }
 
@@ -472,7 +464,7 @@ class TestSubmitQuestionnaire:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["interests"] == ["sports"]
+        assert data["interests"] == ["sports_movement"]
 
     @pytest.mark.asyncio
     async def test_sub_06_unauthenticated(
@@ -482,12 +474,13 @@ class TestSubmitQuestionnaire:
         """SUB-06: Unauthenticated → 401."""
         submit_data = {
             "responses": [
-                {"question_id": "q1", "answer_key": "watch_video"},
-                {"question_id": "q2", "answer_key": "see_diagrams"},
-                {"question_id": "q3", "answer_key": "solo"},
-                {"question_id": "q4", "answer_key": "short"},
-                {"question_id": "q5", "answer_key": "concept_first"},
-                {"question_id": "q6_to_q10", "answer_keys": ["sports"]},
+                {"question_id": "q1", "answer_key": "see_diagram"},
+                {"question_id": "q2", "answer_key": "draw_it"},
+                {"question_id": "q3", "answer_key": "find_example"},
+                {"question_id": "q4", "answer_key": "solo_quiet"},
+                {"question_id": "q5", "answer_key": "big_picture"},
+                {"question_id": "q6", "answer_key": "sports_movement"},
+                {"question_id": "q7", "answer_key": "persists"},
             ]
         }
 
@@ -507,12 +500,13 @@ class TestSubmitQuestionnaire:
         """SUB-07: Teacher submits → 403."""
         submit_data = {
             "responses": [
-                {"question_id": "q1", "answer_key": "watch_video"},
-                {"question_id": "q2", "answer_key": "see_diagrams"},
-                {"question_id": "q3", "answer_key": "solo"},
-                {"question_id": "q4", "answer_key": "short"},
-                {"question_id": "q5", "answer_key": "concept_first"},
-                {"question_id": "q6_to_q10", "answer_keys": ["sports"]},
+                {"question_id": "q1", "answer_key": "see_diagram"},
+                {"question_id": "q2", "answer_key": "draw_it"},
+                {"question_id": "q3", "answer_key": "find_example"},
+                {"question_id": "q4", "answer_key": "solo_quiet"},
+                {"question_id": "q5", "answer_key": "big_picture"},
+                {"question_id": "q6", "answer_key": "sports_movement"},
+                {"question_id": "q7", "answer_key": "persists"},
             ]
         }
 

@@ -74,6 +74,7 @@ def _make_question_row(
     row = MagicMock()
     row.id = question_id or uuid.uuid4()
     row.question_text = question_text
+    row.correct_answer = "B"
     row.options = options or [
         {"key": "A", "text": "3"},
         {"key": "B", "text": "4"},

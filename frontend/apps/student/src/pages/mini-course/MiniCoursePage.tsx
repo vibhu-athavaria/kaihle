@@ -189,7 +189,7 @@ function CheckQuestions({ questions }: CheckQuestionsProps) {
   const allAnswered = answeredCount === questions.length;
 
   const correctCount = questions.filter(
-    (q) => answers[q.id] === q.correct_key,
+    (q) => answers[q.question_id] === q.correct_answer,
   ).length;
 
   const score = allAnswered ? correctCount / questions.length : null;
@@ -214,18 +214,18 @@ function CheckQuestions({ questions }: CheckQuestionsProps) {
 
       <div className="space-y-6">
         {questions.map((q, idx) => {
-          const chosen = answers[q.id];
-          const isCorrect = chosen === q.correct_key;
+          const chosen = answers[q.question_id];
+          const isCorrect = chosen === q.correct_answer;
 
           return (
-            <div key={q.id} className="space-y-3">
+            <div key={q.question_id} className="space-y-3">
               <p className="font-sans font-semibold text-sm text-brand-ink">
                 {idx + 1}. {q.question_text}
               </p>
               <div className="space-y-2">
                 {q.options.map((opt) => {
                   const isChosen = chosen === opt.key;
-                  const isCorrectOpt = opt.key === q.correct_key;
+                  const isCorrectOpt = opt.key === q.correct_answer;
                   let optClass =
                     "w-full text-left px-4 py-3 rounded-xl border font-sans text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2";
 
@@ -245,7 +245,7 @@ function CheckQuestions({ questions }: CheckQuestionsProps) {
                   return (
                     <button
                       key={opt.key}
-                      onClick={() => handleSelect(q.id, opt.key)}
+                      onClick={() => handleSelect(q.question_id, opt.key)}
                       disabled={!!chosen}
                       className={optClass}
                     >
@@ -298,6 +298,7 @@ export function MiniCoursePage() {
   const navigate = useNavigate();
   const layout = useStudentLayoutProps();
   const [explainOpen, setExplainOpen] = useState(false);
+  const [quizStarted, setQuizStarted] = useState(false);
 
   const { data: course, isPending, isError } = useSubtopicCourse(subtopicId!);
 
@@ -433,8 +434,31 @@ export function MiniCoursePage() {
             )}
 
             {/* Check Questions */}
-            {course.questions.length > 0 ? (
-              <CheckQuestions questions={course.questions} />
+            {(course.check_questions ?? []).length > 0 ? (
+              quizStarted ? (
+                <CheckQuestions questions={course.check_questions} />
+              ) : (
+                <div className="bg-white rounded-2xl border border-brand-border p-8 text-center">
+                  <CheckCircle
+                    className="w-10 h-10 text-brand-primary mx-auto mb-3"
+                    aria-hidden="true"
+                  />
+                  <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
+                    Ready to test yourself?
+                  </h2>
+                  <p className="font-sans text-sm text-brand-body mb-5">
+                    {course.check_questions.length} quick question
+                    {course.check_questions.length !== 1 ? "s" : ""} to check
+                    your understanding.
+                  </p>
+                  <button
+                    onClick={() => setQuizStarted(true)}
+                    className="bg-brand-primary text-white rounded-full px-6 py-2.5 text-sm font-semibold hover:bg-brand-primary/90 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                  >
+                    Quiz me
+                  </button>
+                </div>
+              )
             ) : (
               <div className="bg-white rounded-2xl border border-brand-border p-8 text-center">
                 <CheckCircle

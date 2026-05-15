@@ -4,10 +4,10 @@ export interface CourseOption {
 }
 
 export interface CourseQuestion {
-  id: string;
+  question_id: string;
   question_text: string;
   options: CourseOption[];
-  correct_key: string;
+  correct_answer: string;
 }
 
 export interface CourseExplanation {
@@ -35,7 +35,7 @@ export interface SubtopicCourse {
   grade_level: number;
   explanation: CourseExplanation | null;
   video: CourseVideo | null;
-  questions: CourseQuestion[];
+  check_questions: CourseQuestion[];
   progress: CourseProgress | null;
 }
 

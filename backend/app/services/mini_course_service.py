@@ -22,6 +22,7 @@ from app.models.onboarding import StudentLearningProfile
 from app.models.subtopic_content import SubtopicContent
 from app.schemas.mini_course import (
     CheckQuestion,
+    CheckQuestionOption,
     CourseProgressItem,
     MarkProgressRequest,
     StudentCourseProgressResponse,
@@ -361,17 +362,17 @@ class MiniCourseService:
         questions: list[CheckQuestion] = []
         for row in rows:
             # MCQ options JSONB: [{"key": "A", "text": "..."}, ...]
-            # Flatten to list[str] for the response — correct_answer excluded
-            options: list[str] = []
+            options: list[CheckQuestionOption] = []
             if row.options and isinstance(row.options, list):
                 for opt in row.options:
-                    if isinstance(opt, dict) and "text" in opt:
-                        options.append(opt["text"])
+                    if isinstance(opt, dict) and "key" in opt and "text" in opt:
+                        options.append(CheckQuestionOption(key=opt["key"], text=opt["text"]))
             questions.append(
                 CheckQuestion(
                     question_id=row.id,
                     question_text=row.question_text,
                     options=options,
+                    correct_answer=row.correct_answer or "",
                 )
             )
         return questions

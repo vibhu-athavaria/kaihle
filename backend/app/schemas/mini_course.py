@@ -22,11 +22,16 @@ class SubtopicVideoItem(BaseModel):
     duration_seconds: int | None = None
 
 
+class CheckQuestionOption(BaseModel):
+    key: str
+    text: str
+
+
 class CheckQuestion(BaseModel):
     question_id: UUID
     question_text: str
-    options: list[str]
-    # correct_answer is NOT included — evaluated server-side
+    options: list[CheckQuestionOption]
+    correct_answer: str
 
 
 class CourseProgressItem(BaseModel):

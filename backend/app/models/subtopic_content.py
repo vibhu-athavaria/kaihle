@@ -18,10 +18,10 @@ from sqlalchemy import (
     ARRAY,
     Boolean,
     DateTime,
+    Enum,
     ForeignKey,
     Index,
     Integer,
-    String,
     Text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -62,7 +62,7 @@ class SubtopicContent(Base, UUIDMixin, TimestampMixin):
 
     # Content type: video | explanation | practice | quiz
     content_type: Mapped[str] = mapped_column(
-        String(20),
+        Enum("video", "explanation", "practice", "quiz", name="content_type", create_type=False),
         nullable=False,
     )
 
@@ -108,7 +108,7 @@ class SubtopicContent(Base, UUIDMixin, TimestampMixin):
 
     # Review / approval workflow
     review_status: Mapped[str] = mapped_column(
-        String(20),
+        Enum("pending", "approved", "rejected", name="review_status", create_type=False),
         nullable=False,
         server_default="pending",
         index=True,

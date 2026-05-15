@@ -71,52 +71,36 @@ describe("ClassCard", () => {
     expect(screen.getByText("Not assessed")).toBeInTheDocument();
   });
 
-  test("test_class_card_when_rendered_then_three_quick_links_present", () => {
+  test("test_class_card_when_rendered_then_no_sub_links_only_view_class_button", () => {
     renderWithRouter(<ClassCard {...defaultProps} />);
-    expect(screen.getByText("Gap Map")).toBeInTheDocument();
-    expect(screen.getByText("Assessments")).toBeInTheDocument();
-    expect(screen.getByText("Lesson Plans")).toBeInTheDocument();
-    // Study Plan was removed — no longer a dead link
+    expect(screen.queryByText("Gap Map")).not.toBeInTheDocument();
+    expect(screen.queryByText("Assessments")).not.toBeInTheDocument();
+    expect(screen.queryByText("Lesson Plans")).not.toBeInTheDocument();
     expect(screen.queryByText("Study Plan")).not.toBeInTheDocument();
+    expect(screen.getByText("View Class")).toBeInTheDocument();
   });
 
-  test("test_class_card_when_rendered_then_quick_links_have_correct_hrefs", () => {
+  test("test_class_card_when_rendered_then_view_class_button_has_correct_href", () => {
     renderWithRouter(<ClassCard {...defaultProps} />);
-    expect(screen.getByText("Gap Map")).toHaveAttribute(
-      "href",
-      "/teacher/classes/cls-1/gap-map",
-    );
-    expect(screen.getByText("Assessments")).toHaveAttribute(
-      "href",
-      "/teacher/classes/cls-1/assessments",
-    );
-    expect(screen.getByText("Lesson Plans")).toHaveAttribute(
-      "href",
-      "/teacher/classes/cls-1/lesson-plans",
-    );
-  });
-
-  test("test_class_card_when_rendered_then_quick_links_have_focus_visible_ring", () => {
-    renderWithRouter(<ClassCard {...defaultProps} />);
-    expect(screen.getByText("Gap Map")).toHaveClass("focus-visible:ring-2");
-    expect(screen.getByText("Assessments")).toHaveClass("focus-visible:ring-2");
-    expect(screen.getByText("Lesson Plans")).toHaveClass(
-      "focus-visible:ring-2",
-    );
-    expect(screen.getByText("View →")).toHaveClass("focus-visible:ring-2");
-  });
-
-  test("test_class_card_when_rendered_then_view_link_has_correct_href", () => {
-    renderWithRouter(<ClassCard {...defaultProps} />);
-    expect(screen.getByText("View →")).toHaveAttribute(
+    expect(screen.getByText("View Class")).toHaveAttribute(
       "href",
       "/teacher/classes/cls-1",
     );
   });
 
-  test("test_class_card_when_rendered_then_view_link_uses_gold_color", () => {
+  test("test_class_card_when_rendered_then_view_class_button_uses_gold_background", () => {
     renderWithRouter(<ClassCard {...defaultProps} />);
-    expect(screen.getByText("View →")).toHaveClass("text-brand-gold");
+    expect(screen.getByText("View Class")).toHaveClass("bg-brand-gold");
+  });
+
+  test("test_class_card_when_rendered_then_view_class_button_has_focus_visible_ring", () => {
+    renderWithRouter(<ClassCard {...defaultProps} />);
+    expect(screen.getByText("View Class")).toHaveClass("focus-visible:ring-2");
+  });
+
+  test("test_class_card_when_rendered_then_view_class_button_is_full_width", () => {
+    renderWithRouter(<ClassCard {...defaultProps} />);
+    expect(screen.getByText("View Class")).toHaveClass("w-full");
   });
 
   test("test_class_card_skeleton_when_rendered_then_no_crash", () => {
