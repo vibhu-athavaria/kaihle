@@ -191,6 +191,8 @@ async def list_all_explanation_content(
                 "class_id": str(class_id) if class_id else "",
                 "class_name": class_name,
                 "created_at": sc.created_at.isoformat() if sc.created_at else "",
+                "thumbs_up_count": sc.thumbs_up_count,
+                "thumbs_down_count": sc.thumbs_down_count,
             }
         )
 

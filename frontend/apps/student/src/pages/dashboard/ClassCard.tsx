@@ -25,10 +25,10 @@ export function ClassCard({ data }: ClassCardProps) {
     data.mastery_score !== null ? Math.round(data.mastery_score * 100) : null;
 
   return (
-    <div className="bg-white border border-brand-border rounded-card hover:border-brand-primary transition-colors">
+    <div className="bg-white border border-brand-border rounded-card hover:border-brand-primary transition-colors flex flex-col">
       <Link
         to={`/student/classes/${data.class_id}`}
-        className="block p-4"
+        className="block p-4 flex-1"
         aria-label={data.class_name}
       >
         <div className="flex items-start gap-3">
@@ -102,27 +102,27 @@ export function ClassCard({ data }: ClassCardProps) {
         )}
       </Link>
 
-      <div className="border-t border-brand-border-soft px-4 py-2 flex gap-3">
+      <div className="border-t border-brand-border-soft px-4 py-2.5">
         <Link
           to={`/student/classes/${data.class_id}`}
-          className="text-xs font-semibold text-brand-body hover:text-brand-primary transition-colors"
+          className="flex items-center justify-center gap-1.5 text-xs font-semibold text-brand-primary hover:text-brand-primary/80 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 rounded"
           onClick={(e) => e.stopPropagation()}
         >
-          Topics
-        </Link>
-        <Link
-          to={`/student/classes/${data.class_id}/study-plan`}
-          className="text-xs font-semibold text-brand-body hover:text-brand-primary transition-colors"
-          onClick={(e) => e.stopPropagation()}
-        >
-          Study plan
-        </Link>
-        <Link
-          to="/student/my-progress"
-          className="text-xs font-semibold text-brand-body hover:text-brand-primary transition-colors"
-          onClick={(e) => e.stopPropagation()}
-        >
-          My progress
+          View class
+          <svg
+            className="w-3.5 h-3.5"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M3 8h10M9 4l4 4-4 4"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </Link>
       </div>
     </div>

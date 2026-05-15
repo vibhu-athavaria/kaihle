@@ -10,16 +10,20 @@ All LLM calls route through app.ai.providers.router (Rule 4 compliance).
 """
 
 import json
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from uuid import UUID
 
+import litellm
 import structlog
+from fastapi import HTTPException, status
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.providers import router as llm_router
-from app.models.curriculum import Subtopic
+from app.core.questionnaire_config import INTEREST_KEY_TO_CATEGORY
+from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic, Topic
 from app.models.onboarding import StudentLearningProfile
 from app.models.user import User
 
@@ -240,3 +244,155 @@ async def evaluate_mcq_answer(
         "is_correct": str(is_correct).lower(),
         "response": response.strip(),
     }
+
+
+async def explain_subtopic_question(
+    *,
+    subtopic_id: UUID,
+    student_id: UUID,
+    school_id: UUID,
+    question: str,
+    db: AsyncSession,
+) -> AsyncGenerator[str, None]:
+    """Stream an SSE response explaining a subtopic question to a student.
+
+    Yields SSE-formatted chunks from the LLM, grounded to the given subtopic and
+    personalised by the student's dominant learning modality and first interest.
+
+    Args:
+        subtopic_id: UUID of the subtopic to explain.
+        student_id: UUID of the requesting student.
+        school_id: UUID of the student's school (unused in query — kept for future RLS).
+        question: The student's question (max 500 chars).
+        db: Async database session.
+
+    Yields:
+        SSE data lines: ``data: <text_chunk>\\n\\n`` followed by ``data: [DONE]\\n\\n``.
+
+    Raises:
+        HTTPException 404: If subtopic is not found.
+        HTTPException 422: If question exceeds 500 characters.
+    """
+    if len(question) > 500:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Question must be 500 characters or fewer.",
+        )
+
+    # Resolve subtopic + curriculum context (topic, subject, grade) in one join
+    row = await db.execute(
+        select(
+            Subtopic.name.label("subtopic_name"),
+            Topic.name.label("topic_name"),
+            Subject.name.label("subject_name"),
+            Grade.level.label("grade_level"),
+        )
+        .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+        .join(Topic, Topic.id == CurriculumTopic.topic_id)
+        .join(Subject, Subject.id == CurriculumTopic.subject_id)
+        .join(Grade, Grade.id == CurriculumTopic.grade_id)
+        .where(Subtopic.id == subtopic_id, Subtopic.is_active.is_(True))
+    )
+    subtopic_data = row.one_or_none()
+    if subtopic_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Subtopic {subtopic_id} not found",
+        )
+
+    subtopic_name: str = subtopic_data.subtopic_name
+    topic_name: str = subtopic_data.topic_name
+    subject_name: str = subtopic_data.subject_name
+    grade_level: int = subtopic_data.grade_level
+
+    # Resolve student learning profile — graceful fallback if not yet completed
+    profile_result = await db.execute(
+        select(StudentLearningProfile).where(
+            StudentLearningProfile.student_id == student_id,
+            StudentLearningProfile.completed_at.is_not(None),
+        )
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    modality_scores: dict[str, float] = profile.modality_scores if profile else {}
+    interests: list[str] = (profile.interests or []) if profile else []
+
+    dominant_modality = _get_dominant_modality(modality_scores)
+    first_interest_key = interests[0] if interests else None
+    interest_category = (
+        INTEREST_KEY_TO_CATEGORY.get(first_interest_key, "general topics") if first_interest_key else "general topics"
+    )
+
+    # Render system prompt
+    template = _jinja_env.get_template("explain_this.jinja2")
+    system_prompt = template.render(
+        subtopic_name=subtopic_name,
+        topic_name=topic_name,
+        subject_name=subject_name,
+        grade_level=grade_level,
+        dominant_modality=dominant_modality,
+        interest_category=interest_category,
+    )
+
+    model = llm_router.TASK_MODEL_MAP["explain_this"]
+    api_base = llm_router.TASK_API_BASE_MAP.get("explain_this")
+
+    logger.info(
+        "explain_this_stream_started",
+        student_id=str(student_id),
+        subtopic_id=str(subtopic_id),
+        subtopic_name=subtopic_name,
+        dominant_modality=dominant_modality,
+        interest_category=interest_category,
+    )
+
+    return _stream_explain_this(
+        model=model,
+        api_base=api_base,
+        system_prompt=system_prompt,
+        question=question,
+        student_id=student_id,
+        subtopic_id=subtopic_id,
+    )
+
+
+async def _stream_explain_this(
+    *,
+    model: str,
+    api_base: str | None,
+    system_prompt: str,
+    question: str,
+    student_id: UUID,
+    subtopic_id: UUID,
+) -> AsyncGenerator[str, None]:
+    """Inner async generator that drives the litellm streaming call.
+
+    Separated from explain_subtopic_question so that the outer function can perform
+    all DB lookups and validation before returning the generator to the caller — this
+    ensures HTTPExceptions are raised immediately rather than lazily.
+    """
+    response = await litellm.acompletion(
+        model=model,
+        api_base=api_base or None,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question},
+        ],
+        temperature=0.6,
+        max_tokens=400,
+        stream=True,
+    )
+
+    async for chunk in response:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta.content
+        if delta is not None:
+            yield f"data: {delta}\n\n"
+
+    logger.info(
+        "explain_this_stream_completed",
+        student_id=str(student_id),
+        subtopic_id=str(subtopic_id),
+    )
+    yield "data: [DONE]\n\n"

@@ -191,6 +191,9 @@ async def update_explanation_review(
         sc.teacher_explanation = body.teacher_explanation
         sc.teacher_explanation_author_id = current_user.id
 
+    if body.teacher_note is not None:
+        sc.rejection_teacher_note = body.teacher_note
+
     await db.commit()
     await db.refresh(sc)
 

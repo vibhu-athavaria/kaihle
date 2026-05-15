@@ -30,6 +30,8 @@ TASK_MODEL_MAP: dict[str, str] = {
     "student_pack": settings.llm_student_pack_model,
     "embeddings": settings.llm_embeddings_model,
     "concept_guide": settings.llm_concept_guide_model,
+    "explain_this": settings.llm_explain_this_model,
+    "mini_course_explanation": settings.llm_mini_course_model,
 }
 
 TASK_API_BASE_MAP: dict[str, str | None] = {
@@ -40,6 +42,8 @@ TASK_API_BASE_MAP: dict[str, str | None] = {
     "student_pack": settings.llm_student_pack_api_base,
     "embeddings": settings.llm_embeddings_api_base,
     "concept_guide": settings.llm_concept_guide_api_base,
+    "explain_this": settings.llm_explain_this_api_base,
+    "mini_course_explanation": settings.llm_mini_course_api_base,
 }
 
 

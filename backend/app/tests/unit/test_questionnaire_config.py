@@ -15,13 +15,12 @@ class TestGetQuestionnaireDefinition:
         assert isinstance(result, dict)
         assert "version" in result
         assert "questions" in result
-        assert result["version"] == "v1"
+        assert result["version"] == "v2"
 
-    def test_get_questionnaire_definition_has_six_question_entries(self):
+    def test_get_questionnaire_definition_has_seven_question_entries(self):
         result = get_questionnaire_definition()
-        # 6 question entries: q1, q2, q3, q4, q5, q6_to_q10
-        # q6_to_q10 is a multi-select with 10 interest options
-        assert len(result["questions"]) == 6
+        # v2: 7 questions — q1/q2/q3 (modality), q4/q5 (work style), q6 (interest), q7 (challenge)
+        assert len(result["questions"]) == 7
 
 
 class TestGetQuestionById:
@@ -31,11 +30,11 @@ class TestGetQuestionById:
         assert result["id"] == "q1"
         assert result["type"] == "single_select"
 
-    def test_get_question_by_id_q6_returns_interests_question(self):
-        result = get_question_by_id("q6_to_q10")
+    def test_get_question_by_id_q6_returns_interest_category_question(self):
+        result = get_question_by_id("q6")
         assert result is not None
-        assert result["type"] == "multi_select"
-        assert result["maps_to"] == "interests"
+        assert result["type"] == "single_select"
+        assert result["maps_to"] == "interest_category"
 
     def test_get_question_by_id_nonexistent_returns_none(self):
         result = get_question_by_id("nonexistent")
@@ -43,25 +42,25 @@ class TestGetQuestionById:
 
 
 class TestGetOptionByKey:
-    def test_get_option_by_key_q1_watch_video(self):
-        result = get_option_by_key("q1", "watch_video")
+    def test_get_option_by_key_q1_watch_walkthrough(self):
+        # v2: key is "watch_walkthrough" (auditory), not "watch_video"
+        result = get_option_by_key("q1", "watch_walkthrough")
         assert result is not None
-        assert result["key"] == "watch_video"
-        assert result["maps_to"]["modality"] == "visual"
+        assert result["key"] == "watch_walkthrough"
+        assert result["maps_to"]["modality"] == "auditory"
 
-    def test_get_option_by_key_q6_fashion_exists(self):
-        result = get_option_by_key("q6_to_q10", "fashion")
+    def test_get_option_by_key_q6_sports_movement_exists(self):
+        # v2: q6 has canonical category keys, not fine-grained interests
+        result = get_option_by_key("q6", "sports_movement")
         assert result is not None
-        assert result["key"] == "fashion"
-        assert result["text"] == "Fashion"
-        assert result["emoji"] == "👗"
+        assert result["key"] == "sports_movement"
 
     def test_get_option_by_key_q6_design_not_exists(self):
-        result = get_option_by_key("q6_to_q10", "design")
+        result = get_option_by_key("q6", "design")
         assert result is None
 
     def test_get_option_by_key_nonexistent_question(self):
-        result = get_option_by_key("nonexistent", "watch_video")
+        result = get_option_by_key("nonexistent", "watch_walkthrough")
         assert result is None
 
 

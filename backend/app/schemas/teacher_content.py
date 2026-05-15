@@ -32,6 +32,8 @@ class TeacherExplanationReviewWithClass(BaseModel):
     class_id: UUID
     class_name: str
     created_at: str
+    thumbs_up_count: int = 0
+    thumbs_down_count: int = 0
 
 
 class TeacherExplanationReviewListResponse(BaseModel):
@@ -64,6 +66,11 @@ class TeacherExplanationUpdateRequest(BaseModel):
         default=None,
         max_length=5000,
         description="Teacher's own explanation to override the AI explanation",
+    )
+    teacher_note: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Optional note from the teacher when rejecting content",
     )
 
 

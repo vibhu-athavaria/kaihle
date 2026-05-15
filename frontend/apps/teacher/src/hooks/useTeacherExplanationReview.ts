@@ -32,6 +32,7 @@ export interface TeacherExplanationReviewListResponse {
 export interface TeacherExplanationUpdateRequest {
   review_status?: "approved" | "rejected";
   teacher_explanation?: string;
+  teacher_note?: string;
 }
 
 export interface TeacherExplanationUpdateResponse {
@@ -146,6 +147,8 @@ export interface TeacherExplanationReviewWithClass {
   classId: string;
   className: string;
   createdAt: string;
+  thumbsUpCount: number;
+  thumbsDownCount: number;
 }
 
 interface TeacherExplanationReviewResponse {
@@ -159,6 +162,8 @@ interface TeacherExplanationReviewResponse {
   class_id: string;
   class_name: string;
   created_at: string;
+  thumbs_up_count: number;
+  thumbs_down_count: number;
 }
 
 async function fetchAllTeacherExplanationReview(
@@ -183,6 +188,8 @@ async function fetchAllTeacherExplanationReview(
     classId: item.class_id,
     className: item.class_name,
     createdAt: item.created_at,
+    thumbsUpCount: item.thumbs_up_count ?? 0,
+    thumbsDownCount: item.thumbs_down_count ?? 0,
   }));
 }
 

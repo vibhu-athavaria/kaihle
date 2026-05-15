@@ -6,19 +6,32 @@ Routes:
 - GET  /api/v1/students/me/classes         - Current student's enrolled classes
 - POST /api/v1/students/me/concept-guide   - AI-generated concept explanation
 - POST /api/v1/students/me/concept-guide/answer - MCQ answer evaluation
+- GET  /api/v1/students/me/subtopics/{subtopic_id}/course  - Mini-course for a subtopic
+- POST /api/v1/students/me/subtopics/{subtopic_id}/course/progress  - Mark mini-course progress
+- POST /api/v1/students/me/subtopics/{subtopic_id}/explain - SSE streaming explanation
+- POST /api/v1/students/me/subtopic-content/{content_id}/feedback - Submit thumbs up/down feedback
 - GET  /api/v1/students/{student_id}       - Full student detail (school admin)
 """
 
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user, require_role
 from app.models.user import User, UserRole
+from app.schemas.mini_course import (
+    FeedbackRequest,
+    FeedbackResponse,
+    MarkProgressRequest,
+    StudentCourseProgressResponse,
+    SubtopicCourseResponse,
+)
 from app.schemas.student_dashboard import DashboardResponse
 from app.schemas.students import (
     CheckQuestion,
@@ -31,12 +44,20 @@ from app.schemas.students import (
     StudentInfoResponse,
 )
 from app.schemas.user_detail import StudentDetailResponse
+from app.services.concept_guide_service import explain_subtopic_question
+from app.services.mini_course_service import MiniCourseService
 from app.services.student_dashboard_service import StudentDashboardService
 from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/students", tags=["students"])
+
+
+class ExplainRequest(BaseModel):
+    """Request body for the Explain This SSE endpoint."""
+
+    question: str = Field(..., max_length=500, description="Student's question about the subtopic (max 500 chars)")
 
 
 @router.get("/me/info", response_model=StudentInfoResponse)
@@ -244,6 +265,172 @@ async def submit_concept_guide_answer(
         ) from exc
 
     return McqAnswerResponse(is_correct=result["is_correct"] == "true", response=result["response"])
+
+
+@router.get("/me/subtopics/{subtopic_id}/course", response_model=SubtopicCourseResponse)
+async def get_subtopic_course(
+    subtopic_id: UUID = Path(..., description="Subtopic ID"),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SubtopicCourseResponse:
+    """Return the mini-course payload for a subtopic.
+
+    Returns interest-matched explanation (with generic fallback), approved video,
+    up to 3 random check questions, and current progress state.
+    Upserts SubtopicCourseProgress on every call to track last_visited_at.
+
+    Raises:
+        403: If user is not a student.
+        404: If subtopic not found.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    return await MiniCourseService(db).get_course_for_student(
+        subtopic_id=subtopic_id,
+        student_id=current_user.id,
+        school_id=current_user.school_id,
+    )
+
+
+@router.post("/me/subtopics/{subtopic_id}/course/progress", status_code=status.HTTP_200_OK)
+async def mark_subtopic_course_progress(
+    subtopic_id: UUID = Path(..., description="Subtopic ID"),
+    body: MarkProgressRequest = Body(...),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    """Mark explanation and/or video as accessed for a mini-course.
+
+    Idempotent — flags only advance from False to True, never backwards.
+
+    Raises:
+        403: If user is not a student.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    await MiniCourseService(db).mark_progress(
+        subtopic_id=subtopic_id,
+        student_id=current_user.id,
+        school_id=current_user.school_id,
+        request=body,
+    )
+    return {"ok": True}
+
+
+@router.post("/me/subtopics/{subtopic_id}/explain")
+async def explain_subtopic(
+    subtopic_id: UUID = Path(..., description="Subtopic ID"),
+    body: ExplainRequest = Body(...),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Stream an SSE explanation for a student's question about a subtopic.
+
+    Returns an SSE stream of text chunks ending with ``data: [DONE]``.
+
+    Auth: STUDENT role only.
+
+    Raises:
+        403: If user is not a student or has no school.
+        404: If subtopic not found.
+        422: If question exceeds 500 characters.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    generator = await explain_subtopic_question(
+        subtopic_id=subtopic_id,
+        student_id=current_user.id,
+        school_id=current_user.school_id,
+        question=body.question,
+        db=db,
+    )
+
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
+
+
+@router.get("/{student_id}/mini-course-progress", response_model=StudentCourseProgressResponse)
+async def get_student_mini_course_progress(
+    student_id: UUID = Path(..., description="Student ID"),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> StudentCourseProgressResponse:
+    """Get all mini-course progress for a student (teacher view).
+
+    Returns all subtopics visited by the student with their progress state,
+    ordered by most-recently visited first.
+
+    Auth: TEACHER role only. The student must belong to the teacher's school.
+
+    Raises:
+        403: If caller is not a TEACHER, or the student is in a different school.
+    """
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Teacher has no school")
+
+    logger.info(
+        "teacher_student_course_progress_requested",
+        requester_id=str(current_user.id),
+        student_id=str(student_id),
+    )
+
+    return await MiniCourseService(db).get_student_course_progress(
+        student_id=student_id,
+        school_id=current_user.school_id,
+    )
+
+
+@router.post(
+    "/me/subtopic-content/{content_id}/feedback",
+    response_model=FeedbackResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def submit_content_feedback(
+    content_id: UUID = Path(..., description="SubtopicContent ID"),
+    body: FeedbackRequest = Body(...),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> FeedbackResponse:
+    """Submit thumbs up or thumbs down feedback for a subtopic content row.
+
+    Idempotent — if the student has previously submitted feedback for this content,
+    the feedback_type and comment are updated.  Aggregate counts on subtopic_content
+    are recalculated after every upsert.
+
+    Raises:
+        403: If caller is not a STUDENT.
+        404: If the SubtopicContent row does not exist.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    feedback = await MiniCourseService(db).submit_content_feedback(
+        content_id=content_id,
+        student_id=current_user.id,
+        school_id=current_user.school_id,
+        feedback_type=body.feedback_type,
+        comment=body.comment,
+    )
+    return FeedbackResponse(
+        id=feedback.id,
+        feedback_type=feedback.feedback_type,
+        comment=feedback.comment,
+        created_at=feedback.created_at,
+    )
 
 
 @router.get("/{student_id}", response_model=StudentDetailResponse)

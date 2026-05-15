@@ -25,6 +25,7 @@ import { StudyPlanDetail } from "./pages/study-plans/StudyPlanDetail";
 import { ClassTopicsPage } from "./pages/classes/ClassTopicsPage";
 import { ClassPage } from "./pages/classes/ClassPage";
 import { TopicDetailPage } from "./pages/topics/TopicDetailPage";
+import { MiniCoursePage } from "./pages/mini-course/MiniCoursePage";
 
 function PrivateRouteWithPasswordCheck({
   children,
@@ -129,6 +130,18 @@ export default function App() {
               <OnboardingRoute>
                 <ErrorBoundary role="student">
                   <TopicDetailPage />
+                </ErrorBoundary>
+              </OnboardingRoute>
+            </PrivateRouteWithPasswordCheck>
+          }
+        />
+        <Route
+          path="/student/subtopics/:subtopicId/course"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <OnboardingRoute>
+                <ErrorBoundary role="student">
+                  <MiniCoursePage />
                 </ErrorBoundary>
               </OnboardingRoute>
             </PrivateRouteWithPasswordCheck>

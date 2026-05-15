@@ -1,7 +1,8 @@
 // packages/ui/src/layouts/StudentLayout.tsx
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Home, BarChart2, ClipboardList, Settings, LogOut } from "lucide-react";
+// MVP: BarChart2 removed (was used by My Progress nav item — add back when re-enabling)
+import { Home, ClipboardList, Settings, LogOut } from "lucide-react";
 
 export type StudentNavItem = "home" | "progress" | "assessments";
 
@@ -112,11 +113,8 @@ export function StudentLayout({
 
           {[
             { key: "home" as StudentNavItem, label: "Dashboard", Icon: Home },
-            {
-              key: "progress" as StudentNavItem,
-              label: "My progress",
-              Icon: BarChart2,
-            },
+            // MVP: "My progress" nav item hidden — component and route retained
+            // { key: "progress" as StudentNavItem, label: "My progress", Icon: BarChart2 },
           ].map(({ key, label, Icon }) => {
             const isActive = activeNav === key;
             return (

@@ -11,9 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.questionnaire_config import get_option_by_key, get_question_by_id
 
-VALID_QUESTION_IDS = {"q1", "q2", "q3", "q4", "q5", "q6_to_q10"}
-SINGLE_SELECT_QUESTIONS = {"q1", "q2", "q3", "q4", "q5"}
-MULTI_SELECT_QUESTIONS = {"q6_to_q10"}
+VALID_QUESTION_IDS = {"q1", "q2", "q3", "q4", "q5", "q6", "q7"}
+SINGLE_SELECT_QUESTIONS = {"q1", "q2", "q3", "q4", "q5", "q6", "q7"}
+MULTI_SELECT_QUESTIONS: set[str] = set()
 
 
 class ResponseAnswer(BaseModel):
@@ -76,7 +76,7 @@ class ResponseAnswer(BaseModel):
 class QuestionnaireSubmitRequest(BaseModel):
     """Request schema for submitting questionnaire responses."""
 
-    responses: list[ResponseAnswer] = Field(..., min_length=6, description="List of answers to all 6 question groups")
+    responses: list[ResponseAnswer] = Field(..., min_length=7, description="List of answers to all 7 questions")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -159,11 +159,11 @@ class StudentLearningProfileResponse(BaseModel):
     id: UUID
     student_id: UUID
     school_id: UUID
-    modality_scores: dict[str, float] = Field(
-        ..., description="Scores for each modality (visual, auditory, reading_writing, kinesthetic)"
+    modality_scores: dict[str, Any] = Field(
+        ..., description="v2: {dominant, secondary} modality strings; legacy: {visual, auditory, ...} floats"
     )
-    work_style: dict[str, bool] = Field(
-        ..., description="Work style preferences (prefers_solo, short_sessions, concept_first, task_based)"
+    work_style: dict[str, Any] = Field(
+        ..., description="Work style preferences; may include string fields (e.g. challenge_response)"
     )
     interests: list[str] | None = Field(None, description="Selected interests from the questionnaire")
     questionnaire_version: str = Field(..., description="Version of questionnaire used")

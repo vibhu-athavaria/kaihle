@@ -4,15 +4,16 @@ import { StudentLayout } from "@kaihle/ui";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import { useStudentDashboard } from "../../hooks/useStudentDashboard";
 import { TopicsTab } from "./tabs/TopicsTab";
-import { StudyPlanTab } from "./tabs/StudyPlanTab";
-import { MyProgressTab } from "./tabs/MyProgressTab";
+import { AssessmentsTab } from "./tabs/AssessmentsTab";
+// MVP: imports retained — re-enable when Study Plan and My Progress tabs are restored
+// import { StudyPlanTab } from "./tabs/StudyPlanTab";
+// import { MyProgressTab } from "./tabs/MyProgressTab";
 
-type TabKey = "topics" | "study-plan" | "progress";
+type TabKey = "topics" | "assessments";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "topics", label: "Topics" },
-  { key: "study-plan", label: "Study plan" },
-  { key: "progress", label: "My progress" },
+  { key: "assessments", label: "Assessments" },
 ];
 
 export function ClassPage() {
@@ -21,7 +22,6 @@ export function ClassPage() {
   const navigate = useNavigate();
   const layout = useStudentLayoutProps();
 
-  // Use already-cached dashboard data to avoid an extra API call for class metadata
   const { data: dashboard, isLoading: isDashboardLoading } =
     useStudentDashboard();
   const classData = dashboard?.classes.find((c) => c.class_id === classId);
@@ -130,22 +130,7 @@ export function ClassPage() {
           aria-label={TABS.find((t) => t.key === activeTab)?.label}
         >
           {activeTab === "topics" && <TopicsTab classId={classId!} />}
-          {activeTab === "study-plan" && (
-            <StudyPlanTab
-              classId={classId!}
-              diagnosticStatus={classData?.diagnostic_status ?? "PENDING"}
-            />
-          )}
-          {activeTab === "progress" && classData?.subject_id && (
-            <MyProgressTab subjectId={classData.subject_id} />
-          )}
-          {activeTab === "progress" && !classData?.subject_id && (
-            <div className="text-center py-16 px-6">
-              <p className="font-sans text-sm text-brand-body">
-                Loading class information…
-              </p>
-            </div>
-          )}
+          {activeTab === "assessments" && <AssessmentsTab classId={classId!} />}
         </div>
       </div>
     </StudentLayout>

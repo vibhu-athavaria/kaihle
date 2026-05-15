@@ -18,10 +18,15 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user
+from app.models.class_topic import ClassTopic
+from app.models.curriculum import Subtopic
 
 logger = structlog.get_logger()
 
@@ -160,3 +165,57 @@ async def list_topic_quizzes(
     )
     # TODO: Replace with actual quiz listing
     return []
+
+
+class SubtopicStudentResponse(BaseModel):
+    id: UUID
+    name: str
+    order: int
+
+
+@router.get(
+    "/{class_id}/topics/{class_topic_id}/subtopics",
+    response_model=list[SubtopicStudentResponse],
+)
+async def list_class_topic_subtopics(
+    class_id: UUID = Path(..., description="Class ID"),
+    class_topic_id: UUID = Path(..., description="ClassTopic ID"),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[SubtopicStudentResponse]:
+    """List subtopics for a class topic, ordered by sequence_order."""
+    result = await db.execute(
+        select(ClassTopic).where(
+            ClassTopic.id == class_topic_id,
+            ClassTopic.class_id == class_id,
+        )
+    )
+    class_topic = result.scalar_one_or_none()
+    if class_topic is None:
+        raise HTTPException(status_code=404, detail="Topic not found in this class")
+
+    subtopics_result = await db.execute(
+        select(Subtopic)
+        .where(
+            Subtopic.curriculum_topic_id == class_topic.curriculum_topic_id,
+            Subtopic.is_active.is_(True),
+        )
+        .order_by(Subtopic.sequence_order)
+    )
+    subtopics = subtopics_result.scalars().all()
+
+    logger.info(
+        "class_topic_subtopics_listed",
+        user_id=str(current_user.id),
+        class_id=str(class_id),
+        class_topic_id=str(class_topic_id),
+        count=len(subtopics),
+    )
+    return [
+        SubtopicStudentResponse(
+            id=s.id,
+            name=s.name,
+            order=s.sequence_order or 0,
+        )
+        for s in subtopics
+    ]
