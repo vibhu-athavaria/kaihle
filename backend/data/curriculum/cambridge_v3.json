@@ -1047,6 +1047,58 @@
               "prerequisites": []
             }
           ]
+        },
+        {
+          "canonical_code": "ENG-LANG",
+          "name": "Use of English",
+          "sequence_order": 4,
+          "learning_objectives": [
+            "Apply grammatical knowledge in reading and writing",
+            "Use punctuation accurately",
+            "Develop vocabulary"
+          ],
+          "subtopics": [
+            {
+              "name": "Sentences, Phrases and Clauses",
+              "canonical_code": "ENG-LANG-G5-01",
+              "learning_objective": "Identify and use different sentence types; understand phrases and clauses",
+              "bloom_taxonomy_level": "remember",
+              "difficulty_level": 2,
+              "estimated_minutes": 30,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Punctuation",
+              "canonical_code": "ENG-LANG-G5-02",
+              "learning_objective": "Use capital letters, full stops, commas, apostrophes, and question marks correctly",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 30,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Spelling Strategies",
+              "canonical_code": "ENG-LANG-G5-03",
+              "learning_objective": "Apply spelling rules and strategies for common words and word families",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 30,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Vocabulary in Context",
+              "canonical_code": "ENG-LANG-G5-04",
+              "learning_objective": "Understand and use new vocabulary encountered in reading; use a dictionary and thesaurus",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 30,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
         }
       ]
     },
@@ -2305,303 +2357,328 @@
       "standard_code_prefix": "6S",
       "topics": [
         {
-          "name": "Scientific Enquiry",
-          "canonical_code": "SCI-ENQ",
+          "canonical_code": "SCI-CELLS",
+          "name": "Cells",
           "sequence_order": 1,
-          "recommended_weeks": 3,
           "learning_objectives": [
-            "Plan and carry out fair scientific investigations",
-            "Record and present scientific data accurately"
+            "Describe cell structure and function",
+            "Compare plant and animal cells",
+            "Understand specialised cells"
           ],
           "subtopics": [
             {
-              "name": "Planning Investigations",
-              "canonical_code": "SCI-ENQ-G6-01",
-              "learning_objective": "Identify independent, dependent and control variables in a scientific investigation; write a testable hypothesis and design a fair test.",
-              "bloom_taxonomy_level": "Apply",
+              "name": "Cell Structure and Function",
+              "canonical_code": "SCI-CELLS-G6-01",
+              "learning_objective": "Identify and describe the function of cell components: membrane, cytoplasm, nucleus, cell wall, chloroplast, mitochondria, vacuole",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Plant vs Animal Cells",
+              "canonical_code": "SCI-CELLS-G6-02",
+              "learning_objective": "Compare plant and animal cells; explain why plant cells have cell walls and chloroplasts",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Specialised Cells",
+              "canonical_code": "SCI-CELLS-G6-03",
+              "learning_objective": "Describe how the structure of specialised cells (red blood cells, root hair cells, palisade cells) relates to their function",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Tissues, Organs and Systems",
+              "canonical_code": "SCI-CELLS-G6-04",
+              "learning_objective": "Explain how cells form tissues, tissues form organs, and organs form organ systems",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 4,
+              "prerequisites": []
+            },
+            {
+              "name": "Microorganisms as Single-Celled Organisms",
+              "canonical_code": "SCI-CELLS-G6-05",
+              "learning_objective": "Describe microorganisms as single-celled living things; give examples and describe their roles",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 5,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-MATTER",
+          "name": "Classifying Matter",
+          "sequence_order": 2,
+          "learning_objectives": [
+            "Understand atoms, elements, compounds and mixtures",
+            "Describe states of matter using the particle model"
+          ],
+          "subtopics": [
+            {
+              "name": "Atoms and Elements",
+              "canonical_code": "SCI-MATTER-G6-01",
+              "learning_objective": "Describe atoms as the building blocks of matter; identify elements on the Periodic Table; distinguish metals and non-metals",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Compounds and Mixtures",
+              "canonical_code": "SCI-MATTER-G6-02",
+              "learning_objective": "Distinguish between elements, compounds, and mixtures including alloys; describe how compounds form",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "States of Matter and the Particle Model",
+              "canonical_code": "SCI-MATTER-G6-03",
+              "learning_objective": "Describe the arrangement and movement of particles in solids, liquids, and gases; explain state changes",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Properties of Matter \u2014 Density and Solubility",
+              "canonical_code": "SCI-MATTER-G6-04",
+              "learning_objective": "Calculate density; describe solubility and factors affecting it",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-FORCES-SPACE",
+          "name": "Forces and Space",
+          "sequence_order": 3,
+          "learning_objectives": [
+            "Explain gravity and its effects",
+            "Describe the Solar System and orbital mechanics"
+          ],
+          "subtopics": [
+            {
+              "name": "Gravity as a Universal Force",
+              "canonical_code": "SCI-FORCES-SPACE-G6-01",
+              "learning_objective": "Describe gravity as a force of attraction between masses; explain the difference between mass and weight",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "The Solar System and Orbits",
+              "canonical_code": "SCI-FORCES-SPACE-G6-02",
+              "learning_objective": "Describe the structure of the Solar System; explain how planets orbit the Sun due to gravity",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Eclipses and Phases of the Moon",
+              "canonical_code": "SCI-FORCES-SPACE-G6-03",
+              "learning_objective": "Explain how solar and lunar eclipses occur; describe the phases of the Moon",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-LIFE",
+          "name": "Classifying Life",
+          "sequence_order": 4,
+          "learning_objectives": [
+            "Describe characteristics of living organisms",
+            "Use classification keys"
+          ],
+          "subtopics": [
+            {
+              "name": "Characteristics of Living Organisms",
+              "canonical_code": "SCI-LIFE-G6-01",
+              "learning_objective": "List and explain the seven characteristics of living organisms (MRS NERG)",
+              "bloom_taxonomy_level": "remember",
               "difficulty_level": 1,
-              "estimated_minutes": 50,
+              "estimated_minutes": 35,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Classification and Dichotomous Keys",
+              "canonical_code": "SCI-LIFE-G6-02",
+              "learning_objective": "Construct and use dichotomous keys to classify organisms into kingdoms and groups",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Ecosystems and Food Webs",
+              "canonical_code": "SCI-LIFE-G6-03",
+              "learning_objective": "Describe ecosystem components; construct food chains and food webs; explain energy flow",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Biodiversity and Adaptation",
+              "canonical_code": "SCI-LIFE-G6-04",
+              "learning_objective": "Explain how organisms are adapted to their environments; describe threats to biodiversity",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 45,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-CHEM-CHANGE",
+          "name": "Chemical Changes",
+          "sequence_order": 5,
+          "learning_objectives": [
+            "Describe chemical reactions including combustion and acid-base reactions"
+          ],
+          "subtopics": [
+            {
+              "name": "Combustion and Oxidation",
+              "canonical_code": "SCI-CHEM-CHANGE-G6-01",
+              "learning_objective": "Describe combustion as a reaction with oxygen; write word equations for combustion reactions",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Acids and Alkalis",
+              "canonical_code": "SCI-CHEM-CHANGE-G6-02",
+              "learning_objective": "Use the pH scale; test substances with indicators; describe neutralisation reactions",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Word Equations for Reactions",
+              "canonical_code": "SCI-CHEM-CHANGE-G6-03",
+              "learning_objective": "Write word equations for common chemical reactions; identify reactants and products",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-ENERGY-SOUND",
+          "name": "Energy and Sound",
+          "sequence_order": 6,
+          "learning_objectives": [
+            "Describe energy types and transfers",
+            "Explain properties of sound"
+          ],
+          "subtopics": [
+            {
+              "name": "Energy Types and Transfer",
+              "canonical_code": "SCI-ENERGY-SOUND-G6-01",
+              "learning_objective": "Identify different forms of energy; describe energy transfers and transformations using Sankey diagrams",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Sound \u2014 Vibrations, Frequency and Amplitude",
+              "canonical_code": "SCI-ENERGY-SOUND-G6-02",
+              "learning_objective": "Explain that sound is produced by vibrations; relate frequency to pitch and amplitude to loudness",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Electricity and Circuits",
+              "canonical_code": "SCI-ENERGY-SOUND-G6-03",
+              "learning_objective": "Draw and interpret circuit diagrams; distinguish series and parallel circuits; measure current and voltage",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-ENQ",
+          "name": "Thinking and Working Scientifically",
+          "sequence_order": 7,
+          "learning_objectives": [
+            "Plan and conduct investigations",
+            "Record, present, and communicate scientific findings"
+          ],
+          "subtopics": [
+            {
+              "name": "Scientific Method and Hypotheses",
+              "canonical_code": "SCI-ENQ-G6-01",
+              "learning_objective": "Formulate hypotheses; identify variables (independent, dependent, control); plan a fair test",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
               "sequence_order": 1,
               "prerequisites": []
             },
             {
               "name": "Recording and Presenting Data",
               "canonical_code": "SCI-ENQ-G6-02",
-              "learning_objective": "Select appropriate apparatus; record results accurately in clearly labelled tables; present data as bar charts and line graphs, choosing appropriate scales.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 1,
-              "estimated_minutes": 50,
+              "learning_objective": "Record data in tables; draw line graphs, bar charts, and scatter graphs; identify anomalous results",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
               "sequence_order": 2,
-              "prerequisites": [
-                "SCI-ENQ-G6-01"
-              ]
+              "prerequisites": []
             },
             {
+              "name": "Drawing Conclusions and Evaluating",
               "canonical_code": "SCI-ENQ-G6-03",
-              "name": "Communicating Scientific Ideas",
-              "learning_objective": "Present scientific findings using tables, graphs and written explanations",
-              "bloom_taxonomy_level": "understand",
+              "learning_objective": "Draw conclusions from data; evaluate reliability and suggest improvements to investigations",
+              "bloom_taxonomy_level": "evaluate",
               "difficulty_level": 3,
-              "estimated_minutes": 45,
+              "estimated_minutes": 40,
               "sequence_order": 3,
-              "prerequisites": []
-            }
-          ]
-        },
-        {
-          "name": "Biology",
-          "canonical_code": "SCI-BIO",
-          "sequence_order": 2,
-          "recommended_weeks": 5,
-          "learning_objectives": [
-            "Identify and describe the structure of plant and animal cells",
-            "Explain photosynthesis and the role of producers",
-            "Describe food chains, food webs and the roles of organisms in ecosystems"
-          ],
-          "subtopics": [
-            {
-              "name": "Cells and Cell Functions",
-              "canonical_code": "SCI-BIO-G6-01",
-              "learning_objective": "Identify and label the structures of plant and animal cells; state the function of the nucleus, cell membrane, cytoplasm, cell wall, vacuole and chloroplasts.",
-              "bloom_taxonomy_level": "Remember",
-              "difficulty_level": 1,
-              "estimated_minutes": 50,
-              "sequence_order": 1,
-              "prerequisites": []
-            },
-            {
-              "name": "Photosynthesis",
-              "canonical_code": "SCI-BIO-G6-02",
-              "learning_objective": "Write the word equation for photosynthesis; describe the roles of light, chlorophyll, carbon dioxide and water; explain why plants are producers in a food chain.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 1,
-              "estimated_minutes": 50,
-              "sequence_order": 2,
-              "prerequisites": [
-                "SCI-BIO-G6-01"
-              ]
-            },
-            {
-              "name": "Ecosystems and Food Chains",
-              "canonical_code": "SCI-BIO-G6-03",
-              "learning_objective": "Construct and interpret food chains and food webs; describe the roles of producers, consumers and decomposers; explain energy flow through a food chain.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 1,
-              "estimated_minutes": 50,
-              "sequence_order": 3,
-              "prerequisites": [
-                "SCI-BIO-G6-02"
-              ]
-            },
-            {
-              "canonical_code": "SCI-BIO-G6-04",
-              "name": "Characteristics of Living Things",
-              "learning_objective": "Recall and apply MRS GREN to identify living organisms",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 4,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "SCI-BIO-G6-05",
-              "name": "Classification of Organisms",
-              "learning_objective": "Classify organisms into kingdoms; use and construct dichotomous keys",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 5,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "SCI-BIO-G6-06",
-              "name": "Habitats and Adaptation",
-              "learning_objective": "Explain how organisms are adapted to their environments; describe habitat features",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 6,
-              "prerequisites": []
-            }
-          ]
-        },
-        {
-          "name": "Chemistry",
-          "canonical_code": "SCI-CHEM",
-          "sequence_order": 3,
-          "recommended_weeks": 5,
-          "learning_objectives": [
-            "Describe the arrangement and movement of particles in the three states of matter",
-            "Distinguish between elements, compounds and mixtures and describe separation methods",
-            "Compare the physical properties of common materials"
-          ],
-          "subtopics": [
-            {
-              "name": "States of Matter",
-              "canonical_code": "SCI-CHEM-G6-01",
-              "learning_objective": "Describe the arrangement and movement of particles in solids, liquids and gases; explain melting, boiling, condensation and freezing in terms of particle theory.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 1,
-              "estimated_minutes": 50,
-              "sequence_order": 1,
-              "prerequisites": []
-            },
-            {
-              "name": "Mixtures and Separation Techniques",
-              "canonical_code": "SCI-CHEM-G6-02",
-              "learning_objective": "Distinguish between elements, compounds and mixtures using particle diagrams; describe and explain filtration, evaporation, distillation and chromatography.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 55,
-              "sequence_order": 2,
-              "prerequisites": [
-                "SCI-CHEM-G6-01"
-              ]
-            },
-            {
-              "name": "Properties of Materials",
-              "canonical_code": "SCI-CHEM-G6-03",
-              "learning_objective": "Compare physical properties including hardness, solubility, thermal and electrical conductivity; explain material selection for specific uses based on properties.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 2,
-              "estimated_minutes": 50,
-              "sequence_order": 3,
-              "prerequisites": [
-                "SCI-CHEM-G6-01"
-              ]
-            },
-            {
-              "canonical_code": "SCI-CHEM-G6-04",
-              "name": "Atoms, Elements and Compounds",
-              "learning_objective": "Distinguish between atoms, elements and compounds; interpret simple chemical formulae",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 4,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "SCI-CHEM-G6-05",
-              "name": "Acids and Alkalis",
-              "learning_objective": "Use the pH scale; test solutions with indicators; describe neutralisation reactions",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 5,
-              "prerequisites": []
-            }
-          ]
-        },
-        {
-          "name": "Physics",
-          "canonical_code": "SCI-PHY",
-          "sequence_order": 4,
-          "recommended_weeks": 5,
-          "learning_objectives": [
-            "Identify forces and describe their effects on motion",
-            "Describe energy forms and energy transfer",
-            "Draw and interpret simple electric circuits"
-          ],
-          "subtopics": [
-            {
-              "name": "Forces and Their Effects",
-              "canonical_code": "SCI-PHY-G6-01",
-              "learning_objective": "Identify contact and non-contact forces; describe the effects of balanced and unbalanced forces on the motion and shape of objects.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 1,
-              "estimated_minutes": 50,
-              "sequence_order": 1,
-              "prerequisites": []
-            },
-            {
-              "name": "Energy Forms and Transfer",
-              "canonical_code": "SCI-PHY-G6-02",
-              "learning_objective": "Identify different forms of energy (kinetic, potential, thermal, chemical, electrical, light, sound); describe energy transfers and transformations in everyday contexts.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 1,
-              "estimated_minutes": 50,
-              "sequence_order": 2,
-              "prerequisites": []
-            },
-            {
-              "name": "Electric Circuits",
-              "canonical_code": "SCI-PHY-G6-03",
-              "learning_objective": "Draw and interpret circuit diagrams using standard symbols; describe the difference between series and parallel circuits; predict the effect of adding components.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 2,
-              "estimated_minutes": 55,
-              "sequence_order": 3,
-              "prerequisites": [
-                "SCI-PHY-G6-02"
-              ]
-            },
-            {
-              "canonical_code": "SCI-PHY-G6-04",
-              "name": "Sound \u2014 Vibrations, Pitch, Loudness",
-              "learning_objective": "Explain that sound is caused by vibrations; relate pitch to frequency and loudness to amplitude",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 4,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "SCI-PHY-G6-05",
-              "name": "Magnets and Magnetic Fields",
-              "learning_objective": "Describe properties of magnets; draw and interpret magnetic field patterns",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 5,
-              "prerequisites": []
-            }
-          ]
-        },
-        {
-          "canonical_code": "SCI-EARTH",
-          "name": "Earth and Space",
-          "sequence_order": 5,
-          "learning_objectives": [],
-          "recommended_weeks": 2,
-          "subtopics": [
-            {
-              "canonical_code": "SCI-EARTH-G6-01",
-              "name": "The Solar System",
-              "learning_objective": "Describe the structure of the Solar System; compare sizes and distances of planets",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 1,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "SCI-EARTH-G6-02",
-              "name": "Earth in Space \u2014 Day, Night and Seasons",
-              "learning_objective": "Explain day and night using Earth's rotation; explain seasons using Earth's tilt and orbit",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 2,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "SCI-EARTH-G6-03",
-              "name": "The Water Cycle",
-              "learning_objective": "Describe the stages of the water cycle: evaporation, condensation, precipitation, collection",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 3,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "SCI-EARTH-G6-04",
-              "name": "Rocks and the Rock Cycle",
-              "learning_objective": "Classify rocks as igneous, sedimentary or metamorphic; describe processes in the rock cycle",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 4,
               "prerequisites": []
             }
           ]
@@ -2615,295 +2692,324 @@
       "standard_code_prefix": "7S",
       "topics": [
         {
-          "name": "Scientific Enquiry",
-          "canonical_code": "SCI-ENQ",
+          "canonical_code": "SCI-GASES-LIQ",
+          "name": "Gases and Liquids",
           "sequence_order": 1,
-          "recommended_weeks": 3,
           "learning_objectives": [
-            "Evaluate validity and reliability of investigations",
-            "Draw evidence-based conclusions"
+            "Explain properties of gases and liquids using the particle model"
           ],
           "subtopics": [
             {
-              "name": "Variables and Fair Testing",
-              "canonical_code": "SCI-ENQ-G7-01",
-              "learning_objective": "Distinguish between independent, dependent and control variables; evaluate the validity and reliability of an investigation design.",
-              "bloom_taxonomy_level": "Analyse",
+              "name": "Properties and Behaviour of Gases",
+              "canonical_code": "SCI-GASES-LIQ-G7-01",
+              "learning_objective": "Explain gas pressure using the particle model; describe diffusion in gases",
+              "bloom_taxonomy_level": "understand",
               "difficulty_level": 2,
-              "estimated_minutes": 50,
+              "estimated_minutes": 40,
               "sequence_order": 1,
-              "prerequisites": [
-                "SCI-ENQ-G6-02"
-              ]
+              "prerequisites": []
             },
             {
-              "name": "Analysing Evidence and Drawing Conclusions",
-              "canonical_code": "SCI-ENQ-G7-02",
-              "learning_objective": "Identify patterns and anomalies in data; draw conclusions based on evidence; relate findings to scientific knowledge and suggest explanations.",
-              "bloom_taxonomy_level": "Analyse",
-              "difficulty_level": 2,
-              "estimated_minutes": 50,
+              "name": "Pressure in Liquids",
+              "canonical_code": "SCI-GASES-LIQ-G7-02",
+              "learning_objective": "Explain how pressure in a liquid increases with depth; apply to hydraulic systems",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
               "sequence_order": 2,
-              "prerequisites": [
-                "SCI-ENQ-G7-01",
-                "SCI-ENQ-G6-02"
-              ]
+              "prerequisites": []
+            },
+            {
+              "name": "Solubility and Chromatography",
+              "canonical_code": "SCI-GASES-LIQ-G7-03",
+              "learning_objective": "Describe how solubility varies with temperature; use paper chromatography to separate mixtures",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
             }
           ]
         },
         {
-          "name": "Biology",
-          "canonical_code": "SCI-BIO",
+          "canonical_code": "SCI-RESP",
+          "name": "Respiration and the Respiratory System",
           "sequence_order": 2,
-          "recommended_weeks": 5,
           "learning_objectives": [
-            "Describe the structure and function of key human organ systems",
-            "Explain reproduction in plants and humans",
-            "Identify the components of a balanced diet and their roles"
+            "Describe aerobic respiration and the respiratory system"
           ],
           "subtopics": [
             {
-              "name": "Human Organ Systems",
-              "canonical_code": "SCI-BIO-G7-01",
-              "learning_objective": "Describe the structure and function of the digestive, circulatory and respiratory systems; explain how these systems interact to sustain life.",
-              "bloom_taxonomy_level": "Understand",
+              "name": "Aerobic Respiration",
+              "canonical_code": "SCI-RESP-G7-01",
+              "learning_objective": "Write the word equation for aerobic respiration; explain why cells need energy",
+              "bloom_taxonomy_level": "understand",
               "difficulty_level": 2,
-              "estimated_minutes": 55,
+              "estimated_minutes": 40,
               "sequence_order": 1,
-              "prerequisites": [
-                "SCI-BIO-G6-01"
-              ]
+              "prerequisites": []
             },
             {
-              "name": "Reproduction",
-              "canonical_code": "SCI-BIO-G7-02",
-              "learning_objective": "Compare sexual and asexual reproduction; describe fertilisation in plants and humans; explain the stages of the menstrual cycle.",
-              "bloom_taxonomy_level": "Understand",
+              "name": "The Respiratory System",
+              "canonical_code": "SCI-RESP-G7-02",
+              "learning_objective": "Describe the structure of the respiratory system; explain the mechanism of breathing",
+              "bloom_taxonomy_level": "understand",
               "difficulty_level": 2,
-              "estimated_minutes": 55,
+              "estimated_minutes": 45,
               "sequence_order": 2,
-              "prerequisites": [
-                "SCI-BIO-G6-01"
-              ]
+              "prerequisites": []
             },
             {
-              "name": "Nutrition and Health",
-              "canonical_code": "SCI-BIO-G7-03",
-              "learning_objective": "Identify the roles of carbohydrates, proteins, fats, vitamins, minerals and water in the diet; explain the effects of nutritional deficiency and excess on health.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 50,
+              "name": "Gas Exchange",
+              "canonical_code": "SCI-RESP-G7-03",
+              "learning_objective": "Explain gas exchange in the alveoli; describe adaptations of alveoli for efficient exchange",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 45,
               "sequence_order": 3,
-              "prerequisites": [
-                "SCI-BIO-G7-01",
-                "SCI-BIO-G6-02"
-              ]
-            },
-            {
-              "canonical_code": "SCI-BIO-G7-04",
-              "name": "Respiration \u2014 Aerobic and Anaerobic",
-              "learning_objective": "Write the word equation for aerobic respiration; describe anaerobic respiration and its products",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 4,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "SCI-BIO-G7-05",
-              "name": "Digestive System and Nutrition",
-              "learning_objective": "Describe the role of each part of the digestive system; explain why a balanced diet is important",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 5,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "SCI-BIO-G7-06",
-              "name": "Genetics \u2014 Introduction to Inheritance",
-              "learning_objective": "Describe how characteristics are inherited; introduce chromosomes, genes and DNA",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 6,
               "prerequisites": []
             }
           ]
         },
         {
-          "name": "Chemistry",
-          "canonical_code": "SCI-CHEM",
+          "canonical_code": "SCI-LIGHT",
+          "name": "Light and Colour",
           "sequence_order": 3,
-          "recommended_weeks": 5,
           "learning_objectives": [
-            "Describe atomic structure and use the Periodic Table",
-            "Distinguish between physical and chemical changes",
-            "Describe acids, alkalis and neutralisation"
+            "Describe reflection, refraction, and dispersion of light"
           ],
           "subtopics": [
             {
-              "name": "Atoms, Elements and the Periodic Table",
-              "canonical_code": "SCI-CHEM-G7-01",
-              "learning_objective": "Describe the structure of the atom in terms of protons, neutrons and electrons; use the Periodic Table to identify element properties and group trends.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 55,
-              "sequence_order": 1,
-              "prerequisites": [
-                "SCI-CHEM-G6-01"
-              ]
-            },
-            {
-              "name": "Chemical and Physical Changes",
-              "canonical_code": "SCI-CHEM-G7-02",
-              "learning_objective": "Distinguish between physical and chemical changes with examples; write word equations for combustion, oxidation and neutralisation reactions.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 55,
-              "sequence_order": 2,
-              "prerequisites": [
-                "SCI-CHEM-G7-01",
-                "SCI-CHEM-G6-02"
-              ]
-            },
-            {
-              "name": "Acids, Alkalis and Neutralisation",
-              "canonical_code": "SCI-CHEM-G7-03",
-              "learning_objective": "Use the pH scale to classify substances as acidic, neutral or alkaline; describe the reaction between acids and bases; use indicators to determine pH.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 2,
-              "estimated_minutes": 55,
-              "sequence_order": 3,
-              "prerequisites": [
-                "SCI-CHEM-G7-02"
-              ]
-            },
-            {
-              "canonical_code": "SCI-CHEM-G7-04",
-              "name": "Gases in the Atmosphere",
-              "learning_objective": "State the composition of air; describe tests for oxygen, carbon dioxide and hydrogen",
-              "bloom_taxonomy_level": "understand",
+              "name": "Reflection and Refraction",
+              "canonical_code": "SCI-LIGHT-G7-01",
+              "learning_objective": "Apply the law of reflection; explain refraction using the particle/wave model; draw ray diagrams",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 3,
               "estimated_minutes": 45,
-              "sequence_order": 4,
+              "sequence_order": 1,
               "prerequisites": []
             },
             {
-              "canonical_code": "SCI-CHEM-G7-05",
-              "name": "Acids, Bases and Salts",
-              "learning_objective": "Describe reactions of acids with metals, carbonates and alkalis; prepare a salt by neutralisation",
+              "name": "Dispersion and Colour",
+              "canonical_code": "SCI-LIGHT-G7-02",
+              "learning_objective": "Explain dispersion of white light through a prism; explain why objects appear coloured",
               "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Lenses and Images",
+              "canonical_code": "SCI-LIGHT-G7-03",
+              "learning_objective": "Describe how converging lenses form images; draw ray diagrams for lenses",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 3,
               "estimated_minutes": 45,
-              "sequence_order": 5,
+              "sequence_order": 3,
               "prerequisites": []
             }
           ]
         },
         {
-          "name": "Physics",
-          "canonical_code": "SCI-PHY",
+          "canonical_code": "SCI-ATOM-REACT",
+          "name": "Atomic Structure and Chemical Reactions",
           "sequence_order": 4,
-          "recommended_weeks": 5,
           "learning_objectives": [
-            "Describe reflection and refraction of light with ray diagrams",
-            "Explain the properties and transmission of sound",
-            "Describe the structure of the solar system and celestial motion"
+            "Describe atomic structure",
+            "Explain types of chemical reactions"
           ],
           "subtopics": [
             {
-              "name": "Light and Optics",
-              "canonical_code": "SCI-PHY-G7-01",
-              "learning_objective": "Describe reflection and refraction using ray diagrams; explain how lenses form images; describe dispersion of white light into a spectrum.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 55,
-              "sequence_order": 1,
-              "prerequisites": [
-                "SCI-ENQ-G6-02"
-              ]
-            },
-            {
-              "name": "Sound and Waves",
-              "canonical_code": "SCI-PHY-G7-02",
-              "learning_objective": "Describe how sound is produced and transmitted as a longitudinal wave; relate pitch to frequency and loudness to amplitude; explain echoes and uses of ultrasound.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 50,
-              "sequence_order": 2,
-              "prerequisites": [
-                "SCI-PHY-G6-02"
-              ]
-            },
-            {
-              "name": "Earth and Space",
-              "canonical_code": "SCI-PHY-G7-03",
-              "learning_objective": "Describe the structure of the solar system; explain day and night, seasons and lunar phases using models of the Earth's and Moon's motion.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 50,
-              "sequence_order": 3,
-              "prerequisites": [
-                "SCI-PHY-G6-01"
-              ]
-            },
-            {
-              "canonical_code": "SCI-PHY-G7-04",
-              "name": "Motion \u2014 Speed and Distance-Time Graphs",
-              "learning_objective": "Calculate speed using speed = distance/time; draw and interpret distance-time graphs",
+              "name": "Atomic Structure",
+              "canonical_code": "SCI-ATOM-REACT-G7-01",
+              "learning_objective": "Describe the structure of the atom \u2014 protons, neutrons, electrons; explain atomic number and mass number",
               "bloom_taxonomy_level": "understand",
               "difficulty_level": 3,
               "estimated_minutes": 45,
-              "sequence_order": 4,
+              "sequence_order": 1,
               "prerequisites": []
             },
             {
-              "canonical_code": "SCI-PHY-G7-05",
-              "name": "Pressure in Liquids and Gases",
-              "learning_objective": "Calculate pressure using pressure = force/area; apply to examples in liquids and atmosphere",
-              "bloom_taxonomy_level": "understand",
+              "name": "Types of Chemical Reactions",
+              "canonical_code": "SCI-ATOM-REACT-G7-02",
+              "learning_objective": "Classify reactions as combustion, neutralisation, oxidation, decomposition; write word equations",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 3,
               "estimated_minutes": 45,
-              "sequence_order": 5,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Rates of Reaction",
+              "canonical_code": "SCI-ATOM-REACT-G7-03",
+              "learning_objective": "Describe factors affecting reaction rate \u2014 temperature, concentration, surface area, catalysts",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
               "prerequisites": []
             }
           ]
         },
         {
-          "canonical_code": "SCI-EARTH",
-          "name": "Earth and Space",
+          "canonical_code": "SCI-HEALTH",
+          "name": "Health and the Human Body",
           "sequence_order": 5,
-          "learning_objectives": [],
-          "recommended_weeks": 2,
+          "learning_objectives": [
+            "Describe nutrition, disease, and the body's defences"
+          ],
           "subtopics": [
             {
-              "canonical_code": "SCI-EARTH-G7-01",
-              "name": "The Solar System and Space Exploration",
-              "learning_objective": "Describe orbits of planets and moons; discuss key milestones in space exploration",
+              "name": "Nutrition and Balanced Diet",
+              "canonical_code": "SCI-HEALTH-G7-01",
+              "learning_objective": "Identify food groups and their functions; explain the consequences of malnutrition",
               "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Disease and the Body's Defences",
+              "canonical_code": "SCI-HEALTH-G7-02",
+              "learning_objective": "Distinguish between communicable and non-communicable diseases; describe the immune response",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Drugs and Their Effects",
+              "canonical_code": "SCI-HEALTH-G7-03",
+              "learning_objective": "Describe how drugs affect the body; distinguish between medical and recreational drug use",
+              "bloom_taxonomy_level": "analyse",
               "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-MOTION",
+          "name": "Speed, Motion and Forces",
+          "sequence_order": 6,
+          "learning_objectives": [
+            "Calculate speed and interpret motion graphs",
+            "Apply Newton's laws"
+          ],
+          "subtopics": [
+            {
+              "name": "Speed and Distance-Time Graphs",
+              "canonical_code": "SCI-MOTION-G7-01",
+              "learning_objective": "Calculate speed using speed = distance/time; interpret and draw distance-time graphs",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
               "estimated_minutes": 45,
               "sequence_order": 1,
               "prerequisites": []
             },
             {
-              "canonical_code": "SCI-EARTH-G7-02",
-              "name": "Earth's Structure and Tectonic Plates",
-              "learning_objective": "Describe the layers of the Earth; explain tectonic plate movement and its effects (earthquakes, volcanoes)",
-              "bloom_taxonomy_level": "understand",
+              "name": "Forces and Newton's Laws",
+              "canonical_code": "SCI-MOTION-G7-02",
+              "learning_objective": "Apply Newton's first and second laws; calculate resultant forces; explain balanced and unbalanced forces",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 3,
               "estimated_minutes": 45,
               "sequence_order": 2,
               "prerequisites": []
             },
             {
-              "canonical_code": "SCI-EARTH-G7-03",
-              "name": "Weather and Climate",
-              "learning_objective": "Distinguish between weather and climate; explain factors that influence climate",
-              "bloom_taxonomy_level": "understand",
+              "name": "Pressure",
+              "canonical_code": "SCI-MOTION-G7-03",
+              "learning_objective": "Calculate pressure; explain pressure in solids, liquids, and gases in everyday contexts",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 3,
-              "estimated_minutes": 45,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-EARTH-SOL",
+          "name": "Earth and the Solar System",
+          "sequence_order": 7,
+          "learning_objectives": [
+            "Describe Earth's place in the Solar System",
+            "Explain planetary motion and celestial events"
+          ],
+          "subtopics": [
+            {
+              "name": "Earth's Motions and the Seasons",
+              "canonical_code": "SCI-EARTH-SOL-G7-01",
+              "learning_objective": "Explain how Earth's tilt and orbit cause seasons and day length variation",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "The Solar System and Beyond",
+              "canonical_code": "SCI-EARTH-SOL-G7-02",
+              "learning_objective": "Describe the structure of the Solar System; compare planets; explain the scale of the universe",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Moon Phases and Tides",
+              "canonical_code": "SCI-EARTH-SOL-G7-03",
+              "learning_objective": "Explain Moon phases; describe how the Moon's gravity causes tides",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-ENQ",
+          "name": "Thinking and Working Scientifically",
+          "sequence_order": 8,
+          "learning_objectives": [
+            "Design investigations",
+            "Analyse evidence and draw conclusions"
+          ],
+          "subtopics": [
+            {
+              "name": "Variables and Experimental Design",
+              "canonical_code": "SCI-ENQ-G7-01",
+              "learning_objective": "Identify and control variables; design experiments to test a hypothesis; assess reliability",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Analysing Evidence",
+              "canonical_code": "SCI-ENQ-G7-02",
+              "learning_objective": "Analyse data using appropriate graphs and statistical measures; identify patterns and anomalies",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Drawing Conclusions and Evaluating",
+              "canonical_code": "SCI-ENQ-G7-03",
+              "learning_objective": "Draw evidence-based conclusions; evaluate methodology; suggest improvements",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
               "sequence_order": 3,
               "prerequisites": []
             }
@@ -2918,268 +3024,362 @@
       "standard_code_prefix": "8S",
       "topics": [
         {
-          "name": "Scientific Enquiry",
-          "canonical_code": "SCI-ENQ",
+          "canonical_code": "SCI-CHEM-BOND",
+          "name": "Chemical Bonding",
           "sequence_order": 1,
-          "recommended_weeks": 2,
           "learning_objectives": [
-            "Evaluate the quality of evidence and suggest improvements to experimental design"
+            "Describe ionic and covalent bonding",
+            "Relate bonding to properties of substances"
           ],
           "subtopics": [
             {
-              "name": "Evaluating Investigations",
-              "canonical_code": "SCI-ENQ-G8-01",
-              "learning_objective": "Evaluate the quality of evidence by identifying sources of systematic and random error; suggest improvements to experimental design to increase reliability and validity.",
-              "bloom_taxonomy_level": "Evaluate",
-              "difficulty_level": 3,
-              "estimated_minutes": 55,
-              "sequence_order": 1,
-              "prerequisites": [
-                "SCI-ENQ-G7-02"
-              ]
-            },
-            {
-              "canonical_code": "SCI-ENQ-G8-02",
-              "name": "Advanced Investigation Design",
-              "learning_objective": "Design investigations to test hypotheses; identify variables and controls",
+              "name": "Ionic Bonding",
+              "canonical_code": "SCI-CHEM-BOND-G8-01",
+              "learning_objective": "Explain how ions form; describe ionic bonding between metals and non-metals; represent ionic compounds",
               "bloom_taxonomy_level": "understand",
               "difficulty_level": 3,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Covalent Bonding",
+              "canonical_code": "SCI-CHEM-BOND-G8-02",
+              "learning_objective": "Describe covalent bonding in molecules; draw dot-and-cross diagrams for simple molecules",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 4,
               "estimated_minutes": 45,
               "sequence_order": 2,
               "prerequisites": []
             },
             {
-              "canonical_code": "SCI-ENQ-G8-03",
-              "name": "Ethical Dimensions of Science",
-              "learning_objective": "Discuss ethical considerations in scientific research; evaluate societal impacts",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
+              "name": "Bonding and Physical Properties",
+              "canonical_code": "SCI-CHEM-BOND-G8-03",
+              "learning_objective": "Relate type of bonding to melting point, conductivity, and solubility; compare ionic and covalent substances",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 4,
               "estimated_minutes": 45,
               "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "The Periodic Table and Trends",
+              "canonical_code": "SCI-CHEM-BOND-G8-04",
+              "learning_objective": "Describe the structure of the Periodic Table; identify trends in group and period properties",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 4,
               "prerequisites": []
             }
           ]
         },
         {
-          "name": "Biology",
-          "canonical_code": "SCI-BIO",
+          "canonical_code": "SCI-PLANT-BIO",
+          "name": "Plant Biology",
           "sequence_order": 2,
-          "recommended_weeks": 5,
           "learning_objectives": [
-            "Explain inheritance using DNA and Punnett squares",
-            "Describe how pathogens cause disease and how the body responds",
-            "Compare aerobic and anaerobic respiration"
+            "Describe photosynthesis, transport in plants, and plant reproduction"
           ],
           "subtopics": [
             {
-              "name": "Genetics and Inheritance",
-              "canonical_code": "SCI-BIO-G8-01",
-              "learning_objective": "Describe the structure of DNA and the role of genes in inheritance; use Punnett squares to predict ratios of offspring phenotypes for a single trait.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 3,
-              "estimated_minutes": 60,
-              "sequence_order": 1,
-              "prerequisites": [
-                "SCI-BIO-G7-02"
-              ]
-            },
-            {
-              "name": "Disease and Immunity",
-              "canonical_code": "SCI-BIO-G8-02",
-              "learning_objective": "Classify pathogens as bacteria, viruses, fungi and protists; describe modes of transmission; explain how the immune system responds and how vaccination prevents disease.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 55,
-              "sequence_order": 2,
-              "prerequisites": [
-                "SCI-BIO-G7-01"
-              ]
-            },
-            {
-              "name": "Respiration and Gas Exchange",
-              "canonical_code": "SCI-BIO-G8-03",
-              "learning_objective": "Write word equations for aerobic and anaerobic respiration; compare the two processes; describe the structure of the lungs and explain gas exchange across the alveoli.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 55,
-              "sequence_order": 3,
-              "prerequisites": [
-                "SCI-BIO-G7-01"
-              ]
-            },
-            {
-              "canonical_code": "SCI-BIO-G8-04",
-              "name": "Ecosystems and Biodiversity",
-              "learning_objective": "Describe energy flow through food chains; explain the importance of biodiversity",
+              "name": "Photosynthesis",
+              "canonical_code": "SCI-PLANT-BIO-G8-01",
+              "learning_objective": "Write the word equation for photosynthesis; explain the role of chlorophyll, light, CO\u2082, and water; describe limiting factors",
               "bloom_taxonomy_level": "understand",
               "difficulty_level": 3,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Transport in Plants",
+              "canonical_code": "SCI-PLANT-BIO-G8-02",
+              "learning_objective": "Describe water and mineral uptake through roots; explain transport in xylem and phloem",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Minerals and Plant Growth",
+              "canonical_code": "SCI-PLANT-BIO-G8-03",
+              "learning_objective": "Explain the role of nitrates and magnesium in plant growth; describe symptoms of mineral deficiency",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Plant Reproduction",
+              "canonical_code": "SCI-PLANT-BIO-G8-04",
+              "learning_objective": "Describe sexual and asexual reproduction in plants; explain pollination, fertilisation, and seed dispersal",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
               "estimated_minutes": 45,
               "sequence_order": 4,
               "prerequisites": []
-            },
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-WAVES-ENERGY",
+          "name": "Waves and Energy",
+          "sequence_order": 3,
+          "learning_objectives": [
+            "Describe wave properties",
+            "Explain heat transfer and conservation of energy"
+          ],
+          "subtopics": [
             {
-              "canonical_code": "SCI-BIO-G8-05",
-              "name": "Evolution and Natural Selection",
-              "learning_objective": "Describe Darwin's theory of natural selection; explain how variation drives evolution",
-              "bloom_taxonomy_level": "understand",
+              "name": "Wave Properties",
+              "canonical_code": "SCI-WAVES-ENERGY-G8-01",
+              "learning_objective": "Define amplitude, frequency, wavelength, and wave speed; apply the wave equation; compare transverse and longitudinal waves",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 3,
               "estimated_minutes": 45,
-              "sequence_order": 5,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Sound \u2014 Advanced",
+              "canonical_code": "SCI-WAVES-ENERGY-G8-02",
+              "learning_objective": "Explain how the ear detects sound; describe ultrasound and its applications; calculate wave speed in different media",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Heat Transfer",
+              "canonical_code": "SCI-WAVES-ENERGY-G8-03",
+              "learning_objective": "Describe conduction, convection, and radiation; explain everyday applications and insulation strategies",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Conservation of Energy",
+              "canonical_code": "SCI-WAVES-ENERGY-G8-04",
+              "learning_objective": "Apply the principle of conservation of energy; calculate efficiency; interpret Sankey diagrams",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 4,
               "prerequisites": []
             }
           ]
         },
         {
-          "name": "Chemistry",
-          "canonical_code": "SCI-CHEM",
-          "sequence_order": 3,
-          "recommended_weeks": 5,
+          "canonical_code": "SCI-HUMAN-BIO",
+          "name": "Human Biology",
+          "sequence_order": 4,
           "learning_objectives": [
-            "Describe Periodic Table trends and reactivity",
-            "Explain rates of reaction using collision theory",
-            "Describe reversible reactions"
+            "Describe human body systems and their interactions"
           ],
           "subtopics": [
             {
-              "name": "The Periodic Table and Reactivity",
-              "canonical_code": "SCI-CHEM-G8-01",
-              "learning_objective": "Describe the trends in reactivity in Group 1 and Group 7; explain reactivity using electron configuration; write displacement reaction equations.",
-              "bloom_taxonomy_level": "Apply",
+              "name": "Digestion and Nutrition",
+              "canonical_code": "SCI-HUMAN-BIO-G8-01",
+              "learning_objective": "Describe the digestive system; explain enzymatic digestion; identify sites of absorption",
+              "bloom_taxonomy_level": "understand",
               "difficulty_level": 3,
-              "estimated_minutes": 60,
+              "estimated_minutes": 45,
               "sequence_order": 1,
-              "prerequisites": [
-                "SCI-CHEM-G7-01"
-              ]
+              "prerequisites": []
+            },
+            {
+              "name": "Circulation",
+              "canonical_code": "SCI-HUMAN-BIO-G8-02",
+              "learning_objective": "Describe the structure and function of the heart; explain blood composition and circulation",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 45,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Nervous and Endocrine Systems",
+              "canonical_code": "SCI-HUMAN-BIO-G8-03",
+              "learning_objective": "Describe the structure of a neuron; explain reflex arcs; compare nervous and hormonal control",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 4,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Reproduction and Development",
+              "canonical_code": "SCI-HUMAN-BIO-G8-04",
+              "learning_objective": "Describe the human reproductive system; explain fertilisation, development, and the menstrual cycle",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-ELEC-ADV",
+          "name": "Electricity \u2014 Advanced",
+          "sequence_order": 5,
+          "learning_objectives": [
+            "Apply Ohm's law",
+            "Calculate power and energy in circuits"
+          ],
+          "subtopics": [
+            {
+              "name": "Current, Voltage and Resistance",
+              "canonical_code": "SCI-ELEC-ADV-G8-01",
+              "learning_objective": "Apply Ohm's law; measure and calculate resistance; interpret I-V graphs",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Series and Parallel Circuits",
+              "canonical_code": "SCI-ELEC-ADV-G8-02",
+              "learning_objective": "Calculate current, voltage, and resistance in series and parallel circuits",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Electrical Power and Energy",
+              "canonical_code": "SCI-ELEC-ADV-G8-03",
+              "learning_objective": "Calculate electrical power and energy; apply to everyday contexts including cost of electricity",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Electromagnetic Effects",
+              "canonical_code": "SCI-ELEC-ADV-G8-04",
+              "learning_objective": "Describe the motor effect and electromagnetic induction; explain the transformer principle",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 4,
+              "estimated_minutes": 45,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-CHEM-REACT",
+          "name": "Chemical Reactions \u2014 Advanced",
+          "sequence_order": 6,
+          "learning_objectives": [
+            "Describe and explain a range of chemical reactions"
+          ],
+          "subtopics": [
+            {
+              "name": "Reversible Reactions and Equilibrium",
+              "canonical_code": "SCI-CHEM-REACT-G8-01",
+              "learning_objective": "Describe reversible reactions; explain the concept of dynamic equilibrium",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 4,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
             },
             {
               "name": "Rates of Reaction",
-              "canonical_code": "SCI-CHEM-G8-02",
-              "learning_objective": "State and explain the effect of concentration, temperature, surface area and catalysts on reaction rate; use collision theory to explain these effects.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 3,
-              "estimated_minutes": 60,
-              "sequence_order": 2,
-              "prerequisites": [
-                "SCI-CHEM-G8-01",
-                "SCI-CHEM-G7-02"
-              ]
-            },
-            {
-              "name": "Reversible Reactions",
-              "canonical_code": "SCI-CHEM-G8-03",
-              "learning_objective": "Describe reversible reactions with examples such as hydration of copper sulfate; explain what happens to products and reactants when the reaction is reversed.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 50,
-              "sequence_order": 3,
-              "prerequisites": [
-                "CHEM-PHYS-G9-02",
-                "SCI-CHEM-G7-02"
-              ]
-            },
-            {
-              "canonical_code": "SCI-CHEM-G8-04",
-              "name": "Energy Changes in Reactions",
-              "learning_objective": "Classify reactions as exothermic or endothermic; represent energy changes on diagrams",
-              "bloom_taxonomy_level": "understand",
+              "canonical_code": "SCI-CHEM-REACT-G8-02",
+              "learning_objective": "Explain and investigate factors affecting reaction rate; interpret rate graphs",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 3,
               "estimated_minutes": 45,
-              "sequence_order": 4,
+              "sequence_order": 2,
               "prerequisites": []
             },
             {
-              "canonical_code": "SCI-CHEM-G8-05",
-              "name": "Organic Chemistry Introduction",
-              "learning_objective": "Name and describe properties of simple hydrocarbons; introduce crude oil and fractional distillation",
+              "name": "Energy Changes in Reactions",
+              "canonical_code": "SCI-CHEM-REACT-G8-03",
+              "learning_objective": "Distinguish exothermic and endothermic reactions; interpret energy profile diagrams",
               "bloom_taxonomy_level": "understand",
               "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Organic Chemistry Introduction",
+              "canonical_code": "SCI-CHEM-REACT-G8-04",
+              "learning_objective": "Describe hydrocarbons and the homologous series; explain combustion of fuels and fractional distillation",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 4,
               "estimated_minutes": 45,
-              "sequence_order": 5,
+              "sequence_order": 4,
               "prerequisites": []
             }
           ]
         },
         {
-          "name": "Physics",
-          "canonical_code": "SCI-PHY",
-          "sequence_order": 4,
-          "recommended_weeks": 6,
+          "canonical_code": "SCI-ECOSYS",
+          "name": "Species and Their Environments",
+          "sequence_order": 7,
           "learning_objectives": [
-            "Describe electromagnetism and its applications",
-            "Define wave properties and calculate wave speed",
-            "Apply Newton's laws to explain motion"
+            "Analyse ecosystem dynamics",
+            "Evaluate human impact on the environment"
           ],
           "subtopics": [
             {
-              "name": "Electromagnetism",
-              "canonical_code": "SCI-PHY-G8-01",
-              "learning_objective": "Describe the magnetic field around a current-carrying conductor; explain how an electromagnet works; name applications including electric motors and relays.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 55,
-              "sequence_order": 1,
-              "prerequisites": [
-                "SCI-PHY-G6-03"
-              ]
-            },
-            {
-              "name": "Wave Properties",
-              "canonical_code": "SCI-PHY-G8-02",
-              "learning_objective": "Define amplitude, frequency, wavelength and wave speed; calculate wave speed using v = f\u03bb; distinguish between transverse and longitudinal waves.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 3,
-              "estimated_minutes": 55,
-              "sequence_order": 2,
-              "prerequisites": [
-                "SCI-PHY-G7-02"
-              ]
-            },
-            {
-              "name": "Forces and Motion",
-              "canonical_code": "SCI-PHY-G8-03",
-              "learning_objective": "Interpret distance-time and velocity-time graphs; calculate speed, acceleration and distance; state and apply Newton's First, Second and Third Laws.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 3,
-              "estimated_minutes": 60,
-              "sequence_order": 3,
-              "prerequisites": [
-                "SCI-PHY-G6-01"
-              ]
-            },
-            {
-              "canonical_code": "SCI-PHY-G8-04",
-              "name": "Electromagnetic Effects \u2014 Introduction",
-              "learning_objective": "Describe how a magnet moving through a coil induces a current; introduce generators",
-              "bloom_taxonomy_level": "understand",
+              "name": "Population Dynamics and Interdependence",
+              "canonical_code": "SCI-ECOSYS-G8-01",
+              "learning_objective": "Explain predator-prey relationships; interpret population graphs; describe interdependence in ecosystems",
+              "bloom_taxonomy_level": "analyse",
               "difficulty_level": 3,
               "estimated_minutes": 45,
-              "sequence_order": 4,
+              "sequence_order": 1,
               "prerequisites": []
             },
             {
-              "canonical_code": "SCI-PHY-G8-05",
-              "name": "Space Physics",
-              "learning_objective": "Describe the life cycle of stars; explain the Big Bang theory; discuss evidence for an expanding universe",
-              "bloom_taxonomy_level": "understand",
+              "name": "Adaptation and Natural Selection",
+              "canonical_code": "SCI-ECOSYS-G8-02",
+              "learning_objective": "Explain natural selection; describe how populations change over time through selective pressure",
+              "bloom_taxonomy_level": "analyse",
               "difficulty_level": 3,
               "estimated_minutes": 45,
-              "sequence_order": 5,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Human Impact and Conservation",
+              "canonical_code": "SCI-ECOSYS-G8-03",
+              "learning_objective": "Evaluate human impacts on ecosystems; explain conservation strategies and their effectiveness",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
               "prerequisites": []
             }
           ]
         },
         {
-          "canonical_code": "SCI-EARTH",
-          "name": "Earth and Space",
-          "sequence_order": 5,
-          "learning_objectives": [],
-          "recommended_weeks": 2,
+          "canonical_code": "SCI-EARTH-ADV",
+          "name": "Earth and Beyond",
+          "sequence_order": 8,
+          "learning_objectives": [
+            "Describe Earth's structure and geological processes",
+            "Explain climate change"
+          ],
           "subtopics": [
             {
-              "canonical_code": "SCI-EARTH-G8-01",
-              "name": "Earth's Atmosphere and Climate Change",
-              "learning_objective": "Describe the greenhouse effect; explain how human activities contribute to climate change",
+              "name": "Earth's Structure and Plate Tectonics",
+              "canonical_code": "SCI-EARTH-ADV-G8-01",
+              "learning_objective": "Describe the layers of the Earth; explain plate tectonic theory and its evidence; describe earthquakes and volcanoes",
               "bloom_taxonomy_level": "understand",
               "difficulty_level": 3,
               "estimated_minutes": 45,
@@ -3187,22 +3387,72 @@
               "prerequisites": []
             },
             {
-              "canonical_code": "SCI-EARTH-G8-02",
-              "name": "Earth's Resources and Sustainability",
-              "learning_objective": "Discuss sustainable use of resources; evaluate renewable and non-renewable energy sources",
+              "name": "The Rock Cycle",
+              "canonical_code": "SCI-EARTH-ADV-G8-02",
+              "learning_objective": "Describe the formation of igneous, sedimentary, and metamorphic rocks; explain the rock cycle",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Earth's Atmosphere and Climate Change",
+              "canonical_code": "SCI-EARTH-ADV-G8-03",
+              "learning_objective": "Describe the composition of the atmosphere; explain the greenhouse effect and climate change evidence",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 3,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Space Science and Cosmology",
+              "canonical_code": "SCI-EARTH-ADV-G8-04",
+              "learning_objective": "Describe the life cycle of stars; explain the Big Bang theory and evidence for an expanding universe",
               "bloom_taxonomy_level": "understand",
               "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "SCI-ENQ",
+          "name": "Thinking and Working Scientifically",
+          "sequence_order": 9,
+          "learning_objectives": [
+            "Design, conduct, and evaluate scientific investigations at an advanced level"
+          ],
+          "subtopics": [
+            {
+              "name": "Advanced Investigation Design",
+              "canonical_code": "SCI-ENQ-G8-01",
+              "learning_objective": "Design investigations with multiple variables; justify methodology; assess ethical dimensions",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 45,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Data Analysis and Statistical Reasoning",
+              "canonical_code": "SCI-ENQ-G8-02",
+              "learning_objective": "Apply statistical methods to scientific data; assess significance of results; identify sources of error",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 4,
               "estimated_minutes": 45,
               "sequence_order": 2,
               "prerequisites": []
             },
             {
-              "canonical_code": "SCI-EARTH-G8-03",
-              "name": "Space Science and Cosmology",
-              "learning_objective": "Describe the scale and structure of the universe; discuss current understanding of dark matter and dark energy",
-              "bloom_taxonomy_level": "understand",
+              "name": "Scientific Communication and Evaluation",
+              "canonical_code": "SCI-ENQ-G8-03",
+              "learning_objective": "Write structured scientific reports; evaluate sources; distinguish evidence from opinion",
+              "bloom_taxonomy_level": "evaluate",
               "difficulty_level": 3,
-              "estimated_minutes": 45,
+              "estimated_minutes": 40,
               "sequence_order": 3,
               "prerequisites": []
             }
@@ -3419,6 +3669,68 @@
               "prerequisites": []
             }
           ]
+        },
+        {
+          "canonical_code": "ENG-LANG",
+          "name": "Use of English",
+          "sequence_order": 4,
+          "learning_objectives": [
+            "Demonstrate grammatical accuracy in writing",
+            "Use a range of punctuation correctly",
+            "Develop vocabulary range"
+          ],
+          "subtopics": [
+            {
+              "name": "Word Classes",
+              "canonical_code": "ENG-LANG-G6-01",
+              "learning_objective": "Identify and use nouns, verbs, adjectives, adverbs, prepositions, conjunctions, and pronouns",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Sentence Grammar",
+              "canonical_code": "ENG-LANG-G6-02",
+              "learning_objective": "Use simple, compound, and complex sentences; identify subject and verb agreement",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Punctuation for Clarity",
+              "canonical_code": "ENG-LANG-G6-03",
+              "learning_objective": "Use commas, apostrophes, speech marks, colons, and semicolons accurately",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Spelling and Word Formation",
+              "canonical_code": "ENG-LANG-G6-04",
+              "learning_objective": "Apply spelling conventions; use prefixes, suffixes, and root words",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 4,
+              "prerequisites": []
+            },
+            {
+              "name": "Vocabulary Development",
+              "canonical_code": "ENG-LANG-G6-05",
+              "learning_objective": "Extend vocabulary through reading; use synonyms, antonyms, and context clues",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 5,
+              "prerequisites": []
+            }
+          ]
         }
       ]
     },
@@ -3611,6 +3923,67 @@
               "prerequisites": []
             }
           ]
+        },
+        {
+          "canonical_code": "ENG-LANG",
+          "name": "Use of English",
+          "sequence_order": 4,
+          "learning_objectives": [
+            "Use grammatical structures accurately and for effect",
+            "Apply a range of punctuation purposefully"
+          ],
+          "subtopics": [
+            {
+              "name": "Clause and Phrase Types",
+              "canonical_code": "ENG-LANG-G7-01",
+              "learning_objective": "Identify and use main clauses, subordinate clauses, relative clauses, and phrases for effect",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Active and Passive Voice",
+              "canonical_code": "ENG-LANG-G7-02",
+              "learning_objective": "Understand and use active and passive voice; recognise the effect on tone and formality",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Tense and Aspect",
+              "canonical_code": "ENG-LANG-G7-03",
+              "learning_objective": "Use a range of tenses accurately including perfect and progressive forms",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Punctuation for Effect",
+              "canonical_code": "ENG-LANG-G7-04",
+              "learning_objective": "Use dashes, brackets, ellipsis, and semicolons for stylistic effect",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 4,
+              "prerequisites": []
+            },
+            {
+              "name": "Vocabulary for Precision",
+              "canonical_code": "ENG-LANG-G7-05",
+              "learning_objective": "Choose vocabulary for precision, nuance, and audience \u2014 formal vs informal register",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 2,
+              "estimated_minutes": 35,
+              "sequence_order": 5,
+              "prerequisites": []
+            }
+          ]
         }
       ]
     },
@@ -3793,6 +4166,67 @@
               "difficulty_level": 3,
               "estimated_minutes": 45,
               "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "ENG-LANG",
+          "name": "Use of English",
+          "sequence_order": 4,
+          "learning_objectives": [
+            "Apply grammatical knowledge to analyse and improve writing",
+            "Use language choices for deliberate effect"
+          ],
+          "subtopics": [
+            {
+              "name": "Grammatical Accuracy in Extended Writing",
+              "canonical_code": "ENG-LANG-G8-01",
+              "learning_objective": "Sustain grammatical accuracy across longer pieces; vary sentence structure for effect",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Syntax for Effect",
+              "canonical_code": "ENG-LANG-G8-02",
+              "learning_objective": "Manipulate syntax \u2014 fronted adverbials, appositives, tricolon \u2014 for rhetorical impact",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Register and Formality",
+              "canonical_code": "ENG-LANG-G8-03",
+              "learning_objective": "Select register, tone, and vocabulary appropriate to purpose and audience",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Cohesion and Coherence",
+              "canonical_code": "ENG-LANG-G8-04",
+              "learning_objective": "Use cohesive devices \u2014 pronouns, connectives, ellipsis \u2014 to create coherent extended text",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 4,
+              "prerequisites": []
+            },
+            {
+              "name": "Editing and Proofreading",
+              "canonical_code": "ENG-LANG-G8-05",
+              "learning_objective": "Identify and correct errors in grammar, punctuation, and spelling in own and others' writing",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 5,
               "prerequisites": []
             }
           ]
@@ -4524,47 +4958,53 @@
           ],
           "subtopics": [
             {
-              "name": "Compound Growth and Decay",
+              "name": "Surds and Indices",
               "canonical_code": "MATH-NUM-G10-01",
-              "learning_objective": "Solve reverse percentage problems; calculate compound interest and depreciation; apply exponential growth and decay models to real-world problems.",
-              "bloom_taxonomy_level": "Apply",
+              "learning_objective": "Simplify surds; apply laws of indices including fractional and negative indices",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 4,
-              "estimated_minutes": 65,
+              "estimated_minutes": 50,
               "sequence_order": 1,
-              "prerequisites": [
-                "MATH-NUM-G9-03"
-              ]
+              "prerequisites": []
             },
             {
-              "name": "Bounds and Error Intervals",
+              "name": "Standard Form",
               "canonical_code": "MATH-NUM-G10-02",
-              "learning_objective": "Calculate upper and lower bounds of measurements rounded to a given degree of accuracy; use bounds to find the limits of calculated quantities.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 4,
-              "estimated_minutes": 60,
+              "learning_objective": "Convert between standard form and ordinary numbers; perform calculations in standard form",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
               "sequence_order": 2,
-              "prerequisites": [
-                "MATH-NUM-G9-01"
-              ]
+              "prerequisites": []
             },
             {
+              "name": "Estimation and Bounds",
               "canonical_code": "MATH-NUM-G10-03",
-              "name": "Surds \u2014 Simplifying and Rationalising",
-              "learning_objective": "Simplify surds; rationalise the denominator of a fraction involving surds",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
+              "learning_objective": "Estimate answers; calculate upper and lower bounds for measurements and compound measures",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 4,
               "estimated_minutes": 45,
               "sequence_order": 3,
               "prerequisites": []
             },
             {
+              "name": "Ratio, Rate and Proportion \u2014 Advanced",
               "canonical_code": "MATH-NUM-G10-04",
-              "name": "Recurring Decimals to Fractions",
-              "learning_objective": "Convert recurring decimals to fractions using algebraic methods",
-              "bloom_taxonomy_level": "understand",
+              "learning_objective": "Solve problems involving direct and inverse proportion; apply ratio to complex multi-step problems",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 50,
+              "sequence_order": 4,
+              "prerequisites": []
+            },
+            {
+              "name": "Financial Mathematics",
+              "canonical_code": "MATH-NUM-G10-05",
+              "learning_objective": "Apply compound interest, reverse percentage, and profit/loss to financial problems",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 3,
               "estimated_minutes": 45,
-              "sequence_order": 4,
+              "sequence_order": 5,
               "prerequisites": []
             }
           ]
@@ -4580,70 +5020,83 @@
           ],
           "subtopics": [
             {
-              "name": "Functions and Inverse Functions",
+              "name": "Quadratic Equations",
               "canonical_code": "MATH-ALG-G10-01",
-              "learning_objective": "Use function notation; find composite and inverse functions; sketch and interpret graphs of standard functions including quadratic, cubic and reciprocal.",
-              "bloom_taxonomy_level": "Apply",
+              "learning_objective": "Solve quadratic equations by factorisation, completing the square, and the quadratic formula",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 4,
-              "estimated_minutes": 70,
+              "estimated_minutes": 55,
               "sequence_order": 1,
-              "prerequisites": [
-                "MATH-ALG-G8-03"
-              ]
+              "prerequisites": []
             },
             {
-              "name": "Transformation of Graphs",
+              "name": "Functions and Function Notation",
               "canonical_code": "MATH-ALG-G10-02",
-              "learning_objective": "Describe and apply translations f(x) + a, reflections f(\u2212x) and \u2212f(x), and stretches f(ax) and af(x) to graphs of functions.",
-              "bloom_taxonomy_level": "Apply",
+              "learning_objective": "Understand and use function notation f(x); find composite and inverse functions",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 4,
-              "estimated_minutes": 65,
+              "estimated_minutes": 50,
               "sequence_order": 2,
-              "prerequisites": [
-                "MATH-ALG-G10-01"
-              ]
+              "prerequisites": []
             },
             {
-              "name": "Algebraic Proof",
+              "name": "Algebraic Fractions",
               "canonical_code": "MATH-ALG-G10-03",
-              "learning_objective": "Construct and present algebraic proofs using manipulation and reasoning; prove identities; disprove statements using counter-examples.",
-              "bloom_taxonomy_level": "Evaluate",
+              "learning_objective": "Simplify, add, subtract, multiply, and divide algebraic fractions",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 5,
-              "estimated_minutes": 70,
+              "estimated_minutes": 50,
               "sequence_order": 3,
-              "prerequisites": [
-                "MATH-ALG-G10-01",
-                "MATH-ALG-G9-03"
-              ]
+              "prerequisites": []
             },
             {
+              "name": "Inequalities \u2014 Linear and Quadratic",
               "canonical_code": "MATH-ALG-G10-04",
-              "name": "Harder Simultaneous Equations \u2014 Linear and Non-linear",
-              "learning_objective": "Solve simultaneous equations where one is quadratic using substitution",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
+              "learning_objective": "Solve linear and quadratic inequalities; represent solution sets on a number line and graph",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 50,
               "sequence_order": 4,
               "prerequisites": []
             },
             {
+              "name": "Sequences \u2014 nth Term",
               "canonical_code": "MATH-ALG-G10-05",
-              "name": "Graphs of Functions \u2014 Exponential, Reciprocal, Trigonometric",
-              "learning_objective": "Recognise and sketch graphs of exponential, reciprocal and trigonometric functions",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
+              "learning_objective": "Find the nth term of arithmetic and geometric sequences; identify convergent sequences",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 4,
               "estimated_minutes": 45,
               "sequence_order": 5,
               "prerequisites": []
             },
             {
+              "name": "Graphs of Functions",
               "canonical_code": "MATH-ALG-G10-06",
-              "name": "Differentiation Applications",
-              "learning_objective": "Apply differentiation to find stationary points and solve optimisation problems",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
+              "learning_objective": "Sketch and interpret graphs of linear, quadratic, cubic, reciprocal, and exponential functions; identify key features",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 4,
+              "estimated_minutes": 55,
               "sequence_order": 6,
+              "prerequisites": []
+            },
+            {
+              "name": "Simultaneous Equations \u2014 Linear and Non-linear",
+              "canonical_code": "MATH-ALG-G10-07",
+              "learning_objective": "Solve simultaneous equations where one is linear and one is quadratic algebraically and graphically",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 55,
+              "sequence_order": 7,
+              "prerequisites": []
+            },
+            {
+              "name": "Differentiation \u2014 Introduction",
+              "canonical_code": "MATH-ALG-G10-08",
+              "learning_objective": "Differentiate simple polynomials; find gradients of curves and equations of tangents and normals",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 5,
+              "estimated_minutes": 60,
+              "sequence_order": 8,
               "prerequisites": []
             }
           ]
@@ -6998,16 +7451,46 @@
           ],
           "subtopics": [
             {
-              "name": "Sound and Ultrasound",
+              "name": "Light \u2014 Reflection and Refraction",
               "canonical_code": "PHY-WAVES-G10-01",
-              "learning_objective": "Describe how sound waves are produced and transmitted as longitudinal waves; explain the uses of ultrasound in medicine and industry; describe the limits of human hearing.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 2,
-              "estimated_minutes": 55,
+              "learning_objective": "Apply laws of reflection and refraction; use Snell's law; understand total internal reflection",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 50,
               "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Lenses and Optical Devices",
+              "canonical_code": "PHY-WAVES-G10-02",
+              "learning_objective": "Draw ray diagrams for converging and diverging lenses; calculate focal length and magnification",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 50,
+              "sequence_order": 2,
               "prerequisites": [
-                "PHY-WAVES-G9-01"
+                "PHY-WAVES-G10-01"
               ]
+            },
+            {
+              "name": "Electromagnetic Spectrum",
+              "canonical_code": "PHY-WAVES-G10-03",
+              "learning_objective": "Describe properties and uses of the electromagnetic spectrum; compare wavelength, frequency, and energy across the spectrum",
+              "bloom_taxonomy_level": "understand",
+              "difficulty_level": 3,
+              "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Sound Waves \u2014 Extended",
+              "canonical_code": "PHY-WAVES-G10-04",
+              "learning_objective": "Describe ultrasound applications; calculate wave speed, frequency, and wavelength in sound",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 40,
+              "sequence_order": 4,
+              "prerequisites": []
             }
           ]
         },
@@ -7465,6 +7948,56 @@
               "prerequisites": []
             }
           ]
+        },
+        {
+          "canonical_code": "ENG-LANG",
+          "name": "Use of English",
+          "sequence_order": 4,
+          "learning_objectives": [
+            "Demonstrate control of grammar, punctuation and vocabulary in directed and creative writing"
+          ],
+          "subtopics": [
+            {
+              "name": "Grammar for Accuracy",
+              "canonical_code": "ENG-LANG-G9-01",
+              "learning_objective": "Apply grammar rules accurately in extended writing \u2014 agreement, tense consistency, pronoun reference",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Punctuation for Meaning and Effect",
+              "canonical_code": "ENG-LANG-G9-02",
+              "learning_objective": "Use a full range of punctuation purposefully including semicolons, colons, dashes, and parentheses",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Vocabulary for Impact",
+              "canonical_code": "ENG-LANG-G9-03",
+              "learning_objective": "Select vocabulary for precision and impact; avoid repetition and vague language",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Sentence Variety",
+              "canonical_code": "ENG-LANG-G9-04",
+              "learning_objective": "Use a variety of sentence structures to create pace, emphasis, and interest",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
         }
       ]
     },
@@ -7619,6 +8152,46 @@
               "bloom_taxonomy_level": "understand",
               "difficulty_level": 3,
               "estimated_minutes": 45,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "ENG-LANG",
+          "name": "Use of English",
+          "sequence_order": 4,
+          "learning_objectives": [
+            "Demonstrate sophisticated control of language for effect in examination conditions"
+          ],
+          "subtopics": [
+            {
+              "name": "Advanced Grammar and Style",
+              "canonical_code": "ENG-LANG-G10-01",
+              "learning_objective": "Demonstrate mastery of grammar and syntax; use structural choices deliberately for effect",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Register and Rhetorical Devices",
+              "canonical_code": "ENG-LANG-G10-02",
+              "learning_objective": "Deploy register, tone, and rhetorical devices \u2014 anaphora, antithesis, tricolon \u2014 for persuasive and stylistic effect",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Examination Writing Accuracy",
+              "canonical_code": "ENG-LANG-G10-03",
+              "learning_objective": "Sustain accuracy in grammar, spelling, and punctuation under timed examination conditions",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 2,
+              "estimated_minutes": 40,
               "sequence_order": 3,
               "prerequisites": []
             }
@@ -9084,67 +9657,6 @@
       "standard_code_prefix": "12B",
       "topics": [
         {
-          "name": "Advanced Biology",
-          "canonical_code": "BIO-ADV",
-          "sequence_order": 1,
-          "recommended_weeks": 14,
-          "learning_objectives": [
-            "Apply knowledge of genetics, genomics and biotechnology to current research",
-            "Analyse physiological systems at advanced level",
-            "Evaluate ecological data and conservation issues"
-          ],
-          "subtopics": [
-            {
-              "name": "Genomics and Biotechnology",
-              "canonical_code": "BIO-ADV-G12-01",
-              "learning_objective": "Explain the principles of genomics and gene sequencing; describe the applications of recombinant DNA technology; evaluate the ethical implications of genetic modification and cloning.",
-              "bloom_taxonomy_level": "Evaluate",
-              "difficulty_level": 5,
-              "estimated_minutes": 75,
-              "sequence_order": 1,
-              "prerequisites": [
-                "BIO-BIOCHEM-G11-02"
-              ]
-            },
-            {
-              "name": "Physiology and Health Science",
-              "canonical_code": "BIO-ADV-G12-02",
-              "learning_objective": "Describe the control of heart rate and ventilation; explain the immune response in detail including cell-mediated and humoral immunity; evaluate the physiology of exercise and disease.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 5,
-              "estimated_minutes": 75,
-              "sequence_order": 2,
-              "prerequisites": [
-                "BIO-PHYSIO-G10-01"
-              ]
-            },
-            {
-              "name": "Ecosystem Analysis",
-              "canonical_code": "BIO-ADV-G12-03",
-              "learning_objective": "Analyse ecosystems using quantitative techniques; evaluate succession and climax communities; interpret population data; discuss global issues including climate change and biodiversity loss.",
-              "bloom_taxonomy_level": "Evaluate",
-              "difficulty_level": 4,
-              "estimated_minutes": 70,
-              "sequence_order": 3,
-              "prerequisites": [
-                "BIO-BIOCHEM-G11-04"
-              ]
-            },
-            {
-              "name": "Research in Life Sciences",
-              "canonical_code": "BIO-ADV-G12-04",
-              "learning_objective": "Design and evaluate biological investigations; apply statistical analysis to biological data; critically evaluate published research; present findings in scientific report format.",
-              "bloom_taxonomy_level": "Evaluate",
-              "difficulty_level": 5,
-              "estimated_minutes": 80,
-              "sequence_order": 4,
-              "prerequisites": [
-                "BIO-ADV-G12-03"
-              ]
-            }
-          ]
-        },
-        {
           "canonical_code": "BIO-RESP-AS",
           "name": "Energy and Respiration",
           "sequence_order": 2,
@@ -9485,85 +9997,6 @@
       "grade_level": 11,
       "standard_code_prefix": "11C",
       "topics": [
-        {
-          "name": "Advanced Chemistry",
-          "canonical_code": "CHEM-ADV",
-          "sequence_order": 1,
-          "recommended_weeks": 14,
-          "learning_objectives": [
-            "Describe atomic structure, bonding and energetics at advanced level",
-            "Explain reaction kinetics and equilibrium quantitatively",
-            "Apply organic chemistry to functional group reactions"
-          ],
-          "subtopics": [
-            {
-              "name": "Atomic Structure and Bonding",
-              "canonical_code": "CHEM-ADV-G11-01",
-              "learning_objective": "Describe atomic orbitals and electron configuration; explain ionic, covalent, metallic and intermolecular bonding in detail; predict molecular shapes using VSEPR theory; describe lattice structures.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 4,
-              "estimated_minutes": 70,
-              "sequence_order": 1,
-              "prerequisites": [
-                "CHEM-BOND-G9-02"
-              ]
-            },
-            {
-              "name": "Energetics and Kinetics",
-              "canonical_code": "CHEM-ADV-G11-02",
-              "learning_objective": "Calculate enthalpy changes using Hess's law and bond energies; apply collision theory and Arrhenius equation to reaction rates; describe the effect of catalysts on activation energy.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 4,
-              "estimated_minutes": 70,
-              "sequence_order": 2,
-              "prerequisites": [
-                "CHEM-PHYS-G9-01"
-              ]
-            },
-            {
-              "name": "Acids, Bases and Equilibrium",
-              "canonical_code": "CHEM-ADV-G11-03",
-              "learning_objective": "Apply Br\u00f8nsted-Lowry theory to acid-base reactions; calculate pH and Ka; describe buffer action; apply Le Chatelier's principle and Kc to equilibrium calculations.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 4,
-              "estimated_minutes": 75,
-              "sequence_order": 3,
-              "prerequisites": [
-                "CHEM-PHYS-G10-01"
-              ]
-            },
-            {
-              "canonical_code": "CHEM-ADV-G11-04",
-              "name": "Ionisation Energies",
-              "learning_objective": "Define first and successive ionisation energies; use IE trends to deduce electronic configuration",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 4,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "CHEM-ADV-G11-05",
-              "name": "Mass Spectrometry",
-              "learning_objective": "Explain how a mass spectrometer works; use mass spectra to calculate relative atomic mass",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 5,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "CHEM-ADV-G11-06",
-              "name": "Intermolecular Forces",
-              "learning_objective": "Describe van der Waals forces, dipole-dipole forces and hydrogen bonding; relate to physical properties",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 6,
-              "prerequisites": []
-            }
-          ]
-        },
         {
           "canonical_code": "CHEM-ATOM-AS",
           "name": "Atomic Structure",
@@ -10081,63 +10514,6 @@
       "standard_code_prefix": "12C",
       "topics": [
         {
-          "name": "Advanced Chemistry",
-          "canonical_code": "CHEM-ADV",
-          "sequence_order": 1,
-          "recommended_weeks": 14,
-          "learning_objectives": [
-            "Apply spectroscopic techniques to identify organic compounds",
-            "Evaluate contemporary chemical research and applications"
-          ],
-          "subtopics": [
-            {
-              "name": "Spectroscopy and Analysis",
-              "canonical_code": "CHEM-ADV-G12-01",
-              "learning_objective": "Interpret mass spectra, IR, NMR and UV-Vis spectra to identify organic compounds; use chromatography for separation and identification; evaluate analytical data from multiple techniques.",
-              "bloom_taxonomy_level": "Analyse",
-              "difficulty_level": 5,
-              "estimated_minutes": 75,
-              "sequence_order": 1,
-              "prerequisites": [
-                "CHEM-ADV-G11-01"
-              ]
-            },
-            {
-              "name": "Chemical Research and Applications",
-              "canonical_code": "CHEM-ADV-G12-02",
-              "learning_objective": "Evaluate industrial chemical processes including the Haber and Contact processes; discuss green chemistry principles; design and evaluate synthetic routes for organic molecules; assess environmental impact.",
-              "bloom_taxonomy_level": "Evaluate",
-              "difficulty_level": 5,
-              "estimated_minutes": 75,
-              "sequence_order": 2,
-              "prerequisites": [
-                "CHEM-ADV-G11-03",
-                "CHEM-ORG-G10-03"
-              ]
-            },
-            {
-              "canonical_code": "CHEM-ADV-G12-03",
-              "name": "NMR Spectroscopy",
-              "learning_objective": "Interpret proton NMR spectra; use chemical shift values and splitting patterns to determine structure",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 3,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "CHEM-ADV-G12-04",
-              "name": "Chromatography",
-              "learning_objective": "Describe gas-liquid chromatography (GC) and thin-layer chromatography (TLC); interpret chromatograms",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 4,
-              "prerequisites": []
-            }
-          ]
-        },
-        {
           "canonical_code": "CHEM-ORG-INTRO",
           "name": "Introduction to Organic Chemistry",
           "sequence_order": 2,
@@ -10525,88 +10901,6 @@
       "grade_level": 11,
       "standard_code_prefix": "11P",
       "topics": [
-        {
-          "name": "Advanced Physics",
-          "canonical_code": "PHY-ADV",
-          "sequence_order": 1,
-          "recommended_weeks": 16,
-          "learning_objectives": [
-            "Apply advanced mechanics including circular motion and oscillations",
-            "Describe thermal physics and thermodynamic principles",
-            "Analyse waves, optics and the electromagnetic spectrum quantitatively"
-          ],
-          "subtopics": [
-            {
-              "name": "Mechanics and Motion",
-              "canonical_code": "PHY-ADV-G11-01",
-              "learning_objective": "Apply Newton's laws to circular motion, rotation and oscillation; analyse simple harmonic motion mathematically; use conservation of energy and momentum in multi-body collisions.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 4,
-              "estimated_minutes": 75,
-              "sequence_order": 1,
-              "prerequisites": [
-                "PHY-MOTION-G9-04",
-                "MATH-MECH-G11-01"
-              ]
-            },
-            {
-              "name": "Thermal Physics",
-              "canonical_code": "PHY-ADV-G11-02",
-              "learning_objective": "Apply the ideal gas laws and kinetic theory; calculate internal energy, heat and work done in thermodynamic processes; describe the first and second laws of thermodynamics.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 4,
-              "estimated_minutes": 70,
-              "sequence_order": 2,
-              "prerequisites": [
-                "PHY-THERMAL-G9-01"
-              ]
-            },
-            {
-              "name": "Waves and Oscillations",
-              "canonical_code": "PHY-ADV-G11-03",
-              "learning_objective": "Describe stationary and progressive waves; explain diffraction, interference and polarisation; apply superposition to double-slit and diffraction grating experiments; describe the Doppler effect.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 4,
-              "estimated_minutes": 70,
-              "sequence_order": 3,
-              "prerequisites": [
-                "PHY-WAVES-G9-01"
-              ]
-            },
-            {
-              "name": "Electricity and Magnetism",
-              "canonical_code": "PHY-ADV-G11-04",
-              "learning_objective": "Apply Kirchhoff's laws to complex circuits; describe the behaviour of capacitors in DC circuits; explain the magnetic force on moving charges and current-carrying conductors; describe electromagnetic induction quantitatively.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 4,
-              "estimated_minutes": 75,
-              "sequence_order": 4,
-              "prerequisites": [
-                "PHY-ELEC-G10-03"
-              ]
-            },
-            {
-              "canonical_code": "PHY-ADV-G11-05",
-              "name": "Systematic and Random Errors",
-              "learning_objective": "Distinguish between systematic and random errors; suggest ways to reduce each",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 5,
-              "prerequisites": []
-            },
-            {
-              "canonical_code": "PHY-ADV-G11-06",
-              "name": "SI Units, Prefixes and Dimensional Analysis",
-              "learning_objective": "Use SI base units and derived units; check equations using dimensional analysis",
-              "bloom_taxonomy_level": "understand",
-              "difficulty_level": 3,
-              "estimated_minutes": 45,
-              "sequence_order": 6,
-              "prerequisites": []
-            }
-          ]
-        },
         {
           "canonical_code": "PHY-KINEM",
           "name": "Kinematics",
@@ -11105,67 +11399,6 @@
       "grade_level": 12,
       "standard_code_prefix": "12P",
       "topics": [
-        {
-          "name": "Advanced Physics",
-          "canonical_code": "PHY-ADV",
-          "sequence_order": 1,
-          "recommended_weeks": 16,
-          "learning_objectives": [
-            "Describe quantum physics and the wave-particle duality",
-            "Apply electromagnetic theory to advanced contexts",
-            "Explain nuclear and particle physics"
-          ],
-          "subtopics": [
-            {
-              "name": "Quantum Physics",
-              "canonical_code": "PHY-ADV-G12-01",
-              "learning_objective": "Describe the photoelectric effect and photon model; explain wave-particle duality and de Broglie wavelength; describe atomic energy levels, emission and absorption spectra; apply the uncertainty principle.",
-              "bloom_taxonomy_level": "Understand",
-              "difficulty_level": 5,
-              "estimated_minutes": 75,
-              "sequence_order": 1,
-              "prerequisites": [
-                "PHY-ADV-G11-03"
-              ]
-            },
-            {
-              "name": "Electromagnetic Theory",
-              "canonical_code": "PHY-ADV-G12-02",
-              "learning_objective": "Apply Faraday's and Lenz's laws to electromagnetic induction; describe alternating current circuits including capacitors and inductors; explain the operation of transformers and AC generators quantitatively.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 5,
-              "estimated_minutes": 75,
-              "sequence_order": 2,
-              "prerequisites": [
-                "PHY-ADV-G11-04"
-              ]
-            },
-            {
-              "name": "Nuclear and Particle Physics",
-              "canonical_code": "PHY-ADV-G12-03",
-              "learning_objective": "Describe nuclear stability, binding energy and mass defect; explain fission and fusion; describe fundamental particles and the quark model; apply conservation laws to particle interactions.",
-              "bloom_taxonomy_level": "Apply",
-              "difficulty_level": 5,
-              "estimated_minutes": 75,
-              "sequence_order": 3,
-              "prerequisites": [
-                "PHY-NUCLEAR-G10-03"
-              ]
-            },
-            {
-              "name": "Scientific Investigation and Reporting",
-              "canonical_code": "PHY-ADV-G12-04",
-              "learning_objective": "Plan and execute advanced experimental investigations; identify and minimise sources of error; evaluate results statistically; write a formal scientific report with critical analysis of methodology and findings.",
-              "bloom_taxonomy_level": "Evaluate",
-              "difficulty_level": 4,
-              "estimated_minutes": 70,
-              "sequence_order": 4,
-              "prerequisites": [
-                "PHY-ADV-G12-03"
-              ]
-            }
-          ]
-        },
         {
           "canonical_code": "PHY-CIRCULAR",
           "name": "Motion in a Circle",
@@ -12093,36 +12326,132 @@
       "standard_code_prefix": "11G",
       "topics": [
         {
-          "name": "Physical and Human Geography",
-          "canonical_code": "GEO-CORE",
+          "canonical_code": "GEO-PHYS",
+          "name": "Physical Geography",
           "sequence_order": 1,
-          "recommended_weeks": 16,
           "learning_objectives": [
-            "Explain physical processes including tectonics, hydrology and climate",
-            "Analyse human geography including globalisation and urban development"
+            "Understand physical systems and processes"
           ],
           "subtopics": [
             {
-              "name": "Physical Geography",
-              "canonical_code": "GEO-CORE-G11-01",
-              "learning_objective": "Explain tectonic processes, glaciation and coastal systems; describe the hydrological cycle and river processes; analyse the causes and impacts of natural hazards; interpret OS maps and satellite images.",
-              "bloom_taxonomy_level": "Apply",
+              "name": "Hydrology and Fluvial Geomorphology",
+              "canonical_code": "GEO-PHYS-G11-01",
+              "learning_objective": "Describe the hydrological cycle; explain river processes and landforms",
+              "bloom_taxonomy_level": "understand",
               "difficulty_level": 3,
-              "estimated_minutes": 65,
+              "estimated_minutes": 60,
               "sequence_order": 1,
               "prerequisites": []
             },
             {
-              "name": "Human Geography and Globalisation",
-              "canonical_code": "GEO-CORE-G11-02",
-              "learning_objective": "Analyse the causes and consequences of globalisation; describe patterns of migration, urbanisation and development; evaluate the impact of transnational corporations and international trade on development.",
-              "bloom_taxonomy_level": "Evaluate",
+              "name": "Atmosphere and Weather Systems",
+              "canonical_code": "GEO-PHYS-G11-02",
+              "learning_objective": "Explain atmospheric processes; interpret weather maps and climate data",
+              "bloom_taxonomy_level": "apply",
               "difficulty_level": 3,
-              "estimated_minutes": 65,
+              "estimated_minutes": 60,
               "sequence_order": 2,
-              "prerequisites": [
-                "GEO-CORE-G11-01"
-              ]
+              "prerequisites": []
+            },
+            {
+              "name": "Coastal Environments",
+              "canonical_code": "GEO-PHYS-G11-03",
+              "learning_objective": "Describe coastal processes; explain erosion, deposition, and management strategies",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Hazardous Environments",
+              "canonical_code": "GEO-PHYS-G11-04",
+              "learning_objective": "Explain causes and impacts of tectonic and climatic hazards; evaluate management strategies",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 60,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "GEO-HUM",
+          "name": "Human Geography",
+          "sequence_order": 2,
+          "learning_objectives": [
+            "Understand human systems and their spatial patterns"
+          ],
+          "subtopics": [
+            {
+              "name": "Population and Migration",
+              "canonical_code": "GEO-HUM-G11-01",
+              "learning_objective": "Analyse population growth, structure, and migration patterns; interpret demographic data",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Settlement and Urbanisation",
+              "canonical_code": "GEO-HUM-G11-02",
+              "learning_objective": "Explain urban growth processes; analyse land use models and urban challenges",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 3,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Economic Activity and Development",
+              "canonical_code": "GEO-HUM-G11-03",
+              "learning_objective": "Classify economic sectors; explain development indicators and global inequality",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "GEO-SKILLS",
+          "name": "Geographical Skills and Fieldwork",
+          "sequence_order": 3,
+          "learning_objectives": [
+            "Apply geographical skills in data collection, analysis, and presentation"
+          ],
+          "subtopics": [
+            {
+              "name": "Map Skills and Remote Sensing",
+              "canonical_code": "GEO-SKILLS-G11-01",
+              "learning_objective": "Use OS maps, satellite imagery, and GIS; interpret spatial data",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 3,
+              "estimated_minutes": 50,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Statistical and Graphical Techniques",
+              "canonical_code": "GEO-SKILLS-G11-02",
+              "learning_objective": "Apply statistical techniques \u2014 Spearman's rank, chi-squared; present data using appropriate graphs",
+              "bloom_taxonomy_level": "apply",
+              "difficulty_level": 4,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Fieldwork Investigation",
+              "canonical_code": "GEO-SKILLS-G11-03",
+              "learning_objective": "Design, conduct, and evaluate a geographical fieldwork investigation using primary and secondary data",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 90,
+              "sequence_order": 3,
+              "prerequisites": []
             }
           ]
         }
@@ -12135,37 +12464,115 @@
       "standard_code_prefix": "12G",
       "topics": [
         {
-          "name": "Advanced Geography",
-          "canonical_code": "GEO-ADV",
+          "canonical_code": "GEO-ENV",
+          "name": "Global Environmental Issues",
           "sequence_order": 1,
-          "recommended_weeks": 16,
           "learning_objectives": [
-            "Conduct geographical fieldwork and research",
-            "Evaluate political, urban and environmental geographical issues"
+            "Evaluate global environmental challenges and responses"
           ],
           "subtopics": [
             {
-              "name": "Fieldwork and Geographical Research",
-              "canonical_code": "GEO-ADV-G12-01",
-              "learning_objective": "Design and conduct geographical fieldwork; collect, process and analyse primary and secondary data; evaluate methodology and present findings as a structured geographical investigation.",
-              "bloom_taxonomy_level": "Evaluate",
+              "name": "Climate Change \u2014 Causes and Evidence",
+              "canonical_code": "GEO-ENV-G12-01",
+              "learning_objective": "Explain natural and anthropogenic causes of climate change; evaluate evidence",
+              "bloom_taxonomy_level": "evaluate",
               "difficulty_level": 4,
-              "estimated_minutes": 80,
+              "estimated_minutes": 60,
               "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Climate Change \u2014 Impacts and Responses",
+              "canonical_code": "GEO-ENV-G12-02",
+              "learning_objective": "Assess impacts of climate change on environments and societies; evaluate mitigation and adaptation strategies",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
               "prerequisites": [
-                "GEO-CORE-G11-02"
+                "GEO-ENV-G12-01"
               ]
             },
             {
-              "name": "Political, Urban and Environmental Geography",
-              "canonical_code": "GEO-ADV-G12-02",
-              "learning_objective": "Evaluate political geography including borders, governance and supranational organisations; analyse urban regeneration and sustainability; assess responses to environmental challenges including climate change.",
-              "bloom_taxonomy_level": "Evaluate",
+              "name": "Biodiversity and Ecosystem Management",
+              "canonical_code": "GEO-ENV-G12-03",
+              "learning_objective": "Explain threats to biodiversity; evaluate conservation strategies at local and global scales",
+              "bloom_taxonomy_level": "evaluate",
               "difficulty_level": 4,
-              "estimated_minutes": 75,
+              "estimated_minutes": 55,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "GEO-GLOB",
+          "name": "Globalisation and Development",
+          "sequence_order": 2,
+          "learning_objectives": [
+            "Analyse the causes and consequences of globalisation"
+          ],
+          "subtopics": [
+            {
+              "name": "Globalisation \u2014 Patterns and Processes",
+              "canonical_code": "GEO-GLOB-G12-01",
+              "learning_objective": "Explain the causes of globalisation; analyse patterns of trade, investment, and migration",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 4,
+              "estimated_minutes": 60,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "TNCs and Global Production",
+              "canonical_code": "GEO-GLOB-G12-02",
+              "learning_objective": "Evaluate the role of transnational corporations in development; assess benefits and costs for host and home countries",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Development \u2014 Strategies and Sustainability",
+              "canonical_code": "GEO-GLOB-G12-03",
+              "learning_objective": "Compare top-down and bottom-up development strategies; evaluate sustainable development goals",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "GEO-IND-STUDY",
+          "name": "Independent Investigation",
+          "sequence_order": 3,
+          "learning_objectives": [
+            "Conduct an independent geographical investigation"
+          ],
+          "subtopics": [
+            {
+              "name": "Research Design and Methodology",
+              "canonical_code": "GEO-IND-STUDY-G12-01",
+              "learning_objective": "Formulate a geographical question; design a methodology using primary and secondary sources",
+              "bloom_taxonomy_level": "create",
+              "difficulty_level": 5,
+              "estimated_minutes": 90,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Data Collection, Analysis and Evaluation",
+              "canonical_code": "GEO-IND-STUDY-G12-02",
+              "learning_objective": "Collect, process, and analyse data; draw conclusions and evaluate methodology",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 120,
               "sequence_order": 2,
               "prerequisites": [
-                "GEO-CORE-G11-02"
+                "GEO-IND-STUDY-G12-01"
               ]
             }
           ]
@@ -12179,35 +12586,87 @@
       "standard_code_prefix": "11GP",
       "topics": [
         {
-          "name": "Global Perspectives and Research",
-          "canonical_code": "GP-CORE",
+          "canonical_code": "GP-PERSP",
+          "name": "Global Perspectives \u2014 Issues and Research",
           "sequence_order": 1,
-          "recommended_weeks": 16,
           "learning_objectives": [
-            "Apply critical thinking to global issues from multiple perspectives",
-            "Conduct independent research and present findings"
+            "Research and evaluate global issues from multiple perspectives"
           ],
           "subtopics": [
             {
-              "name": "Stakeholder Analysis and Critical Thinking",
-              "canonical_code": "GP-CORE-G11-01",
-              "learning_objective": "Identify and analyse the perspectives of stakeholders on a global issue; evaluate the credibility and bias of sources; apply critical thinking frameworks to construct a reasoned argument.",
-              "bloom_taxonomy_level": "Evaluate",
+              "name": "Identifying and Analysing Global Issues",
+              "canonical_code": "GP-PERSP-G11-01",
+              "learning_objective": "Identify significant global issues; analyse causes, consequences, and possible futures from multiple perspectives",
+              "bloom_taxonomy_level": "analyse",
               "difficulty_level": 3,
-              "estimated_minutes": 65,
+              "estimated_minutes": 55,
               "sequence_order": 1,
               "prerequisites": []
             },
             {
-              "name": "International Research Projects",
-              "canonical_code": "GP-CORE-G11-02",
-              "learning_objective": "Plan and conduct an international research project on a global issue; gather and synthesise evidence from diverse sources; collaborate with peers to produce a team essay and reflective portfolio.",
-              "bloom_taxonomy_level": "Create",
-              "difficulty_level": 3,
-              "estimated_minutes": 70,
+              "name": "Research Skills and Source Evaluation",
+              "canonical_code": "GP-PERSP-G11-02",
+              "learning_objective": "Select and evaluate sources for reliability, credibility, and bias; use evidence to support arguments",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Argument Construction and Critical Thinking",
+              "canonical_code": "GP-PERSP-G11-03",
+              "learning_objective": "Construct reasoned arguments; identify assumptions, fallacies, and weaknesses in reasoning",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "Written Perspective Essay",
+              "canonical_code": "GP-PERSP-G11-04",
+              "learning_objective": "Write a structured essay presenting multiple perspectives on a global issue with a reasoned personal conclusion",
+              "bloom_taxonomy_level": "create",
+              "difficulty_level": 4,
+              "estimated_minutes": 90,
+              "sequence_order": 4,
+              "prerequisites": [
+                "GP-PERSP-G11-01",
+                "GP-PERSP-G11-02",
+                "GP-PERSP-G11-03"
+              ]
+            }
+          ]
+        },
+        {
+          "canonical_code": "GP-COLLAB",
+          "name": "Collaborative Project",
+          "sequence_order": 2,
+          "learning_objectives": [
+            "Collaborate to research and address a global issue"
+          ],
+          "subtopics": [
+            {
+              "name": "Team Research and Planning",
+              "canonical_code": "GP-COLLAB-G11-01",
+              "learning_objective": "Plan and conduct collaborative research on a global issue; allocate roles and manage a project timeline",
+              "bloom_taxonomy_level": "create",
+              "difficulty_level": 4,
+              "estimated_minutes": 90,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Oral Presentation of Findings",
+              "canonical_code": "GP-COLLAB-G11-02",
+              "learning_objective": "Present research findings and recommendations as a team; respond to questions and critique",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 60,
               "sequence_order": 2,
               "prerequisites": [
-                "GP-CORE-G11-01"
+                "GP-COLLAB-G11-01"
               ]
             }
           ]
@@ -12221,38 +12680,76 @@
       "standard_code_prefix": "12GP",
       "topics": [
         {
-          "name": "Advanced Global Perspectives",
-          "canonical_code": "GP-ADV",
+          "canonical_code": "GP-RES",
+          "name": "Individual Research Report",
           "sequence_order": 1,
-          "recommended_weeks": 16,
           "learning_objectives": [
-            "Produce an independent capstone research project on a global challenge",
-            "Apply theory to global challenges and present at advanced level"
+            "Conduct independent research on a global issue and produce a research report"
           ],
           "subtopics": [
             {
-              "name": "Capstone Research Project",
-              "canonical_code": "GP-ADV-G12-01",
-              "learning_objective": "Produce an independent research project on a self-chosen global issue; apply theoretical frameworks; synthesise evidence from multiple perspectives; write a formal research report with bibliography.",
-              "bloom_taxonomy_level": "Create",
+              "name": "Research Question and Literature Review",
+              "canonical_code": "GP-RES-G12-01",
+              "learning_objective": "Formulate a research question; synthesise sources in a structured literature review",
+              "bloom_taxonomy_level": "create",
               "difficulty_level": 4,
               "estimated_minutes": 90,
               "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Methodology and Data Collection",
+              "canonical_code": "GP-RES-G12-02",
+              "learning_objective": "Select and justify a research methodology; collect primary and/or secondary data",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 90,
+              "sequence_order": 2,
               "prerequisites": [
-                "GP-CORE-G11-02"
+                "GP-RES-G12-01"
               ]
             },
             {
-              "name": "Theory and Application to Global Challenges",
-              "canonical_code": "GP-ADV-G12-02",
-              "learning_objective": "Apply social science theory to contemporary global challenges; evaluate policy responses to issues such as climate change, inequality and migration; present conclusions in an academic debate format.",
-              "bloom_taxonomy_level": "Evaluate",
-              "difficulty_level": 4,
-              "estimated_minutes": 75,
-              "sequence_order": 2,
+              "name": "Analysis, Conclusions and Reflection",
+              "canonical_code": "GP-RES-G12-03",
+              "learning_objective": "Analyse data; draw evidence-based conclusions; evaluate methodology and reflect on learning",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 90,
+              "sequence_order": 3,
               "prerequisites": [
-                "GP-ADV-G12-01"
+                "GP-RES-G12-02"
               ]
+            }
+          ]
+        },
+        {
+          "canonical_code": "GP-EXAM",
+          "name": "Global Issues \u2014 Examination Preparation",
+          "sequence_order": 2,
+          "learning_objectives": [
+            "Apply global perspectives skills under examination conditions"
+          ],
+          "subtopics": [
+            {
+              "name": "Examination Essay Technique",
+              "canonical_code": "GP-EXAM-G12-01",
+              "learning_objective": "Structure timed essays on global issues; integrate evidence and present balanced, reasoned arguments",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 90,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Source-Based Questions",
+              "canonical_code": "GP-EXAM-G12-02",
+              "learning_objective": "Analyse and evaluate unseen sources under timed conditions; identify perspective, bias, and purpose",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": []
             }
           ]
         }
@@ -12265,36 +12762,92 @@
       "standard_code_prefix": "11H",
       "topics": [
         {
-          "name": "Historical Study",
-          "canonical_code": "HIST-CORE",
+          "canonical_code": "HIST-MODERN",
+          "name": "Modern World History \u2014 Causation and Change",
           "sequence_order": 1,
-          "recommended_weeks": 16,
           "learning_objectives": [
-            "Analyse key historical periods using primary and secondary sources",
-            "Apply historiographical approaches to historical evidence"
+            "Analyse causes and consequences of major twentieth-century events"
           ],
           "subtopics": [
             {
-              "name": "In-Depth Study of Historical Periods",
-              "canonical_code": "HIST-CORE-G11-01",
-              "learning_objective": "Analyse a chosen historical period using primary and secondary sources; evaluate the significance of key events, individuals and turning points; construct an evidence-based historical argument.",
-              "bloom_taxonomy_level": "Analyse",
-              "difficulty_level": 3,
-              "estimated_minutes": 70,
+              "name": "The First World War \u2014 Causes and Impact",
+              "canonical_code": "HIST-MODERN-G11-01",
+              "learning_objective": "Analyse long and short-term causes of WWI; evaluate its social, political, and economic consequences",
+              "bloom_taxonomy_level": "analyse",
+              "difficulty_level": 4,
+              "estimated_minutes": 60,
               "sequence_order": 1,
               "prerequisites": []
             },
             {
-              "name": "Thematic and Historiographical Studies",
-              "canonical_code": "HIST-CORE-G11-02",
-              "learning_objective": "Analyse historical themes across time periods (war, society, technology, power); evaluate the perspectives of different historians; explain how interpretations of history change over time.",
-              "bloom_taxonomy_level": "Evaluate",
+              "name": "The Rise of Authoritarian Regimes",
+              "canonical_code": "HIST-MODERN-G11-02",
+              "learning_objective": "Explain the conditions that enabled authoritarian regimes in interwar Europe; compare fascism, Nazism, and Stalinism",
+              "bloom_taxonomy_level": "analyse",
               "difficulty_level": 4,
-              "estimated_minutes": 70,
+              "estimated_minutes": 65,
               "sequence_order": 2,
-              "prerequisites": [
-                "HIST-CORE-G11-01"
-              ]
+              "prerequisites": []
+            },
+            {
+              "name": "The Second World War \u2014 Causes, Course, and Consequences",
+              "canonical_code": "HIST-MODERN-G11-03",
+              "learning_objective": "Analyse the causes of WWII; evaluate key turning points and the post-war international order",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 65,
+              "sequence_order": 3,
+              "prerequisites": []
+            },
+            {
+              "name": "The Cold War",
+              "canonical_code": "HIST-MODERN-G11-04",
+              "learning_objective": "Explain the origins and development of the Cold War; evaluate key crises and the significance of d\u00e9tente",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 60,
+              "sequence_order": 4,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "HIST-SKILLS",
+          "name": "Historical Skills and Source Analysis",
+          "sequence_order": 2,
+          "learning_objectives": [
+            "Evaluate historical sources and construct evidence-based arguments"
+          ],
+          "subtopics": [
+            {
+              "name": "Source Analysis \u2014 Reliability and Utility",
+              "canonical_code": "HIST-SKILLS-G11-01",
+              "learning_objective": "Evaluate the origin, purpose, and content of historical sources for reliability and utility",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 55,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Causation and Consequence",
+              "canonical_code": "HIST-SKILLS-G11-02",
+              "learning_objective": "Distinguish long and short-term causes; assess relative significance of causes and consequences",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 55,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Structured Essay Writing",
+              "canonical_code": "HIST-SKILLS-G11-03",
+              "learning_objective": "Write structured, argued essays using evidence; construct and sustain a historical argument",
+              "bloom_taxonomy_level": "create",
+              "difficulty_level": 4,
+              "estimated_minutes": 90,
+              "sequence_order": 3,
+              "prerequisites": []
             }
           ]
         }
@@ -12307,50 +12860,84 @@
       "standard_code_prefix": "12H",
       "topics": [
         {
-          "name": "Advanced Historical Study",
-          "canonical_code": "HIST-ADV",
+          "canonical_code": "HIST-CONTEMP",
+          "name": "Contemporary World History",
           "sequence_order": 1,
-          "recommended_weeks": 16,
           "learning_objectives": [
-            "Conduct comparative historical studies across cultures and periods",
-            "Apply historiographical methodology to independent research"
+            "Analyse key developments in post-1945 world history"
           ],
           "subtopics": [
             {
-              "name": "Comparative Historical Studies",
-              "canonical_code": "HIST-ADV-G12-01",
-              "learning_objective": "Compare historical developments across different societies, cultures and time periods; evaluate the extent to which historical patterns repeat; produce a comparative analytical essay with source evaluation.",
-              "bloom_taxonomy_level": "Evaluate",
-              "difficulty_level": 5,
-              "estimated_minutes": 80,
+              "name": "Decolonisation and Independence Movements",
+              "canonical_code": "HIST-CONTEMP-G12-01",
+              "learning_objective": "Explain the process of decolonisation; evaluate the political, economic, and social legacy of colonial rule",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 4,
+              "estimated_minutes": 60,
               "sequence_order": 1,
-              "prerequisites": [
-                "HIST-CORE-G11-02"
-              ]
+              "prerequisites": []
             },
             {
-              "name": "Historiography and Methodology",
-              "canonical_code": "HIST-ADV-G12-02",
-              "learning_objective": "Apply and evaluate major historiographical schools (Marxist, feminist, postcolonial, revisionist); conduct independent archival or source-based research; present an extended historical argument with full scholarly apparatus.",
-              "bloom_taxonomy_level": "Evaluate",
+              "name": "The End of the Cold War",
+              "canonical_code": "HIST-CONTEMP-G12-02",
+              "learning_objective": "Analyse the causes of the Cold War's end; evaluate the significance of 1989\u20131991 for the international order",
+              "bloom_taxonomy_level": "evaluate",
               "difficulty_level": 5,
-              "estimated_minutes": 80,
+              "estimated_minutes": 60,
+              "sequence_order": 2,
+              "prerequisites": []
+            },
+            {
+              "name": "Globalisation and International Relations since 1990",
+              "canonical_code": "HIST-CONTEMP-G12-03",
+              "learning_objective": "Analyse the impact of globalisation on international relations; evaluate the role of the UN, WTO, and other bodies",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 60,
+              "sequence_order": 3,
+              "prerequisites": []
+            }
+          ]
+        },
+        {
+          "canonical_code": "HIST-INQUIRY",
+          "name": "Historical Enquiry",
+          "sequence_order": 2,
+          "learning_objectives": [
+            "Conduct an independent historical enquiry using primary and secondary sources"
+          ],
+          "subtopics": [
+            {
+              "name": "Enquiry Question and Source Selection",
+              "canonical_code": "HIST-INQUIRY-G12-01",
+              "learning_objective": "Formulate a historical enquiry question; select and justify a range of primary and secondary sources",
+              "bloom_taxonomy_level": "create",
+              "difficulty_level": 5,
+              "estimated_minutes": 90,
+              "sequence_order": 1,
+              "prerequisites": []
+            },
+            {
+              "name": "Critical Analysis and Synthesis",
+              "canonical_code": "HIST-INQUIRY-G12-02",
+              "learning_objective": "Critically analyse and synthesise sources; construct an evidence-based historical argument",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 90,
               "sequence_order": 2,
               "prerequisites": [
-                "HIST-ADV-G12-01"
+                "HIST-INQUIRY-G12-01"
               ]
             },
             {
-              "name": "Modern and Ancient Cultures",
-              "canonical_code": "HIST-ADV-G12-03",
-              "learning_objective": "Explore the interaction between ancient and modern cultures; analyse cultural transmission, syncretism and colonialism; evaluate the legacy of historical periods on contemporary society.",
-              "bloom_taxonomy_level": "Evaluate",
-              "difficulty_level": 4,
-              "estimated_minutes": 70,
+              "name": "Historiography and Interpretation",
+              "canonical_code": "HIST-INQUIRY-G12-03",
+              "learning_objective": "Evaluate different historical interpretations; understand how historiography shapes understanding of events",
+              "bloom_taxonomy_level": "evaluate",
+              "difficulty_level": 5,
+              "estimated_minutes": 60,
               "sequence_order": 3,
-              "prerequisites": [
-                "HIST-CORE-G11-01"
-              ]
+              "prerequisites": []
             }
           ]
         }

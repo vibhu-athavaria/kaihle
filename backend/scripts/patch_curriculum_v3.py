@@ -66,7 +66,7 @@ structlog.configure(
     ],
     wrapper_class=structlog.stdlib.BoundLogger,
     context_class=dict,
-    logger_factory=structlog.stdlib.LoggerFactory(),
+    logger_factory=structlog.PrintLoggerFactory(),
 )
 log = structlog.get_logger()
 
