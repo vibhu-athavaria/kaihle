@@ -4,17 +4,16 @@ import { StudentLayout } from "@kaihle/ui";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import { useStudentDashboard } from "../../hooks/useStudentDashboard";
 import { TopicsTab } from "./tabs/TopicsTab";
+import { AssessmentsTab } from "./tabs/AssessmentsTab";
 // MVP: imports retained — re-enable when Study Plan and My Progress tabs are restored
 // import { StudyPlanTab } from "./tabs/StudyPlanTab";
 // import { MyProgressTab } from "./tabs/MyProgressTab";
 
-// MVP: only "topics" tab shown — "study-plan" and "progress" hidden, not deleted
-type TabKey = "topics" | "study-plan" | "progress";
+type TabKey = "topics" | "assessments";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "topics", label: "Topics" },
-  // { key: "study-plan", label: "Study plan" },   // MVP: hidden
-  // { key: "progress", label: "My progress" },    // MVP: hidden
+  { key: "assessments", label: "Assessments" },
 ];
 
 export function ClassPage() {
@@ -23,7 +22,6 @@ export function ClassPage() {
   const navigate = useNavigate();
   const layout = useStudentLayoutProps();
 
-  // Use already-cached dashboard data to avoid an extra API call for class metadata
   const { data: dashboard, isLoading: isDashboardLoading } =
     useStudentDashboard();
   const classData = dashboard?.classes.find((c) => c.class_id === classId);
@@ -132,7 +130,7 @@ export function ClassPage() {
           aria-label={TABS.find((t) => t.key === activeTab)?.label}
         >
           {activeTab === "topics" && <TopicsTab classId={classId!} />}
-          {/* MVP: study-plan and progress tabs hidden — components retained for future re-enabling */}
+          {activeTab === "assessments" && <AssessmentsTab classId={classId!} />}
         </div>
       </div>
     </StudentLayout>
