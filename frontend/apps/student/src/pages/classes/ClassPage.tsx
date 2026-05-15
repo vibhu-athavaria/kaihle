@@ -4,15 +4,17 @@ import { StudentLayout } from "@kaihle/ui";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import { useStudentDashboard } from "../../hooks/useStudentDashboard";
 import { TopicsTab } from "./tabs/TopicsTab";
-import { StudyPlanTab } from "./tabs/StudyPlanTab";
-import { MyProgressTab } from "./tabs/MyProgressTab";
+// MVP: imports retained — re-enable when Study Plan and My Progress tabs are restored
+// import { StudyPlanTab } from "./tabs/StudyPlanTab";
+// import { MyProgressTab } from "./tabs/MyProgressTab";
 
+// MVP: only "topics" tab shown — "study-plan" and "progress" hidden, not deleted
 type TabKey = "topics" | "study-plan" | "progress";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "topics", label: "Topics" },
-  { key: "study-plan", label: "Study plan" },
-  { key: "progress", label: "My progress" },
+  // { key: "study-plan", label: "Study plan" },   // MVP: hidden
+  // { key: "progress", label: "My progress" },    // MVP: hidden
 ];
 
 export function ClassPage() {
@@ -130,22 +132,7 @@ export function ClassPage() {
           aria-label={TABS.find((t) => t.key === activeTab)?.label}
         >
           {activeTab === "topics" && <TopicsTab classId={classId!} />}
-          {activeTab === "study-plan" && (
-            <StudyPlanTab
-              classId={classId!}
-              diagnosticStatus={classData?.diagnostic_status ?? "PENDING"}
-            />
-          )}
-          {activeTab === "progress" && classData?.subject_id && (
-            <MyProgressTab subjectId={classData.subject_id} />
-          )}
-          {activeTab === "progress" && !classData?.subject_id && (
-            <div className="text-center py-16 px-6">
-              <p className="font-sans text-sm text-brand-body">
-                Loading class information…
-              </p>
-            </div>
-          )}
+          {/* MVP: study-plan and progress tabs hidden — components retained for future re-enabling */}
         </div>
       </div>
     </StudentLayout>

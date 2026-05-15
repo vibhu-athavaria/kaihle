@@ -17,6 +17,7 @@ import {
   Clock,
 } from "lucide-react";
 import { ClassSetupWizard } from "./ClassSetupWizard";
+import { TopicMiniCourseButton } from "../../components/topics/TopicMiniCourseButton";
 
 export function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -207,26 +208,47 @@ export function ClassDetailPage() {
         </Link>
       </div>
 
-      {/* Topics summary strip (once configured) */}
+      {/* Topics list (once configured) */}
       {topicsConfigured && (
-        <div className="bg-white rounded-xl border border-brand-border px-5 py-4 mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <BookMarked
-              className="w-4 h-4 text-brand-primary"
-              aria-hidden="true"
-            />
-            <span className="text-sm font-semibold text-brand-ink">
-              {classTopics.length} topic
-              {classTopics.length !== 1 ? "s" : ""} configured
-            </span>
+        <div className="bg-white rounded-xl border border-brand-border mb-6 overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-brand-border">
+            <div className="flex items-center gap-2">
+              <BookMarked
+                className="w-4 h-4 text-brand-primary"
+                aria-hidden="true"
+              />
+              <span className="text-sm font-semibold text-brand-ink">
+                {classTopics.length} topic
+                {classTopics.length !== 1 ? "s" : ""} configured
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => openWizardAtStep(1)}
+              className="text-xs font-semibold text-brand-gold hover:text-brand-gold-dark transition-colors"
+            >
+              Edit topics →
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => openWizardAtStep(1)}
-            className="text-xs font-semibold text-brand-gold hover:text-brand-gold-dark transition-colors"
-          >
-            Edit topics →
-          </button>
+          <ul className="divide-y divide-brand-border">
+            {classTopics.map((topic) => (
+              <li
+                key={topic.id}
+                className="flex items-center justify-between px-5 py-3 gap-4"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-brand-ink truncate">
+                    {topic.topic_name}
+                  </p>
+                  <p className="text-xs text-brand-muted">
+                    {topic.subtopic_count} subtopic
+                    {topic.subtopic_count !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <TopicMiniCourseButton topicId={topic.topic_id} />
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

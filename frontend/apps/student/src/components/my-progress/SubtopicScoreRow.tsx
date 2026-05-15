@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { getMasteryStyle, scoreToPercent } from "@kaihle/types";
 import { useConceptGuideContext } from "../../context/ConceptGuideContext";
 
@@ -24,6 +25,7 @@ export function SubtopicScoreRow({
   masteryScore,
   lastAssessedAt,
 }: SubtopicScoreRowProps) {
+  const navigate = useNavigate();
   const { openGuide } = useConceptGuideContext();
   const { dotClass, textClass } = getMasteryStyle(masteryScore);
   const displayPct = scoreToPercent(masteryScore);
@@ -37,6 +39,13 @@ export function SubtopicScoreRow({
         <span className="font-sans text-sm text-brand-ink">{subtopicName}</span>
       </div>
       <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => navigate(`/student/subtopics/${subtopicId}/course`)}
+          className="font-sans text-xs text-brand-primary hover:text-brand-dark underline focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded min-h-[44px] px-1"
+        >
+          Learn →
+        </button>
         {showExplainButton && (
           <button
             type="button"

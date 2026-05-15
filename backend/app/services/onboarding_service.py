@@ -66,7 +66,7 @@ class OnboardingService:
             school_id=school_id,
             modality_scores={},
             work_style={},
-            questionnaire_version="v1",
+            questionnaire_version="v2",
         )
         self.db.add(new_profile)
         await self.db.commit()
@@ -123,7 +123,7 @@ class OnboardingService:
                 school_id=user.school_id,
                 modality_scores={},
                 work_style={},
-                questionnaire_version="v1",
+                questionnaire_version="v2",
             )
             self.db.add(learning_profile)
 
@@ -138,7 +138,7 @@ class OnboardingService:
         learning_profile.modality_scores = modality_scores
         learning_profile.work_style = work_style
         learning_profile.interests = interests
-        learning_profile.questionnaire_version = "v1"
+        learning_profile.questionnaire_version = "v2"
         learning_profile.completed_at = datetime.now(UTC)
 
         await self.db.commit()
@@ -160,17 +160,21 @@ class OnboardingService:
 
         return learning_profile
 
-    def _calculate_modality_scores(self, responses: list[dict[str, Any]]) -> dict[str, float]:
-        """Calculate modality scores from Q1 and Q2 responses.
+    def _calculate_modality_scores(self, responses: list[dict[str, Any]]) -> dict[str, Any]:
+        """Calculate modality scores from Q1, Q2, Q3 responses (v2 plurality vote).
 
-        Each modality answer counts as 1 point, divided by 2 (max questions).
+        Collects the modality vote from each of Q1, Q2, Q3.  The modality
+        with the most votes becomes dominant; the one with the second-most
+        becomes secondary.  Tie-break rule: "reading_writing" wins ties.
 
         Args:
             responses: List of response dictionaries.
 
         Returns:
-            Dictionary with modality scores (0.0 to 1.0).
+            Dictionary with "dominant" and "secondary" modality keys.
         """
+        # Tie-break order: reading_writing first, then the rest alphabetically
+        tie_break_order = ["reading_writing", "auditory", "kinesthetic", "visual"]
         counts: dict[str, int] = {
             "visual": 0,
             "auditory": 0,
@@ -178,10 +182,9 @@ class OnboardingService:
             "kinesthetic": 0,
         }
 
-        # Process Q1 and Q2 for modality
         for response in responses:
             question_id = response.get("question_id")
-            if question_id not in ("q1", "q2"):
+            if question_id not in ("q1", "q2", "q3"):
                 continue
 
             answer_key = response.get("answer_key")
@@ -196,65 +199,96 @@ class OnboardingService:
                     if modality in counts:
                         counts[modality] += 1
 
-        # Normalize: count / 2 (max possible is 2, one per question)
-        return {modality: count / 2 for modality, count in counts.items()}
+        # Sort modalities by vote count desc, then by tie_break_order for ties
+        def sort_key(item: tuple[str, int]) -> tuple[int, int]:
+            modality, count = item
+            tie_pos = tie_break_order.index(modality) if modality in tie_break_order else 99
+            return (-count, tie_pos)
 
-    def _calculate_work_style(self, responses: list[dict[str, Any]]) -> dict[str, bool]:
-        """Calculate work style preferences from Q3, Q4, Q5 responses.
+        ranked = sorted(counts.items(), key=sort_key)
+
+        dominant = ranked[0][0]
+        # Secondary exists only if its count is > 0 and less than dominant's count,
+        # or if multiple modalities share the top count (then second in order)
+        secondary: str | None = None
+        if len(ranked) > 1 and ranked[1][1] > 0:
+            secondary = ranked[1][0]
+
+        return {"dominant": dominant, "secondary": secondary}
+
+    def _calculate_work_style(self, responses: list[dict[str, Any]]) -> dict[str, Any]:
+        """Calculate work style preferences from Q4, Q5, Q7 responses (v2).
+
+        Q4 → short_sessions / prefers_solo
+        Q5 → concept_first (True/False/None)
+        Q7 → challenge_response (option key string)
 
         Args:
             responses: List of response dictionaries.
 
         Returns:
-            Dictionary with work style boolean flags.
+            Dictionary with work style fields including challenge_response.
         """
-        work_style: dict[str, bool] = {
+        work_style: dict[str, Any] = {
             "prefers_solo": False,
             "short_sessions": False,
             "concept_first": False,
             "task_based": False,
+            "challenge_response": None,
         }
 
         for response in responses:
             question_id = response.get("question_id")
-            if question_id not in ("q3", "q4", "q5"):
-                continue
 
-            answer_key = response.get("answer_key")
-            if not answer_key:
-                continue
+            if question_id in ("q4", "q5"):
+                answer_key = response.get("answer_key")
+                if not answer_key:
+                    continue
 
-            option = get_option_by_key(question_id, answer_key)
-            if option and "maps_to" in option:
-                maps_to = option["maps_to"]
-                if "work_style" in maps_to and "value" in maps_to:
-                    field_name = maps_to["work_style"]
-                    field_value = maps_to["value"]
-                    work_style[field_name] = field_value
+                option = get_option_by_key(question_id, answer_key)
+                if option and "maps_to" in option:
+                    maps_to = option["maps_to"]
+                    if "work_style" in maps_to and "value" in maps_to:
+                        field_name = maps_to["work_style"]
+                        field_value = maps_to["value"]
+                        # concept_first can be None ("either_way") — store as-is
+                        work_style[field_name] = field_value
 
-        # Derive task_based from concept_first (opposite)
-        work_style["task_based"] = not work_style["concept_first"]
+            elif question_id == "q7":
+                answer_key = response.get("answer_key")
+                if answer_key:
+                    work_style["challenge_response"] = answer_key
+
+        # Derive task_based from concept_first (opposite; None → False)
+        concept_first_val = work_style.get("concept_first")
+        work_style["task_based"] = not concept_first_val if concept_first_val is not None else False
 
         return work_style
 
     def _extract_interests(self, responses: list[dict[str, Any]]) -> list[str]:
-        """Extract selected interests from Q6-Q10 (multi-select).
+        """Extract selected interest category from Q6 (v2 single-select).
+
+        Q6 maps_to "interest_category" — the selected option key is the
+        canonical interest category (e.g. "sports_movement").
+
+        Returns a single-item list to maintain list type for backward
+        compatibility with existing profile readers.
 
         Args:
             responses: List of response dictionaries.
 
         Returns:
-            List of selected interest keys in lowercase.
+            Single-item list containing the selected interest category key,
+            or empty list if Q6 was not answered.
         """
         for response in responses:
             question_id = response.get("question_id")
-            if question_id != "q6_to_q10":
+            if question_id != "q6":
                 continue
 
-            answer_keys = response.get("answer_keys", [])
-            if answer_keys:
-                # Ensure all lowercase
-                return [key.lower() for key in answer_keys]
+            answer_key = response.get("answer_key")
+            if answer_key:
+                return [answer_key.lower()]
 
         return []
 

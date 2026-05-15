@@ -21,6 +21,7 @@ celery_app = Celery(
         "app.tasks.gap_tasks",
         # "app.tasks.onboarding_tasks",
         "app.tasks.lesson_plan_tasks",
+        "app.tasks.mini_course_tasks",
         "app.tasks.parent_tasks",
         "app.tasks.content_maintenance_tasks",
         "app.tasks.study_plan_tasks",

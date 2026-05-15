@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SubtopicExplanationItem(BaseModel):
@@ -50,3 +50,30 @@ class SubtopicCourseResponse(BaseModel):
 class MarkProgressRequest(BaseModel):
     explanation_accessed: bool = False
     video_accessed: bool = False
+
+
+class SubtopicProgressItem(BaseModel):
+    subtopic_id: UUID
+    subtopic_name: str
+    topic_name: str
+    last_visited_at: datetime
+    explanation_accessed: bool
+    video_accessed: bool
+    check_questions_score: float | None
+
+
+class StudentCourseProgressResponse(BaseModel):
+    student_id: UUID
+    progress: list[SubtopicProgressItem]
+
+
+class FeedbackRequest(BaseModel):
+    feedback_type: Literal["thumbs_up", "thumbs_down"]
+    comment: str | None = Field(None, max_length=140)
+
+
+class FeedbackResponse(BaseModel):
+    id: UUID
+    feedback_type: str
+    comment: str | None
+    created_at: datetime

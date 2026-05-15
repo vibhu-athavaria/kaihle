@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     llm_concept_guide_model: str = ""
     llm_concept_guide_api_base: str | None = None
 
+    llm_explain_this_model: str = "gemini/gemini-2.5-flash"
+    llm_explain_this_api_base: str | None = None
+
+    llm_mini_course_model: str = "gemini/gemini-2.5-flash"
+    llm_mini_course_api_base: str | None = None
+
     # Notification recipients
     kaihle_admin_email: str = "admin@kaihle.ai"
 

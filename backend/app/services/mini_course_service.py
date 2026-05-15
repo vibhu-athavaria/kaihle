@@ -11,21 +11,23 @@ from typing import Literal
 
 import structlog
 from fastapi import HTTPException, status
-from sqlalchemy import case, func, select, text
+from sqlalchemy import case, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.questionnaire_config import INTEREST_KEY_TO_CATEGORY
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subtopic, Topic
 from app.models.interest_category import InterestCategory
-from app.models.mini_course import SubtopicCourseProgress
+from app.models.mini_course import SubtopicContentFeedback, SubtopicCourseProgress
 from app.models.onboarding import StudentLearningProfile
 from app.models.subtopic_content import SubtopicContent
 from app.schemas.mini_course import (
     CheckQuestion,
     CourseProgressItem,
     MarkProgressRequest,
+    StudentCourseProgressResponse,
     SubtopicCourseResponse,
     SubtopicExplanationItem,
+    SubtopicProgressItem,
     SubtopicVideoItem,
 )
 
@@ -191,6 +193,94 @@ class MiniCourseService:
             video_accessed=request.video_accessed,
         )
 
+    async def submit_content_feedback(
+        self,
+        content_id: uuid.UUID,
+        student_id: uuid.UUID,
+        school_id: uuid.UUID,
+        feedback_type: str,
+        comment: str | None,
+    ) -> SubtopicContentFeedback:
+        """Upsert student feedback (thumbs_up / thumbs_down) for a subtopic content row.
+
+        Steps:
+        1. Verify the SubtopicContent row exists (404 if not).
+        2. Upsert SubtopicContentFeedback (unique on student_id + subtopic_content_id).
+           On conflict, update feedback_type and comment.
+        3. Recalculate and update thumbs_up_count / thumbs_down_count on subtopic_content.
+        4. Return the feedback row.
+        """
+        # 1. Verify content exists
+        content_result = await self.db.execute(select(SubtopicContent).where(SubtopicContent.id == content_id))
+        content_row = content_result.scalar_one_or_none()
+        if content_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"SubtopicContent {content_id} not found",
+            )
+
+        # 2. Upsert feedback row
+        await self.db.execute(
+            text(
+                """
+                INSERT INTO subtopic_content_feedback
+                    (id, student_id, subtopic_content_id, school_id,
+                     feedback_type, comment, created_at, updated_at)
+                VALUES
+                    (gen_random_uuid(), :student_id, :content_id, :school_id,
+                     :feedback_type, :comment, now(), now())
+                ON CONFLICT (student_id, subtopic_content_id) DO UPDATE SET
+                    feedback_type = EXCLUDED.feedback_type,
+                    comment       = EXCLUDED.comment,
+                    updated_at    = now()
+                """
+            ),
+            {
+                "student_id": student_id,
+                "content_id": content_id,
+                "school_id": school_id,
+                "feedback_type": feedback_type,
+                "comment": comment,
+            },
+        )
+
+        # 3. Recalculate aggregate counts
+        counts_result = await self.db.execute(
+            select(
+                func.count().filter(SubtopicContentFeedback.feedback_type == "thumbs_up").label("up_count"),
+                func.count().filter(SubtopicContentFeedback.feedback_type == "thumbs_down").label("down_count"),
+            ).where(SubtopicContentFeedback.subtopic_content_id == content_id)
+        )
+        counts = counts_result.one()
+
+        await self.db.execute(
+            update(SubtopicContent)
+            .where(SubtopicContent.id == content_id)
+            .values(
+                thumbs_up_count=counts.up_count,
+                thumbs_down_count=counts.down_count,
+            )
+        )
+        await self.db.commit()
+
+        # 4. Return the feedback row
+        feedback_result = await self.db.execute(
+            select(SubtopicContentFeedback).where(
+                SubtopicContentFeedback.student_id == student_id,
+                SubtopicContentFeedback.subtopic_content_id == content_id,
+            )
+        )
+        feedback_row = feedback_result.scalar_one()
+
+        logger.info(
+            "content_feedback_submitted",
+            student_id=str(student_id),
+            content_id=str(content_id),
+            feedback_type=feedback_type,
+        )
+
+        return feedback_row
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -330,4 +420,77 @@ class MiniCourseService:
             video_accessed=row.video_accessed,
             check_questions_score=row.check_questions_score,
             last_visited_at=row.last_visited_at,
+        )
+
+    async def get_student_course_progress(
+        self,
+        student_id: uuid.UUID,
+        school_id: uuid.UUID,
+    ) -> StudentCourseProgressResponse:
+        """Return all mini-course progress rows for a student, ordered by last_visited_at DESC.
+
+        Validates that the student belongs to the given school before querying.
+        Cross-school access raises HTTP 403.
+        """
+        from app.models.user import User, UserRole
+
+        # Validate student exists in the caller's school
+        student_result = await self.db.execute(
+            select(User).where(
+                User.id == student_id,
+                User.role == UserRole.STUDENT,
+                User.school_id == school_id,
+            )
+        )
+        student = student_result.scalar_one_or_none()
+        if student is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Student not found in your school",
+            )
+
+        rows_result = await self.db.execute(
+            select(
+                SubtopicCourseProgress.subtopic_id,
+                Subtopic.name.label("subtopic_name"),
+                Topic.name.label("topic_name"),
+                SubtopicCourseProgress.last_visited_at,
+                SubtopicCourseProgress.explanation_accessed,
+                SubtopicCourseProgress.video_accessed,
+                SubtopicCourseProgress.check_questions_score,
+            )
+            .join(Subtopic, Subtopic.id == SubtopicCourseProgress.subtopic_id)
+            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .join(Topic, Topic.id == CurriculumTopic.topic_id)
+            .where(
+                SubtopicCourseProgress.student_id == student_id,
+                SubtopicCourseProgress.school_id == school_id,
+            )
+            .order_by(SubtopicCourseProgress.last_visited_at.desc())
+        )
+        rows = rows_result.all()
+
+        progress_items = [
+            SubtopicProgressItem(
+                subtopic_id=row.subtopic_id,
+                subtopic_name=row.subtopic_name,
+                topic_name=row.topic_name,
+                last_visited_at=row.last_visited_at,
+                explanation_accessed=row.explanation_accessed,
+                video_accessed=row.video_accessed,
+                check_questions_score=row.check_questions_score,
+            )
+            for row in rows
+        ]
+
+        logger.info(
+            "teacher_student_course_progress_fetched",
+            student_id=str(student_id),
+            school_id=str(school_id),
+            count=len(progress_items),
+        )
+
+        return StudentCourseProgressResponse(
+            student_id=student_id,
+            progress=progress_items,
         )

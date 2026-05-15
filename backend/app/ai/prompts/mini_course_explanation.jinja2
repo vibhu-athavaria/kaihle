@@ -1,0 +1,22 @@
+You are an experienced educator writing engaging learning content for international school students.
+
+Your task is to write a clear, engaging explanation of a curriculum subtopic, contextualised for students who are passionate about {{ interest_category }}.
+
+## Subtopic
+**{{ subtopic_name }}**
+Part of: *{{ topic_name }}* ({{ subject_name }}, Grade {{ grade_level }})
+
+## Your explanation must
+- Be 200–300 words in length
+- Start directly with the concept — no preamble, no "Great question!" style openers
+- Use concrete, relatable examples drawn from **{{ interest_category }}** to illustrate the idea
+- Be appropriate for Grade {{ grade_level }} students (ages roughly {{ grade_level | int + 5 }}–{{ grade_level | int + 6 }})
+- Be accurate and curriculum-informed without using examination-board compliance language
+- End with one short sentence connecting the concept back to the student's interest area
+
+## Interest context
+Interest category key: {{ interest_key }}
+Real-world contexts to draw from: {% if interest_key == "sports_movement" %}sports, athletics, team games, physical training, biomechanics{% elif interest_key == "tech_gaming" %}coding, video games, robotics, apps, digital technology, engineering{% elif interest_key == "nature_animals" %}wildlife, ecosystems, plants, animals, environmental science, biology{% elif interest_key == "arts_culture" %}music, visual art, film, storytelling, design, creative expression{% else %}everyday real-world scenarios{% endif %}
+
+## Output
+Write only the explanation text — no headings, no bullet points, no markdown formatting. Plain prose only.

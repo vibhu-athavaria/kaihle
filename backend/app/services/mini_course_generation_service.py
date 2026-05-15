@@ -1,0 +1,278 @@
+"""Mini-course generation service.
+
+All business logic for generating interest-personalised subtopic explanations.
+Called exclusively from the generate_topic_mini_course Celery task.
+
+Architecture:
+- Queries topic → curriculum_topic → subtopic chain.
+- For each (subtopic, interest_category) pair, calls LLM via router.py.
+- Upserts SubtopicContent rows: skips if non-rejected row already exists;
+  creates new row if absent; updates rejected rows.
+- Uses Jinja2 to render the mini_course_explanation prompt template.
+"""
+
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+from typing import Any
+
+import structlog
+from jinja2 import Environment, FileSystemLoader
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.ai.providers import router as llm_router
+from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic, Topic
+from app.models.interest_category import InterestCategory
+from app.models.subtopic_content import SubtopicContent
+
+logger = structlog.get_logger(__name__)
+
+_PROMPTS_DIR = Path(__file__).parent.parent / "ai" / "prompts"
+_jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)), autoescape=False)
+
+# Interest categories: (db_name, human_label, interest_key)
+INTEREST_CATEGORIES: list[tuple[str, str, str]] = [
+    ("sports_movement", "Sports & Fitness", "sports_movement"),
+    ("tech_gaming", "Technology & Innovation", "tech_gaming"),
+    ("nature_animals", "Nature & Science", "nature_animals"),
+    ("arts_culture", "Music & Arts", "arts_culture"),
+]
+
+
+class TopicNotFoundError(Exception):
+    pass
+
+
+class MiniCourseGenerationService:
+    """Generates interest-personalised explanations for all subtopics under a topic."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def generate_for_topic(self, topic_id: str, school_id: str) -> dict[str, Any]:
+        """Generate mini-course explanations for all subtopics of a topic.
+
+        Idempotent: skips (subtopic_id, interest_category_id) pairs that
+        already have a non-rejected row (pending or approved).
+
+        Args:
+            topic_id: UUID string of the Topic.
+            school_id: UUID string of the requesting school (logged only).
+
+        Returns:
+            Dict with subtopics_found, subtopics_processed, explanations_written.
+
+        Raises:
+            TopicNotFoundError: If topic_id does not exist.
+        """
+        topic_uuid = uuid.UUID(topic_id)
+
+        # 1. Fetch topic context (name, subject, grade) via CurriculumTopic
+        topic_row = await self._fetch_topic_context(topic_uuid)
+        if topic_row is None:
+            raise TopicNotFoundError(f"Topic {topic_id} not found")
+
+        topic_name, subject_name, grade_level = topic_row
+
+        # 2. Fetch all subtopics for this topic (via any CurriculumTopic)
+        subtopics = await self._fetch_subtopics(topic_uuid)
+
+        # Rule 17: log WARNING and exit early if no subtopics
+        if not subtopics:
+            logger.warning(
+                "generate_topic_mini_course_no_subtopics",
+                topic_id=topic_id,
+                school_id=school_id,
+            )
+            return {
+                "subtopics_found": 0,
+                "subtopics_processed": 0,
+                "explanations_written": 0,
+            }
+
+        # 3. Resolve interest category IDs from DB
+        category_id_map = await self._resolve_interest_category_ids()
+
+        # 4. Generate for each subtopic × interest_category
+        explanations_written = 0
+        subtopics_processed = 0
+
+        for subtopic in subtopics:
+            subtopic_written = 0
+            for db_name, human_label, interest_key in INTEREST_CATEGORIES:
+                category_id = category_id_map.get(db_name)
+                if category_id is None:
+                    logger.warning(
+                        "interest_category_not_found_in_db",
+                        category_name=db_name,
+                        topic_id=topic_id,
+                    )
+                    continue
+
+                # Skip if a non-rejected row already exists
+                if await self._has_non_rejected_content(subtopic.id, category_id):
+                    logger.info(
+                        "mini_course_content_already_exists_skipping",
+                        subtopic_id=str(subtopic.id),
+                        interest_category=db_name,
+                    )
+                    continue
+
+                explanation = await self._call_llm(
+                    subtopic_name=subtopic.name,
+                    topic_name=topic_name,
+                    subject_name=subject_name,
+                    grade_level=grade_level,
+                    interest_category=human_label,
+                    interest_key=interest_key,
+                )
+
+                await self._upsert_content(
+                    subtopic_id=subtopic.id,
+                    interest_category_id=category_id,
+                    explanation_text=explanation,
+                )
+                subtopic_written += 1
+
+            explanations_written += subtopic_written
+            if subtopic_written > 0:
+                subtopics_processed += 1
+
+        await self.db.commit()
+
+        return {
+            "subtopics_found": len(subtopics),
+            "subtopics_processed": subtopics_processed,
+            "explanations_written": explanations_written,
+        }
+
+    async def _fetch_topic_context(self, topic_id: uuid.UUID) -> tuple[str, str, int] | None:
+        """Return (topic_name, subject_name, grade_level) for a topic.
+
+        Joins through CurriculumTopic to get Subject and Grade.
+        """
+        result = await self.db.execute(
+            select(
+                Topic.name.label("topic_name"),
+                Subject.name.label("subject_name"),
+                Grade.level.label("grade_level"),
+            )
+            .join(CurriculumTopic, CurriculumTopic.topic_id == Topic.id)
+            .join(Subject, Subject.id == CurriculumTopic.subject_id)
+            .join(Grade, Grade.id == CurriculumTopic.grade_id)
+            .where(Topic.id == topic_id)
+            .limit(1)
+        )
+        row = result.first()
+        if row is None:
+            return None
+        return (row.topic_name, row.subject_name, row.grade_level)
+
+    async def _fetch_subtopics(self, topic_id: uuid.UUID) -> list[Subtopic]:
+        """Return all active subtopics for a topic via curriculum_topics."""
+        result = await self.db.execute(
+            select(Subtopic)
+            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .where(
+                CurriculumTopic.topic_id == topic_id,
+                Subtopic.is_active.is_(True),
+            )
+            .order_by(Subtopic.sequence_order)
+        )
+        return list(result.scalars().all())
+
+    async def _resolve_interest_category_ids(self) -> dict[str, uuid.UUID]:
+        """Return {category_name: id} for all interest categories in DB."""
+        result = await self.db.execute(select(InterestCategory))
+        categories = result.scalars().all()
+        return {cat.name: cat.id for cat in categories}
+
+    async def _has_non_rejected_content(self, subtopic_id: uuid.UUID, interest_category_id: uuid.UUID) -> bool:
+        """Return True if a pending or approved content row already exists."""
+        result = await self.db.execute(
+            select(SubtopicContent.id).where(
+                SubtopicContent.subtopic_id == subtopic_id,
+                SubtopicContent.interest_category_id == interest_category_id,
+                SubtopicContent.content_type == "explanation",
+                SubtopicContent.review_status != "rejected",
+                SubtopicContent.is_archived.is_(False),
+            )
+        )
+        return result.first() is not None
+
+    async def _call_llm(
+        self,
+        subtopic_name: str,
+        topic_name: str,
+        subject_name: str,
+        grade_level: int,
+        interest_category: str,
+        interest_key: str,
+    ) -> str:
+        """Render prompt and call LLM via router. Returns explanation text."""
+        template = _jinja_env.get_template("mini_course_explanation.jinja2")
+        prompt_text = template.render(
+            subtopic_name=subtopic_name,
+            topic_name=topic_name,
+            subject_name=subject_name,
+            grade_level=grade_level,
+            interest_category=interest_category,
+            interest_key=interest_key,
+        )
+        messages = [{"role": "user", "content": prompt_text}]
+        return await llm_router.complete(
+            task="mini_course_explanation",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=600,
+        )
+
+    async def _upsert_content(
+        self,
+        subtopic_id: uuid.UUID,
+        interest_category_id: uuid.UUID,
+        explanation_text: str,
+    ) -> None:
+        """Insert a new SubtopicContent row (or update a rejected one).
+
+        Strategy: check for existing rejected row first — update in place.
+        Otherwise insert fresh. This avoids needing a DB-level unique constraint
+        while remaining idempotent when the task is retried.
+        """
+        result = await self.db.execute(
+            select(SubtopicContent).where(
+                SubtopicContent.subtopic_id == subtopic_id,
+                SubtopicContent.interest_category_id == interest_category_id,
+                SubtopicContent.content_type == "explanation",
+                SubtopicContent.review_status == "rejected",
+                SubtopicContent.is_archived.is_(False),
+            )
+        )
+        existing_rejected = result.scalar_one_or_none()
+
+        if existing_rejected is not None:
+            existing_rejected.explanation_text = explanation_text
+            existing_rejected.review_status = "pending_review"
+            existing_rejected.rejection_reason = None
+            existing_rejected.rejection_teacher_note = None
+            logger.info(
+                "mini_course_content_updated_rejected_row",
+                subtopic_id=str(subtopic_id),
+                interest_category_id=str(interest_category_id),
+            )
+        else:
+            content = SubtopicContent(
+                subtopic_id=subtopic_id,
+                content_type="explanation",
+                explanation_text=explanation_text,
+                interest_category_id=interest_category_id,
+                review_status="pending_review",
+            )
+            self.db.add(content)
+            logger.info(
+                "mini_course_content_created",
+                subtopic_id=str(subtopic_id),
+                interest_category_id=str(interest_category_id),
+            )

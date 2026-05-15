@@ -45,149 +45,142 @@ def school_id() -> uuid.UUID:
 
 
 class TestCalculateModalityScores:
-    """Tests for modality score calculation."""
+    """Tests for modality score calculation (v2 plurality-vote format).
 
-    def test_when_visual_answers_then_visual_score_1(self, service: OnboardingService) -> None:
-        """Test that visual answers result in visual=1.0 score."""
+    v2 returns {"dominant": str, "secondary": str | None} instead of 0.0-1.0 floats.
+    """
+
+    def test_when_visual_answers_then_dominant_is_visual(self, service: OnboardingService) -> None:
+        """Test that visual answers result in dominant=visual."""
+        # v2 keys: Q1=see_diagram (visual), Q2=draw_it (visual), Q3=find_example (visual)
         responses = [
-            {"question_id": "q1", "answer_key": "watch_video"},
-            {"question_id": "q2", "answer_key": "see_diagrams"},
+            {"question_id": "q1", "answer_key": "see_diagram"},
+            {"question_id": "q2", "answer_key": "draw_it"},
+            {"question_id": "q3", "answer_key": "find_example"},
         ]
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["visual"] == 1.0
-        assert scores["auditory"] == 0.0
-        assert scores["reading_writing"] == 0.0
-        assert scores["kinesthetic"] == 0.0
+        assert scores["dominant"] == "visual"
 
-    def test_when_kinesthetic_answers_then_kinesthetic_score_1(self, service: OnboardingService) -> None:
-        """Test that kinesthetic answers result in kinesthetic=1.0 score."""
+    def test_when_kinesthetic_answers_then_dominant_is_kinesthetic(self, service: OnboardingService) -> None:
+        """Test that kinesthetic answers result in dominant=kinesthetic."""
+        # v2 keys: Q1=try_problems (kinesthetic), Q2=show_example (kinesthetic), Q3=try_different (kinesthetic)
         responses = [
-            {"question_id": "q1", "answer_key": "try_it_out"},
-            {"question_id": "q2", "answer_key": "do_exercise"},
+            {"question_id": "q1", "answer_key": "try_problems"},
+            {"question_id": "q2", "answer_key": "show_example"},
+            {"question_id": "q3", "answer_key": "try_different"},
         ]
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["kinesthetic"] == 1.0
-        assert scores["visual"] == 0.0
-        assert scores["auditory"] == 0.0
-        assert scores["reading_writing"] == 0.0
+        assert scores["dominant"] == "kinesthetic"
 
-    def test_when_mixed_answers_then_scores_0_5(self, service: OnboardingService) -> None:
-        """Test that mixed answers result in 0.5 scores for each modality."""
+    def test_when_mixed_answers_then_dominant_is_most_common(self, service: OnboardingService) -> None:
+        """Test that the most-voted modality is dominant."""
+        # Q1=see_diagram (visual), Q2=draw_it (visual), Q3=talk_through (auditory) → visual wins
         responses = [
-            {"question_id": "q1", "answer_key": "watch_video"},
-            {"question_id": "q2", "answer_key": "do_exercise"},
+            {"question_id": "q1", "answer_key": "see_diagram"},
+            {"question_id": "q2", "answer_key": "draw_it"},
+            {"question_id": "q3", "answer_key": "ask_someone"},
         ]
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["visual"] == 0.5
-        assert scores["kinesthetic"] == 0.5
-        assert scores["auditory"] == 0.0
-        assert scores["reading_writing"] == 0.0
+        assert scores["dominant"] == "visual"
+        assert scores["secondary"] == "auditory"
 
-    def test_when_auditory_answers_then_auditory_score_1(self, service: OnboardingService) -> None:
-        """Test that auditory answers result in auditory=1.0 score."""
+    def test_when_auditory_answers_then_dominant_is_auditory(self, service: OnboardingService) -> None:
+        """Test that auditory answers result in dominant=auditory."""
         responses = [
-            {"question_id": "q1", "answer_key": "discuss_it"},
-            {"question_id": "q2", "answer_key": "hear_explained"},
+            {"question_id": "q1", "answer_key": "watch_walkthrough"},
+            {"question_id": "q2", "answer_key": "talk_through"},
+            {"question_id": "q3", "answer_key": "ask_someone"},
         ]
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["auditory"] == 1.0
-        assert scores["visual"] == 0.0
-        assert scores["reading_writing"] == 0.0
-        assert scores["kinesthetic"] == 0.0
+        assert scores["dominant"] == "auditory"
 
-    def test_when_reading_writing_answers_then_reading_writing_score_1(self, service: OnboardingService) -> None:
-        """Test that reading/writing answers result in reading_writing=1.0 score."""
+    def test_when_reading_writing_answers_then_dominant_is_reading_writing(self, service: OnboardingService) -> None:
+        """Test that reading/writing answers result in dominant=reading_writing."""
         responses = [
-            {"question_id": "q1", "answer_key": "read_about_it"},
-            {"question_id": "q2", "answer_key": "write_notes"},
+            {"question_id": "q1", "answer_key": "read_explanation"},
+            {"question_id": "q2", "answer_key": "write_points"},
+            {"question_id": "q3", "answer_key": "reread_alone"},
         ]
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["reading_writing"] == 1.0
-        assert scores["visual"] == 0.0
-        assert scores["auditory"] == 0.0
-        assert scores["kinesthetic"] == 0.0
+        assert scores["dominant"] == "reading_writing"
 
-    def test_when_no_modality_responses_then_all_zero(self, service: OnboardingService) -> None:
-        """Test that missing modality responses result in all zero scores."""
+    def test_when_no_modality_responses_then_dominant_set_by_tiebreak(self, service: OnboardingService) -> None:
+        """Test that missing modality responses produce a tiebreak-determined dominant."""
+        # No Q1/Q2/Q3 responses → all counts = 0 → reading_writing wins by tiebreak
         responses: list[dict[str, Any]] = [
-            {"question_id": "q3", "answer_key": "solo"},
-            {"question_id": "q6_to_q10", "answer_keys": ["sports"]},
+            {"question_id": "q4", "answer_key": "short_focused"},
+            {"question_id": "q6", "answer_key": "sports_movement"},
         ]
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["visual"] == 0.0
-        assert scores["auditory"] == 0.0
-        assert scores["reading_writing"] == 0.0
-        assert scores["kinesthetic"] == 0.0
+        # All counts are 0 → tiebreak gives reading_writing
+        assert scores["dominant"] == "reading_writing"
+        assert "secondary" in scores
 
 
 class TestCalculateWorkStyle:
-    """Tests for work style calculation."""
+    """Tests for work style calculation (v2: Q4=study setup, Q5=concept_first, Q7=challenge)."""
 
-    def test_when_solo_selected_then_prefers_solo_true(self, service: OnboardingService) -> None:
-        """Test that selecting solo results in prefers_solo=True."""
+    def test_when_with_friends_selected_then_prefers_solo_false(self, service: OnboardingService) -> None:
+        """Test that selecting with_friends (Q4) results in prefers_solo=False."""
+        # v2: Q4 "with_friends" maps to prefers_solo=False
         responses = [
-            {"question_id": "q3", "answer_key": "solo"},
-            {"question_id": "q4", "answer_key": "long"},
-            {"question_id": "q5", "answer_key": "concept_first"},
-        ]
-
-        work_style = service._calculate_work_style(responses)
-
-        assert work_style["prefers_solo"] is True
-        assert work_style["short_sessions"] is False
-        assert work_style["concept_first"] is True
-        assert work_style["task_based"] is False
-
-    def test_when_group_selected_then_prefers_solo_false(self, service: OnboardingService) -> None:
-        """Test that selecting group results in prefers_solo=False."""
-        responses = [
-            {"question_id": "q3", "answer_key": "group"},
-            {"question_id": "q4", "answer_key": "short"},
-            {"question_id": "q5", "answer_key": "task_based"},
+            {"question_id": "q4", "answer_key": "with_friends"},
+            {"question_id": "q5", "answer_key": "big_picture"},
         ]
 
         work_style = service._calculate_work_style(responses)
 
         assert work_style["prefers_solo"] is False
-        assert work_style["short_sessions"] is True
+        assert work_style["short_sessions"] is False
+        assert work_style["concept_first"] is True
+        assert work_style["task_based"] is False
+
+    def test_when_long_deep_selected_then_short_sessions_false(self, service: OnboardingService) -> None:
+        """Test that selecting long_deep results in short_sessions=False."""
+        responses = [
+            {"question_id": "q4", "answer_key": "long_deep"},
+            {"question_id": "q5", "answer_key": "dive_in"},
+        ]
+
+        work_style = service._calculate_work_style(responses)
+
+        assert work_style["prefers_solo"] is False
+        assert work_style["short_sessions"] is False
         assert work_style["concept_first"] is False
         assert work_style["task_based"] is True
 
-    def test_when_short_sessions_selected_then_short_sessions_true(self, service: OnboardingService) -> None:
-        """Test that selecting short sessions results in short_sessions=True."""
+    def test_when_short_focused_selected_then_short_sessions_true(self, service: OnboardingService) -> None:
+        """Test that selecting short_focused results in short_sessions=True."""
         responses = [
-            {"question_id": "q3", "answer_key": "solo"},
-            {"question_id": "q4", "answer_key": "short"},
-            {"question_id": "q5", "answer_key": "concept_first"},
+            {"question_id": "q4", "answer_key": "short_focused"},
+            {"question_id": "q5", "answer_key": "big_picture"},
         ]
 
         work_style = service._calculate_work_style(responses)
 
         assert work_style["short_sessions"] is True
-        assert work_style["prefers_solo"] is True
         assert work_style["concept_first"] is True
         assert work_style["task_based"] is False
 
-    def test_when_concept_first_selected_then_concept_first_true_and_task_based_false(
+    def test_when_big_picture_selected_then_concept_first_true_and_task_based_false(
         self, service: OnboardingService
     ) -> None:
-        """Test that selecting concept_first results in correct flags."""
+        """Test that selecting big_picture (Q5) results in correct flags."""
         responses = [
-            {"question_id": "q3", "answer_key": "solo"},
-            {"question_id": "q4", "answer_key": "short"},
-            {"question_id": "q5", "answer_key": "concept_first"},
+            {"question_id": "q4", "answer_key": "short_focused"},
+            {"question_id": "q5", "answer_key": "big_picture"},
         ]
 
         work_style = service._calculate_work_style(responses)
@@ -195,14 +188,13 @@ class TestCalculateWorkStyle:
         assert work_style["concept_first"] is True
         assert work_style["task_based"] is False
 
-    def test_when_task_based_selected_then_concept_first_false_and_task_based_true(
+    def test_when_dive_in_selected_then_concept_first_false_and_task_based_true(
         self, service: OnboardingService
     ) -> None:
-        """Test that selecting task_based results in correct flags."""
+        """Test that selecting dive_in (Q5) results in correct flags."""
         responses = [
-            {"question_id": "q3", "answer_key": "group"},
-            {"question_id": "q4", "answer_key": "long"},
-            {"question_id": "q5", "answer_key": "task_based"},
+            {"question_id": "q4", "answer_key": "long_deep"},
+            {"question_id": "q5", "answer_key": "dive_in"},
         ]
 
         work_style = service._calculate_work_style(responses)
@@ -212,70 +204,44 @@ class TestCalculateWorkStyle:
 
 
 class TestExtractInterests:
-    """Tests for interest extraction."""
+    """Tests for interest extraction (v2: Q6 single-select → canonical category key)."""
 
-    def test_when_interests_selected_then_interests_stored(self, service: OnboardingService) -> None:
-        """Test that selected interests are stored as lowercase list."""
+    def test_when_sports_movement_selected_then_returns_single_item_list(self, service: OnboardingService) -> None:
+        """Test that Q6 single-select returns a one-item list."""
         responses = [
-            {"question_id": "q6_to_q10", "answer_keys": ["sports", "music"]},
+            {"question_id": "q6", "answer_key": "sports_movement"},
         ]
 
         interests = service._extract_interests(responses)
 
-        assert interests == ["sports", "music"]
+        assert interests == ["sports_movement"]
 
-    def test_when_interests_mixed_case_then_lowered(self, service: OnboardingService) -> None:
-        """Test that interests are converted to lowercase."""
+    def test_when_tech_gaming_selected_then_interest_lowercased(self, service: OnboardingService) -> None:
+        """Test that interest key is lowercased."""
         responses = [
-            {"question_id": "q6_to_q10", "answer_keys": ["SPORTS", "Music", "GAMING"]},
+            {"question_id": "q6", "answer_key": "TECH_GAMING"},
         ]
 
         interests = service._extract_interests(responses)
 
-        assert interests == ["sports", "music", "gaming"]
-
-    def test_when_no_interests_selected_then_empty_list(self, service: OnboardingService) -> None:
-        """Test that no interests results in empty list."""
-        responses = [
-            {"question_id": "q6_to_q10", "answer_keys": []},
-        ]
-
-        interests = service._extract_interests(responses)
-
-        assert interests == []
+        assert interests == ["tech_gaming"]
 
     def test_when_no_q6_response_then_empty_list(self, service: OnboardingService) -> None:
         """Test that missing q6 response results in empty list."""
         responses = [
-            {"question_id": "q1", "answer_key": "watch_video"},
+            {"question_id": "q1", "answer_key": "see_diagram"},
         ]
 
         interests = service._extract_interests(responses)
 
         assert interests == []
 
-    def test_when_all_interests_selected_then_all_stored(self, service: OnboardingService) -> None:
-        """Test that all 10 interests can be selected."""
-        all_interests = [
-            "sports",
-            "music",
-            "gaming",
-            "animals",
-            "cooking",
-            "art",
-            "technology",
-            "nature",
-            "fashion",
-            "travel",
-        ]
-        responses = [
-            {"question_id": "q6_to_q10", "answer_keys": all_interests},
-        ]
-
-        interests = service._extract_interests(responses)
-
-        assert interests == all_interests
-        assert len(interests) == 10
+    def test_when_nature_animals_selected_then_returns_nature_animals(self, service: OnboardingService) -> None:
+        """Test each canonical interest category is returned correctly."""
+        for category in ("sports_movement", "tech_gaming", "nature_animals", "arts_culture"):
+            responses = [{"question_id": "q6", "answer_key": category}]
+            interests = service._extract_interests(responses)
+            assert interests == [category]
 
 
 @pytest.mark.asyncio
@@ -324,7 +290,7 @@ class TestGetOrCreateLearningProfile:
         assert result.school_id == school_id
         assert result.modality_scores == {}
         assert result.work_style == {}
-        assert result.questionnaire_version == "v1"
+        assert result.questionnaire_version == "v2"
         service.db.add.assert_called_once()  # type: ignore[attr-defined]
         service.db.commit.assert_called_once()
 
@@ -352,13 +318,15 @@ class TestSaveQuestionnaireResponse:
             user_id=student_id,
         )
 
+        # v2 responses
         responses: list[dict[str, Any]] = [
-            {"question_id": "q1", "answer_key": "watch_video"},
-            {"question_id": "q2", "answer_key": "see_diagrams"},
-            {"question_id": "q3", "answer_key": "solo"},
-            {"question_id": "q4", "answer_key": "short"},
-            {"question_id": "q5", "answer_key": "concept_first"},
-            {"question_id": "q6_to_q10", "answer_keys": ["sports"]},
+            {"question_id": "q1", "answer_key": "see_diagram"},
+            {"question_id": "q2", "answer_key": "draw_it"},
+            {"question_id": "q3", "answer_key": "find_example"},
+            {"question_id": "q4", "answer_key": "short_focused"},
+            {"question_id": "q5", "answer_key": "big_picture"},
+            {"question_id": "q6", "answer_key": "sports_movement"},
+            {"question_id": "q7", "answer_key": "persists"},
         ]
 
         # Mock the database queries
@@ -374,7 +342,8 @@ class TestSaveQuestionnaireResponse:
 
         assert result == existing_profile
         assert result.completed_at is not None
-        assert result.modality_scores["visual"] == 1.0
+        # v2: dominant should be visual (all three Q1/Q2/Q3 answered visual)
+        assert result.modality_scores["dominant"] == "visual"
         service.db.add.assert_not_called()  # type: ignore[attr-defined]  # Should not create new row
         assert service.db.commit.call_count == 2  # type: ignore[attr-defined]  # Once for profile, once for is_learning_profile_complete
 
@@ -388,13 +357,15 @@ class TestSaveQuestionnaireResponse:
             user_id=student_id,
         )
 
+        # v2 responses
         responses: list[dict[str, Any]] = [
-            {"question_id": "q1", "answer_key": "watch_video"},
-            {"question_id": "q2", "answer_key": "see_diagrams"},
-            {"question_id": "q3", "answer_key": "solo"},
-            {"question_id": "q4", "answer_key": "short"},
-            {"question_id": "q5", "answer_key": "concept_first"},
-            {"question_id": "q6_to_q10", "answer_keys": ["sports"]},
+            {"question_id": "q1", "answer_key": "see_diagram"},
+            {"question_id": "q2", "answer_key": "draw_it"},
+            {"question_id": "q3", "answer_key": "find_example"},
+            {"question_id": "q4", "answer_key": "short_focused"},
+            {"question_id": "q5", "answer_key": "big_picture"},
+            {"question_id": "q6", "answer_key": "sports_movement"},
+            {"question_id": "q7", "answer_key": "persists"},
         ]
 
         # Create existing profile for the second call
@@ -404,7 +375,7 @@ class TestSaveQuestionnaireResponse:
             school_id=school_id,
             modality_scores={},
             work_style={},
-            questionnaire_version="v1",
+            questionnaire_version="v2",
         )
 
         # Mock the database queries
@@ -420,7 +391,7 @@ class TestSaveQuestionnaireResponse:
 
         assert result == existing_profile
         assert result.completed_at is not None
-        assert result.modality_scores["visual"] == 1.0
+        assert result.modality_scores["dominant"] == "visual"
         service.db.add.assert_not_called()  # type: ignore[attr-defined]  # Should not create new row
         assert service.db.commit.call_count == 2  # type: ignore[attr-defined]  # Once for profile, once for is_learning_profile_complete
 
