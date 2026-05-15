@@ -65,6 +65,13 @@ def _make_scalar_one_or_none_result(value: object) -> MagicMock:
     return result
 
 
+def _make_all_result(rows: list) -> MagicMock:
+    """Mock result where result.all() returns rows (used by _fetch_existing_content_pairs)."""
+    result = MagicMock()
+    result.all.return_value = rows
+    return result
+
+
 # ---------------------------------------------------------------------------
 # MiniCourseGenerationService unit tests
 # ---------------------------------------------------------------------------
@@ -129,27 +136,19 @@ class TestGenerateForTopic:
 
         categories = [_make_interest_category(db_name) for db_name, _, _ in INTEREST_CATEGORIES]
 
-        # execute call sequence per loop iteration (per category):
-        #   _has_non_rejected_content → .first()
-        #   _upsert_content rejected-row check → .scalar_one_or_none()
-        # Interleaved: 1 subtopic × 4 categories = 8 per-loop calls, plus 3 setup.
-        # Setup: _fetch_topic_context, _fetch_subtopics, _resolve_interest_category_ids
-        # Loop (×4): has_non_rejected (first=None), upsert check (scalar_one_or_none=None)
+        # execute call sequence:
+        # Setup (3): _fetch_topic_context, _fetch_subtopics, _resolve_interest_category_ids
+        # Batch (1): _fetch_existing_content_pairs → result.all() → empty (no prior content)
+        # Loop ×4:   _upsert_content rejected-row check → scalar_one_or_none()
         execute_returns = [
             _make_first_result(topic_context_row),  # _fetch_topic_context
             _make_scalars_result([subtopic]),  # _fetch_subtopics
             _make_scalars_result(categories),  # _resolve_interest_category_ids
-            # cat 1 (sports_movement)
-            _make_first_result(None),  # has_non_rejected → no content
-            _make_scalar_one_or_none_result(None),  # upsert check → no rejected row
-            # cat 2 (tech_gaming)
-            _make_first_result(None),
+            _make_all_result([]),  # _fetch_existing_content_pairs → no prior content
+            # upsert check ×4 — no rejected row exists → fresh insert each time
             _make_scalar_one_or_none_result(None),
-            # cat 3 (nature_animals)
-            _make_first_result(None),
             _make_scalar_one_or_none_result(None),
-            # cat 4 (arts_culture)
-            _make_first_result(None),
+            _make_scalar_one_or_none_result(None),
             _make_scalar_one_or_none_result(None),
         ]
         db.execute.side_effect = execute_returns
@@ -197,19 +196,20 @@ class TestGenerateForTopic:
 
         categories = [_make_interest_category(db_name) for db_name, _, _ in INTEREST_CATEGORIES]
 
-        # All 4 interest categories already have approved content
-        existing_row = MagicMock()
-        existing_row.id = uuid.uuid4()
+        # All 4 interest categories already have non-rejected content —
+        # batch query returns one row per (subtopic_id, category_id) pair.
+        existing_pairs = []
+        for cat in categories:
+            pair = MagicMock()
+            pair.subtopic_id = subtopic.id
+            pair.interest_category_id = cat.id
+            existing_pairs.append(pair)
 
         execute_returns = [
             _make_first_result(topic_context_row),
             _make_scalars_result([subtopic]),
             _make_scalars_result(categories),
-            # has_non_rejected × 4 — all return an existing row
-            _make_first_result(existing_row),
-            _make_first_result(existing_row),
-            _make_first_result(existing_row),
-            _make_first_result(existing_row),
+            _make_all_result(existing_pairs),  # _fetch_existing_content_pairs → all 4 pairs present
         ]
         db.execute.side_effect = execute_returns
 
@@ -253,8 +253,7 @@ class TestGenerateForTopic:
             _make_first_result(topic_context_row),
             _make_scalars_result([subtopic]),
             _make_scalars_result(categories),
-            # First _has_non_rejected check — no existing content
-            _make_first_result(None),
+            _make_all_result([]),  # _fetch_existing_content_pairs → no prior content
         ]
         db.execute.side_effect = execute_returns
 

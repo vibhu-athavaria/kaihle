@@ -24,14 +24,6 @@ from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
 
-# Interest categories: (category_db_name, human_readable_label, interest_key)
-INTEREST_CATEGORIES: list[tuple[str, str, str]] = [
-    ("sports_movement", "Sports & Fitness", "sports_movement"),
-    ("tech_gaming", "Technology & Innovation", "tech_gaming"),
-    ("nature_animals", "Nature & Science", "nature_animals"),
-    ("arts_culture", "Music & Arts", "arts_culture"),
-]
-
 
 class GenerateMiniCourseTask(celery.Task):
     """Celery Task subclass that emits a CRITICAL log when all retries are exhausted.

@@ -33,6 +33,7 @@ _PROMPTS_DIR = Path(__file__).parent.parent / "ai" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)), autoescape=False)
 
 # Interest categories: (db_name, human_label, interest_key)
+# db_name must match interest_category_enum values in PostgreSQL.
 INTEREST_CATEGORIES: list[tuple[str, str, str]] = [
     ("sports_movement", "Sports & Fitness", "sports_movement"),
     ("tech_gaming", "Technology & Innovation", "tech_gaming"),
@@ -95,7 +96,12 @@ class MiniCourseGenerationService:
         # 3. Resolve interest category IDs from DB
         category_id_map = await self._resolve_interest_category_ids()
 
-        # 4. Generate for each subtopic × interest_category
+        # 4. Batch-fetch all existing non-rejected (subtopic_id, category_id) pairs
+        #    for this topic in one query — avoids N+1 point-lookups inside the loop.
+        subtopic_ids = [s.id for s in subtopics]
+        existing_pairs = await self._fetch_existing_content_pairs(subtopic_ids)
+
+        # 5. Generate for each subtopic × interest_category
         explanations_written = 0
         subtopics_processed = 0
 
@@ -111,8 +117,8 @@ class MiniCourseGenerationService:
                     )
                     continue
 
-                # Skip if a non-rejected row already exists
-                if await self._has_non_rejected_content(subtopic.id, category_id):
+                # Skip if a non-rejected row already exists (in-memory set lookup)
+                if (subtopic.id, category_id) in existing_pairs:
                     logger.info(
                         "mini_course_content_already_exists_skipping",
                         subtopic_id=str(subtopic.id),
@@ -189,18 +195,20 @@ class MiniCourseGenerationService:
         categories = result.scalars().all()
         return {cat.name: cat.id for cat in categories}
 
-    async def _has_non_rejected_content(self, subtopic_id: uuid.UUID, interest_category_id: uuid.UUID) -> bool:
-        """Return True if a pending or approved content row already exists."""
+    async def _fetch_existing_content_pairs(self, subtopic_ids: list[uuid.UUID]) -> set[tuple[uuid.UUID, uuid.UUID]]:
+        """Return set of (subtopic_id, interest_category_id) pairs that already have
+        a non-rejected explanation row. One query for the whole topic batch."""
+        if not subtopic_ids:
+            return set()
         result = await self.db.execute(
-            select(SubtopicContent.id).where(
-                SubtopicContent.subtopic_id == subtopic_id,
-                SubtopicContent.interest_category_id == interest_category_id,
+            select(SubtopicContent.subtopic_id, SubtopicContent.interest_category_id).where(
+                SubtopicContent.subtopic_id.in_(subtopic_ids),
                 SubtopicContent.content_type == "explanation",
                 SubtopicContent.review_status != "rejected",
                 SubtopicContent.is_archived.is_(False),
             )
         )
-        return result.first() is not None
+        return {(row.subtopic_id, row.interest_category_id) for row in result.all()}
 
     async def _call_llm(
         self,
@@ -254,7 +262,7 @@ class MiniCourseGenerationService:
 
         if existing_rejected is not None:
             existing_rejected.explanation_text = explanation_text
-            existing_rejected.review_status = "pending_review"
+            existing_rejected.review_status = "pending"
             existing_rejected.rejection_reason = None
             existing_rejected.rejection_teacher_note = None
             logger.info(
@@ -268,7 +276,7 @@ class MiniCourseGenerationService:
                 content_type="explanation",
                 explanation_text=explanation_text,
                 interest_category_id=interest_category_id,
-                review_status="pending_review",
+                review_status="pending",
             )
             self.db.add(content)
             logger.info(
