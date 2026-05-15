@@ -174,6 +174,18 @@ class TestCalculateWorkStyle:
         assert work_style["concept_first"] is True
         assert work_style["task_based"] is False
 
+    def test_when_solo_quiet_selected_then_prefers_solo_true(self, service: OnboardingService) -> None:
+        """Test that selecting solo_quiet (Q4) results in prefers_solo=True."""
+        responses = [
+            {"question_id": "q4", "answer_key": "solo_quiet"},
+            {"question_id": "q5", "answer_key": "big_picture"},
+        ]
+
+        work_style = service._calculate_work_style(responses)
+
+        assert work_style["prefers_solo"] is True
+        assert work_style["short_sessions"] is False
+
     def test_when_big_picture_selected_then_concept_first_true_and_task_based_false(
         self, service: OnboardingService
     ) -> None:

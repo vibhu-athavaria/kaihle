@@ -159,11 +159,11 @@ class StudentLearningProfileResponse(BaseModel):
     id: UUID
     student_id: UUID
     school_id: UUID
-    modality_scores: dict[str, float] = Field(
-        ..., description="Scores for each modality (visual, auditory, reading_writing, kinesthetic)"
+    modality_scores: dict[str, Any] = Field(
+        ..., description="v2: {dominant, secondary} modality strings; legacy: {visual, auditory, ...} floats"
     )
-    work_style: dict[str, bool] = Field(
-        ..., description="Work style preferences (prefers_solo, short_sessions, concept_first, task_based)"
+    work_style: dict[str, Any] = Field(
+        ..., description="Work style preferences; may include string fields (e.g. challenge_response)"
     )
     interests: list[str] | None = Field(None, description="Selected interests from the questionnaire")
     questionnaire_version: str = Field(..., description="Version of questionnaire used")

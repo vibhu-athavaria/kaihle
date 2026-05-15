@@ -121,9 +121,9 @@ QUESTIONNAIRE_V2: dict[str, Any] = {
                     "maps_to": {"work_style": "prefers_solo", "value": False},
                 },
                 {
-                    "key": "on_the_move",
-                    "text": "Moving around — I can't sit still for long",
-                    "maps_to": {"work_style": "short_sessions", "value": True},
+                    "key": "solo_quiet",
+                    "text": "On my own, somewhere quiet",
+                    "maps_to": {"work_style": "prefers_solo", "value": True},
                 },
             ],
         },

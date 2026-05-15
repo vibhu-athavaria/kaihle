@@ -4,10 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { OnboardingLayout } from "@kaihle/ui";
 import { Button } from "@kaihle/ui";
-import {
-  useQuestionnaireStore,
-  QUESTION_KEYS,
-} from "../../store/questionnaireStore";
+import { useQuestionnaireStore } from "../../store/questionnaireStore";
 import { apiClient } from "@kaihle/auth";
 
 // Types for API questionnaire response
@@ -39,7 +36,7 @@ export function ProfileQuestionnaire() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const queryClient = useQueryClient();
-  const { answers, setAnswer, toggleInterest, reset } = useQuestionnaireStore();
+  const { answers, setAnswer, reset } = useQuestionnaireStore();
 
   // Fetch questionnaire from API
   useEffect(() => {
@@ -65,15 +62,12 @@ export function ProfileQuestionnaire() {
     setIsSubmitting(true);
     setError(null);
     try {
-      // Build responses in the format expected by backend
+      // Build responses keyed by question ID — works for any questionnaire version
       const responses =
-        questionnaire?.questions.map((q, index) => {
-          if (q.type === "multi_select") {
-            return { question_id: q.id, answer_keys: answers.interests };
-          }
-          const questionKey = QUESTION_KEYS[index];
-          return { question_id: q.id, answer_key: answers[questionKey] };
-        }) ?? [];
+        questionnaire?.questions.map((q) => ({
+          question_id: q.id,
+          answer_key: answers[q.id] ?? null,
+        })) ?? [];
 
       await apiClient.post("/api/v1/onboarding/questionnaire/submit", {
         responses,
@@ -91,15 +85,10 @@ export function ProfileQuestionnaire() {
   };
 
   const canProceed = () => {
-    if (currentStep <= 5 && questionnaire) {
-      const question = questionnaire.questions[currentStep - 1];
-      if (question.type === "multi_select") {
-        return true; // Multi-select is optional
-      }
-      const questionKey = QUESTION_KEYS[currentStep - 1];
-      return answers[questionKey] !== null;
-    }
-    return true;
+    if (!questionnaire) return false;
+    const question = questionnaire.questions[currentStep - 1];
+    if (!question) return true;
+    return answers[question.id] != null;
   };
 
   const renderQuestion = () => {
@@ -108,49 +97,8 @@ export function ProfileQuestionnaire() {
     const question = questionnaire.questions[currentStep - 1];
     if (!question) return null;
 
-    if (question.type === "multi_select") {
-      return (
-        <div className="space-y-6">
-          <h2 className="font-display font-bold text-xl text-brand-ink text-center">
-            What are you interested in?
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            {question.options.map((option) => {
-              const isSelected = answers.interests.includes(option.key);
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  onClick={() => toggleInterest(option.key)}
-                  className={`
-                    relative p-4 rounded-xl border-2 transition-all min-h-[44px]
-                    ${
-                      isSelected
-                        ? "border-brand-primary bg-brand-light"
-                        : "border-brand-border hover:border-brand-mid"
-                    }
-                  `}
-                >
-                  <span className="text-2xl block">{option.emoji}</span>
-                  <span className="text-xs font-semibold text-brand-ink mt-2 block">
-                    {option.text}
-                  </span>
-                  {isSelected && (
-                    <span className="absolute top-2 right-2 w-5 h-5 bg-brand-primary rounded-full flex items-center justify-center">
-                      <Check className="w-3 h-3 text-white" />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    // Single select question
-    const questionKey = QUESTION_KEYS[currentStep - 1];
-    const currentValue = answers[questionKey];
+    // Single select — keyed by question ID
+    const currentValue = answers[question.id];
 
     return (
       <div className="space-y-6">
@@ -164,7 +112,7 @@ export function ProfileQuestionnaire() {
               <button
                 key={option.key}
                 type="button"
-                onClick={() => setAnswer(questionKey, option.key)}
+                onClick={() => setAnswer(question.id, option.key)}
                 className={`
                   relative p-6 rounded-xl border-2 transition-all text-left min-h-[44px]
                   ${
