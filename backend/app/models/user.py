@@ -72,11 +72,11 @@ class User(Base, TimestampMixin):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[str] = mapped_column(
         Enum(
-            UserRole.STUDENT,
-            UserRole.TEACHER,
-            UserRole.SCHOOL_ADMIN,
-            UserRole.PARENT,
-            UserRole.KAIHLE_ADMIN,
+            "STUDENT",
+            "TEACHER",
+            "SCHOOL_ADMIN",
+            "PARENT",
+            "KAIHLE_ADMIN",
             name="user_role",
         ),
         nullable=False,
