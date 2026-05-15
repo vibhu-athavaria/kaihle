@@ -35,6 +35,36 @@ target_metadata = Base.metadata
 # ... etc.
 
 
+def include_object(object, name, type_, reflected, compare_to):  # type: ignore[override]
+    """Skip reflected-only indexes from autogenerate.
+
+    Indexes that exist in the DB with legacy idx_* names but have no ORM
+    declaration are still correct — Alembic should not drop them.
+    """
+    if type_ == "index" and reflected and compare_to is None:
+        return False
+    return True
+
+
+def process_revision_directives(context, revision, directives):  # type: ignore[override]
+    """Strip table comment operations from autogenerate output.
+
+    Table comments (COMMENT ON TABLE) are DB documentation only.
+    Alembic has no ORM-side comment declarations, so every autogenerate
+    run would emit drop_table_comment noise for every table. We suppress
+    all of them here before the migration file is written.
+    """
+    from alembic.operations import ops as alembic_ops
+
+    for directive in directives:
+        directive.upgrade_ops.ops = [
+            op for op in directive.upgrade_ops.ops if not isinstance(op, alembic_ops.DropTableCommentOp)
+        ]
+        directive.downgrade_ops.ops = [
+            op for op in directive.downgrade_ops.ops if not isinstance(op, alembic_ops.CreateTableCommentOp)
+        ]
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -53,6 +83,10 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
+        process_revision_directives=process_revision_directives,
+        compare_type=False,
+        compare_server_default=False,
     )
 
     with context.begin_transaction():
@@ -63,6 +97,10 @@ def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
+        include_object=include_object,
+        process_revision_directives=process_revision_directives,
+        compare_type=False,
+        compare_server_default=False,
     )
 
     with context.begin_transaction():

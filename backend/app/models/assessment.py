@@ -9,7 +9,6 @@ from datetime import datetime
 
 from sqlalchemy import (
     CheckConstraint,
-    DateTime,
     Enum,
     ForeignKey,
     Index,
@@ -18,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -94,7 +93,6 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
             AssessmentType.PROGRESS_CHECK,
             AssessmentType.FINAL,
             name="assessment_type",
-            native_enum=False,
         ),
         nullable=False,
     )
@@ -104,7 +102,6 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
             AssessmentStatus.ACTIVE,
             AssessmentStatus.CLOSED,
             name="assessment_status",
-            native_enum=False,
         ),
         nullable=False,
         default=AssessmentStatus.DRAFT,
@@ -118,8 +115,8 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
         ARRAY(Text), nullable=False, default=lambda: ["MCQ", "TRUE_FALSE"]
     )
     time_limit_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    deadline: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
     __table_args__ = (
         CheckConstraint("minimum_difficulty >= 1", name="chk_assessment_min_diff"),
@@ -200,7 +197,6 @@ class StudentAttempt(Base, UUIDMixin, TimestampMixin):
             AttemptStatus.COMPLETED,
             AttemptStatus.ABANDONED,
             name="attempt_status",
-            native_enum=False,
         ),
         nullable=False,
         default=AttemptStatus.NOT_STARTED,
@@ -209,10 +205,11 @@ class StudentAttempt(Base, UUIDMixin, TimestampMixin):
     questions_answered: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     overall_score: Mapped[float | None]
     time_taken_seconds: Mapped[int | None]
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
     __table_args__ = (
+        UniqueConstraint("assessment_id", "student_id", name="sa_unique"),
         CheckConstraint(
             "overall_score IS NULL OR (overall_score BETWEEN 0.0 AND 1.0)",
             name="chk_sa_score",
@@ -244,7 +241,6 @@ class StudentResponse(Base, UUIDMixin):
             ScoredBy.LLM,
             ScoredBy.PENDING,
             name="scored_by",
-            native_enum=False,
         ),
         nullable=False,
         default=ScoredBy.PENDING,
@@ -252,9 +248,10 @@ class StudentResponse(Base, UUIDMixin):
     ai_feedback: Mapped[str | None] = mapped_column(Text)
     hints_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     time_taken_ms: Mapped[int | None]
-    answered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    answered_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
+        UniqueConstraint("attempt_id", "question_id", name="sr_unique"),
         CheckConstraint(
             "score IS NULL OR (score BETWEEN 0.0 AND 1.0)",
             name="chk_sr_score",
@@ -294,7 +291,7 @@ class StudentAttemptSubtopicScore(Base):
     score: Mapped[float] = mapped_column(nullable=False)
     # Per-subtopic fraction correct for this attempt: correct / total in subtopic
     attempted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        TIMESTAMP(timezone=True),
         nullable=False,
     )
 

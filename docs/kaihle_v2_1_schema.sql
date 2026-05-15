@@ -1,8 +1,9 @@
 -- =============================================================================
--- Kaihle v2.1 — Canonical Database Schema
+-- Kaihle v2.2 — Canonical Database Schema
 -- =============================================================================
 -- Prepared by: Kramer (Technical Lead)
--- Supersedes:  Kaihle v1.0 schema (schema.sql)
+-- Updated:     2026-05-15
+-- Supersedes:  Kaihle v2.1 schema
 -- Strategy:    Migrate — new schema, data imported via scripts
 --
 -- Design principles:
@@ -72,10 +73,21 @@ CREATE TYPE resource_type AS ENUM (
 );
 
 CREATE TYPE lesson_plan_status AS ENUM (
+    'GENERATING',      -- Celery task running (v2.2: added GENERATING state)
     'GENERATED',
     'EDITED',          -- teacher modified it
     'USED',            -- teacher delivered it
     'ARCHIVED'
+);
+
+-- v2.2: failure codes for lesson plan generation errors
+CREATE TYPE lesson_plan_failure_code AS ENUM (
+    'llm_auth_error',
+    'llm_rate_limit_error',
+    'llm_connection_error',
+    'llm_unexpected_error',
+    'json_parse_failed',
+    'class_not_found'
 );
 
 CREATE TYPE subscription_tier AS ENUM (
@@ -109,13 +121,28 @@ CREATE TYPE user_role AS ENUM (
 
 CREATE TYPE auth_token_type AS ENUM (
     'MAGIC_LINK',
-    'REFRESH'
+    'REFRESH',
+    'PASSWORD_RESET'   -- v2.2: added for password reset flow
 );
 
 CREATE TYPE onboarding_status AS ENUM (
     'PENDING',       -- student enrolled but has not started onboarding
     'IN_PROGRESS',   -- at least one Tier 1 diagnostic created; not all completed
     'COMPLETED'      -- all Tier 1 diagnostics completed AND learning profile submitted
+);
+
+-- v2.2: enum types for subtopic_content (replacing VARCHAR columns)
+CREATE TYPE content_type AS ENUM (
+    'video',
+    'explanation',
+    'practice',
+    'quiz'
+);
+
+CREATE TYPE review_status AS ENUM (
+    'pending',
+    'approved',
+    'rejected'
 );
 
 -- =============================================================================
@@ -147,15 +174,16 @@ COMMENT ON TABLE curricula IS
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE subjects (
-    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    name        VARCHAR(100) NOT NULL,
-    code        VARCHAR(20)  NOT NULL,  -- e.g. 'MATH', 'SCI', 'ENG'
-    description TEXT,
-    icon        VARCHAR(50),            -- icon identifier for UI
-    color       VARCHAR(7),             -- hex color e.g. '#0D9488'
-    is_active   BOOLEAN     NOT NULL DEFAULT TRUE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ,
+    id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name                VARCHAR(100) NOT NULL,
+    code                VARCHAR(20)  NOT NULL,  -- e.g. 'MATH', 'SCI', 'ENG'
+    description         TEXT,
+    icon                VARCHAR(50),            -- icon identifier for UI
+    color               VARCHAR(7),             -- hex color e.g. '#0D9488'
+    subject_family_code VARCHAR(20),            -- v2.2: groups related subjects e.g. 'SCIENCE'
+    is_active           BOOLEAN     NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ,
     CONSTRAINT subjects_code_key UNIQUE (code),
     CONSTRAINT subjects_name_key UNIQUE (name)
 );
@@ -163,7 +191,10 @@ CREATE TABLE subjects (
 COMMENT ON TABLE subjects IS
     'Global subject catalogue. School-agnostic.
      e.g. Mathematics (MATH), Science (SCI), English Language (ENG).
-     Used directly by classes and question_bank joins.';
+     Used directly by classes and question_bank joins.
+     subject_family_code (v2.2): groups related subjects e.g. BIO/CHEM/PHY under SCIENCE.';
+
+CREATE INDEX idx_subjects_family_code ON subjects (subject_family_code);
 
 -- ---------------------------------------------------------------------------
 
@@ -367,6 +398,7 @@ CREATE TABLE curriculum_chunks (
     page_number INT,
     embedding   VECTOR(768),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ,                    -- v2.2: added
     CONSTRAINT chk_chunk_index CHECK (chunk_index >= 0)
 );
 
@@ -494,21 +526,23 @@ CREATE UNIQUE INDEX idx_school_curricula_one_primary
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE users (
-    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    school_id       UUID        REFERENCES schools (id) ON DELETE SET NULL,
+    id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id           UUID        REFERENCES schools (id) ON DELETE SET NULL,
     -- NULL is valid ONLY for KAIHLE_ADMIN. All other roles require school_id.
     -- Enforced by: CHECK (role = 'KAIHLE_ADMIN' OR school_id IS NOT NULL)
-    email           VARCHAR(255) NOT NULL,
-    hashed_password VARCHAR(255),
+    email               VARCHAR(255) NOT NULL,
+    hashed_password     VARCHAR(255),
     -- NULL for magic-link-only users (invited teachers/parents)
-    first_name      VARCHAR(100) NOT NULL,
-    last_name       VARCHAR(100) NOT NULL,
-    role            user_role   NOT NULL,
-    is_active       BOOLEAN     NOT NULL DEFAULT TRUE,
-    last_login_at   TIMESTAMPTZ,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ,
-    CONSTRAINT users_email_unique UNIQUE (email)
+    first_name          VARCHAR(100) NOT NULL,
+    last_name           VARCHAR(100) NOT NULL,
+    role                user_role   NOT NULL,
+    is_active           BOOLEAN     NOT NULL DEFAULT TRUE,
+    last_login_at       TIMESTAMPTZ,
+    must_change_password BOOLEAN    NOT NULL DEFAULT FALSE,  -- v2.2: added
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ,
+    CONSTRAINT users_email_unique UNIQUE (email),
+    CONSTRAINT chk_user_school_id_required CHECK (role = 'KAIHLE_ADMIN' OR school_id IS NOT NULL)
 );
 
 COMMENT ON TABLE users IS
@@ -517,7 +551,8 @@ COMMENT ON TABLE users IS
      All other roles (STUDENT, TEACHER, SCHOOL_ADMIN, PARENT) MUST have school_id.
      Enforced by CHECK constraint: CHECK (role = ''KAIHLE_ADMIN'' OR school_id IS NOT NULL).
      hashed_password NULL: user authenticates via magic link only.
-     email UNIQUE: globally unique, not per-school (simplifies magic link auth).';
+     email UNIQUE: globally unique, not per-school (simplifies magic link auth).
+     must_change_password (v2.2): set TRUE after password reset to force change on next login.';
 
 CREATE INDEX idx_users_school_role ON users (school_id, role);
 CREATE INDEX idx_users_email       ON users (email);
@@ -539,7 +574,8 @@ COMMENT ON TABLE auth_tokens IS
     'Magic link and refresh token storage.
      token_hash: SHA-256 of raw token. Raw token travels in email/header, never stored.
      used_at: tokens are single-use. Second use returns 401.
-     Nightly Celery task purges expired tokens.';
+     Nightly Celery task purges expired tokens.
+     type=PASSWORD_RESET (v2.2): token issued for password reset flow.';
 
 CREATE INDEX idx_auth_tokens_user    ON auth_tokens (user_id);
 CREATE INDEX idx_auth_tokens_expires ON auth_tokens (expires_at);
@@ -641,6 +677,9 @@ CREATE TABLE student_learning_profiles (
     -- Non-NULL = questionnaire fully submitted. Only non-NULL profiles are used by AI features.
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ,
+    -- NOTE: slp_student_unique and idx_slp_student both enforce uniqueness on student_id.
+    -- Only one is needed. The UNIQUE constraint below serves as the authoritative enforcement.
+    -- The idx_slp_student index is a duplicate and should be dropped.
     CONSTRAINT slp_student_unique UNIQUE (student_id)
     -- One profile per student. Use ON CONFLICT DO UPDATE to handle re-submission.
 );
@@ -659,8 +698,9 @@ COMMENT ON TABLE student_learning_profiles IS
      Accessible to teacher in class gap map (read-only student panel).
      Accessible to student via /student/settings/profile (editable after onboarding).';
 
-CREATE UNIQUE INDEX idx_slp_student ON student_learning_profiles (student_id);
-CREATE INDEX idx_slp_school   ON student_learning_profiles (school_id);
+-- NOTE: idx_slp_student is a duplicate of the slp_student_unique constraint above.
+-- Only the constraint is needed. This index should not be re-created on fresh installs.
+CREATE INDEX idx_slp_school ON student_learning_profiles (school_id);
 
 -- ---------------------------------------------------------------------------
 -- classes: the operational unit for all school activity.
@@ -719,6 +759,31 @@ CREATE INDEX idx_enrollments_student ON class_enrollments (student_id);
 CREATE INDEX idx_enrollments_active  ON class_enrollments (class_id, is_active);
 CREATE INDEX idx_enrollments_onboarding_status ON class_enrollments (student_id, onboarding_diagnostic_status);
 
+-- ---------------------------------------------------------------------------
+-- class_topics: teacher-configured topic list for a class (v2.2)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE class_topics (
+    id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id           UUID        NOT NULL REFERENCES schools (id) ON DELETE RESTRICT,
+    class_id            UUID        NOT NULL REFERENCES classes (id) ON DELETE CASCADE,
+    curriculum_topic_id UUID        NOT NULL REFERENCES curriculum_topics (id) ON DELETE RESTRICT,
+    sequence_order      INT         NOT NULL,
+    is_covered          BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_class_topic UNIQUE (class_id, curriculum_topic_id)
+);
+
+COMMENT ON TABLE class_topics IS
+    'Teacher-selected topics for a specific class (v2.2).
+     Allows teachers to configure which curriculum topics they cover and in what order.
+     is_covered: teacher marks topic as delivered to class.
+     Used by lesson plan generator to scope content selection.';
+
+CREATE INDEX idx_class_topics_class  ON class_topics (class_id);
+CREATE INDEX idx_class_topics_school ON class_topics (school_id);
+
 -- =============================================================================
 -- SECTION 4: ASSESSMENTS
 -- Definition (teacher creates once for a class) is fully separated from
@@ -727,45 +792,70 @@ CREATE INDEX idx_enrollments_onboarding_status ON class_enrollments (student_id,
 
 CREATE TABLE assessments (
     id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id           UUID        NOT NULL REFERENCES schools (id) ON DELETE RESTRICT,
+    -- v2.2: school_id added for tenant isolation
     class_id            UUID        NOT NULL REFERENCES classes (id) ON DELETE CASCADE,
-    created_by          UUID        NOT NULL REFERENCES users (id)   ON DELETE RESTRICT,
+    created_by          UUID        REFERENCES users (id) ON DELETE RESTRICT,
+    -- nullable: system-created assessments may not have a human creator
     title               TEXT        NOT NULL,
     assessment_type     assessment_type NOT NULL,
     status              assessment_status NOT NULL DEFAULT 'DRAFT',
-    is_system_generated BOOLEAN     NOT NULL DEFAULT FALSE,
-    -- FALSE: teacher-created (Tier 2 — ongoing assessments)
-    -- TRUE:  system-created (Tier 1 — onboarding diagnostic, fired on class enrollment)
-    -- Tier 1 assessments cover ALL curriculum topics for the student's grade+subject.
-    -- Tier 1 assessments gate student dashboard access until completed.
-    curriculum_topic_id UUID        REFERENCES curriculum_topics (id) ON DELETE SET NULL,
-    -- Required for TOPIC_SPECIFIC and PROGRESS_CHECK.
-    -- NULL for DIAGNOSTIC (both Tier 1 system and Tier 2 teacher broad sweep) and FINAL.
-    config              JSONB       NOT NULL DEFAULT '{}',
-    -- {
-    --   "num_questions": 10,
-    --   "difficulty_range": [1, 4],
-    --   "question_types": ["MCQ", "SHORT_ANSWER"],
-    --   "time_limit_minutes": null
-    -- }
+    -- v2.2: removed is_system_generated, curriculum_topic_id, config, due_at
+    -- v2.2: added school_id, published_at, question_count, questions_per_topic,
+    --        minimum_difficulty, maximum_difficulty, question_types, time_limit_minutes, deadline
     instructions        TEXT,
-    due_at              TIMESTAMPTZ,
+    published_at        TIMESTAMPTZ,
+    question_count      INT,
+    questions_per_topic INT         NOT NULL DEFAULT 5,
+    -- minimum 3 per topic for statistical reliability (Vidhya rule)
+    minimum_difficulty  INT         NOT NULL DEFAULT 1,
+    maximum_difficulty  INT         NOT NULL DEFAULT 5,
+    question_types      TEXT[]      NOT NULL DEFAULT ARRAY['MCQ', 'TRUE_FALSE'],
+    time_limit_minutes  INT         NOT NULL DEFAULT 0,
+    -- 0 = untimed
+    deadline            TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ
+    updated_at          TIMESTAMPTZ,
+    CONSTRAINT chk_assessment_min_diff  CHECK (minimum_difficulty >= 1),
+    CONSTRAINT chk_assessment_max_diff  CHECK (maximum_difficulty <= 5),
+    CONSTRAINT chk_assessment_qpt       CHECK (questions_per_topic >= 1),
+    CONSTRAINT chk_assessment_time_limit CHECK (time_limit_minutes >= 0)
 );
 
 COMMENT ON TABLE assessments IS
-    'Assessment definition. Teacher creates once (Tier 2) or system creates (Tier 1).
+    'Assessment definition. Teacher creates once.
      Replaces v1 approach of one assessment row per student.
+     v2.2: is_system_generated removed — all assessments are now teacher-created.
+     v2.2: config JSONB replaced by typed columns (questions_per_topic, difficulty range, etc).
+     v2.2: curriculum_topic_id moved to assessment_topic_config table (supports multi-topic).
      DRAFT: teacher selecting/previewing questions.
-     ACTIVE: students can start. CLOSED: results visible, no new attempts.
-     curriculum_topic_id: present for TOPIC_SPECIFIC/PROGRESS_CHECK, NULL for DIAGNOSTIC/FINAL.
-     is_system_generated=TRUE: Tier 1 onboarding diagnostic — created by Celery task
-       trigger_onboarding_diagnostics() on student enrollment. Blocks dashboard access
-       until class_enrollments.onboarding_diagnostic_status = COMPLETED for all active enrollments.';
+     ACTIVE: students can start. CLOSED: results visible, no new attempts.';
 
-CREATE INDEX idx_assessments_class  ON assessments (class_id);
-CREATE INDEX idx_assessments_status ON assessments (status);
-CREATE INDEX idx_assessments_type   ON assessments (assessment_type);
+CREATE INDEX idx_assessments_school_id ON assessments (school_id);
+CREATE INDEX idx_assessments_class     ON assessments (class_id);
+CREATE INDEX idx_assessments_status    ON assessments (status);
+CREATE INDEX idx_assessments_type      ON assessments (assessment_type);
+
+-- ---------------------------------------------------------------------------
+-- assessment_topic_config: topics selected for an assessment (v2.2)
+-- Replaces the deprecated curriculum_topic_id single-FK column on assessments.
+-- Supports multi-topic assessments and records which grade each topic came from.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE assessment_topic_config (
+    assessment_id       UUID NOT NULL REFERENCES assessments (id)        ON DELETE CASCADE,
+    curriculum_topic_id UUID NOT NULL REFERENCES curriculum_topics (id)  ON DELETE RESTRICT,
+    grade_id            UUID NOT NULL REFERENCES grades (id)             ON DELETE RESTRICT,
+    PRIMARY KEY (assessment_id, curriculum_topic_id)
+);
+
+COMMENT ON TABLE assessment_topic_config IS
+    'Topics selected for an assessment — one row per topic per assessment (v2.2).
+     Replaces single curriculum_topic_id column on assessments.
+     grade_id: records which grade the topic came from — supports prior-grade topic selection
+     (Tier 1 diagnostics probe current AND prior grade: grade = class.grade and class.grade - 1).';
+
+CREATE INDEX idx_atc_assessment ON assessment_topic_config (assessment_id);
 
 -- ---------------------------------------------------------------------------
 -- assessment_selected_questions: which questions were chosen for this assessment.
@@ -804,8 +894,9 @@ CREATE TABLE student_attempts (
     completed_at        TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ,
-    CONSTRAINT sa_unique UNIQUE (assessment_id, student_id)
+    CONSTRAINT sa_unique UNIQUE (assessment_id, student_id),
     -- One attempt per student per assessment. Use ON CONFLICT DO UPDATE on start.
+    CONSTRAINT chk_sa_score CHECK (overall_score IS NULL OR (overall_score BETWEEN 0.0 AND 1.0))
 );
 
 COMMENT ON TABLE student_attempts IS
@@ -900,8 +991,6 @@ CREATE INDEX idx_gap_states_student_class ON gap_states (student_id, class_id);
 CREATE INDEX idx_gap_states_mastery       ON gap_states (mastery_score);
 
 -- =============================================================================
-
--- =============================================================================
 -- SECTION: CONTENT LAYER (subtopic_content, interest_categories)
 -- Replaces deprecated curriculum_chunks PDF RAG approach.
 -- No pgvector, no embeddings — structured SQL retrieval only.
@@ -914,7 +1003,8 @@ CREATE TABLE interest_categories (
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_interest_categories_name ON interest_categories (name);
+-- v2.2: changed from regular index to UNIQUE index (name already has UNIQUE constraint above)
+CREATE UNIQUE INDEX idx_interest_categories_name ON interest_categories (name);
 
 COMMENT ON TABLE interest_categories IS
     'Lookup table for content personalisation tags.
@@ -927,8 +1017,8 @@ COMMENT ON TABLE interest_categories IS
 CREATE TABLE subtopic_content (
     id                              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     subtopic_id                     UUID        NOT NULL REFERENCES subtopics (id) ON DELETE CASCADE,
-    content_type                    VARCHAR(20) NOT NULL,
-    -- 'video' | 'explanation' | 'practice' | 'quiz'
+    content_type                    content_type NOT NULL,
+    -- v2.2: changed from VARCHAR(50) to content_type enum
 
     -- Video fields (content_type = 'video')
     video_url                       TEXT,
@@ -945,6 +1035,7 @@ CREATE TABLE subtopic_content (
     quiz_questions                  JSONB,
     -- [{question_id, question_text, options, correct_answer, explanation}]
     quiz_questions_count            INT,
+    CONSTRAINT ck_quiz_questions_count_positive CHECK (quiz_questions_count >= 0),
 
     -- Teacher-authored explanation (overrides explanation_text when present)
     teacher_explanation             TEXT,
@@ -955,11 +1046,16 @@ CREATE TABLE subtopic_content (
     applicable_tiers                INT[] NOT NULL DEFAULT '{1,2,3}',
 
     -- Review workflow (KaihleAdmin approves videos; teacher approves explanations)
-    review_status                   VARCHAR(20) NOT NULL DEFAULT 'pending',
-    -- 'pending' | 'approved' | 'rejected'
+    review_status                   review_status NOT NULL DEFAULT 'pending',
+    -- v2.2: changed from VARCHAR(20) to review_status enum
     reviewed_at                     TIMESTAMPTZ,
     reviewed_by_id                  UUID REFERENCES users (id) ON DELETE SET NULL,
     rejection_reason                TEXT,
+    rejection_teacher_note          TEXT,       -- v2.2: added (teacher-visible rejection note)
+
+    -- Student feedback aggregates (denormalised for read performance)
+    thumbs_up_count                 INT NOT NULL DEFAULT 0,     -- v2.2: added
+    thumbs_down_count               INT NOT NULL DEFAULT 0,     -- v2.2: added
 
     -- Status flags
     is_active                       BOOLEAN NOT NULL DEFAULT TRUE,
@@ -976,13 +1072,23 @@ CREATE INDEX idx_subtopic_content_review      ON subtopic_content (review_status
 CREATE INDEX idx_subtopic_content_active      ON subtopic_content (is_active);
 CREATE INDEX idx_subtopic_content_interest    ON subtopic_content (interest_category_id);
 
+-- v2.2: partial unique indexes — one active approved content per type per subtopic
+CREATE UNIQUE INDEX uix_subtopic_content_active_explanation
+    ON subtopic_content(subtopic_id) WHERE content_type = 'explanation' AND review_status = 'approved';
+CREATE UNIQUE INDEX uix_subtopic_content_active_video
+    ON subtopic_content(subtopic_id) WHERE content_type = 'video' AND review_status = 'approved';
+CREATE UNIQUE INDEX uix_subtopic_content_active_practice
+    ON subtopic_content(subtopic_id) WHERE content_type = 'practice' AND review_status = 'approved';
+
 COMMENT ON TABLE subtopic_content IS
     'One row per (subtopic, content_type) combination — curriculum layer, no school_id.
      Replaces curriculum_chunks PDF/RAG approach.
-     content_type values: video | explanation | practice | quiz.
-     review_status workflow: pending → approved | rejected.
+     content_type values (v2.2 enum): video | explanation | practice | quiz.
+     review_status (v2.2 enum): pending → approved | rejected.
      KaihleAdmin reviews video content. Teachers review explanation content.
-     applicable_tiers: [1,2,3] means content applies to all student tiers.';
+     applicable_tiers: [1,2,3] means content applies to all student tiers.
+     thumbs_up/down_count (v2.2): denormalised feedback aggregates from subtopic_content_feedback.
+     rejection_teacher_note (v2.2): teacher-visible explanation when content is rejected.';
 
 -- =============================================================================
 -- SECTION: STUDENT LESSON PACKS
@@ -1054,6 +1160,56 @@ COMMENT ON TABLE student_attempt_subtopic_scores IS
      Stores per-subtopic score for that attempt (correct / total for that subtopic).
      Used to compute recency-weighted mastery in subsequent gap state calculations.
      Distinct from gap_states which holds the rolling aggregate.';
+
+-- =============================================================================
+-- SECTION: MINI-COURSE PROGRESS AND FEEDBACK (v2.2)
+-- Tracks student engagement with mini-course content (explanations, videos, practice).
+-- =============================================================================
+
+CREATE TABLE subtopic_course_progress (
+    student_id              UUID    NOT NULL REFERENCES users (id)     ON DELETE CASCADE,
+    subtopic_id             UUID    NOT NULL REFERENCES subtopics (id) ON DELETE CASCADE,
+    school_id               UUID    NOT NULL REFERENCES schools (id)   ON DELETE RESTRICT,
+    last_visited_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    explanation_accessed    BOOLEAN NOT NULL DEFAULT FALSE,
+    video_accessed          BOOLEAN NOT NULL DEFAULT FALSE,
+    check_questions_score   FLOAT,
+    -- NULL until student completes the check questions for this subtopic
+    PRIMARY KEY (student_id, subtopic_id)
+);
+
+COMMENT ON TABLE subtopic_course_progress IS
+    'Tracks a student''s progress through a mini-course for a given subtopic (v2.2).
+     One row per (student, subtopic) — updated every time student opens the mini-course page.
+     check_questions_score: NULL until check questions completed (0.0–1.0).
+     Used to surface progress indicators in Student class view.';
+
+CREATE INDEX idx_subtopic_course_progress_school_student
+    ON subtopic_course_progress (school_id, student_id);
+
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE subtopic_content_feedback (
+    id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id              UUID        NOT NULL REFERENCES users (id)              ON DELETE CASCADE,
+    subtopic_content_id     UUID        NOT NULL REFERENCES subtopic_content (id)  ON DELETE CASCADE,
+    school_id               UUID        NOT NULL REFERENCES schools (id)            ON DELETE CASCADE,
+    feedback_type           VARCHAR(20) NOT NULL,
+    comment                 TEXT,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_subtopic_content_feedback_student_content UNIQUE (student_id, subtopic_content_id),
+    CONSTRAINT chk_subtopic_content_feedback_type CHECK (feedback_type IN ('thumbs_up', 'thumbs_down'))
+);
+
+COMMENT ON TABLE subtopic_content_feedback IS
+    'Student thumbs-up/thumbs-down feedback on subtopic content (v2.2).
+     UNIQUE on (student_id, subtopic_content_id) — one feedback per student per content row.
+     feedback_type: thumbs_up | thumbs_down.
+     Aggregated into subtopic_content.thumbs_up_count and thumbs_down_count.';
+
+CREATE INDEX idx_scf_subtopic_content ON subtopic_content_feedback (subtopic_content_id);
+CREATE INDEX idx_scf_school           ON subtopic_content_feedback (school_id);
 
 -- SECTION 6: STUDY PLANS
 -- =============================================================================
@@ -1144,31 +1300,43 @@ COMMENT ON TABLE study_plan_quizzes IS
 -- =============================================================================
 
 CREATE TABLE lesson_plans (
-    id                  UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
-    class_id            UUID    NOT NULL REFERENCES classes (id) ON DELETE CASCADE,
-    teacher_id          UUID    NOT NULL REFERENCES users (id)   ON DELETE RESTRICT,
-    week_start          DATE    NOT NULL,
-    focus_subtopic_ids  UUID[]  NOT NULL DEFAULT '{}',
+    id                      UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id                UUID    NOT NULL REFERENCES classes (id) ON DELETE CASCADE,
+    teacher_id              UUID    NOT NULL REFERENCES users (id)   ON DELETE RESTRICT,
+    week_start              DATE,
+    -- v2.2: nullable (one-off plans need not be tied to a week)
+    focus_subtopic_ids      UUID[]  NOT NULL DEFAULT '{}',
     -- Top 2 subtopic_ids with lowest class-average mastery this week
-    gap_summary         JSONB   NOT NULL DEFAULT '{}',
-    -- Snapshot at generation time:
-    -- {"subtopic_id": {"name": "...", "class_avg": 0.32, "group_a_count": 8, ...}}
-    generated_plan      JSONB   NOT NULL DEFAULT '{}',
+    class_context_snapshot  JSONB   NOT NULL DEFAULT '{}',
+    -- v2.2: replaces gap_summary — richer snapshot including class composition, learning styles
+    generated_plan          JSONB   NOT NULL DEFAULT '{}',
     -- Full lesson plan structure — see product_plan.md Part 4 for JSON schema
-    teacher_edits       JSONB,
+    teacher_edits           JSONB,
     -- Teacher's modifications. UI merges generated_plan + teacher_edits for display.
-    status              lesson_plan_status NOT NULL DEFAULT 'GENERATED',
-    generated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ,
-    CONSTRAINT lp_class_week_unique UNIQUE (class_id, week_start)
+    status                  lesson_plan_status NOT NULL DEFAULT 'GENERATING',
+    -- v2.2: status now includes GENERATING as initial state
+    duration_minutes        INT     NOT NULL DEFAULT 45,
+    -- v2.2: explicit duration (default 45 min)
+    failure_code            lesson_plan_failure_code,
+    -- v2.2: set on generation failure; NULL on success
+    failure_reason          TEXT,
+    -- v2.2: human-readable failure message; NULL on success
+    raw_llm_output          TEXT,
+    -- v2.2: raw LLM response stored for debugging and reprocessing
+    generated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ
+    -- NOTE: lp_class_week_unique constraint REMOVED in v2.2
+    -- Multiple lesson plans per class per week are now allowed (on-demand generation)
 );
 
 COMMENT ON TABLE lesson_plans IS
-    'Weekly AI-generated lesson plan per class.
-     Generated every Monday 06:00 local time (per schools.timezone) by Celery beat.
-     One plan per class per week enforced by UNIQUE constraint.
-     teacher_edits: overlay — not a replacement of generated_plan.
-     focus_subtopic_ids: top 2 lowest-mastery subtopics drive the lesson content.';
+    'On-demand AI-generated lesson plan per class (v2.2).
+     v2.1 was weekly Celery-scheduled; v2.2 is teacher-triggered on-demand.
+     lp_class_week_unique REMOVED — teachers can generate multiple plans per week.
+     week_start now nullable — one-off plans may not be tied to a specific week.
+     gap_summary REMOVED and replaced by class_context_snapshot (richer context).
+     failure_code / failure_reason: set when LLM generation fails.
+     raw_llm_output: stored for debugging and potential retry/reprocessing.';
 
 CREATE INDEX idx_lesson_plans_class   ON lesson_plans (class_id);
 CREATE INDEX idx_lesson_plans_teacher ON lesson_plans (teacher_id);
@@ -1335,7 +1503,79 @@ CREATE TABLE alembic_version (
 );
 
 -- =============================================================================
--- CHANGE SUMMARY vs v1.0
+-- CHANGE SUMMARY vs v2.1
+-- =============================================================================
+--
+-- ENUMS ADDED:
+--   lesson_plan_failure_code    llm_auth_error | llm_rate_limit_error | llm_connection_error
+--                               | llm_unexpected_error | json_parse_failed | class_not_found
+--   content_type                video | explanation | practice | quiz
+--   review_status               pending | approved | rejected
+--
+-- ENUM MODIFIED:
+--   auth_token_type             PASSWORD_RESET value added
+--   lesson_plan_status          GENERATING value added
+--
+-- COLUMN ADDED — users:
+--   must_change_password BOOLEAN NOT NULL DEFAULT FALSE
+--
+-- TABLE CHANGED — assessments:
+--   REMOVED: is_system_generated, curriculum_topic_id, config, due_at
+--   ADDED:   school_id, published_at, question_count, questions_per_topic,
+--             minimum_difficulty, maximum_difficulty, question_types,
+--             time_limit_minutes, deadline
+--   INDEX:   idx_assessments_school_id added
+--
+-- TABLE ADDED — assessment_topic_config:
+--   Replaces single curriculum_topic_id FK on assessments.
+--   Supports multi-topic assessments and prior-grade topic selection.
+--
+-- TABLE CHANGED — lesson_plans:
+--   REMOVED: gap_summary column
+--   REMOVED: lp_class_week_unique UNIQUE constraint
+--   CHANGED: week_start made nullable (was NOT NULL)
+--   ADDED:   class_context_snapshot JSONB NOT NULL DEFAULT '{}'
+--   ADDED:   duration_minutes INT NOT NULL DEFAULT 45
+--   ADDED:   failure_code lesson_plan_failure_code (nullable)
+--   ADDED:   failure_reason TEXT (nullable)
+--   ADDED:   raw_llm_output TEXT (nullable)
+--
+-- TABLE CHANGED — subtopic_content:
+--   CHANGED: content_type VARCHAR(50) → content_type enum (content_type)
+--   CHANGED: review_status VARCHAR(20) → review_status enum (review_status)
+--   ADDED:   thumbs_up_count INT NOT NULL DEFAULT 0
+--   ADDED:   thumbs_down_count INT NOT NULL DEFAULT 0
+--   ADDED:   rejection_teacher_note TEXT
+--   ADDED:   CHECK constraint on quiz_questions_count >= 0
+--   ADDED:   3 partial UNIQUE indexes (one active approved per content_type per subtopic)
+--
+-- TABLE CHANGED — subjects:
+--   ADDED:   subject_family_code VARCHAR(20)
+--   INDEX:   idx_subjects_family_code added
+--
+-- TABLE CHANGED — curriculum_chunks:
+--   ADDED:   updated_at TIMESTAMPTZ
+--
+-- TABLE ADDED — class_topics:
+--   Teacher-configured topic list per class with sequence ordering.
+--
+-- TABLE ADDED — subtopic_course_progress:
+--   Tracks student engagement with mini-course content per subtopic.
+--
+-- TABLE ADDED — subtopic_content_feedback:
+--   Student thumbs-up/thumbs-down on AI-generated content.
+--
+-- INDEX CHANGED — student_learning_profiles:
+--   NOTE: slp_student_unique constraint and idx_slp_student are duplicates.
+--   The UNIQUE constraint (slp_student_unique) is authoritative.
+--   idx_slp_student should be dropped on existing installations.
+--
+-- INDEX CHANGED — interest_categories:
+--   idx_interest_categories_name changed from regular to UNIQUE index.
+--   (Redundant with the UNIQUE constraint on name, but explicit for clarity.)
+--
+-- =============================================================================
+-- CHANGE SUMMARY vs v1.0 (preserved from v2.1)
 -- =============================================================================
 --
 -- KEPT (verbatim or minor adjustments):
@@ -1387,39 +1627,5 @@ CREATE TABLE alembic_version (
 --   payments, invoices (v1)       → subscription_invoices replaces these
 --   roles table                   → user_role enum is sufficient
 --   plan_features, plan_subjects  → subscription_plans.features JSONB
---
--- =============================================================================
--- CHANGE SUMMARY vs v2.0 (v2.1 additions)
--- =============================================================================
---
--- ENUM ADDED:
---   onboarding_status             PENDING | IN_PROGRESS | COMPLETED
---
--- COLUMN CHANGED — student_profiles:
---   REMOVED: has_completed_onboarding BOOLEAN DEFAULT FALSE
---   REMOVED: learning_profile JSONB
---   REMOVED: onboarding_diagnostic_status (MOVED to class_enrollments in v2.1)
---   Rationale: normalised status enum replaces boolean; learning profile
---              moved to dedicated student_learning_profiles table.
---              Onboarding status moved to class_enrollments for per-class tracking.
---
--- COLUMN ADDED — class_enrollments (v2.1):
---   ADDED: onboarding_diagnostic_status onboarding_status DEFAULT 'PENDING'
---   Rationale: tracks diagnostic completion per-class enrollment.
---              Student is fully onboarded when ALL active enrollments are COMPLETED.
---
--- COLUMN ADDED — assessments:
---   ADDED: is_system_generated BOOLEAN NOT NULL DEFAULT FALSE
---   Rationale: distinguishes Tier 1 (system-triggered onboarding diagnostics)
---              from Tier 2 (teacher-created assessments). Both use same tables
---              and student-facing UI — only creation trigger and dashboard gate differ.
---
--- TABLE ADDED:
---   student_learning_profiles     one row per student
---                                 modality_scores JSONB (visual/auditory/reading_writing/kinesthetic)
---                                 work_style JSONB (solo/short_sessions/task_based/concept_first)
---                                 interests TEXT[] (personalisation tags for quiz generator)
---                                 Replaces learning_profile JSONB on student_profiles.
---                                 Used by content_curator and quiz_generator for personalisation.
 --
 -- =============================================================================

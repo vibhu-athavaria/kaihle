@@ -11,14 +11,13 @@ from typing import Any
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
-    DateTime,
     Enum,
     ForeignKey,
     String,
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -79,12 +78,11 @@ class User(Base, TimestampMixin):
             UserRole.PARENT,
             UserRole.KAIHLE_ADMIN,
             name="user_role",
-            native_enum=False,
         ),
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_login_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false", default=False)
 
 
@@ -129,7 +127,7 @@ class TeacherProfile(Base, TimestampMixin):
     qualifications: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     experience_years: Mapped[int | None]
     bio: Mapped[str | None] = mapped_column(Text)
-    hire_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    hire_date: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
 
 
 class ParentStudent(Base):
@@ -147,7 +145,7 @@ class ParentStudent(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -175,13 +173,12 @@ class AuthToken(Base):
             AuthTokenType.REFRESH,
             AuthTokenType.PASSWORD_RESET,
             name="auth_token_type",
-            native_enum=False,
         ),
         nullable=False,
     )
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     @property
     def is_used(self) -> bool:

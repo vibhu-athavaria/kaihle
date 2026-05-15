@@ -15,16 +15,14 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
-    ARRAY,
     Boolean,
-    DateTime,
     Enum,
     ForeignKey,
     Index,
     Integer,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -113,7 +111,7 @@ class SubtopicContent(Base, UUIDMixin, TimestampMixin):
         server_default="pending",
         index=True,
     )
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),

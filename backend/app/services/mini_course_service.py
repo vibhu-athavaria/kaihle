@@ -248,8 +248,8 @@ class MiniCourseService:
         # 3. Recalculate aggregate counts
         counts_result = await self.db.execute(
             select(
-                func.count().filter(SubtopicContentFeedback.feedback_type == "thumbs_up").label("up_count"),
-                func.count().filter(SubtopicContentFeedback.feedback_type == "thumbs_down").label("down_count"),
+                func.count(case((SubtopicContentFeedback.feedback_type == "thumbs_up", 1))).label("up_count"),
+                func.count(case((SubtopicContentFeedback.feedback_type == "thumbs_down", 1))).label("down_count"),
             ).where(SubtopicContentFeedback.subtopic_content_id == content_id)
         )
         counts = counts_result.one()

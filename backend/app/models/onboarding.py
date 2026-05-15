@@ -7,8 +7,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -49,5 +49,5 @@ class StudentLearningProfile(Base, UUIDMixin, TimestampMixin):
     # Stored lowercase. Top 2 injected into quiz generation prompts.
 
     questionnaire_version: Mapped[str] = mapped_column(String(10), nullable=False, default="v1")
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     # NULL means questionnaire not yet submitted. Non-null means complete.

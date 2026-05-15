@@ -35,7 +35,7 @@ _DIAGNOSTIC_COMPLETED = "COMPLETED"
 
 
 class AnalyticsService:
-    def __init__(self, db: AsyncSession, redis: Redis) -> None:
+    def __init__(self, db: AsyncSession, redis: Redis) -> None:  # type: ignore[type-arg]
         self._db = db
         self._redis = redis
 

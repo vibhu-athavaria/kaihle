@@ -12,15 +12,15 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
-    DateTime,
     Enum,
     ForeignKey,
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 if TYPE_CHECKING:
@@ -174,6 +174,7 @@ class CurriculumTopic(Base, UUIDMixin, TimestampMixin):
     subtopics: Mapped[list["Subtopic"]] = relationship("Subtopic", back_populates="curriculum_topic")
 
     __table_args__ = (
+        UniqueConstraint("curriculum_id", "subject_id", "grade_id", "topic_id", name="curriculum_topics_unique"),
         CheckConstraint(
             "sequence_order IS NULL OR sequence_order > 0",
             name="chk_ct_sequence",
@@ -233,7 +234,7 @@ class SubtopicPrerequisite(Base):
         primary_key=True,
     )
     importance: Mapped[str] = mapped_column(String(20), nullable=False, default="REQUIRED")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     __table_args__ = (
         CheckConstraint(
