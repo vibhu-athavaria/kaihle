@@ -811,3 +811,222 @@ class TestSubmitResponseQuestionNotInAssessment:
                 question_id=uuid.uuid4(),
                 selected_key="A",
             )
+
+
+class TestGetAttemptStartedAt:
+    """Tests for the started_at side-effect in get_attempt()."""
+
+    @pytest.mark.asyncio
+    async def test_get_attempt_when_started_at_is_none_then_started_at_is_set(
+        self, service, mock_db, sample_attempt, sample_assessment, sample_questions
+    ):
+        """When started_at is None, get_attempt sets it to the current UTC time."""
+        # Arrange — attempt has never been opened before
+        sample_attempt.started_at = None
+        sample_attempt.status = AttemptStatus.NOT_STARTED
+
+        attempt_result = MagicMock()
+        attempt_result.scalar_one_or_none.return_value = sample_attempt
+        assessment_result = MagicMock()
+        assessment_result.scalar_one_or_none.return_value = sample_assessment
+        responses_result = MagicMock()
+        responses_result.scalars.return_value.all.return_value = []
+
+        mock_db.execute.side_effect = [attempt_result, assessment_result, responses_result]
+        mock_db.flush = AsyncMock()
+
+        before = datetime.now(UTC)
+        with patch.object(service, "_load_questions", AsyncMock(return_value=sample_questions)):
+            await service.get_attempt(
+                attempt_id=sample_attempt.id,
+                requesting_user_id=sample_attempt.student_id,
+                requesting_user_role="STUDENT",
+                school_id=sample_assessment.school_id,
+            )
+        after = datetime.now(UTC)
+
+        # Assert — started_at was populated and flush was called
+        assert sample_attempt.started_at is not None
+        assert before <= sample_attempt.started_at <= after
+        mock_db.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_attempt_when_started_at_already_set_then_not_overwritten(
+        self, service, mock_db, sample_attempt, sample_assessment, sample_questions
+    ):
+        """When started_at is already set, get_attempt leaves it unchanged."""
+        original_start = datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC)
+        sample_attempt.started_at = original_start
+        sample_attempt.status = AttemptStatus.IN_PROGRESS
+
+        attempt_result = MagicMock()
+        attempt_result.scalar_one_or_none.return_value = sample_attempt
+        assessment_result = MagicMock()
+        assessment_result.scalar_one_or_none.return_value = sample_assessment
+        responses_result = MagicMock()
+        responses_result.scalars.return_value.all.return_value = []
+
+        mock_db.execute.side_effect = [attempt_result, assessment_result, responses_result]
+        mock_db.flush = AsyncMock()
+
+        with patch.object(service, "_load_questions", AsyncMock(return_value=sample_questions)):
+            await service.get_attempt(
+                attempt_id=sample_attempt.id,
+                requesting_user_id=sample_attempt.student_id,
+                requesting_user_role="STUDENT",
+                school_id=sample_assessment.school_id,
+            )
+
+        # started_at must be unchanged
+        assert sample_attempt.started_at == original_start
+        mock_db.flush.assert_not_called()
+
+
+class TestSubmitAttemptTimedOut:
+    """Tests for timed_out=True behaviour in submit_attempt()."""
+
+    def _make_onboarding_service(self):
+        svc = MagicMock()
+        svc.check_and_update_onboarding_complete = AsyncMock(return_value=True)
+        return svc
+
+    @pytest.mark.asyncio
+    async def test_submit_attempt_when_timed_out_then_unanswered_questions_marked_wrong(
+        self, service, mock_db, sample_attempt, sample_assessment, sample_questions
+    ):
+        """When timed_out=True, every question without a response gets a wrong StudentResponse."""
+        sample_attempt.status = AttemptStatus.IN_PROGRESS
+        sample_attempt.started_at = datetime.now(UTC)
+
+        q_answered = sample_questions[0]
+        q_unanswered = sample_questions[1]
+
+        attempt_r = MagicMock()
+        attempt_r.scalar_one_or_none.return_value = sample_attempt
+        assessment_r = MagicMock()
+        assessment_r.scalar_one_or_none.return_value = sample_assessment
+
+        # existing_responses — empty: the student's answer comes in this bulk submit call
+        existing_r = MagicMock()
+        existing_r.all.return_value = []
+
+        # bridge check for q_answered (verifies question is in the assessment)
+        bridge_r = MagicMock()
+        bridge_r.scalar_one_or_none.return_value = MagicMock()
+
+        # question load for scoring q_answered
+        question_r = MagicMock()
+        question_r.scalar_one_or_none.return_value = q_answered
+        q_answered.correct_answer = "B"
+
+        # timed_out path: answered_ids fetch after flush (now includes q_answered)
+        answered_ids_r = MagicMock()
+        answered_ids_r.all.return_value = [(q_answered.id,)]
+
+        # timed_out path: all question ids in assessment (both questions)
+        all_q_ids_r = MagicMock()
+        all_q_ids_r.all.return_value = [(q_answered.id,), (q_unanswered.id,)]
+
+        # final all_responses after timed-out fill
+        final_response_correct = MagicMock(is_correct=True)
+        final_response_wrong = MagicMock(is_correct=False)
+        all_responses_r = MagicMock()
+        all_responses_r.scalars.return_value.all.return_value = [
+            final_response_correct,
+            final_response_wrong,
+        ]
+
+        mock_db.execute.side_effect = [
+            attempt_r,  # _load_and_verify_attempt attempt load
+            assessment_r,  # _load_and_verify_attempt assessment load
+            assessment_r,  # load assessment for type check
+            existing_r,  # already_answered set
+            bridge_r,  # bridge check for submitted answer
+            question_r,  # question load for scoring
+            answered_ids_r,  # timed_out: answered IDs
+            all_q_ids_r,  # timed_out: all question IDs
+            all_responses_r,  # final score computation
+        ]
+        mock_db.flush = AsyncMock()
+
+        added_responses: list = []
+        mock_db.add = MagicMock(side_effect=lambda obj: added_responses.append(obj))
+
+        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
+            mock_task.delay = MagicMock()
+            result = await service.submit_attempt(
+                attempt_id=sample_attempt.id,
+                student_id=sample_attempt.student_id,
+                school_id=sample_assessment.school_id,
+                answers=[{"question_id": q_answered.id, "selected_key": "B"}],
+                onboarding_service=self._make_onboarding_service(),
+                timed_out=True,
+            )
+
+        # One wrong StudentResponse must have been added for the unanswered question
+        from app.models.assessment import StudentResponse as SR
+
+        timed_out_responses = [r for r in added_responses if isinstance(r, SR) and r.answer_given == ""]
+        assert len(timed_out_responses) == 1
+        assert timed_out_responses[0].question_id == q_unanswered.id
+        assert timed_out_responses[0].is_correct is False
+
+        # Score must reflect 1 correct out of 2 total
+        assert result.total_questions == 2
+        assert result.correct_count == 1
+        assert result.score == pytest.approx(0.5)
+
+    @pytest.mark.asyncio
+    async def test_submit_attempt_when_timed_out_all_unanswered_then_score_is_zero(
+        self, service, mock_db, sample_attempt, sample_assessment, sample_questions
+    ):
+        """When all questions are unanswered and timed_out=True, score is 0.0."""
+        sample_attempt.status = AttemptStatus.IN_PROGRESS
+        sample_attempt.started_at = datetime.now(UTC)
+
+        attempt_r = MagicMock()
+        attempt_r.scalar_one_or_none.return_value = sample_attempt
+        assessment_r = MagicMock()
+        assessment_r.scalar_one_or_none.return_value = sample_assessment
+
+        existing_r = MagicMock()
+        existing_r.all.return_value = []  # nothing answered from bulk submit
+
+        # timed_out path: no answered IDs
+        answered_ids_r = MagicMock()
+        answered_ids_r.all.return_value = []
+
+        all_q_ids_r = MagicMock()
+        all_q_ids_r.all.return_value = [(q.id,) for q in sample_questions]
+
+        all_responses_r = MagicMock()
+        all_responses_r.scalars.return_value.all.return_value = [
+            MagicMock(is_correct=False),
+            MagicMock(is_correct=False),
+        ]
+
+        mock_db.execute.side_effect = [
+            attempt_r,
+            assessment_r,
+            assessment_r,
+            existing_r,
+            answered_ids_r,
+            all_q_ids_r,
+            all_responses_r,
+        ]
+        mock_db.flush = AsyncMock()
+        mock_db.add = MagicMock()
+
+        with patch("app.tasks.gap_tasks.calculate_gap_states") as mock_task:
+            mock_task.delay = MagicMock()
+            result = await service.submit_attempt(
+                attempt_id=sample_attempt.id,
+                student_id=sample_attempt.student_id,
+                school_id=sample_assessment.school_id,
+                answers=[],
+                onboarding_service=self._make_onboarding_service(),
+                timed_out=True,
+            )
+
+        assert result.score == pytest.approx(0.0)
+        assert result.correct_count == 0
