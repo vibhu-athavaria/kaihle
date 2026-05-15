@@ -6,19 +6,22 @@ Routes:
 - GET  /api/v1/students/me/classes         - Current student's enrolled classes
 - POST /api/v1/students/me/concept-guide   - AI-generated concept explanation
 - POST /api/v1/students/me/concept-guide/answer - MCQ answer evaluation
+- GET  /api/v1/students/me/subtopics/{subtopic_id}/course  - Mini-course for a subtopic
+- POST /api/v1/students/me/subtopics/{subtopic_id}/course/progress  - Mark mini-course progress
 - GET  /api/v1/students/{student_id}       - Full student detail (school admin)
 """
 
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user, require_role
 from app.models.user import User, UserRole
+from app.schemas.mini_course import MarkProgressRequest, SubtopicCourseResponse
 from app.schemas.student_dashboard import DashboardResponse
 from app.schemas.students import (
     CheckQuestion,
@@ -31,6 +34,7 @@ from app.schemas.students import (
     StudentInfoResponse,
 )
 from app.schemas.user_detail import StudentDetailResponse
+from app.services.mini_course_service import MiniCourseService
 from app.services.student_dashboard_service import StudentDashboardService
 from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
 
@@ -244,6 +248,62 @@ async def submit_concept_guide_answer(
         ) from exc
 
     return McqAnswerResponse(is_correct=result["is_correct"] == "true", response=result["response"])
+
+
+@router.get("/me/subtopics/{subtopic_id}/course", response_model=SubtopicCourseResponse)
+async def get_subtopic_course(
+    subtopic_id: UUID = Path(..., description="Subtopic ID"),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SubtopicCourseResponse:
+    """Return the mini-course payload for a subtopic.
+
+    Returns interest-matched explanation (with generic fallback), approved video,
+    up to 3 random check questions, and current progress state.
+    Upserts SubtopicCourseProgress on every call to track last_visited_at.
+
+    Raises:
+        403: If user is not a student.
+        404: If subtopic not found.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    return await MiniCourseService(db).get_course_for_student(
+        subtopic_id=subtopic_id,
+        student_id=current_user.id,
+        school_id=current_user.school_id,
+    )
+
+
+@router.post("/me/subtopics/{subtopic_id}/course/progress", status_code=status.HTTP_200_OK)
+async def mark_subtopic_course_progress(
+    subtopic_id: UUID = Path(..., description="Subtopic ID"),
+    body: MarkProgressRequest = Body(...),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    """Mark explanation and/or video as accessed for a mini-course.
+
+    Idempotent — flags only advance from False to True, never backwards.
+
+    Raises:
+        403: If user is not a student.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    await MiniCourseService(db).mark_progress(
+        subtopic_id=subtopic_id,
+        student_id=current_user.id,
+        school_id=current_user.school_id,
+        request=body,
+    )
+    return {"ok": True}
 
 
 @router.get("/{student_id}", response_model=StudentDetailResponse)
