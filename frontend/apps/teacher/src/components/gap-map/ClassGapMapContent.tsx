@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Download } from "lucide-react";
+import { ChevronDown, ChevronRight, Download } from "lucide-react";
 import { getMasteryStyle, scoreToPercent } from "@kaihle/types";
 import { useClassGapMap } from "../../hooks/useClassGapMap";
 import { useClass } from "../../hooks/useClass";
@@ -192,6 +192,18 @@ export function ClassGapMapContent({
     }>;
   } | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [collapsedGrades, setCollapsedGrades] = useState<Set<string>>(
+    new Set(),
+  );
+
+  function toggleGrade(gradeId: string) {
+    setCollapsedGrades((prev) => {
+      const next = new Set(prev);
+      if (next.has(gradeId)) next.delete(gradeId);
+      else next.add(gradeId);
+      return next;
+    });
+  }
 
   const handleCellClick = (studentId: string, studentName: string) => {
     const subtopicScores =
@@ -408,77 +420,93 @@ export function ClassGapMapContent({
                       <tr key={`grade-${gradeId}`}>
                         <td
                           colSpan={totalCols}
-                          className="px-4 py-2 bg-brand-ink border-y border-brand-border"
+                          className="px-4 py-2 bg-brand-ink border-y border-brand-border cursor-pointer select-none"
+                          onClick={() => toggleGrade(gradeId)}
+                          aria-expanded={!collapsedGrades.has(gradeId)}
                         >
-                          <span className="text-xs font-bold uppercase tracking-widest text-white">
-                            {gradeName}
-                          </span>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase tracking-widest text-white">
+                              {gradeName}
+                            </span>
+                            {collapsedGrades.has(gradeId) ? (
+                              <ChevronRight
+                                className="w-4 h-4 text-white"
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              <ChevronDown
+                                className="w-4 h-4 text-white"
+                                aria-hidden="true"
+                              />
+                            )}
+                          </div>
                         </td>
                       </tr>
-                      {topics.map(({ topicId, topicName, nodes }) => {
-                        const topicAvg = topicClassAvg(nodes);
-                        return (
-                          <>
-                            <tr key={`topic-${gradeId}-${topicId}`}>
-                              <td
-                                colSpan={totalCols}
-                                className="bg-brand-bg px-4 py-2 border-b border-brand-border"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-semibold text-brand-ink">
-                                    {topicName}
-                                  </span>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs text-brand-muted">
-                                      topic avg
+                      {!collapsedGrades.has(gradeId) &&
+                        topics.map(({ topicId, topicName, nodes }) => {
+                          const topicAvg = topicClassAvg(nodes);
+                          return (
+                            <>
+                              <tr key={`topic-${gradeId}-${topicId}`}>
+                                <td
+                                  colSpan={totalCols}
+                                  className="bg-brand-bg px-4 py-2 border-b border-brand-border"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-semibold text-brand-ink">
+                                      {topicName}
                                     </span>
-                                    <AvgBadge score={topicAvg} />
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs text-brand-muted">
+                                        topic avg
+                                      </span>
+                                      <AvgBadge score={topicAvg} />
+                                    </div>
                                   </div>
-                                </div>
-                              </td>
-                            </tr>
-                            {nodes.map((node: any) => (
-                              <tr
-                                key={node.subtopic_id}
-                                className="group hover:bg-amber-50/30 transition-colors"
-                              >
-                                <td className="sticky left-0 z-10 bg-white group-hover:bg-amber-50/30 px-4 py-1.5 text-sm text-brand-ink border-b border-brand-border transition-colors">
-                                  {node.subtopic_name}
-                                </td>
-                                {students.map((s) => {
-                                  const ss = node.student_scores.find(
-                                    (x: any) => x.student_id === s.student_id,
-                                  );
-                                  return (
-                                    <td
-                                      key={s.student_id}
-                                      className="px-1.5 py-1.5 border-b border-brand-border"
-                                    >
-                                      <HeatCell
-                                        score={ss?.mastery_score ?? null}
-                                        label={`${s.student_name} — ${node.subtopic_name}`}
-                                        onClick={() =>
-                                          handleCellClick(
-                                            s.student_id,
-                                            s.student_name,
-                                          )
-                                        }
-                                      />
-                                    </td>
-                                  );
-                                })}
-                                <td className="sticky right-0 z-10 bg-gray-50 px-1.5 py-1.5 border-b border-l border-brand-border">
-                                  <HeatCell
-                                    score={node.class_average}
-                                    label={`Class average — ${node.subtopic_name}`}
-                                    variant="summary"
-                                  />
                                 </td>
                               </tr>
-                            ))}
-                          </>
-                        );
-                      })}
+                              {nodes.map((node: any) => (
+                                <tr
+                                  key={node.subtopic_id}
+                                  className="group hover:bg-amber-50/30 transition-colors"
+                                >
+                                  <td className="sticky left-0 z-10 bg-white group-hover:bg-amber-50/30 px-4 py-1.5 text-sm text-brand-ink border-b border-brand-border transition-colors">
+                                    {node.subtopic_name}
+                                  </td>
+                                  {students.map((s) => {
+                                    const ss = node.student_scores.find(
+                                      (x: any) => x.student_id === s.student_id,
+                                    );
+                                    return (
+                                      <td
+                                        key={s.student_id}
+                                        className="px-1.5 py-1.5 border-b border-brand-border"
+                                      >
+                                        <HeatCell
+                                          score={ss?.mastery_score ?? null}
+                                          label={`${s.student_name} — ${node.subtopic_name}`}
+                                          onClick={() =>
+                                            handleCellClick(
+                                              s.student_id,
+                                              s.student_name,
+                                            )
+                                          }
+                                        />
+                                      </td>
+                                    );
+                                  })}
+                                  <td className="sticky right-0 z-10 bg-gray-50 px-1.5 py-1.5 border-b border-l border-brand-border">
+                                    <HeatCell
+                                      score={node.class_average}
+                                      label={`Class average — ${node.subtopic_name}`}
+                                      variant="summary"
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </>
+                          );
+                        })}
                     </>
                   ))}
 
