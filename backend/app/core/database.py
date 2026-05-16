@@ -1,6 +1,7 @@
 """Database session factory for async SQLAlchemy."""
 
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -11,34 +12,44 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
-# Pooled engine for FastAPI — lives in a single long-lived event loop.
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.environment == "development",
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-)
 
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+class _LazySessionmaker:
+    """Defers engine + sessionmaker creation until first call.
 
-# Unpooled engine for Celery tasks — each task runs in its own event loop.
+    Importing this module during unit-test collection does not trigger
+    create_async_engine, so tests that mock the DB session can collect
+    without a DATABASE_URL being set.
+    """
+
+    def __init__(self, poolclass: Any = None) -> None:
+        self._poolclass = poolclass
+        self._maker: async_sessionmaker[AsyncSession] | None = None
+
+    def _build(self) -> async_sessionmaker[AsyncSession]:
+        kwargs: dict[str, Any] = {}
+        if self._poolclass is not None:
+            kwargs["poolclass"] = self._poolclass
+        else:
+            kwargs["pool_pre_ping"] = True
+            kwargs["pool_size"] = 10
+            kwargs["max_overflow"] = 20
+            kwargs["echo"] = settings.environment == "development"
+        engine = create_async_engine(settings.database_url, **kwargs)
+        return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    def __call__(self) -> AsyncSession:
+        if self._maker is None:
+            self._maker = self._build()
+        return self._maker()
+
+
+# Pooled factory for FastAPI — lives in a single long-lived event loop.
+AsyncSessionLocal = _LazySessionmaker()
+
+# Unpooled factory for Celery tasks — each task runs in its own event loop.
 # NullPool creates a fresh connection per session and closes it immediately,
 # so no asyncio primitives are shared across event loop boundaries.
-celery_engine = create_async_engine(
-    settings.database_url,
-    poolclass=NullPool,
-)
-
-CeleryAsyncSessionLocal = async_sessionmaker(
-    celery_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+CeleryAsyncSessionLocal = _LazySessionmaker(poolclass=NullPool)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

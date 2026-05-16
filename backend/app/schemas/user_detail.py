@@ -13,6 +13,8 @@ class GapStateDetail(BaseModel):
 class ClassEnrollmentDetail(BaseModel):
     class_id: uuid.UUID
     class_name: str
+    subject_id: uuid.UUID
+    subject_name: str
     teacher_name: str
     gap_states: list[GapStateDetail]
 

@@ -28,6 +28,13 @@ def _make_class(class_id: uuid.UUID, school_id: uuid.UUID, grade_id: uuid.UUID) 
     )
 
 
+def _make_family_execute_result(subject_id: uuid.UUID) -> MagicMock:
+    """Return a mock execute result yielding one subject id row (for family lookup)."""
+    result = MagicMock()
+    result.all.return_value = [(subject_id,)]
+    return result
+
+
 class TestGetClassGapMap:
     @pytest.mark.asyncio
     async def test_get_class_gap_map_when_wrong_school_id_then_raises_404(self) -> None:
@@ -43,13 +50,20 @@ class TestGetClassGapMap:
     async def test_get_class_gap_map_when_no_subtopics_then_returns_empty_nodes(self) -> None:
         db = _make_db()
         class_id, school_id = uuid.uuid4(), uuid.uuid4()
-        db.scalar.return_value = _make_class(class_id, school_id, uuid.uuid4())
+        subject_id = uuid.uuid4()
+        # scalar calls: class lookup, then subject_family_code
+        db.scalar.side_effect = [_make_class(class_id, school_id, uuid.uuid4()), "SCI"]
         empty_result = MagicMock()
         empty_result.all.return_value = []
-        db.execute.return_value = empty_result
+        # execute calls: family subject ids, subtopics, gap_rows
+        db.execute.side_effect = [
+            _make_family_execute_result(subject_id),
+            empty_result,
+            empty_result,
+        ]
         service = GapService(db)
 
-        result = await service.get_class_gap_map(class_id, school_id, uuid.uuid4())
+        result = await service.get_class_gap_map(class_id, school_id, subject_id)
 
         assert result.nodes == []
         assert result.class_id == class_id
@@ -58,9 +72,10 @@ class TestGetClassGapMap:
     async def test_get_class_gap_map_when_students_have_gap_states_then_class_average_correct(self) -> None:
         db = _make_db()
         class_id, school_id, grade_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-        subtopic_id, topic_id = uuid.uuid4(), uuid.uuid4()
+        subtopic_id, topic_id, subject_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
         student_id_1, student_id_2 = uuid.uuid4(), uuid.uuid4()
-        db.scalar.return_value = _make_class(class_id, school_id, grade_id)
+        # scalar calls: class lookup, subject_family_code
+        db.scalar.side_effect = [_make_class(class_id, school_id, grade_id), "SCI"]
 
         subtopic_row = SimpleNamespace(
             subtopic_id=subtopic_id,
@@ -69,6 +84,7 @@ class TestGetClassGapMap:
             topic_name="Maths",
             grade_id=grade_id,
             grade_name="Grade 7",
+            grade_level=7,
         )
         subtopics_result = MagicMock()
         subtopics_result.all.return_value = [subtopic_row]
@@ -91,10 +107,11 @@ class TestGetClassGapMap:
         )
         gap_result = MagicMock()
         gap_result.all.return_value = [gap_row_1, gap_row_2]
-        db.execute.side_effect = [subtopics_result, gap_result]
+        # execute calls: family subject ids, subtopics, gap_rows
+        db.execute.side_effect = [_make_family_execute_result(subject_id), subtopics_result, gap_result]
         service = GapService(db)
 
-        result = await service.get_class_gap_map(class_id, school_id, uuid.uuid4())
+        result = await service.get_class_gap_map(class_id, school_id, subject_id)
 
         assert len(result.nodes) == 1
         assert result.nodes[0].class_average is not None
@@ -105,8 +122,9 @@ class TestGetClassGapMap:
     async def test_get_class_gap_map_when_subtopic_has_no_gap_states_then_class_average_none(self) -> None:
         db = _make_db()
         class_id, school_id, grade_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-        subtopic_id, topic_id = uuid.uuid4(), uuid.uuid4()
-        db.scalar.return_value = _make_class(class_id, school_id, grade_id)
+        subtopic_id, topic_id, subject_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        # scalar calls: class lookup, subject_family_code
+        db.scalar.side_effect = [_make_class(class_id, school_id, grade_id), "SCI"]
 
         subtopic_row = SimpleNamespace(
             subtopic_id=subtopic_id,
@@ -115,19 +133,38 @@ class TestGetClassGapMap:
             topic_name="Maths",
             grade_id=grade_id,
             grade_name="Grade 7",
+            grade_level=7,
         )
         subtopics_result = MagicMock()
         subtopics_result.all.return_value = [subtopic_row]
         gap_result = MagicMock()
         gap_result.all.return_value = []
-        db.execute.side_effect = [subtopics_result, gap_result]
+        # execute calls: family subject ids, subtopics, gap_rows
+        db.execute.side_effect = [_make_family_execute_result(subject_id), subtopics_result, gap_result]
         service = GapService(db)
 
-        result = await service.get_class_gap_map(class_id, school_id, uuid.uuid4())
+        result = await service.get_class_gap_map(class_id, school_id, subject_id)
 
         assert len(result.nodes) == 1
         assert result.nodes[0].class_average is None
         assert result.nodes[0].student_scores == []
+
+    @pytest.mark.asyncio
+    async def test_get_class_gap_map_when_subject_has_no_family_then_falls_back_to_exact_subject(self) -> None:
+        """Subjects with no subject_family_code (e.g. Geography) fall back to exact subject filter."""
+        db = _make_db()
+        class_id, school_id, grade_id, subject_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        # scalar calls: class lookup, subject_family_code returns None
+        db.scalar.side_effect = [_make_class(class_id, school_id, grade_id), None]
+        empty_result = MagicMock()
+        empty_result.all.return_value = []
+        # execute calls: NO family lookup (skipped), subtopics, gap_rows
+        db.execute.side_effect = [empty_result, empty_result]
+        service = GapService(db)
+
+        result = await service.get_class_gap_map(class_id, school_id, subject_id)
+
+        assert result.nodes == []
 
 
 class TestGetStudentGapMap:
@@ -144,9 +181,10 @@ class TestGetStudentGapMap:
     @pytest.mark.asyncio
     async def test_get_student_gap_map_when_student_has_gap_state_then_score_returned(self) -> None:
         db = _make_db()
-        student_id = uuid.uuid4()
+        student_id, subject_id = uuid.uuid4(), uuid.uuid4()
         subtopic_id, topic_id = uuid.uuid4(), uuid.uuid4()
-        db.scalar.return_value = SimpleNamespace(grade_id=uuid.uuid4(), id=uuid.uuid4())
+        # scalar calls: enrolled class, subject_family_code
+        db.scalar.side_effect = [SimpleNamespace(grade_id=uuid.uuid4(), id=uuid.uuid4()), "SCI"]
 
         subtopic_row = SimpleNamespace(
             subtopic_id=subtopic_id, subtopic_name="Equations", topic_id=topic_id, topic_name="Algebra"
@@ -159,35 +197,32 @@ class TestGetStudentGapMap:
         )
         gap_result = MagicMock()
         gap_result.all.return_value = [gap_row]
-        db.execute.side_effect = [subtopics_result, gap_result]
+        # execute calls: family subject ids, subtopics, gap_rows
+        db.execute.side_effect = [_make_family_execute_result(subject_id), subtopics_result, gap_result]
         service = GapService(db)
 
-        result = await service.get_student_gap_map(student_id, uuid.uuid4(), uuid.uuid4())
+        result = await service.get_student_gap_map(student_id, uuid.uuid4(), subject_id)
 
         assert len(result.scores) == 1
         assert result.scores[0].mastery_score == 0.75
 
     @pytest.mark.asyncio
-    async def test_get_student_gap_map_when_subtopic_unassessed_then_score_is_none(self) -> None:
+    async def test_get_student_gap_map_when_no_assessed_subtopics_then_returns_empty_scores(self) -> None:
+        """API only returns assessed subtopics — unassessed subtopics are excluded at the query level."""
         db = _make_db()
-        subtopic_id = uuid.uuid4()
-        db.scalar.return_value = SimpleNamespace(grade_id=uuid.uuid4(), id=uuid.uuid4())
+        subject_id = uuid.uuid4()
+        # scalar calls: enrolled class, subject_family_code
+        db.scalar.side_effect = [SimpleNamespace(grade_id=uuid.uuid4(), id=uuid.uuid4()), "MATH"]
 
-        subtopic_row = SimpleNamespace(
-            subtopic_id=subtopic_id, subtopic_name="Pythagoras", topic_id=uuid.uuid4(), topic_name="Geometry"
-        )
-        subtopics_result = MagicMock()
-        subtopics_result.all.return_value = [subtopic_row]
-        gap_result = MagicMock()
-        gap_result.all.return_value = []
-        db.execute.side_effect = [subtopics_result, gap_result]
+        empty_result = MagicMock()
+        empty_result.all.return_value = []
+        # execute calls: family subject ids, subtopics (empty — subquery excludes unassessed), gap_rows
+        db.execute.side_effect = [_make_family_execute_result(subject_id), empty_result, empty_result]
         service = GapService(db)
 
-        result = await service.get_student_gap_map(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
+        result = await service.get_student_gap_map(uuid.uuid4(), uuid.uuid4(), subject_id)
 
-        assert len(result.scores) == 1
-        assert result.scores[0].mastery_score is None
-        assert result.scores[0].last_assessed_at is None
+        assert result.scores == []
 
 
 class TestGetClassSummary:

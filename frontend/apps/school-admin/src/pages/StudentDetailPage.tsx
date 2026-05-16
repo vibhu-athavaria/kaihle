@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { DashboardLayout } from "@kaihle/ui";
+import { DashboardLayout, StudentGapMapTab } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
 import { apiClient } from "@kaihle/auth";
 import {
@@ -10,6 +10,32 @@ import {
   type StudentProfile,
 } from "../hooks/useSchoolAdmin";
 import { EditStudentPanel } from "./EditStudentPanel";
+
+function useStudentGapMap(
+  studentId: string | undefined,
+  subjectId: string | null,
+) {
+  return useQuery({
+    queryKey: ["student-gap-map", studentId, subjectId],
+    queryFn: async () => {
+      const res = await apiClient.get(
+        `/api/v1/students/${studentId}/gap-map?subject_id=${subjectId}`,
+      );
+      return res.data as {
+        scores: Array<{
+          subtopic_id: string;
+          subtopic_name: string;
+          topic_id: string;
+          topic_name: string;
+          mastery_score: number | null;
+          last_assessed_at: string | null;
+        }>;
+      };
+    },
+    enabled: !!studentId && !!subjectId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 function nameDisplay(first: string, last: string) {
   return `${first} ${last.charAt(0).toUpperCase()}.`;
@@ -41,6 +67,27 @@ export function StudentDetailPage() {
   const activeStudyPlan = Array.isArray(studyPlans)
     ? studyPlans.find((p) => p.is_active)
     : null;
+
+  // Derive unique subjects from enrollments for the subject selector
+  const availableSubjects = (() => {
+    const seen = new Set<string>();
+    return (student?.class_enrollments ?? []).reduce<
+      Array<{ subject_id: string; subject_name: string }>
+    >((acc, ce) => {
+      if (!seen.has(ce.subject_id)) {
+        seen.add(ce.subject_id);
+        acc.push({ subject_id: ce.subject_id, subject_name: ce.subject_name });
+      }
+      return acc;
+    }, []);
+  })();
+
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(
+    null,
+  );
+  const activeSubjectId =
+    selectedSubjectId ?? availableSubjects[0]?.subject_id ?? null;
+  const { data: gapMap } = useStudentGapMap(studentId, activeSubjectId);
 
   const needsWorkClassCount = (student?.class_enrollments ?? []).filter(
     (ce) => {
@@ -172,76 +219,27 @@ export function StudentDetailPage() {
 
           <div className="mb-5">
             <div className="text-xs font-black uppercase tracking-[0.8px] text-role-school-muted mb-3">
-              Mastery by class
+              Gap Map
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              {student.class_enrollments.map((ce) => {
-                const scores = ce.gap_states
-                  .map((g) => g.mastery_score)
-                  .filter((s): s is number => s !== null);
-                const avg = scores.length
-                  ? scores.reduce((a, b) => a + b, 0) / scores.length
-                  : null;
-                const { dotClass, label } = getMasteryStyle(avg);
-                return (
-                  <div
-                    key={ce.class_id}
-                    className="bg-white border border-role-school-border rounded-xl p-4"
+            {availableSubjects.length > 1 && (
+              <div className="flex gap-2 mb-4 flex-wrap">
+                {availableSubjects.map((s) => (
+                  <button
+                    key={s.subject_id}
+                    type="button"
+                    onClick={() => setSelectedSubjectId(s.subject_id)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      activeSubjectId === s.subject_id
+                        ? "bg-brand-light text-brand-primary border border-brand-primary"
+                        : "bg-gray-100 text-brand-muted hover:bg-gray-200"
+                    }`}
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <div className="text-sm font-bold text-brand-ink">
-                          {ce.class_name}
-                        </div>
-                        <div className="text-xs text-brand-muted mt-0.5">
-                          {ce.teacher_name}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`w-2 h-2 rounded-full ${dotClass}`} />
-                        <span className="text-xs font-bold text-brand-ink">
-                          {label}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      {ce.gap_states.map((gs) => {
-                        const {
-                          label: gl,
-                          dotClass,
-                          textClass,
-                        } = getMasteryStyle(gs.mastery_score);
-                        const pct =
-                          gs.mastery_score !== null
-                            ? Math.round(gs.mastery_score * 100)
-                            : 0;
-                        return (
-                          <div
-                            key={gs.subtopic_name}
-                            className="flex items-center gap-2"
-                          >
-                            <span className="text-xs text-brand-body w-28 flex-shrink-0 truncate">
-                              {gs.subtopic_name}
-                            </span>
-                            <div className="flex-1 h-[5px] bg-gray-100 rounded-full">
-                              <div
-                                className={`h-[5px] rounded-full ${dotClass}`}
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                            <span
-                              className={`text-xs font-bold w-16 text-right flex-shrink-0 ${textClass}`}
-                            >
-                              {gl}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                    {s.subject_name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <StudentGapMapTab scores={gapMap?.scores ?? []} />
           </div>
 
           {activeStudyPlan && (

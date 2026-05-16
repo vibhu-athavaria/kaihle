@@ -455,9 +455,10 @@ class UserService:
         grade_name: str | None = profile_row[2] if profile_row else None
 
         enrollment_query = (
-            select(ClassEnrollment, Class, Curriculum, User)
+            select(ClassEnrollment, Class, Curriculum, User, Subject)
             .join(Class, Class.id == ClassEnrollment.class_id)
             .join(Curriculum, Curriculum.id == Class.curriculum_id)
+            .join(Subject, Subject.id == Class.subject_id)
             .outerjoin(User, User.id == Class.teacher_id)
             .where(
                 ClassEnrollment.student_id == student_id,
@@ -486,7 +487,7 @@ class UserService:
         earliest_enrolled_at: str = ""
         class_enrollments: list[ClassEnrollmentDetail] = []
 
-        for enrollment, class_, curriculum, teacher in enrollment_rows:
+        for enrollment, class_, curriculum, teacher, subject in enrollment_rows:
             if curriculum_name == "" and curriculum:
                 curriculum_name = curriculum.name
             if earliest_enrolled_at == "" and enrollment.enrolled_at:
@@ -496,6 +497,8 @@ class UserService:
                 ClassEnrollmentDetail(
                     class_id=class_.id,
                     class_name=class_.name,
+                    subject_id=subject.id,
+                    subject_name=subject.name,
                     teacher_name=teacher_name,
                     gap_states=gap_by_class.get(class_.id, []),
                 )

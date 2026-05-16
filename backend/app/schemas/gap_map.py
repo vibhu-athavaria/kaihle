@@ -20,6 +20,7 @@ class GapMapNode(BaseModel):
     topic_name: str
     grade_id: UUID
     grade_name: str
+    grade_level: int
     class_average: float | None  # None = no students assessed on this subtopic yet
     student_count: int
     student_scores: list[StudentGapScore]

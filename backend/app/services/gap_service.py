@@ -19,7 +19,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.curriculum import CurriculumTopic, Grade, Subtopic, Topic
+from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic, Topic
 from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User
@@ -344,10 +344,22 @@ class GapService:
                 detail=f"Class {class_id} not found in school {school_id}",
             )
 
-        # Subquery: subtopic IDs that have gap_state rows for this class.
-        # The Tier 1 diagnostic covers current AND previous grade subtopics, so
-        # gap_states may reference subtopics outside class_.grade_id. We include
-        # any subtopic that was actually assessed so they appear in the heatmap.
+        # Resolve the subject family: subjects sharing the same subject_family_code
+        # as the class subject are considered related (e.g. SCI, CHEM, BIO, PHY all
+        # share family "SCI"). This allows prior-grade SCI diagnostic data to surface
+        # on an IGCSE Chemistry gap map — the signal is valid cross-programme knowledge.
+        family_row = await self.db.scalar(select(Subject.subject_family_code).where(Subject.id == subject_id))
+        if family_row:
+            family_subject_ids_q = await self.db.execute(
+                select(Subject.id).where(Subject.subject_family_code == family_row)
+            )
+            family_subject_ids = [row[0] for row in family_subject_ids_q.all()]
+        else:
+            family_subject_ids = [subject_id]
+
+        # Restrict to subtopics that were actually assessed for this class.
+        # Showing unassessed curriculum subtopics provides no signal to the teacher —
+        # only subtopics with real gap_state rows are meaningful in the heatmap.
         assessed_subtopic_ids = select(GapState.subtopic_id).where(GapState.class_id == class_id).scalar_subquery()
 
         subtopic_rows = (
@@ -359,18 +371,19 @@ class GapService:
                     Topic.name.label("topic_name"),
                     CurriculumTopic.grade_id.label("grade_id"),
                     Grade.name.label("grade_name"),
+                    Grade.level.label("grade_level"),
                 )
                 .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
                 .join(Topic, Topic.id == CurriculumTopic.topic_id)
                 .join(Grade, Grade.id == CurriculumTopic.grade_id)
                 .where(
-                    CurriculumTopic.subject_id == subject_id,
+                    CurriculumTopic.subject_id.in_(family_subject_ids),
                     CurriculumTopic.is_active.is_(True),
                     Subtopic.is_active.is_(True),
-                    # Current grade curriculum OR assessed via diagnostic
-                    ((CurriculumTopic.grade_id == class_.grade_id) | (Subtopic.id.in_(assessed_subtopic_ids))),
+                    Subtopic.id.in_(assessed_subtopic_ids),
                 )
-                .order_by(Topic.name, Subtopic.name)
+                # Previous grade first (diagnostic prior knowledge), then current grade
+                .order_by(Grade.level, Topic.name, Subtopic.name)
             )
         ).all()
 
@@ -416,6 +429,7 @@ class GapService:
                     subtopic_id=st.subtopic_id,
                     grade_id=st.grade_id,
                     grade_name=st.grade_name,
+                    grade_level=st.grade_level,
                     subtopic_name=st.subtopic_name,
                     topic_id=st.topic_id,
                     topic_name=st.topic_name,
@@ -469,6 +483,25 @@ class GapService:
                 detail="No class enrollment found for student in this subject",
             )
 
+        # Resolve subject family — same logic as get_class_gap_map.
+        # For a student in IGCSE CHEM, prior SCI gap states from the diagnostic
+        # are valid signal and should appear on their gap map.
+        student_family_row = await self.db.scalar(select(Subject.subject_family_code).where(Subject.id == subject_id))
+        if student_family_row:
+            student_family_ids_q = await self.db.execute(
+                select(Subject.id).where(Subject.subject_family_code == student_family_row)
+            )
+            student_family_subject_ids = [row[0] for row in student_family_ids_q.all()]
+        else:
+            student_family_subject_ids = [subject_id]
+
+        # Restrict to subtopics that were actually assessed for this student's class.
+        assessed_student_subtopic_ids = (
+            select(GapState.subtopic_id)
+            .where(GapState.student_id == student_id, GapState.class_id == enrolled_class.id)
+            .scalar_subquery()
+        )
+
         subtopic_rows = (
             await self.db.execute(
                 select(
@@ -480,10 +513,10 @@ class GapService:
                 .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
                 .join(Topic, Topic.id == CurriculumTopic.topic_id)
                 .where(
-                    CurriculumTopic.subject_id == subject_id,
-                    CurriculumTopic.grade_id == enrolled_class.grade_id,
+                    CurriculumTopic.subject_id.in_(student_family_subject_ids),
                     CurriculumTopic.is_active.is_(True),
                     Subtopic.is_active.is_(True),
+                    Subtopic.id.in_(assessed_student_subtopic_ids),
                 )
                 .order_by(Topic.name, Subtopic.name)
             )
@@ -511,6 +544,9 @@ class GapService:
 
         gaps_by_subtopic = {row.subtopic_id: row for row in gap_rows}
 
+        # subtopic_rows is already scoped to assessed subtopics; gaps_by_subtopic
+        # covers all of them. The fallback to None handles edge cases where a
+        # gap_state row was deleted after the subquery ran.
         scores = [
             StudentSubtopicScore(
                 subtopic_id=st.subtopic_id,
