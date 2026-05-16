@@ -1117,8 +1117,9 @@ class AssessmentService:
             List of dicts with assessment and class_name.
         """
         base_q = (
-            select(Assessment, Class.name.label("class_name"))
+            select(Assessment, Class.name.label("class_name"), Grade.name.label("grade_name"))
             .join(Class, Class.id == Assessment.class_id)
+            .join(Grade, Grade.id == Class.grade_id)
             .where(
                 Class.teacher_id == teacher_id,
                 Class.school_id == school_id,
@@ -1138,6 +1139,7 @@ class AssessmentService:
                 "id": row[0].id,
                 "class_id": row[0].class_id,
                 "class_name": row[1],
+                "grade_name": row[2],
                 "title": row[0].title,
                 "assessment_type": row[0].assessment_type,
                 "status": row[0].status,

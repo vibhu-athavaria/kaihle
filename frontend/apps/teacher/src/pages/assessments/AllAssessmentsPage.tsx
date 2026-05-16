@@ -17,6 +17,7 @@ import { Button, EmptyState, SkeletonCard, toast } from "@kaihle/ui";
 interface AssessmentWithClass extends Assessment {
   className: string;
   classId: string;
+  gradeName: string;
 }
 
 export function AllAssessmentsPage() {
@@ -57,6 +58,7 @@ export function AllAssessmentsPage() {
       deadline: a.deadline,
       className: a.className,
       classId: a.classId,
+      gradeName: a.gradeName,
     }));
   }, [assessments]);
 
@@ -161,7 +163,8 @@ export function AllAssessmentsPage() {
                   {statusBadge(assessment.status)}
                 </div>
                 <div className="text-xs text-brand-muted">
-                  {assessment.className} · {assessment.question_count} questions
+                  {assessment.className} — {assessment.gradeName} ·{" "}
+                  {assessment.question_count} questions
                   {assessment.deadline &&
                     ` · Due ${new Date(assessment.deadline).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
                 </div>

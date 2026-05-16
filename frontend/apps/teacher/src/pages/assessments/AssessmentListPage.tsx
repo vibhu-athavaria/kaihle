@@ -81,7 +81,9 @@ export function AssessmentListPage() {
             to={`/teacher/classes/${classId}`}
             className="hover:text-brand-ink transition-colors"
           >
-            {currentClass?.name ?? "Class"}
+            {currentClass
+              ? `${currentClass.name} — ${currentClass.grade_name}`
+              : "Class"}
           </Link>
           <span aria-hidden="true">/</span>
           <span className="text-brand-ink font-medium">Assessments</span>
