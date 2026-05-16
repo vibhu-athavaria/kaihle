@@ -413,7 +413,7 @@ class TestSubmitResponseReal:
         assert response.status_code == 204
 
     @pytest.mark.asyncio
-    async def test_submit_response_when_duplicate_then_409(
+    async def test_submit_response_when_duplicate_then_upserts_and_returns_204(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -422,26 +422,30 @@ class TestSubmitResponseReal:
         active_assessment_with_question: Assessment,
         question: QuestionBank,
     ) -> None:
-        """Same question submitted twice → 409 on second attempt."""
-        body = {
+        """Same question submitted twice → second submission updates existing row (upsert)."""
+        first_body = {
             "question_id": str(question.id),
             "selected_key": "A",
+        }
+        second_body = {
+            "question_id": str(question.id),
+            "selected_key": "B",
         }
         # First submission
         r1 = await client.post(
             f"/api/v1/attempts/{student_attempt_with_question.id}/responses",
             headers=_auth(student_user),
-            json=body,
+            json=first_body,
         )
         assert r1.status_code == 204
 
-        # Second submission — same question
+        # Second submission with a different answer — should succeed (upsert)
         r2 = await client.post(
             f"/api/v1/attempts/{student_attempt_with_question.id}/responses",
             headers=_auth(student_user),
-            json=body,
+            json=second_body,
         )
-        assert r2.status_code == 409
+        assert r2.status_code == 204
 
 
 class TestSubmitAttemptReal:
