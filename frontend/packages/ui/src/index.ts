@@ -38,3 +38,14 @@ export { Toaster } from "sonner";
 export { Modal } from "./components/Modal";
 export { SlideOverPanel } from "./components/SlideOverPanel";
 export { GapMapCell, type GapMapCellProps } from "./components/GapMapCell";
+export {
+  ClassGapMapTable,
+  type ClassGapMapTableProps,
+  type GapMapNode,
+  type GapMapStudentScore,
+} from "./components/ClassGapMapTable";
+export {
+  StudentGapMapTab,
+  type StudentGapMapTabProps,
+  type StudentSubtopicScore,
+} from "./components/StudentGapMapTab";

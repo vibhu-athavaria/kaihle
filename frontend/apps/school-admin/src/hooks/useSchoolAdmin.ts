@@ -146,6 +146,8 @@ export interface StudentProfile {
   class_enrollments: Array<{
     class_id: string;
     class_name: string;
+    subject_id: string;
+    subject_name: string;
     teacher_name: string;
     gap_states: Array<{
       subtopic_name: string;

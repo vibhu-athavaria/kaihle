@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { DashboardLayout, GapMapCell } from "@kaihle/ui";
+import { DashboardLayout, ClassGapMapTable } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
 import { apiClient } from "@kaihle/auth";
 import {
@@ -13,17 +13,33 @@ import {
 import { EditClassPanel } from "./EditClassPanel";
 import { ManageEnrollmentsModal } from "./ManageEnrollmentsModal";
 
-// ── Gap Map types (local to this file) ───────────────────────────────────────
+// ── Gap Map types ─────────────────────────────────────────────────────────────
 
-interface GapMapData {
-  class_name: string;
-  subtopics: { id: string; name: string }[];
-  students: { id: string; name: string }[];
-  cells: {
-    student_id: string;
-    subtopic_id: string;
-    mastery_score: number | null;
-  }[];
+interface StudentGapScore {
+  student_id: string;
+  student_name: string;
+  mastery_score: number | null;
+}
+
+interface GapMapNode {
+  subtopic_id: string;
+  subtopic_name: string;
+  topic_id: string;
+  topic_name: string;
+  grade_id: string;
+  grade_name: string;
+  grade_level: number;
+  class_average: number | null;
+  student_count: number;
+  student_scores: StudentGapScore[];
+}
+
+interface ClassGapMap {
+  class_id: string;
+  subject_id: string;
+  generated_at: string;
+  nodes: GapMapNode[];
+  has_student_data: boolean;
 }
 
 function useClassGapMap(classId: string, subjectId: string | undefined) {
@@ -33,7 +49,7 @@ function useClassGapMap(classId: string, subjectId: string | undefined) {
       const res = await apiClient.get(
         `/api/v1/classes/${classId}/gap-map?subject_id=${subjectId}`,
       );
-      return res.data as GapMapData;
+      return res.data as ClassGapMap;
     },
     enabled: !!classId && !!subjectId,
     staleTime: 5 * 60 * 1000,
@@ -303,19 +319,6 @@ function GapMapTab({
 }) {
   const { data, isLoading, isError } = useClassGapMap(classId, subjectId);
 
-  // All hooks must run unconditionally before any early return.
-  const students = data?.students ?? [];
-  const subtopics = data?.subtopics ?? [];
-  const cells = data?.cells ?? [];
-
-  const scoreMap = useMemo(() => {
-    const map = new Map<string, number | null>();
-    for (const c of cells) {
-      map.set(`${c.student_id}:${c.subtopic_id}`, c.mastery_score);
-    }
-    return map;
-  }, [cells]);
-
   if (classDetailLoading || (isLoading && !data)) {
     return (
       <div className="animate-pulse space-y-3">
@@ -336,73 +339,50 @@ function GapMapTab({
 
   if (!data) return null;
 
-  const getScore = (studentId: string, subtopicId: string) =>
-    scoreMap.get(`${studentId}:${subtopicId}`) ?? null;
+  if (!data.has_student_data) {
+    return (
+      <div className="bg-white rounded-2xl border border-role-school-border p-12 text-center">
+        <span className="text-4xl mb-3 block" role="img" aria-label="chart">
+          📊
+        </span>
+        <p className="font-display font-semibold text-brand-ink mb-2">
+          No gap data yet
+        </p>
+        <p className="text-sm text-brand-muted">
+          The gap map populates automatically once students complete the
+          diagnostic.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <div className="overflow-auto">
-        <table className="border-collapse">
-          <thead>
-            <tr>
-              <th className="w-48 min-w-[12rem]" />
-              {students.map((s) => (
-                <th
-                  key={s.id}
-                  className="px-1 pb-2 text-xs font-bold text-brand-muted text-center whitespace-nowrap max-w-[48px] overflow-hidden text-ellipsis"
-                >
-                  {s.name.split(" ")[0]}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {subtopics.map((sub) => (
-              <tr
-                key={sub.id}
-                className="border-b border-role-school-border last:border-0"
-              >
-                <td className="pr-3 py-1 text-xs text-brand-body font-semibold whitespace-nowrap">
-                  {sub.name}
-                </td>
-                {students.map((stu) => (
-                  <td key={stu.id} className="px-1 py-1 text-center">
-                    <GapMapCell
-                      masteryScore={getScore(stu.id, sub.id)}
-                      studentName={stu.name}
-                      subtopicName={sub.name}
-                      display="label"
-                      readOnly
-                    />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="space-y-4">
+      <div className="flex items-center gap-5 flex-wrap">
+        {(
+          [
+            [0.8, "Strong"],
+            [0.55, "Developing"],
+            [0.2, "Needs Work"],
+            [null, "Not assessed"],
+          ] as Array<[number | null, string]>
+        ).map(([score, label]) => {
+          const { bgClass, textClass } = getMasteryStyle(score);
+          return (
+            <div key={label} className="flex items-center gap-1.5">
+              <span
+                className={`w-4 h-4 rounded ${bgClass}`}
+                aria-hidden="true"
+              />
+              <span className={`text-xs font-medium ${textClass}`}>
+                {label}
+              </span>
+            </div>
+          );
+        })}
       </div>
-
-      <div className="flex gap-5 mt-4">
-        {[
-          { dotClass: "bg-brand-red", label: "Needs Work" },
-          { dotClass: "bg-brand-amber", label: "Developing" },
-          { dotClass: "bg-brand-green", label: "Strong" },
-          { dotClass: "bg-brand-muted", label: "Not assessed" },
-        ].map(({ dotClass, label }) => (
-          <div
-            key={label}
-            className="flex items-center gap-1.5 text-xs text-brand-body font-semibold"
-          >
-            <span
-              className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotClass}`}
-              aria-label={label}
-              role="img"
-            />
-            {label}
-          </div>
-        ))}
-      </div>
-    </>
+      <ClassGapMapTable nodes={data.nodes} variant="school-admin" />
+    </div>
   );
 }
 

@@ -109,6 +109,7 @@ class TestSchemaInstantiation:
             topic_name="Test Topic",
             grade_id=uuid.uuid4(),
             grade_name="Grade 7",
+            grade_level=7,
             class_average=None,
             student_count=0,
             student_scores=[],

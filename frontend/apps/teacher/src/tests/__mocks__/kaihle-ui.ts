@@ -79,3 +79,7 @@ export const ScoreRing = ({
       score !== null ? `${Math.round(score * 100)}%` : "Not assessed",
     className,
   });
+
+// Re-export real implementations — pure React components, no browser APIs needed.
+export { ClassGapMapTable } from "../../../../../packages/ui/src/components/ClassGapMapTable";
+export { StudentGapMapTab } from "../../../../../packages/ui/src/components/StudentGapMapTab";
