@@ -1,24 +1,35 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 import { AdminLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
-import { Pencil } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
+
+interface McqOption {
+  key: string;
+  text: string;
+}
 
 interface QuestionRow {
   id: string;
   question_text: string;
   question_type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER";
+  options: McqOption[] | null;
   correct_answer: string;
   explanation: string | null;
   difficulty_level: number | null;
   is_active: boolean;
+  subtopic_id: string | null;
+  curriculum_id: string | null;
   curriculum_name: string | null;
+  subject_id: string | null;
   subject_name: string | null;
+  grade_id: string | null;
   grade_name: string | null;
+  topic_id: string | null;
   topic_name: string | null;
   subtopic_name: string | null;
   curriculum_topic_id: string | null;
@@ -37,6 +48,7 @@ interface FilterOption {
 }
 
 const QUESTION_TYPES = ["MCQ", "TRUE_FALSE", "SHORT_ANSWER"] as const;
+const MCQ_KEYS = ["A", "B", "C", "D"];
 
 const TYPE_PILL: Record<string, string> = {
   MCQ: "bg-blue-50 text-blue-700",
@@ -51,10 +63,16 @@ function difficultyLabel(val: number | null) {
   return { label: "Easy", cls: "text-[#16a34a]" };
 }
 
+// ── Shared filter selects ──────────────────────────────────────────────────
+
+const selectCls =
+  "border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]";
+
 // ── Main page ──────────────────────────────────────────────────────────────
 
 export function AdminQuestionReview() {
   const { logout } = useAuth();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const curriculumId = searchParams.get("curriculum_id") ?? "";
   const gradeId = searchParams.get("grade_id") ?? "";
@@ -66,12 +84,11 @@ export function AdminQuestionReview() {
   const search = searchParams.get("search") ?? "";
   const page = parseInt(searchParams.get("page") ?? "1", 10);
 
-  // React Query hooks for dropdown data with caching
   const { data: curriculaData } = useQuery({
     queryKey: ["curricula"],
     queryFn: () =>
       apiClient.get<FilterOption[]>("/api/v1/curricula").then((r) => r.data),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
   const { data: gradesData } = useQuery({
     queryKey: ["grades"],
@@ -106,7 +123,6 @@ export function AdminQuestionReview() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Use React Query data or fall back to state
   const curriculums = curriculaData ?? [];
   const grades = gradesData ?? [];
   const subjects = subjectsData ?? [];
@@ -119,9 +135,10 @@ export function AdminQuestionReview() {
   const [editingQuestion, setEditingQuestion] = useState<QuestionRow | null>(
     null,
   );
+  const [addingQuestion, setAddingQuestion] = useState(false);
 
-  // Load question list
   useEffect(() => {
+    setLoading(true);
     const params: Record<string, string | number> = { page, page_size: 20 };
     if (curriculumId) params.curriculum_id = curriculumId;
     if (gradeId) params.grade_id = gradeId;
@@ -157,7 +174,7 @@ export function AdminQuestionReview() {
       } else {
         next.delete(key);
       }
-      next.delete("page"); // reset to page 1
+      next.delete("page");
       setSearchParams(next);
     },
     [searchParams, setSearchParams],
@@ -166,6 +183,35 @@ export function AdminQuestionReview() {
   const clearAll = useCallback(() => {
     setSearchParams(new URLSearchParams());
   }, [setSearchParams]);
+
+  const handleSaved = (updated: QuestionRow) => {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            questions: prev.questions.map((q) =>
+              q.id === updated.id ? updated : q,
+            ),
+          }
+        : prev,
+    );
+    setEditingQuestion(null);
+    queryClient.invalidateQueries({ queryKey: ["question-bank"] });
+  };
+
+  const handleCreated = (created: QuestionRow) => {
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            questions: [created, ...prev.questions],
+            total: prev.total + 1,
+          }
+        : prev,
+    );
+    setAddingQuestion(false);
+    queryClient.invalidateQueries({ queryKey: ["question-bank"] });
+  };
 
   const totalPages = data ? Math.ceil(data.total / data.page_size) : 0;
   const startItem = data ? (page - 1) * data.page_size + 1 : 0;
@@ -177,7 +223,7 @@ export function AdminQuestionReview() {
       <div className="bg-white border border-[#eaecf0] rounded-lg p-3 mb-4 space-y-3">
         <div className="flex flex-wrap gap-2">
           <select
-            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-36"
+            className={`${selectCls} w-36`}
             value={curriculumId}
             onChange={(e) => setFilter("curriculum_id", e.target.value)}
           >
@@ -189,7 +235,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-28"
+            className={`${selectCls} w-28`}
             value={gradeId}
             onChange={(e) => setFilter("grade_id", e.target.value)}
           >
@@ -201,7 +247,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-32"
+            className={`${selectCls} w-32`}
             value={subjectId}
             onChange={(e) => setFilter("subject_id", e.target.value)}
           >
@@ -213,7 +259,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-36"
+            className={`${selectCls} w-36`}
             value={topicId}
             onChange={(e) => setFilter("topic_id", e.target.value)}
           >
@@ -225,7 +271,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-36"
+            className={`${selectCls} w-36`}
             value={subtopicId}
             onChange={(e) => setFilter("subtopic_id", e.target.value)}
           >
@@ -237,7 +283,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-40"
+            className={`${selectCls} w-40`}
             value={curriculumTopicId}
             onChange={(e) => setFilter("curriculum_topic_id", e.target.value)}
           >
@@ -249,7 +295,7 @@ export function AdminQuestionReview() {
             ))}
           </select>
           <select
-            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-32"
+            className={`${selectCls} w-32`}
             value={questionType}
             onChange={(e) => setFilter("question_type", e.target.value)}
           >
@@ -265,7 +311,7 @@ export function AdminQuestionReview() {
           <input
             type="text"
             placeholder="🔍 Search question text…"
-            className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] flex-1"
+            className={`${selectCls} flex-1`}
             value={search}
             onChange={(e) => setFilter("search", e.target.value)}
           />
@@ -284,11 +330,20 @@ export function AdminQuestionReview() {
           <h2 className="text-xs font-semibold text-[#374151]">
             Assessment Questions
           </h2>
-          {data && (
-            <span className="text-xs text-[#6b7280]">
-              Showing {startItem}–{endItem} of {data.total} questions
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {data && (
+              <span className="text-xs text-[#6b7280]">
+                Showing {startItem}–{endItem} of {data.total} questions
+              </span>
+            )}
+            <button
+              onClick={() => setAddingQuestion(true)}
+              className="flex items-center gap-1.5 bg-[#1a5c38] text-white text-xs font-semibold px-3 py-1.5 rounded-full hover:bg-[#155231] transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              Add Question
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -342,7 +397,8 @@ export function AdminQuestionReview() {
                       className="border-b border-[#eaecf0] hover:bg-[#fafafa] transition-colors"
                     >
                       <td className="py-2 px-3 text-xs text-[#374151] max-w-xs truncate">
-                        {q.question_text.slice(0, 80)}…
+                        {q.question_text.slice(0, 80)}
+                        {q.question_text.length > 80 ? "…" : ""}
                       </td>
                       <td className="py-2 px-3">
                         <span
@@ -379,8 +435,9 @@ export function AdminQuestionReview() {
                           onClick={() => setEditingQuestion(q)}
                           className="w-7 h-7 rounded border border-[#eaecf0] bg-white text-[#6b7280] hover:bg-[#f3f4f6] flex items-center justify-center"
                           title="Edit"
+                          aria-label="Edit question"
                         >
-                          <Pencil className="w-3.5 h-3.5" />
+                          <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
                       </td>
                     </tr>
@@ -440,7 +497,8 @@ export function AdminQuestionReview() {
 
       {/* Edit Modal */}
       {editingQuestion && (
-        <EditModal
+        <QuestionModal
+          mode="edit"
           question={editingQuestion}
           curriculums={curriculums}
           grades={grades}
@@ -448,30 +506,32 @@ export function AdminQuestionReview() {
           topics={topics}
           subtopics={subtopics}
           onClose={() => setEditingQuestion(null)}
-          onSave={(updated) => {
-            // Optimistic update
-            setData((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    questions: prev.questions.map((q) =>
-                      q.id === updated.id ? updated : q,
-                    ),
-                  }
-                : prev,
-            );
-            setEditingQuestion(null);
-          }}
+          onSave={handleSaved}
+        />
+      )}
+
+      {/* Add Question Modal */}
+      {addingQuestion && (
+        <QuestionModal
+          mode="add"
+          curriculums={curriculums}
+          grades={grades}
+          subjects={subjects}
+          topics={topics}
+          subtopics={subtopics}
+          onClose={() => setAddingQuestion(false)}
+          onSave={handleCreated}
         />
       )}
     </AdminLayout>
   );
 }
 
-// ── Edit Modal ─────────────────────────────────────────────────────────────
+// ── Question Modal (Edit + Add) ────────────────────────────────────────────
 
-interface EditModalProps {
-  question: QuestionRow;
+interface QuestionModalProps {
+  mode: "edit" | "add";
+  question?: QuestionRow;
   curriculums: FilterOption[];
   grades: FilterOption[];
   subjects: FilterOption[];
@@ -481,7 +541,12 @@ interface EditModalProps {
   onSave: (q: QuestionRow) => void;
 }
 
-function EditModal({
+function buildDefaultOptions(): McqOption[] {
+  return MCQ_KEYS.map((key) => ({ key, text: "" }));
+}
+
+function QuestionModal({
+  mode,
   question,
   curriculums,
   grades,
@@ -490,46 +555,72 @@ function EditModal({
   subtopics,
   onClose,
   onSave,
-}: EditModalProps) {
+}: QuestionModalProps) {
+  const isEdit = mode === "edit";
+
   const [form, setForm] = useState({
-    question_text: question.question_text,
-    question_type: question.question_type,
-    correct_answer: question.correct_answer,
-    explanation: question.explanation ?? "",
-    difficulty_level: question.difficulty_level ?? "",
-    is_active: question.is_active,
+    question_text: question?.question_text ?? "",
+    question_type:
+      question?.question_type ??
+      ("MCQ" as "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER"),
+    correct_answer: question?.correct_answer ?? "",
+    explanation: question?.explanation ?? "",
+    difficulty_level: question?.difficulty_level ?? ("" as number | ""),
+    is_active: question?.is_active ?? true,
   });
-  const [selectedCurriculum, setSelectedCurriculum] = useState("");
-  const [selectedGrade, setSelectedGrade] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState("");
-  const [selectedTopic, setSelectedTopic] = useState("");
-  const [selectedSubtopic, setSelectedSubtopic] = useState("");
-  const [fetchedSubtopics, setFilteredSubtopics] = useState<FilterOption[]>([]);
+
+  // MCQ options — pre-populate from existing question or start fresh
+  const [options, setOptions] = useState<McqOption[]>(() => {
+    if (question?.question_type === "MCQ" && question.options?.length) {
+      return question.options as McqOption[];
+    }
+    return buildDefaultOptions();
+  });
+
+  // Curriculum context selects — pre-populate with question's current IDs
+  const [selectedCurriculum, setSelectedCurriculum] = useState(
+    question?.curriculum_id ?? "",
+  );
+  const [selectedGrade, setSelectedGrade] = useState(question?.grade_id ?? "");
+  const [selectedSubject, setSelectedSubject] = useState(
+    question?.subject_id ?? "",
+  );
+  const [selectedTopic, setSelectedTopic] = useState(question?.topic_id ?? "");
+  const [selectedSubtopic, setSelectedSubtopic] = useState(
+    question?.subtopic_id ?? "",
+  );
+
+  const [fetchedSubtopics, setFetchedSubtopics] = useState<FilterOption[]>([]);
   const filteredSubtopics = useMemo(
     () => (selectedTopic ? fetchedSubtopics : subtopics),
     [selectedTopic, fetchedSubtopics, subtopics],
   );
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch filtered subtopics when topic is selected (with AbortController for race condition prevention)
+  // Fetch subtopics when topic changes
   useEffect(() => {
+    if (!selectedTopic) return;
     const controller = new AbortController();
-    if (selectedTopic) {
-      apiClient
-        .get("/api/v1/subtopics", {
-          params: { topic_id: selectedTopic },
-          signal: controller.signal,
-        })
-        .then((r) => setFilteredSubtopics(r.data))
-        .catch((err) => {
-          if (err.name !== "CanceledError") {
-            setFilteredSubtopics([]);
-          }
-        });
-    }
+    apiClient
+      .get("/api/v1/subtopics", {
+        params: { topic_id: selectedTopic },
+        signal: controller.signal,
+      })
+      .then((r) => setFetchedSubtopics(r.data))
+      .catch((err) => {
+        if (err.name !== "CanceledError") setFetchedSubtopics([]);
+      });
     return () => controller.abort();
-  }, [selectedTopic, subtopics]);
+  }, [selectedTopic]);
+
+  // Reset options when question type changes
+  useEffect(() => {
+    if (form.question_type === "MCQ" && !options.length) {
+      setOptions(buildDefaultOptions());
+    }
+  }, [form.question_type, options.length]);
 
   const handleCurriculumChange = (v: string) => {
     setSelectedCurriculum(v);
@@ -537,32 +628,45 @@ function EditModal({
     setSelectedSubject("");
     setSelectedTopic("");
     setSelectedSubtopic("");
+    setFetchedSubtopics([]);
   };
   const handleGradeChange = (v: string) => {
     setSelectedGrade(v);
     setSelectedSubject("");
     setSelectedTopic("");
     setSelectedSubtopic("");
+    setFetchedSubtopics([]);
   };
   const handleSubjectChange = (v: string) => {
     setSelectedSubject(v);
     setSelectedTopic("");
     setSelectedSubtopic("");
+    setFetchedSubtopics([]);
   };
   const handleTopicChange = (v: string) => {
     setSelectedTopic(v);
     setSelectedSubtopic("");
-    // Subtopics will be filtered by topic on the backend side
+  };
+
+  const updateOption = (idx: number, text: string) => {
+    setOptions((prev) => prev.map((o, i) => (i === idx ? { ...o, text } : o)));
   };
 
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
+      const resolvedOptions = form.question_type === "MCQ" ? options : null;
+      const resolvedCorrectAnswer =
+        form.question_type === "MCQ"
+          ? form.correct_answer
+          : form.correct_answer;
+
       const payload: Record<string, unknown> = {
         question_text: form.question_text,
         question_type: form.question_type,
-        correct_answer: form.correct_answer,
+        options: resolvedOptions,
+        correct_answer: resolvedCorrectAnswer,
         explanation: form.explanation || null,
         difficulty_level:
           form.difficulty_level !== ""
@@ -570,121 +674,185 @@ function EditModal({
             : null,
         is_active: form.is_active,
       };
-      if (selectedSubtopic) {
+
+      if (isEdit) {
+        // Only send subtopic_id if admin actually changed it
+        if (
+          selectedSubtopic &&
+          selectedSubtopic !== (question?.subtopic_id ?? "")
+        ) {
+          payload.subtopic_id = selectedSubtopic;
+        }
+        const resp = await apiClient.patch(
+          `/api/v1/question-bank/${question!.id}`,
+          payload,
+        );
+        onSave(resp.data);
+      } else {
+        // Create — subtopic is required
+        if (!selectedSubtopic) {
+          setError("Please select a subtopic to assign this question.");
+          setSaving(false);
+          return;
+        }
         payload.subtopic_id = selectedSubtopic;
+        const resp = await apiClient.post("/api/v1/question-bank", payload);
+        onSave(resp.data);
       }
-      const resp = await apiClient.patch(
-        `/api/v1/question-bank/${question.id}`,
-        payload,
-      );
-      onSave(resp.data);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to save");
+      const msg =
+        e instanceof Error ? e.message : "Failed to save. Please try again.";
+      setError(msg);
     } finally {
       setSaving(false);
     }
   };
 
   const isFormValid =
-    form.question_text && form.question_type && form.correct_answer;
-  const currentContext = [
-    question.curriculum_name,
-    question.grade_name,
-    question.subject_name,
-    question.topic_name,
-    question.subtopic_name,
-  ]
-    .filter(Boolean)
-    .join(" → ");
+    form.question_text.trim() &&
+    form.question_type &&
+    (form.question_type !== "MCQ" ||
+      (options.every((o) => o.text.trim()) && form.correct_answer.trim())) &&
+    (form.question_type === "MCQ" || form.correct_answer.trim()) &&
+    (isEdit || selectedSubtopic);
+
+  const currentContext = isEdit
+    ? [
+        question?.curriculum_name,
+        question?.grade_name,
+        question?.subject_name,
+        question?.topic_name,
+        question?.subtopic_name,
+      ]
+        .filter(Boolean)
+        .join(" → ")
+    : null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-[600px] shadow-xl">
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white rounded-lg w-full max-w-[840px] shadow-xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-[#eaecf0] flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-[#eaecf0] flex items-center justify-between flex-shrink-0">
           <h2 className="text-sm font-semibold text-[#111827]">
-            Edit Question
+            {isEdit ? "Edit Question" : "Add New Question"}
           </h2>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded hover:bg-[#f3f4f6] flex items-center justify-center text-[#6b7280]"
+            aria-label="Close"
           >
             ✕
           </button>
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto max-h-[70vh] px-5 py-4 space-y-5">
+        <div className="overflow-y-auto px-6 py-5 space-y-5 flex-1">
           {/* Curriculum Context */}
           <div>
             <div className="text-xs font-bold uppercase tracking-widest text-[#9ca3af] border-b border-[#f3f4f6] pb-1 mb-3">
               CURRICULUM CONTEXT
+              {isEdit && (
+                <span className="ml-2 normal-case font-normal text-[#9ca3af]">
+                  — change subtopic to reassign
+                </span>
+              )}
             </div>
-            <p className="text-xs text-[#6b7280] mb-2">
-              Current:{" "}
-              <span className="text-[#374151]">{currentContext || "None"}</span>
-            </p>
+            {isEdit && currentContext && (
+              <p className="text-xs text-[#6b7280] mb-2">
+                Current:{" "}
+                <span className="text-[#374151]">{currentContext}</span>
+              </p>
+            )}
             <div className="grid grid-cols-5 gap-2">
-              <select
-                className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
-                value={selectedCurriculum}
-                onChange={(e) => handleCurriculumChange(e.target.value)}
-              >
-                <option value="">Unchanged</option>
-                {curriculums.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
-                value={selectedGrade}
-                onChange={(e) => handleGradeChange(e.target.value)}
-              >
-                <option value="">Unchanged</option>
-                {grades.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
-                value={selectedSubject}
-                onChange={(e) => handleSubjectChange(e.target.value)}
-              >
-                <option value="">Unchanged</option>
-                {subjects.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
-                value={selectedTopic}
-                onChange={(e) => handleTopicChange(e.target.value)}
-              >
-                <option value="">Unchanged</option>
-                {topics.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38]"
-                value={selectedSubtopic}
-                onChange={(e) => setSelectedSubtopic(e.target.value)}
-              >
-                <option value="">Unchanged</option>
-                {filteredSubtopics.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <label className="text-[10px] text-[#9ca3af] font-semibold uppercase tracking-wide mb-1 block">
+                  Curriculum
+                </label>
+                <select
+                  className={`${selectCls} w-full`}
+                  value={selectedCurriculum}
+                  onChange={(e) => handleCurriculumChange(e.target.value)}
+                >
+                  <option value="">{isEdit ? "Unchanged" : "Select…"}</option>
+                  {curriculums.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-[#9ca3af] font-semibold uppercase tracking-wide mb-1 block">
+                  Grade
+                </label>
+                <select
+                  className={`${selectCls} w-full`}
+                  value={selectedGrade}
+                  onChange={(e) => handleGradeChange(e.target.value)}
+                >
+                  <option value="">{isEdit ? "Unchanged" : "Select…"}</option>
+                  {grades.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-[#9ca3af] font-semibold uppercase tracking-wide mb-1 block">
+                  Subject
+                </label>
+                <select
+                  className={`${selectCls} w-full`}
+                  value={selectedSubject}
+                  onChange={(e) => handleSubjectChange(e.target.value)}
+                >
+                  <option value="">{isEdit ? "Unchanged" : "Select…"}</option>
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-[#9ca3af] font-semibold uppercase tracking-wide mb-1 block">
+                  Topic
+                </label>
+                <select
+                  className={`${selectCls} w-full`}
+                  value={selectedTopic}
+                  onChange={(e) => handleTopicChange(e.target.value)}
+                >
+                  <option value="">{isEdit ? "Unchanged" : "Select…"}</option>
+                  {topics.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-[#9ca3af] font-semibold uppercase tracking-wide mb-1 block">
+                  Subtopic{" "}
+                  {!isEdit && <span className="text-[#ef4444]">*</span>}
+                </label>
+                <select
+                  className={`${selectCls} w-full`}
+                  value={selectedSubtopic}
+                  onChange={(e) => setSelectedSubtopic(e.target.value)}
+                >
+                  <option value="">{isEdit ? "Unchanged" : "Select…"}</option>
+                  {filteredSubtopics.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -693,13 +861,13 @@ function EditModal({
             <div className="text-xs font-bold uppercase tracking-widest text-[#9ca3af] border-b border-[#f3f4f6] pb-1 mb-3">
               CONTENT
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
                 <label className="text-xs text-[#374151] font-medium mb-1 block">
                   Question Text <span className="text-[#ef4444]">*</span>
                 </label>
                 <textarea
-                  className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full resize-none"
+                  className={`${selectCls} w-full resize-none`}
                   rows={4}
                   value={form.question_text}
                   onChange={(e) =>
@@ -707,49 +875,150 @@ function EditModal({
                   }
                 />
               </div>
-              <div>
-                <label className="text-xs text-[#374151] font-medium mb-1 block">
-                  Question Type <span className="text-[#ef4444]">*</span>
-                </label>
-                <select
-                  className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full"
-                  value={form.question_type}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      question_type: e.target.value as
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-[#374151] font-medium mb-1 block">
+                    Question Type <span className="text-[#ef4444]">*</span>
+                  </label>
+                  <select
+                    className={`${selectCls} w-full`}
+                    value={form.question_type}
+                    onChange={(e) => {
+                      const qt = e.target.value as
                         | "MCQ"
                         | "TRUE_FALSE"
-                        | "SHORT_ANSWER",
-                    })
-                  }
-                >
-                  {QUESTION_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
+                        | "SHORT_ANSWER";
+                      setForm({
+                        ...form,
+                        question_type: qt,
+                        correct_answer: "",
+                      });
+                      if (qt === "MCQ") setOptions(buildDefaultOptions());
+                    }}
+                  >
+                    {QUESTION_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-[#374151] font-medium mb-1 block">
+                    Difficulty (1.0–5.0)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    step="0.1"
+                    className={`${selectCls} w-full`}
+                    value={form.difficulty_level}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        difficulty_level: e.target.value as unknown as
+                          | number
+                          | "",
+                      })
+                    }
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-xs text-[#374151] font-medium mb-1 block">
-                  Correct Answer <span className="text-[#ef4444]">*</span>
-                </label>
-                <textarea
-                  className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full resize-none"
-                  rows={2}
-                  value={form.correct_answer}
-                  onChange={(e) =>
-                    setForm({ ...form, correct_answer: e.target.value })
-                  }
-                />
-              </div>
+
+              {/* MCQ Options */}
+              {form.question_type === "MCQ" && (
+                <div>
+                  <label className="text-xs text-[#374151] font-medium mb-2 block">
+                    Answer Options <span className="text-[#ef4444]">*</span>
+                  </label>
+                  <div className="space-y-2">
+                    {options.map((opt, idx) => (
+                      <div key={opt.key} className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-[#f3f4f6] border border-[#eaecf0] flex items-center justify-center text-xs font-bold text-[#374151] flex-shrink-0">
+                          {opt.key}
+                        </span>
+                        <input
+                          type="text"
+                          className={`${selectCls} flex-1`}
+                          placeholder={`Option ${opt.key}`}
+                          value={opt.text}
+                          onChange={(e) => updateOption(idx, e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm({ ...form, correct_answer: opt.key })
+                          }
+                          className={`text-xs px-2 py-1 rounded border transition-colors ${
+                            form.correct_answer === opt.key
+                              ? "bg-[#1a5c38] border-[#1a5c38] text-white font-semibold"
+                              : "border-[#eaecf0] text-[#6b7280] hover:border-[#1a5c38] hover:text-[#1a5c38]"
+                          }`}
+                          title={`Mark ${opt.key} as correct`}
+                        >
+                          ✓ Correct
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {form.correct_answer && (
+                    <p className="text-xs text-[#1a5c38] font-medium mt-1.5">
+                      Correct answer: Option {form.correct_answer}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* TRUE_FALSE correct answer */}
+              {form.question_type === "TRUE_FALSE" && (
+                <div>
+                  <label className="text-xs text-[#374151] font-medium mb-1 block">
+                    Correct Answer <span className="text-[#ef4444]">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    {["true", "false"].map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setForm({ ...form, correct_answer: v })}
+                        className={`text-xs px-4 py-2 rounded border capitalize transition-colors ${
+                          form.correct_answer === v
+                            ? "bg-[#1a5c38] border-[#1a5c38] text-white font-semibold"
+                            : "border-[#eaecf0] text-[#374151] hover:border-[#1a5c38]"
+                        }`}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SHORT_ANSWER correct answer */}
+              {form.question_type === "SHORT_ANSWER" && (
+                <div>
+                  <label className="text-xs text-[#374151] font-medium mb-1 block">
+                    Model Answer <span className="text-[#ef4444]">*</span>
+                  </label>
+                  <textarea
+                    className={`${selectCls} w-full resize-none`}
+                    rows={2}
+                    value={form.correct_answer}
+                    onChange={(e) =>
+                      setForm({ ...form, correct_answer: e.target.value })
+                    }
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="text-xs text-[#374151] font-medium mb-1 block">
                   Explanation
                 </label>
                 <textarea
-                  className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full resize-none"
+                  className={`${selectCls} w-full resize-none`}
                   rows={3}
                   value={form.explanation}
                   onChange={(e) =>
@@ -757,24 +1026,9 @@ function EditModal({
                   }
                 />
               </div>
-              <div>
-                <label className="text-xs text-[#374151] font-medium mb-1 block">
-                  Difficulty (1.0–5.0)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="5"
-                  step="0.1"
-                  className="border border-[#eaecf0] rounded-md text-xs text-[#374151] bg-white px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#1a5c38] w-full"
-                  value={form.difficulty_level}
-                  onChange={(e) =>
-                    setForm({ ...form, difficulty_level: e.target.value })
-                  }
-                />
-              </div>
-              <div>
-                <label className="text-xs text-[#374151] font-medium mb-1 block">
+
+              <div className="flex items-center gap-3">
+                <label className="text-xs text-[#374151] font-medium">
                   Active
                 </label>
                 <button
@@ -794,13 +1048,18 @@ function EditModal({
                     }`}
                   />
                 </button>
+                <span className="text-xs text-[#6b7280]">
+                  {form.is_active
+                    ? "Visible to assessments"
+                    : "Hidden from assessments"}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="border-t border-[#eaecf0] px-5 py-4 flex justify-end items-center gap-3">
+        <div className="border-t border-[#eaecf0] px-6 py-4 flex justify-end items-center gap-3 flex-shrink-0">
           {error && (
             <span
               role="alert"
@@ -820,7 +1079,13 @@ function EditModal({
             disabled={saving || !isFormValid}
             className="bg-[#1a5c38] text-white text-xs font-semibold px-4 py-2 rounded-md hover:bg-[#155231] disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {saving ? "Saving…" : "Save changes"}
+            {saving
+              ? isEdit
+                ? "Saving…"
+                : "Adding…"
+              : isEdit
+                ? "Save changes"
+                : "Add question"}
           </button>
         </div>
       </div>

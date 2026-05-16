@@ -3,6 +3,7 @@ Question Bank API — KaihleAdmin question browser and editor.
 All routes require KAIHLE_ADMIN role.
 """
 
+import hashlib
 from typing import Any
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from app.models.curriculum import (
 )
 from app.models.user import UserRole
 from app.schemas.question_bank import (
+    QuestionBankCreateRequest,
     QuestionBankListResponse,
     QuestionBankResponse,
     QuestionBankUpdateRequest,
@@ -36,9 +38,13 @@ def _base_query():
     return (
         select(
             QuestionBank,
+            Curriculum.id.label("curriculum_id"),
             Curriculum.name.label("curriculum_name"),
+            Subject.id.label("subject_id"),
             Subject.name.label("subject_name"),
+            Grade.id.label("grade_id"),
             Grade.name.label("grade_name"),
+            Topic.id.label("topic_id"),
             Topic.name.label("topic_name"),
             Subtopic.name.label("subtopic_name"),
             CurriculumTopic.id.label("curriculum_topic_id"),
@@ -53,20 +59,38 @@ def _base_query():
 
 
 def _to_response(row: Any) -> QuestionBankResponse:
-    qb, curriculum_name, subject_name, grade_name, topic_name, subtopic_name, ct_id = row
+    (
+        qb,
+        curriculum_id,
+        curriculum_name,
+        subject_id,
+        subject_name,
+        grade_id,
+        grade_name,
+        topic_id,
+        topic_name,
+        subtopic_name,
+        ct_id,
+    ) = row
     return QuestionBankResponse(
         id=qb.id,
         question_text=qb.question_text,
         question_type=qb.question_type,
+        options=qb.options,
         correct_answer=qb.correct_answer,
         explanation=qb.explanation,
         difficulty_level=qb.difficulty_level,
         is_active=qb.is_active,
+        subtopic_id=qb.subtopic_id,
         created_at=qb.created_at,
         updated_at=qb.updated_at,
+        curriculum_id=curriculum_id,
         curriculum_name=curriculum_name,
+        subject_id=subject_id,
         subject_name=subject_name,
+        grade_id=grade_id,
         grade_name=grade_name,
+        topic_id=topic_id,
         topic_name=topic_name,
         subtopic_name=subtopic_name,
         curriculum_topic_id=ct_id,
@@ -152,5 +176,45 @@ async def update_question(
     row = (await db.execute(_base_query().where(QuestionBank.id == question_id))).one_or_none()
     if not row:
         raise HTTPException(status_code=500, detail="Failed to reload question after update")
+
+    return _to_response(row)
+
+
+@router.post("", response_model=QuestionBankResponse, status_code=status.HTTP_201_CREATED)
+async def create_question(
+    payload: QuestionBankCreateRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> QuestionBankResponse:
+    """Create a new question in the bank. KAIHLE_ADMIN only."""
+    subtopic = await db.get(Subtopic, payload.subtopic_id)
+    if not subtopic:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="subtopic_id does not exist",
+        )
+
+    # SHA-256 of normalized text — matches compute_canonical_form in scripts/import_questions.py
+    canonical_form = hashlib.sha256(payload.question_text.strip().lower().encode()).hexdigest()
+
+    question = QuestionBank(
+        subtopic_id=payload.subtopic_id,
+        question_text=payload.question_text,
+        question_type=payload.question_type,
+        options=payload.options,
+        correct_answer=payload.correct_answer,
+        explanation=payload.explanation,
+        difficulty_level=payload.difficulty_level,
+        is_active=payload.is_active,
+        canonical_form=canonical_form,
+        source="bank",
+    )
+    db.add(question)
+    await db.commit()
+    await db.refresh(question)
+
+    row = (await db.execute(_base_query().where(QuestionBank.id == question.id))).one_or_none()
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to reload question after create")
 
     return _to_response(row)
