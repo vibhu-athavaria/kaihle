@@ -144,7 +144,9 @@ export function StudentProfilePage() {
         {activeTab === "learning-profile" && data.learningProfile && (
           <LearningProfileTab
             modalityScores={data.learningProfile.modality_scores}
+            workStyle={data.learningProfile.work_style}
             interests={data.learningProfile.interests}
+            completedAt={data.learningProfile.completed_at}
           />
         )}
         {activeTab === "learning-profile" && !data.learningProfile && (

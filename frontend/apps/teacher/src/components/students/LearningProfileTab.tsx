@@ -1,44 +1,98 @@
-const modalityLabels: Record<string, string> = {
+const MODALITY_LABELS: Record<string, string> = {
   visual: "Visual",
   auditory: "Auditory",
-  reading_writing: "Reading/Writing",
+  reading_writing: "Reading / Writing",
   kinesthetic: "Hands-on",
 };
 
+const MODALITY_EMOJI: Record<string, string> = {
+  visual: "👁️",
+  auditory: "👂",
+  reading_writing: "📖",
+  kinesthetic: "🤲",
+};
+
+const TEACHING_TIPS: Record<string, string> = {
+  visual: "Use diagrams, colour coding, and visual organisers",
+  auditory: "Include verbal explanations and think-aloud moments",
+  reading_writing: "Provide written notes and encourage written responses",
+  kinesthetic: "Use hands-on activities and physical models",
+};
+
+interface WorkStyle {
+  prefers_solo?: boolean;
+  short_sessions?: boolean;
+  task_based?: boolean;
+  [key: string]: boolean | undefined;
+}
+
 interface LearningProfileTabProps {
   modalityScores: Record<string, number>;
-  workStyle?: {
-    prefers_solo?: boolean;
-    short_sessions?: boolean;
-    task_based?: boolean;
-  };
+  workStyle?: WorkStyle | null;
   interests: string[];
+  completedAt?: string | null;
+}
+
+function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) return "—";
+  return new Date(dateString).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export function LearningProfileTab({
   modalityScores,
+  workStyle,
   interests,
+  completedAt,
 }: LearningProfileTabProps) {
-  const dominantModality = Object.entries(modalityScores).reduce(
-    (max, curr) => (curr[1] > max[1] ? curr : max),
-    ["", 0] as [string, number],
-  )[0];
-
   const modalityEntries = Object.entries(modalityScores).sort(
     (a, b) => b[1] - a[1],
   );
 
+  const dominantModality =
+    modalityEntries.length > 0 ? modalityEntries[0][0] : "";
+
+  // Top 2 tips by modality score + optional short_sessions tip
+  const topTips = modalityEntries
+    .slice(0, 2)
+    .map(([key]) => TEACHING_TIPS[key])
+    .filter(Boolean);
+  if (workStyle?.short_sessions === true) {
+    topTips.push("Break tasks into short focused chunks");
+  }
+
   return (
     <div className="space-y-6">
+      {/* Section 1 — Dominant modality headline */}
+      {dominantModality && (
+        <div className="flex items-center gap-3 p-4 bg-brand-gold/10 rounded-xl border border-brand-gold/20">
+          <span className="text-2xl" aria-hidden="true">
+            {MODALITY_EMOJI[dominantModality] ?? "🧠"}
+          </span>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-brand-muted">
+              Dominant learning style
+            </p>
+            <p className="font-display font-bold text-lg text-brand-ink">
+              {MODALITY_LABELS[dominantModality] ?? dominantModality}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Section 2 — All modality bars */}
       <div>
         <h3 className="font-display font-semibold text-sm text-brand-ink mb-3">
-          Learning Style
+          Learning style breakdown
         </h3>
         <div className="space-y-2">
           {modalityEntries.map(([key, value]) => (
             <div key={key} className="flex items-center gap-3 py-1">
-              <span className="font-sans text-sm text-brand-body w-32 flex-shrink-0">
-                {modalityLabels[key] ?? key}
+              <span className="font-sans text-sm text-brand-body w-36 flex-shrink-0">
+                {MODALITY_LABELS[key] ?? key}
               </span>
               <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
                 <div
@@ -46,6 +100,11 @@ export function LearningProfileTab({
                     key === dominantModality ? "bg-brand-gold" : "bg-gray-200"
                   }`}
                   style={{ width: `${Math.round(value * 100)}%` }}
+                  role="progressbar"
+                  aria-valuenow={Math.round(value * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${MODALITY_LABELS[key] ?? key} score`}
                 />
               </div>
               <span className="font-sans text-sm text-brand-muted w-10 text-right">
@@ -56,6 +115,48 @@ export function LearningProfileTab({
         </div>
       </div>
 
+      {/* Section 3 — Work style chips */}
+      {workStyle && (
+        <div>
+          <h3 className="font-display font-semibold text-sm text-brand-ink mb-3">
+            Work style
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {workStyle.prefers_solo === true && (
+              <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                Prefers solo work
+              </span>
+            )}
+            {workStyle.prefers_solo === false && (
+              <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                Prefers group work
+              </span>
+            )}
+            {workStyle.short_sessions === true && (
+              <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                Short sessions
+              </span>
+            )}
+            {workStyle.short_sessions === false && (
+              <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                Long sessions
+              </span>
+            )}
+            {workStyle.task_based === true && (
+              <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                Task-based
+              </span>
+            )}
+            {workStyle.task_based === false && (
+              <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                Exploration-based
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Section 4 — Interests */}
       {interests.length > 0 && (
         <div>
           <h3 className="font-display font-semibold text-sm text-brand-ink mb-3">
@@ -72,6 +173,35 @@ export function LearningProfileTab({
             ))}
           </div>
         </div>
+      )}
+
+      {/* Section 5 — Teaching implications */}
+      {topTips.length > 0 && (
+        <div>
+          <h3 className="font-display font-semibold text-sm text-brand-ink mb-3">
+            Teaching implications
+          </h3>
+          <div className="space-y-1.5">
+            {topTips.map((tip) => (
+              <div
+                key={tip}
+                className="flex items-start gap-2 text-sm text-brand-body"
+              >
+                <span className="text-brand-gold mt-0.5" aria-hidden="true">
+                  •
+                </span>
+                {tip}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Section 6 — Profile completion date */}
+      {completedAt && (
+        <p className="font-sans text-xs text-brand-muted">
+          Profile completed {formatDate(completedAt)}
+        </p>
       )}
     </div>
   );
