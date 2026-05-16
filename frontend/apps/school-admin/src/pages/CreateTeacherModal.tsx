@@ -218,7 +218,7 @@ export default function CreateTeacherModal({ open, onOpenChange }: Props) {
               className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-brand-muted hover:text-brand-ink"
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {showPassword ? <Eye size={16} /> : <EyeOff size={16} />}
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
           {password.length > 0 && <PasswordStrengthBar password={password} />}
