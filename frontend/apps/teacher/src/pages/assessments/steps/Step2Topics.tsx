@@ -1,4 +1,5 @@
 import { Button, Skeleton } from "@kaihle/ui";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { useAssessmentWizard } from "../../../hooks/useAssessmentWizard";
 import { useClassTopicsWithGrades } from "../../../hooks/useClassTopicsWithGrades";
 import type { DiagnosticTopicItem } from "../../../hooks/useClassTopicsWithGrades";
@@ -165,6 +166,66 @@ export function Step2Topics() {
           </p>
         )}
       </div>
+
+      {topicIds.length > 0 && (
+        <div>
+          <p className="text-xs font-sans font-bold uppercase tracking-widest text-brand-muted mb-2">
+            Selected topics (drag to reorder)
+          </p>
+          <div className="space-y-2">
+            {topicIds.map((id, idx) => {
+              const topic = allTopics.find((t) => t.curriculum_topic_id === id);
+              if (!topic) return null;
+              return (
+                <div
+                  key={id}
+                  className="flex items-center gap-2 px-3 py-2 bg-white border border-brand-border rounded-lg"
+                >
+                  <span className="text-sm font-sans text-brand-ink flex-1">
+                    {topic.topic_name}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Move up"
+                    disabled={idx === 0}
+                    onClick={() => {
+                      if (idx <= 0) return;
+                      const next = [...topicIds];
+                      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                      setTopicIds(next);
+                    }}
+                    className="text-brand-muted hover:text-brand-ink disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
+                  >
+                    <ChevronUp className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Move down"
+                    disabled={idx === topicIds.length - 1}
+                    onClick={() => {
+                      if (idx >= topicIds.length - 1) return;
+                      const next = [...topicIds];
+                      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                      setTopicIds(next);
+                    }}
+                    className="text-brand-muted hover:text-brand-ink disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
+                  >
+                    <ChevronDown className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${topic.topic_name}`}
+                    onClick={() => toggleTopic(id)}
+                    className="text-brand-muted hover:text-brand-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
+                  >
+                    <X className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-between pt-2">
         <Button variant="secondary" onClick={() => setStep(1)}>
