@@ -358,7 +358,7 @@ class AttemptService:
             ValueError: If attempt not found or belongs to a different student/school.
             AttemptAlreadyCompletedError: If attempt.status == COMPLETED.
             QuestionNotInAssessmentError: If question_id not in assessment.
-            DuplicateResponseError: If a response for this question already exists.
+            Note: If a response for this question already exists, it is updated (upsert).
         """
         attempt = await self._load_and_verify_attempt(attempt_id, student_id, school_id)
 
@@ -375,15 +375,14 @@ class AttemptService:
         if bridge_result.scalar_one_or_none() is None:
             raise QuestionNotInAssessmentError(f"Question {question_id} is not in assessment {attempt.assessment_id}")
 
-        # Duplicate guard
-        dup_result = await self.db.execute(
+        # Load existing response for this (attempt, question) pair
+        existing_result = await self.db.execute(
             select(StudentResponse).where(
                 StudentResponse.attempt_id == attempt_id,
                 StudentResponse.question_id == question_id,
             )
         )
-        if dup_result.scalar_one_or_none() is not None:
-            raise DuplicateResponseError(f"Response for question {question_id} already exists in attempt {attempt_id}")
+        existing_response = existing_result.scalar_one_or_none()
 
         # Load question for scoring
         question_result = await self.db.execute(select(QuestionBank).where(QuestionBank.id == question_id))
@@ -393,17 +392,30 @@ class AttemptService:
 
         is_correct = selected_key.strip().lower() == question.correct_answer.strip().lower()
 
-        response = StudentResponse(
-            id=uuid.uuid4(),
-            attempt_id=attempt_id,
-            question_id=question_id,
-            answer_given=selected_key,
-            is_correct=is_correct,
-            score=1.0 if is_correct else 0.0,
-            scored_by=ScoredBy.RULE,
-            time_taken_ms=time_taken_ms,
-        )
-        self.db.add(response)
+        if existing_response is not None:
+            # Upsert: update existing response so students can change answers mid-assessment
+            existing_response.answer_given = selected_key
+            existing_response.is_correct = is_correct
+            existing_response.score = 1.0 if is_correct else 0.0
+            existing_response.time_taken_ms = time_taken_ms
+            logger.info(
+                "response_updated",
+                attempt_id=str(attempt_id),
+                question_id=str(question_id),
+                is_correct=is_correct,
+            )
+        else:
+            response = StudentResponse(
+                id=uuid.uuid4(),
+                attempt_id=attempt_id,
+                question_id=question_id,
+                answer_given=selected_key,
+                is_correct=is_correct,
+                score=1.0 if is_correct else 0.0,
+                scored_by=ScoredBy.RULE,
+                time_taken_ms=time_taken_ms,
+            )
+            self.db.add(response)
 
         # Transition attempt from NOT_STARTED → IN_PROGRESS on first answer
         if attempt.status == AttemptStatus.NOT_STARTED:
