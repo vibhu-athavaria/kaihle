@@ -22,7 +22,6 @@ from app.services.attempt_service import (
     AttemptAlreadyCompletedError,
     AttemptNotFoundError,
     AttemptService,
-    DuplicateResponseError,
     QuestionNotInAssessmentError,
 )
 
@@ -264,36 +263,88 @@ class TestSubmitResponse:
         assert sample_attempt.started_at is not None
 
     @pytest.mark.asyncio
-    async def test_submit_response_duplicate_raises_error(
+    async def test_submit_response_when_already_answered_then_updates_existing_response(
         self, service, mock_db, sample_attempt, sample_assessment, sample_questions
     ):
-        """Submitting the same question twice should raise DuplicateResponseError."""
+        """Submitting the same question twice should update the existing response (upsert)."""
         sample_attempt.status = AttemptStatus.IN_PROGRESS
         attempt_result = MagicMock()
         attempt_result.scalar_one_or_none.side_effect = [sample_attempt, sample_assessment]
 
-        question_result = MagicMock()
         q = MagicMock()
         q.correct_answer = "B"
+        question_result = MagicMock()
         question_result.scalar_one_or_none.return_value = q
 
         bridge_result = MagicMock()
         bridge_result.scalar_one_or_none.return_value = MagicMock()
 
         # Simulate existing response found
+        existing_response = MagicMock()
+        existing_response.answer_given = "A"
+        existing_response.is_correct = False
+        existing_response.score = 0.0
         dup_result = MagicMock()
-        dup_result.scalar_one_or_none.return_value = MagicMock()  # Found existing response
+        dup_result.scalar_one_or_none.return_value = existing_response
 
         mock_db.execute.side_effect = [attempt_result, attempt_result, bridge_result, dup_result, question_result]
 
-        with pytest.raises(DuplicateResponseError):
-            await service.submit_response(
-                attempt_id=sample_attempt.id,
-                student_id=sample_attempt.student_id,
-                school_id=sample_assessment.school_id,
-                question_id=sample_questions[0].id,
-                selected_key="B",
-            )
+        # Change answer from A to B (correct)
+        await service.submit_response(
+            attempt_id=sample_attempt.id,
+            student_id=sample_attempt.student_id,
+            school_id=sample_assessment.school_id,
+            question_id=sample_questions[0].id,
+            selected_key="B",
+        )
+
+        # Should NOT insert a new row
+        mock_db.add.assert_not_called()
+        # Should update existing response fields
+        assert existing_response.answer_given == "B"
+        assert existing_response.is_correct is True
+        assert existing_response.score == 1.0
+
+    @pytest.mark.asyncio
+    async def test_submit_response_when_update_changes_correct_to_incorrect_then_score_is_zero(
+        self, service, mock_db, sample_attempt, sample_assessment, sample_questions
+    ):
+        """Changing a previously correct answer to wrong should set score to 0."""
+        sample_attempt.status = AttemptStatus.IN_PROGRESS
+        attempt_result = MagicMock()
+        attempt_result.scalar_one_or_none.side_effect = [sample_attempt, sample_assessment]
+
+        q = MagicMock()
+        q.correct_answer = "B"
+        question_result = MagicMock()
+        question_result.scalar_one_or_none.return_value = q
+
+        bridge_result = MagicMock()
+        bridge_result.scalar_one_or_none.return_value = MagicMock()
+
+        # Existing response was correct (B)
+        existing_response = MagicMock()
+        existing_response.answer_given = "B"
+        existing_response.is_correct = True
+        existing_response.score = 1.0
+        dup_result = MagicMock()
+        dup_result.scalar_one_or_none.return_value = existing_response
+
+        mock_db.execute.side_effect = [attempt_result, attempt_result, bridge_result, dup_result, question_result]
+
+        # Change answer to wrong option
+        await service.submit_response(
+            attempt_id=sample_attempt.id,
+            student_id=sample_attempt.student_id,
+            school_id=sample_assessment.school_id,
+            question_id=sample_questions[0].id,
+            selected_key="A",
+        )
+
+        mock_db.add.assert_not_called()
+        assert existing_response.answer_given == "A"
+        assert existing_response.is_correct is False
+        assert existing_response.score == 0.0
 
     @pytest.mark.asyncio
     async def test_submit_response_completed_attempt_raises_error(

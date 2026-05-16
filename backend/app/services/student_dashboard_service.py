@@ -292,20 +292,47 @@ class StudentDashboardService:
                     )
                 )
 
-        # # (c) Diagnostic pending
-        # for row in enrollments:
-        #     if row.onboarding_diagnostic_status == "PENDING":
-        #         action_items.append(
-        #             ActionItem(
-        #                 type="diagnostic_pending",
-        #                 class_id=row.class_id,
-        #                 class_name=row.class_name,
-        #                 subject_name=row.subject_name,
-        #                 priority=3,
-        #                 due_date=None,
-        #                 action_url=f"/student/classes/{row.class_id}/diagnostic",
-        #             )
-        #         )
+        # (c) Diagnostic pending — ACTIVE diagnostics with no COMPLETED attempt
+        if class_ids:
+            diagnostics_q = await self.db.execute(
+                select(
+                    Assessment.id,
+                    Assessment.class_id,
+                    Assessment.title,
+                    Class.name.label("class_name"),
+                    Subject.name.label("subject_name"),
+                )
+                .join(Class, Class.id == Assessment.class_id)
+                .join(Subject, Subject.id == Class.subject_id)
+                .outerjoin(
+                    StudentAttempt,
+                    and_(
+                        StudentAttempt.assessment_id == Assessment.id,
+                        StudentAttempt.student_id == student.id,
+                        StudentAttempt.status == AttemptStatus.COMPLETED,
+                    ),
+                )
+                .where(
+                    Assessment.class_id.in_(class_ids),
+                    Assessment.status == AssessmentStatus.ACTIVE,
+                    Assessment.assessment_type == AssessmentType.DIAGNOSTIC,
+                    StudentAttempt.id.is_(None),
+                )
+            )
+            for d in diagnostics_q.all():
+                action_items.append(
+                    ActionItem(
+                        type="diagnostic_pending",
+                        title=d.title,
+                        class_id=d.class_id,
+                        assessment_id=d.id,
+                        class_name=d.class_name,
+                        subject_name=d.subject_name,
+                        priority=1,
+                        due_date=None,
+                        action_url=f"/student/classes/{d.class_id}/diagnostic",
+                    )
+                )
 
         action_items.sort(
             key=lambda a: (
