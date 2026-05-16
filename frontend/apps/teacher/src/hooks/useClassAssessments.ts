@@ -11,6 +11,7 @@ export interface Assessment {
   question_count: number;
   deadline: string | null;
   created_at: string;
+  attempt_count: number;
 }
 
 async function fetchClassAssessments(classId: string): Promise<Assessment[]> {

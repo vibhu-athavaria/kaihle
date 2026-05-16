@@ -1013,7 +1013,7 @@ class AssessmentService:
         status_filter: str | None,
         page: int,
         page_size: int,
-    ) -> tuple[list[Assessment], int]:
+    ) -> tuple[list[Assessment], int, dict[uuid.UUID, int]]:
         """List assessments for a class with role-based visibility rules.
 
         Role-based visibility:
@@ -1081,7 +1081,21 @@ class AssessmentService:
         items_q = base_q.order_by(Assessment.created_at.desc()).offset(offset).limit(page_size)
         items = list((await self.db.execute(items_q)).scalars().all())
 
-        return items, total
+        # Fetch attempt counts for all assessments in one query to avoid N+1
+        assessment_ids = [a.id for a in items]
+        attempt_count_map: dict[uuid.UUID, int] = {}
+        if assessment_ids:
+            attempt_count_rows = (
+                await self.db.execute(
+                    select(StudentAttempt.assessment_id, func.count(StudentAttempt.id).label("cnt"))
+                    .where(StudentAttempt.assessment_id.in_(assessment_ids))
+                    .group_by(StudentAttempt.assessment_id)
+                )
+            ).all()
+            for row in attempt_count_rows:
+                attempt_count_map[row.assessment_id] = int(row.cnt)
+
+        return items, total, attempt_count_map
 
     async def list_teacher_assessments(
         self,
@@ -1191,10 +1205,11 @@ class AssessmentService:
         school_id: uuid.UUID | None,
         teacher_id: uuid.UUID,
     ) -> None:
-        """Permanently delete a DRAFT assessment and its selected-question bridge rows.
+        """Permanently delete a DRAFT or attempt-free ACTIVE assessment.
 
-        Only DRAFT assessments can be deleted — ACTIVE or CLOSED assessments have
-        student attempt records and must not be removed.
+        DRAFT assessments can always be deleted.
+        ACTIVE assessments can be deleted only if no student has attempted them yet.
+        CLOSED assessments cannot be deleted.
 
         Args:
             assessment_id: The assessment UUID.
@@ -1202,7 +1217,7 @@ class AssessmentService:
             teacher_id: Must match assessment.created_by.
 
         Raises:
-            ValueError: If not found, wrong school, or status is not DRAFT.
+            ValueError: If not found, wrong school, status is CLOSED, or attempts exist.
             TeacherNotClassOwnerError: If teacher does not own the assessment.
         """
         assessment = (
@@ -1217,8 +1232,23 @@ class AssessmentService:
             raise ValueError(f"Assessment not found: {assessment_id}")
         if assessment.created_by != teacher_id:
             raise TeacherNotClassOwnerError(f"Only the creating teacher can delete assessment {assessment_id}")
-        if assessment.status != AssessmentStatus.DRAFT:
-            raise ValueError(f"Cannot delete: status is {assessment.status}. Only DRAFT assessments can be deleted.")
+
+        if assessment.status == AssessmentStatus.ACTIVE:
+            # Allow deletion only when no student attempts exist
+            attempt_count_result = await self.db.execute(
+                select(func.count(StudentAttempt.id)).where(StudentAttempt.assessment_id == assessment_id)
+            )
+            attempt_count = attempt_count_result.scalar() or 0
+            if attempt_count > 0:
+                raise ValueError(
+                    f"Cannot delete: assessment has {attempt_count} student attempt(s). "
+                    "Archive it instead by using the close endpoint."
+                )
+        elif assessment.status != AssessmentStatus.DRAFT:
+            raise ValueError(
+                f"Cannot delete: status is {assessment.status}. "
+                "Only DRAFT or zero-attempt ACTIVE assessments can be deleted."
+            )
 
         # Delete bridge rows first — no ORM cascade defined on Assessment.
         await self.db.execute(

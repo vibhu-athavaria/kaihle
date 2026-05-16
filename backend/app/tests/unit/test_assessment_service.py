@@ -396,6 +396,66 @@ class TestPublishAssessment:
 
 class TestCloseAssessment:
     @pytest.mark.asyncio
+    async def test_delete_assessment_when_active_with_no_attempts_then_succeeds(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """ACTIVE assessment with zero student attempts can be deleted."""
+        school_id = uuid.uuid4()
+        teacher_id = uuid.uuid4()
+        assessment_id = uuid.uuid4()
+
+        assessment = SimpleNamespace(
+            id=assessment_id,
+            school_id=school_id,
+            created_by=teacher_id,
+            status=AssessmentStatus.ACTIVE,
+        )
+
+        mock_assessment_result = MagicMock()
+        mock_assessment_result.scalar_one_or_none.return_value = assessment
+        # Attempt count query returns 0
+        mock_count_result = MagicMock()
+        mock_count_result.scalar.return_value = 0
+        # Bridge row deletion execute
+        mock_delete_result = MagicMock()
+
+        mock_db.execute = AsyncMock(side_effect=[mock_assessment_result, mock_count_result, mock_delete_result])
+        mock_db.delete = AsyncMock()
+
+        await service.delete_assessment(assessment_id, school_id, teacher_id)
+
+        mock_db.delete.assert_called_once_with(assessment)
+
+    @pytest.mark.asyncio
+    async def test_delete_assessment_when_active_with_attempts_then_409(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """ACTIVE assessment with >=1 student attempt raises ValueError (mapped to 409 in route)."""
+        school_id = uuid.uuid4()
+        teacher_id = uuid.uuid4()
+        assessment_id = uuid.uuid4()
+
+        assessment = SimpleNamespace(
+            id=assessment_id,
+            school_id=school_id,
+            created_by=teacher_id,
+            status=AssessmentStatus.ACTIVE,
+        )
+
+        mock_assessment_result = MagicMock()
+        mock_assessment_result.scalar_one_or_none.return_value = assessment
+        mock_count_result = MagicMock()
+        mock_count_result.scalar.return_value = 3  # 3 existing attempts
+
+        mock_db.execute = AsyncMock(side_effect=[mock_assessment_result, mock_count_result])
+        mock_db.delete = AsyncMock()
+
+        with pytest.raises(ValueError, match="attempt"):
+            await service.delete_assessment(assessment_id, school_id, teacher_id)
+
+        mock_db.delete.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_close_when_active_then_status_becomes_closed(
         self, service: AssessmentService, mock_db: MagicMock
     ) -> None:
