@@ -65,6 +65,7 @@ class AssessmentWithClassResponse(BaseModel):
     id: UUID
     class_id: UUID
     class_name: str
+    grade_name: str
     title: str
     assessment_type: str
     status: str

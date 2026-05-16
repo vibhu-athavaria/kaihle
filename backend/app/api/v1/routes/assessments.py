@@ -151,6 +151,7 @@ async def list_teacher_assessments(
             id=a["id"],
             class_id=a["class_id"],
             class_name=a["class_name"],
+            grade_name=a["grade_name"],
             title=a["title"],
             assessment_type=a["assessment_type"],
             status=a["status"],

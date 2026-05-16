@@ -94,14 +94,14 @@ export function Step1ClassAndType() {
             <option value="">Choose a class…</option>
             {classes.map((cls) => (
               <option key={cls.id} value={cls.id}>
-                {cls.name}
+                {cls.name} — {cls.gradeName}
               </option>
             ))}
           </select>
         )}
         {selectedClass && (
           <p className="mt-1 text-xs font-sans text-brand-muted">
-            Selected: {selectedClass.name}
+            Selected: {selectedClass.name} — {selectedClass.gradeName}
           </p>
         )}
       </div>

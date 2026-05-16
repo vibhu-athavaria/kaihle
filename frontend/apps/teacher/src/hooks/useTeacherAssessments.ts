@@ -7,6 +7,7 @@ export interface TeacherAssessment {
   id: string;
   classId: string;
   className: string;
+  gradeName: string;
   title: string;
   assessment_type: string;
   is_system_generated: boolean;
@@ -21,6 +22,7 @@ interface AssessmentWithClassResponse {
   id: string;
   class_id: string;
   class_name: string;
+  grade_name: string;
   title: string;
   assessment_type: string;
   is_system_generated: boolean;
@@ -47,6 +49,7 @@ async function fetchTeacherAssessments(
     id: a.id,
     classId: a.class_id,
     className: a.class_name,
+    gradeName: a.grade_name,
     title: a.title,
     assessment_type: a.assessment_type,
     is_system_generated: a.is_system_generated,
