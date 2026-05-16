@@ -19,7 +19,15 @@ export function useClassEnrollments(classId: string | undefined) {
       return res.data ?? [];
     },
     enabled: !!classId,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      // Poll every 30 s while any student is still awaiting their diagnostic,
+      // so the teacher sees completion updates without a manual refresh.
+      const data = query.state.data as EnrolledStudent[] | undefined;
+      if (!data) return false;
+      const hasPending = data.some((s) => !s.diagnostic_completed);
+      return hasPending ? 30_000 : false;
+    },
   });
 }
