@@ -52,7 +52,7 @@ class MiniCourseGenerationService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def generate_for_topic(self, topic_id: str, school_id: str) -> dict[str, Any]:
+    async def generate_for_topic(self, topic_id: str, school_id: str, dry_run: bool = False) -> dict[str, Any]:
         """Generate mini-course explanations for all subtopics of a topic.
 
         Idempotent: skips (subtopic_id, interest_category_id) pairs that
@@ -61,9 +61,12 @@ class MiniCourseGenerationService:
         Args:
             topic_id: UUID string of the Topic.
             school_id: UUID string of the requesting school (logged only).
+            dry_run: When True, generate LLM responses but do not write to DB.
+                     Returns generated texts inline in the result dict.
 
         Returns:
             Dict with subtopics_found, subtopics_processed, explanations_written.
+            When dry_run=True, also includes a 'dry_run_results' list.
 
         Raises:
             TopicNotFoundError: If topic_id does not exist.
@@ -104,6 +107,7 @@ class MiniCourseGenerationService:
         # 5. Generate for each subtopic × interest_category
         explanations_written = 0
         subtopics_processed = 0
+        dry_run_results: list[dict[str, Any]] = []
 
         for subtopic in subtopics:
             subtopic_written = 0
@@ -118,7 +122,7 @@ class MiniCourseGenerationService:
                     continue
 
                 # Skip if a non-rejected row already exists (in-memory set lookup)
-                if (subtopic.id, category_id) in existing_pairs:
+                if not dry_run and (subtopic.id, category_id) in existing_pairs:
                     logger.info(
                         "mini_course_content_already_exists_skipping",
                         subtopic_id=str(subtopic.id),
@@ -135,24 +139,38 @@ class MiniCourseGenerationService:
                     interest_key=interest_key,
                 )
 
-                await self._upsert_content(
-                    subtopic_id=subtopic.id,
-                    interest_category_id=category_id,
-                    explanation_text=explanation,
-                )
+                if dry_run:
+                    dry_run_results.append(
+                        {
+                            "subtopic_name": subtopic.name,
+                            "interest_category": db_name,
+                            "interest_label": human_label,
+                            "explanation_text": explanation,
+                        }
+                    )
+                else:
+                    await self._upsert_content(
+                        subtopic_id=subtopic.id,
+                        interest_category_id=category_id,
+                        explanation_text=explanation,
+                    )
                 subtopic_written += 1
 
             explanations_written += subtopic_written
             if subtopic_written > 0:
                 subtopics_processed += 1
 
-        await self.db.commit()
+        if not dry_run:
+            await self.db.commit()
 
-        return {
+        result: dict[str, Any] = {
             "subtopics_found": len(subtopics),
             "subtopics_processed": subtopics_processed,
             "explanations_written": explanations_written,
         }
+        if dry_run:
+            result["dry_run_results"] = dry_run_results
+        return result
 
     async def _fetch_topic_context(self, topic_id: uuid.UUID) -> tuple[str, str, int] | None:
         """Return (topic_name, subject_name, grade_level) for a topic.

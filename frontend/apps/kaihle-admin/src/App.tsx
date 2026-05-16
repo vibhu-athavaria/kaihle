@@ -23,6 +23,7 @@ import { VideoReviewQueue } from "./pages/content/VideoReviewQueue";
 import { VideoReviewDetail } from "./pages/content/VideoReviewDetail";
 import { ScriptsPage } from "./pages/scripts/ScriptsPage";
 import { ScriptDetailPage } from "./pages/scripts/ScriptDetailPage";
+import { SmokeTestPage } from "./pages/scripts/SmokeTestPage";
 
 export default function App() {
   return (
@@ -75,6 +76,10 @@ export default function App() {
                       <Route
                         path="scripts/:scriptName"
                         element={<ScriptDetailPage />}
+                      />
+                      <Route
+                        path="scripts/smoke-tests/:testName"
+                        element={<SmokeTestPage />}
                       />
                       <Route
                         index

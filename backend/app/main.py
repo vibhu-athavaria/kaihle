@@ -24,6 +24,7 @@ from app.api.v1.routes import (
     question_bank,
     schools,
     scripts,
+    smoke_tests,
     student_content,
     students,
     study_plans,
@@ -111,6 +112,7 @@ app.include_router(users.router, prefix="/api/v1")
 app.include_router(onboarding.router, prefix="/api/v1")
 app.include_router(student_content.router, prefix="/api/v1")
 app.include_router(scripts.router, prefix="/api/v1")
+app.include_router(smoke_tests.router, prefix="/api/v1")
 app.include_router(students.router, prefix="/api/v1")
 
 # Register health routes at root level (no /api/v1 prefix)
