@@ -28,7 +28,7 @@ class ActionItem(BaseModel):
     subject_name: str
     priority: int  # 1 = today / urgent, 2 = this week, 3 = nudge
     due_date: datetime | None = None
-    action_url: str  # frontend-relative path, e.g. "/student/assessments"
+    action_url: str | None = None  # frontend-relative path, e.g. "/student/assessments"
 
 
 class ClassSummary(BaseModel):

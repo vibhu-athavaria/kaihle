@@ -292,15 +292,16 @@ class StudentDashboardService:
                     )
                 )
 
-        # (c) Diagnostic pending — ACTIVE diagnostics with no COMPLETED attempt
+        # (c) Diagnostic pending
         if class_ids:
             diagnostics_q = await self.db.execute(
                 select(
                     Assessment.id,
                     Assessment.class_id,
-                    Assessment.title,
                     Class.name.label("class_name"),
                     Subject.name.label("subject_name"),
+                    StudentAttempt.id.label("attempt_id"),
+                    StudentAttempt.status.label("attempt_status"),
                 )
                 .join(Class, Class.id == Assessment.class_id)
                 .join(Subject, Subject.id == Class.subject_id)
@@ -309,28 +310,30 @@ class StudentDashboardService:
                     and_(
                         StudentAttempt.assessment_id == Assessment.id,
                         StudentAttempt.student_id == student.id,
-                        StudentAttempt.status == AttemptStatus.COMPLETED,
                     ),
                 )
                 .where(
                     Assessment.class_id.in_(class_ids),
                     Assessment.status == AssessmentStatus.ACTIVE,
                     Assessment.assessment_type == AssessmentType.DIAGNOSTIC,
-                    StudentAttempt.id.is_(None),
+                    (StudentAttempt.id.is_(None) | (StudentAttempt.status != AttemptStatus.COMPLETED)),
                 )
             )
             for d in diagnostics_q.all():
+                if d.attempt_id and d.attempt_status != AttemptStatus.COMPLETED:
+                    d_url: str | None = f"/student/assessments/{d.attempt_id}/take"
+                else:
+                    d_url = None
                 action_items.append(
                     ActionItem(
                         type="diagnostic_pending",
-                        title=d.title,
                         class_id=d.class_id,
                         assessment_id=d.id,
                         class_name=d.class_name,
                         subject_name=d.subject_name,
-                        priority=1,
+                        priority=3,
                         due_date=None,
-                        action_url=f"/student/classes/{d.class_id}/diagnostic",
+                        action_url=d_url,
                     )
                 )
 

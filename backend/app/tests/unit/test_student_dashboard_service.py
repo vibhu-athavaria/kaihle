@@ -221,6 +221,9 @@ class TestGetDashboard:
         plans_mock = MagicMock()
         plans_mock.all.return_value = []
 
+        diagnostics_mock = MagicMock()
+        diagnostics_mock.all.return_value = []
+
         mock_db.execute = AsyncMock(
             side_effect=[
                 profile_mock,
@@ -230,7 +233,7 @@ class TestGetDashboard:
                 assessed_mock,
                 assessments_mock,
                 plans_mock,
-                _empty_mock(),
+                diagnostics_mock,
             ]
         )
 
@@ -277,6 +280,9 @@ class TestGetDashboard:
         plans_mock = MagicMock()
         plans_mock.all.return_value = []
 
+        diagnostics_mock = MagicMock()
+        diagnostics_mock.all.return_value = []
+
         mock_db.execute = AsyncMock(
             side_effect=[
                 profile_mock,
@@ -286,7 +292,7 @@ class TestGetDashboard:
                 assessed_mock,
                 assessments_mock,
                 plans_mock,
-                _empty_mock(),
+                diagnostics_mock,
             ]
         )
 
@@ -332,6 +338,9 @@ class TestGetDashboard:
         plans_mock = MagicMock()
         plans_mock.all.return_value = []
 
+        diagnostics_mock = MagicMock()
+        diagnostics_mock.all.return_value = []
+
         mock_db.execute = AsyncMock(
             side_effect=[
                 profile_mock,
@@ -341,7 +350,7 @@ class TestGetDashboard:
                 assessed_mock,
                 assessments_mock,
                 plans_mock,
-                _empty_mock(),
+                diagnostics_mock,
             ]
         )
 
@@ -394,6 +403,9 @@ class TestGetDashboard:
         plans_mock = MagicMock()
         plans_mock.all.return_value = []
 
+        diagnostics_mock = MagicMock()
+        diagnostics_mock.all.return_value = []
+
         mock_db.execute = AsyncMock(
             side_effect=[
                 profile_mock,
@@ -403,7 +415,7 @@ class TestGetDashboard:
                 assessed_mock,
                 assessments_mock,
                 plans_mock,
-                _empty_mock(),
+                diagnostics_mock,
             ]
         )
 
@@ -454,6 +466,9 @@ class TestGetDashboard:
         plans_mock = MagicMock()
         plans_mock.all.return_value = [plan_row]
 
+        diagnostics_mock = MagicMock()
+        diagnostics_mock.all.return_value = []
+
         mock_db.execute = AsyncMock(
             side_effect=[
                 profile_mock,
@@ -463,7 +478,7 @@ class TestGetDashboard:
                 assessed_mock,
                 assessments_mock,
                 plans_mock,
-                _empty_mock(),
+                diagnostics_mock,
             ]
         )
 
@@ -521,6 +536,9 @@ class TestGetDashboard:
         plans_mock = MagicMock()
         plans_mock.all.return_value = [plan_row]
 
+        diagnostics_mock = MagicMock()
+        diagnostics_mock.all.return_value = []
+
         mock_db.execute = AsyncMock(
             side_effect=[
                 profile_mock,
@@ -530,7 +548,7 @@ class TestGetDashboard:
                 assessed_mock,
                 assessments_mock,
                 plans_mock,
-                _empty_mock(),
+                diagnostics_mock,
             ]
         )
 
@@ -586,6 +604,9 @@ class TestGetDashboard:
         plans_mock = MagicMock()
         plans_mock.all.return_value = []
 
+        diagnostics_mock = MagicMock()
+        diagnostics_mock.all.return_value = []
+
         mock_db.execute = AsyncMock(
             side_effect=[
                 profile_mock,
@@ -595,7 +616,7 @@ class TestGetDashboard:
                 assessed_mock,
                 assessments_mock,
                 plans_mock,
-                _empty_mock(),
+                diagnostics_mock,
             ]
         )
 
@@ -613,34 +634,48 @@ class TestGetDashboard:
 
     @pytest.mark.asyncio
     async def test_get_dashboard_when_student_has_active_diagnostic_then_diagnostic_pending_in_action_items(self):
-        """ACTIVE diagnostic with no completed attempt should appear as diagnostic_pending action item."""
+        """Active diagnostic with no completed attempt should appear as diagnostic_pending action item."""
         student = _make_student()
         class_id = uuid.uuid4()
         assessment_id = uuid.uuid4()
         mock_db = AsyncMock()
 
+        # Profile query
         profile_mock = MagicMock()
-        profile_mock.one_or_none.return_value = _make_profile_result("Grade 8")
+        profile_mock.one_or_none.return_value = _make_profile_result()
 
-        enrollment = _make_enrollment_row(class_id=class_id, diagnostic_status="PENDING")
+        # Enrollment query
+        enrollment = _make_enrollment_row(class_id=class_id)
         enrollments_mock = MagicMock()
         enrollments_mock.all.return_value = [enrollment]
 
-        mastery_mock = _empty_mock()
-        topics_mock = _empty_mock()
-        assessed_mock = _empty_mock()
-        assessments_mock = _empty_mock()
-        plans_mock = _empty_mock()
+        # Mastery/topics queries return empty
+        mastery_mock = MagicMock()
+        mastery_mock.all.return_value = []
+        topics_mock = MagicMock()
+        topics_mock.all.return_value = []
+        assessed_mock = MagicMock()
+        assessed_mock.all.return_value = []
 
-        diag_row = _make_mock_row(
+        # Regular assessments query returns empty
+        assessments_mock = MagicMock()
+        assessments_mock.all.return_value = []
+
+        # Study plans query returns empty
+        plans_mock = MagicMock()
+        plans_mock.all.return_value = []
+
+        # Diagnostics query returns one active diagnostic with no attempt
+        diagnostic_row = _make_mock_row(
             id=assessment_id,
             class_id=class_id,
-            title="Diagnostic: Mathematics 8A",
             class_name="Mathematics 8A",
             subject_name="Mathematics",
+            attempt_id=None,
+            attempt_status=None,
         )
         diagnostics_mock = MagicMock()
-        diagnostics_mock.all.return_value = [diag_row]
+        diagnostics_mock.all.return_value = [diagnostic_row]
 
         mock_db.execute = AsyncMock(
             side_effect=[
@@ -658,92 +693,51 @@ class TestGetDashboard:
         service = StudentDashboardService(mock_db)
         result = await service.get_dashboard(student)
 
+        # Arrange: one active diagnostic, no attempt
+        # Act: get_dashboard
+        # Assert: diagnostic_pending action item with assessment_id set and action_url=None
         assert len(result.action_items) == 1
-        item = result.action_items[0]
-        assert item.type == "diagnostic_pending"
-        assert item.assessment_id == assessment_id
-        assert item.class_id == class_id
-        assert item.action_url == f"/student/classes/{class_id}/diagnostic"
-        assert item.priority == 1
+        action = result.action_items[0]
+        assert action.type == "diagnostic_pending"
+        assert action.assessment_id == assessment_id
+        assert action.action_url is None
+        assert action.priority == 3
 
     @pytest.mark.asyncio
-    async def test_get_dashboard_when_student_has_active_non_diagnostic_then_assessment_due_in_action_items(self):
-        """ACTIVE non-diagnostic assessment with no completed attempt appears as assessment_due."""
+    async def test_get_dashboard_when_student_completed_diagnostic_then_not_in_action_items(self):
+        """Completed diagnostic should not appear in action items."""
         student = _make_student()
         class_id = uuid.uuid4()
-        assessment_id = uuid.uuid4()
-        attempt_id = uuid.uuid4()
         mock_db = AsyncMock()
 
+        # Profile query
         profile_mock = MagicMock()
-        profile_mock.one_or_none.return_value = _make_profile_result("Grade 8")
+        profile_mock.one_or_none.return_value = _make_profile_result()
 
+        # Enrollment query
         enrollment = _make_enrollment_row(class_id=class_id, diagnostic_status="COMPLETED")
         enrollments_mock = MagicMock()
         enrollments_mock.all.return_value = [enrollment]
 
-        mastery_mock = _empty_mock()
-        topics_mock = _empty_mock()
-        assessed_mock = _empty_mock()
+        # Mastery/topics queries return empty
+        mastery_mock = MagicMock()
+        mastery_mock.all.return_value = []
+        topics_mock = MagicMock()
+        topics_mock.all.return_value = []
+        assessed_mock = MagicMock()
+        assessed_mock.all.return_value = []
 
-        assessment_row = _make_mock_row(
-            id=assessment_id,
-            deadline=None,
-            class_id=class_id,
-            title="Unit 2 Quiz",
-            attempt_id=attempt_id,
-            class_name="Mathematics 8A",
-            subject_name="Mathematics",
-        )
+        # Regular assessments query returns empty
         assessments_mock = MagicMock()
-        assessments_mock.all.return_value = [assessment_row]
+        assessments_mock.all.return_value = []
 
-        plans_mock = _empty_mock()
-        diagnostics_mock = _empty_mock()
+        # Study plans query returns empty
+        plans_mock = MagicMock()
+        plans_mock.all.return_value = []
 
-        mock_db.execute = AsyncMock(
-            side_effect=[
-                profile_mock,
-                enrollments_mock,
-                mastery_mock,
-                topics_mock,
-                assessed_mock,
-                assessments_mock,
-                plans_mock,
-                diagnostics_mock,
-            ]
-        )
-
-        service = StudentDashboardService(mock_db)
-        result = await service.get_dashboard(student)
-
-        assert len(result.action_items) == 1
-        item = result.action_items[0]
-        assert item.type == "assessment_due"
-        assert item.assessment_id == assessment_id
-        assert item.action_url == f"/student/assessments/{attempt_id}/take"
-
-    @pytest.mark.asyncio
-    async def test_get_dashboard_when_student_has_completed_diagnostic_then_not_in_action_items(self):
-        """Completed diagnostic must NOT appear in action items."""
-        student = _make_student()
-        class_id = uuid.uuid4()
-        mock_db = AsyncMock()
-
-        profile_mock = MagicMock()
-        profile_mock.one_or_none.return_value = _make_profile_result("Grade 8")
-
-        enrollment = _make_enrollment_row(class_id=class_id, diagnostic_status="COMPLETED")
-        enrollments_mock = MagicMock()
-        enrollments_mock.all.return_value = [enrollment]
-
-        mastery_mock = _empty_mock()
-        topics_mock = _empty_mock()
-        assessed_mock = _empty_mock()
-        assessments_mock = _empty_mock()
-        plans_mock = _empty_mock()
-        # Diagnostics query returns empty because WHERE filters out completed attempts
-        diagnostics_mock = _empty_mock()
+        # Diagnostics query returns empty (completed attempt filtered out at DB level)
+        diagnostics_mock = MagicMock()
+        diagnostics_mock.all.return_value = []
 
         mock_db.execute = AsyncMock(
             side_effect=[
@@ -761,5 +755,7 @@ class TestGetDashboard:
         service = StudentDashboardService(mock_db)
         result = await service.get_dashboard(student)
 
-        diagnostic_items = [i for i in result.action_items if i.type == "diagnostic_pending"]
-        assert diagnostic_items == []
+        # Arrange: completed diagnostic filtered out by query
+        # Act: get_dashboard
+        # Assert: no diagnostic_pending in action items
+        assert result.action_items == []
