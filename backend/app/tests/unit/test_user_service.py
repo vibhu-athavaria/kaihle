@@ -442,6 +442,103 @@ class TestUpdateUser:
         with pytest.raises(ValueError, match="User not found"):
             await user_service.update_user(school_id, user_id, update_data)
 
+    @pytest.mark.asyncio
+    async def test_update_user_when_password_changed_then_password_changed_email_sent(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """Test that a password-changed email is sent when password is updated."""
+        # Arrange
+        user_id = uuid.uuid4()
+        user = User(
+            id=user_id,
+            email="teacher@school.com",
+            first_name="Jane",
+            last_name="Doe",
+            role=UserRole.TEACHER,
+            school_id=school_id,
+            is_active=True,
+        )
+        mock_db.scalar = AsyncMock(return_value=user)
+
+        update_data = UserUpdate(password="NewSecurePass123!")
+
+        # Act
+        with patch(
+            "app.services.user_service.UserService._send_password_changed_email",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            await user_service.update_user(school_id, user_id, update_data)
+
+        # Assert
+        mock_send.assert_called_once_with(user, school_id)
+
+    @pytest.mark.asyncio
+    async def test_update_user_when_no_password_change_then_no_email_sent(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """Test that no password-changed email is sent when password is not part of the update."""
+        # Arrange
+        user_id = uuid.uuid4()
+        user = User(
+            id=user_id,
+            email="teacher@school.com",
+            first_name="OldName",
+            last_name="Doe",
+            role=UserRole.TEACHER,
+            school_id=school_id,
+            is_active=True,
+        )
+        mock_db.scalar = AsyncMock(return_value=user)
+
+        update_data = UserUpdate(first_name="NewName")
+
+        # Act
+        with patch(
+            "app.services.user_service.UserService._send_password_changed_email",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            await user_service.update_user(school_id, user_id, update_data)
+
+        # Assert
+        mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_user_when_email_send_fails_then_user_still_updated(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """Test that a failure from EmailService.send does not block the user update (non-fatal guarantee)."""
+        from app.models.school import School
+
+        # Arrange
+        user_id = uuid.uuid4()
+        user = User(
+            id=user_id,
+            email="teacher@school.com",
+            first_name="Jane",
+            last_name="Doe",
+            role=UserRole.TEACHER,
+            school_id=school_id,
+            is_active=True,
+        )
+        mock_db.scalar = AsyncMock(return_value=user)
+
+        school = School(id=school_id, name="Test School")
+        mock_db.get = AsyncMock(return_value=school)
+
+        update_data = UserUpdate(password="NewSecurePass123!")
+
+        # Act — EmailService.send raises; _send_password_changed_email catches it; update proceeds
+        with patch(
+            "app.services.user_service.EmailService.send",
+            new_callable=AsyncMock,
+            side_effect=Exception("SMTP connection refused"),
+        ):
+            result = await user_service.update_user(school_id, user_id, update_data)
+
+        # Assert — user object returned; DB flush was called
+        assert result is user
+        mock_db.flush.assert_called_once()
+
 
 class TestDeactivateUser:
     """Tests for UserService.deactivate_user method."""

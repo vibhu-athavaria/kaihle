@@ -291,6 +291,9 @@ class UserService:
             grade_changed=grade_id is not None,
         )
 
+        if new_password is not None:
+            await self._send_password_changed_email(user, school_id)
+
         return user
 
     async def deactivate_user(self, school_id: uuid.UUID, user_id: uuid.UUID) -> None:
@@ -359,6 +362,41 @@ class UserService:
         except Exception as e:
             logger.error(
                 "failed_to_send_credentials_email",
+                user_id=str(user.id),
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
+
+    async def _send_password_changed_email(self, user: User, school_id: uuid.UUID) -> None:
+        """Notify user that their password was changed by a school administrator."""
+        school = await self.db.get(School, school_id)
+        school_name = school.name if school else "your school"
+
+        role_url_map: dict[str, str] = {
+            "TEACHER": settings.teacher_app_url,
+            "STUDENT": settings.student_app_url,
+            "PARENT": settings.parent_app_url,
+            "SCHOOL_ADMIN": settings.school_admin_app_url,
+            "KAIHLE_ADMIN": settings.kaihle_admin_app_url,
+        }
+        app_url = role_url_map.get(user.role, settings.school_admin_app_url)
+        login_url = f"{app_url}/login"
+
+        email_service = EmailService()
+        try:
+            await email_service.send(
+                to=user.email,
+                subject="Your Kaihle password has been updated",
+                template="password_changed.html.jinja2",
+                ctx={
+                    "first_name": user.first_name,
+                    "school_name": school_name,
+                    "login_url": login_url,
+                },
+            )
+        except Exception as e:
+            logger.warning(
+                "failed_to_send_password_changed_email",
                 user_id=str(user.id),
                 error_type=type(e).__name__,
                 error_message=str(e),
