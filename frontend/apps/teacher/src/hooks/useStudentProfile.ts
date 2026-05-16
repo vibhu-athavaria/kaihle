@@ -25,7 +25,14 @@ export interface StudentLearningProfile {
     reading_writing: number;
     kinesthetic: number;
   };
+  work_style: {
+    prefers_solo?: boolean;
+    short_sessions?: boolean;
+    task_based?: boolean;
+    [key: string]: boolean | undefined;
+  } | null;
   interests: string[];
+  completed_at: string | null;
 }
 
 export interface StudentProfileData {

@@ -2,16 +2,26 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 
-interface ModalityScore {
-  modality: string;
-  score: number;
+interface WorkStyle {
+  prefers_solo?: boolean;
+  short_sessions?: boolean;
+  task_based?: boolean;
+  [key: string]: boolean | undefined;
 }
 
 interface LearningProfile {
-  modalities: ModalityScore[];
-  interests: string[];
+  modality_scores: Record<string, number>;
+  work_style: WorkStyle | null;
+  interests: string[] | null;
   completed_at: string | null;
 }
+
+const MODALITY_LABELS: Record<string, string> = {
+  visual: "Visual",
+  auditory: "Auditory",
+  reading_writing: "Reading / Writing",
+  kinesthetic: "Hands-on",
+};
 
 export function LearningProfileSection() {
   const navigate = useNavigate();
@@ -32,22 +42,21 @@ export function LearningProfileSection() {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "—";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-GB", {
+    return new Date(dateString).toLocaleDateString("en-GB", {
       day: "numeric",
       month: "short",
       year: "numeric",
     });
   };
 
-  const getDominantModality = () => {
-    if (!profile?.modalities || profile.modalities.length === 0) return null;
-    return profile.modalities.reduce((prev, current) =>
-      prev.score > current.score ? prev : current,
-    );
-  };
+  const modalityEntries = profile?.modality_scores
+    ? Object.entries(profile.modality_scores).sort((a, b) => b[1] - a[1])
+    : [];
 
-  const dominantModality = getDominantModality();
+  const dominantModality =
+    modalityEntries.length > 0 ? modalityEntries[0][0] : null;
+
+  const workStyle = profile?.work_style ?? null;
 
   return (
     <div className="bg-white rounded-2xl border border-brand-border shadow-sm">
@@ -68,37 +77,71 @@ export function LearningProfileSection() {
         <>
           {/* Modality bars */}
           <div className="py-2 px-6">
-            {profile?.modalities?.map((modality) => {
-              const isDominant =
-                dominantModality?.modality === modality.modality;
+            {modalityEntries.map(([key, score]) => {
+              const isDominant = dominantModality === key;
               return (
-                <div
-                  key={modality.modality}
-                  className="flex items-center gap-3 py-2"
-                >
+                <div key={key} className="flex items-center gap-3 py-2">
                   <span className="font-sans text-sm text-brand-ink w-36">
-                    {modality.modality}
+                    {MODALITY_LABELS[key] ?? key}
                   </span>
                   <div className="h-2 rounded-full flex-1 bg-brand-border-soft">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ease-out ${
                         isDominant ? "bg-brand-primary" : "bg-brand-border"
                       }`}
-                      style={{ width: `${modality.score * 100}%` }}
+                      style={{ width: `${score * 100}%` }}
                       role="progressbar"
-                      aria-valuenow={Math.round(modality.score * 100)}
+                      aria-valuenow={Math.round(score * 100)}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      aria-label={`${modality.modality} score`}
+                      aria-label={`${MODALITY_LABELS[key] ?? key} score`}
                     />
                   </div>
                   <span className="font-sans text-sm text-brand-body w-10 text-right">
-                    {Math.round(modality.score * 100)}%
+                    {Math.round(score * 100)}%
                   </span>
                 </div>
               );
             })}
           </div>
+
+          {/* Work style chips */}
+          {workStyle && (
+            <div className="px-6 pb-4">
+              <div className="flex flex-wrap gap-2">
+                {workStyle.prefers_solo === true && (
+                  <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                    Prefers solo work
+                  </span>
+                )}
+                {workStyle.prefers_solo === false && (
+                  <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                    Prefers group work
+                  </span>
+                )}
+                {workStyle.short_sessions === true && (
+                  <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                    Short sessions
+                  </span>
+                )}
+                {workStyle.short_sessions === false && (
+                  <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                    Long sessions
+                  </span>
+                )}
+                {workStyle.task_based === true && (
+                  <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                    Task-based
+                  </span>
+                )}
+                {workStyle.task_based === false && (
+                  <span className="px-3 py-1 bg-gray-100 text-brand-ink text-xs font-sans font-medium rounded-full">
+                    Exploration-based
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Profile impact explainer */}
           <div className="px-6 pb-4">
