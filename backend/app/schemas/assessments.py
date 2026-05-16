@@ -46,6 +46,8 @@ class AssessmentResponse(BaseModel):
     created_at: datetime
     published_at: datetime | None
     deadline: datetime | None
+    # Number of student attempts recorded against this assessment (populated in list endpoint)
+    attempt_count: int = 0
     # Populated only when the requesting user is a STUDENT
     attempt_status: str | None = None  # "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED"
     attempt_id: UUID | None = None

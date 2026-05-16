@@ -51,7 +51,7 @@ class PublishRequest(BaseModel):
     deadline: datetime | None = None
 
 
-def _assessment_to_response(assessment: Assessment) -> AssessmentResponse:
+def _assessment_to_response(assessment: Assessment, attempt_count: int = 0) -> AssessmentResponse:
     """Convert an Assessment ORM model to AssessmentResponse schema.
 
     Note: topic_ids is not stored directly on the Assessment model — it is stored
@@ -75,6 +75,7 @@ def _assessment_to_response(assessment: Assessment) -> AssessmentResponse:
         created_at=assessment.created_at,
         published_at=assessment.published_at,
         deadline=assessment.deadline,
+        attempt_count=attempt_count,
     )
 
 
@@ -94,7 +95,7 @@ async def list_class_assessments(
 ) -> Page[AssessmentResponse]:
     service = AssessmentService(db)
     try:
-        items, total = await service.list_class_assessments(
+        items, total, attempt_count_map = await service.list_class_assessments(
             class_id=class_id,
             school_id=current_user.school_id,
             requesting_user_id=current_user.id,
@@ -115,7 +116,7 @@ async def list_class_assessments(
         )
 
     return Page(
-        data=[_assessment_to_response(a) for a in items],
+        data=[_assessment_to_response(a, attempt_count_map.get(a.id, 0)) for a in items],
         total=total,
         page=page,
         page_size=page_size,

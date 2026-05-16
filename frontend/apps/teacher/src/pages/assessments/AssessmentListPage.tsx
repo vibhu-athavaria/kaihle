@@ -223,22 +223,34 @@ export function AssessmentListPage() {
                         </Link>
                       )}
 
-                      {assessment.status === "ACTIVE" && (
-                        <button
-                          type="button"
-                          onClick={() => handleClose(assessment.id)}
-                          disabled={closeAssessment.isPending}
-                          className="flex items-center gap-1.5 text-xs font-sans font-bold text-brand-body hover:text-brand-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded px-2 py-1 disabled:opacity-50"
-                        >
-                          <X className="w-3.5 h-3.5" aria-hidden="true" />
-                          Close
-                        </button>
-                      )}
+                      {assessment.status === "ACTIVE" &&
+                        assessment.attempt_count > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleClose(assessment.id)}
+                            disabled={closeAssessment.isPending}
+                            className="flex items-center gap-1.5 text-xs font-sans font-bold text-brand-body hover:text-brand-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded px-2 py-1 disabled:opacity-50"
+                          >
+                            <X className="w-3.5 h-3.5" aria-hidden="true" />
+                            Archive
+                          </button>
+                        )}
 
-                      {assessment.status === "DRAFT" && (
+                      {(assessment.status === "DRAFT" ||
+                        (assessment.status === "ACTIVE" &&
+                          assessment.attempt_count === 0)) && (
                         <button
                           type="button"
-                          onClick={() => handleDelete(assessment.id)}
+                          onClick={() => {
+                            if (
+                              assessment.status === "ACTIVE" &&
+                              !window.confirm(
+                                "Delete this assessment? Students won't be able to access it.",
+                              )
+                            )
+                              return;
+                            handleDelete(assessment.id);
+                          }}
                           disabled={deleteAssessment.isPending}
                           className="flex items-center gap-1.5 text-xs font-sans font-bold text-brand-red hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded px-2 py-1 disabled:opacity-50"
                         >
