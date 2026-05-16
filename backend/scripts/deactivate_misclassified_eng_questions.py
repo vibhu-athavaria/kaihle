@@ -1,11 +1,17 @@
-"""Deactivates 32 English Language questions that test factual history knowledge
+"""Deactivates English Language questions that test factual history or science knowledge
 instead of language skills.
 
 Root cause: LLM question generation used WWI/WWII/French Revolution as reading
 passage *context*, but generated questions that test historical recall (e.g.
 "Which event marked the beginning of WWII?") rather than English language skills
-(inference, author intent, text analysis). These would produce false-positives for
+(inference, author intent, text analysis). These produce false-positives for
 history-literate students on ENG diagnostics.
+
+Discovery strategy:
+  Primary   — match by UUID (fast, exact). Works on the database where questions
+               were originally generated (typically dev/staging).
+  Fallback   — match by keyword pattern in question_text (works on any DB, including
+               prod where UUIDs differ). Requires human review via --dry-run first.
 
 Action: soft-deactivation (is_active = false). Hard DELETE is blocked by the
 ON DELETE RESTRICT FK on student_responses / assessment_selected_questions.
@@ -13,15 +19,16 @@ ON DELETE RESTRICT FK on student_responses / assessment_selected_questions.
 Safe to run multiple times — idempotent. Already-deactivated rows are a no-op.
 Verified: zero student_responses reference these questions as of 2026-05-16.
 
-Usage (from project root):
-    docker compose exec backend python -m scripts.deactivate_misclassified_eng_questions
+Usage:
+    # Dry run first — ALWAYS review before writing to prod
+    python -m scripts.deactivate_misclassified_eng_questions --dry-run
 
-    # Dry run — shows what would be deactivated, no DB writes:
-    docker compose exec backend python -m scripts.deactivate_misclassified_eng_questions --dry-run
+    # Run for real once you've confirmed the dry-run matches look correct
+    python -m scripts.deactivate_misclassified_eng_questions
 
-    # Outside Docker (requires DATABASE_URL in env):
-    cd backend
-    DATABASE_URL=postgresql+asyncpg://... python -m scripts.deactivate_misclassified_eng_questions
+    # On prod (UUIDs differ from dev — uses keyword fallback automatically)
+    python -m scripts.deactivate_misclassified_eng_questions --dry-run
+    python -m scripts.deactivate_misclassified_eng_questions
 """
 
 import argparse
@@ -50,12 +57,9 @@ structlog.configure(
 )
 log = structlog.get_logger()
 
-# IDs confirmed by audit on 2026-05-16.
-# These are ENG questions testing factual history (WWI, WWII, French Revolution,
-# League of Nations, Treaty of Versailles, Marshall Plan, Magna Carta, Enlightenment).
-# They belong to ENG subtopics: Comprehension and Inference, Critical Textual Analysis,
-# Cross-Text Synthesis, Inference and Interpretation, Reading for Explicit Meaning,
-# and Argumentative and Persuasive Writing.
+# ── Primary: UUIDs from the dev/staging database (2026-05-16 audit) ──────────
+# These only match on the DB where questions were originally generated.
+# On prod, the fallback keyword query is used instead.
 MISCLASSIFIED_QUESTION_IDS: list[str] = [
     # Argumentative and Persuasive Writing
     "1ee4db7d-d682-4b3f-a6e2-19d1502584bd",
@@ -97,6 +101,78 @@ MISCLASSIFIED_QUESTION_IDS: list[str] = [
     "47deb376-5934-4b1d-917a-b606eefe9f4a",
 ]
 
+# ── Fallback: keyword patterns that identify misclassified ENG questions ──────
+# Used when zero UUIDs match (i.e. on prod or any DB with different UUIDs).
+# Matches active ENG questions whose question_text contains any of these phrases.
+# Scoped to ENG subject only to avoid false positives in history/science subjects.
+HISTORY_KEYWORDS: list[str] = [
+    "world war",
+    "french revolution",
+    "treaty of versailles",
+    "league of nations",
+    "marshall plan",
+    "magna carta",
+    "the enlightenment",
+    "cold war",
+    "allied powers",
+    "yalta conference",
+    "nazi",
+    "renaissance",
+    "roman empire",
+    "black death",
+    "declaration of independence",
+    "industrial revolution",
+]
+
+SCIENCE_KEYWORDS: list[str] = [
+    "photosynthesis",
+    "mitosis",
+    "meiosis",
+    "periodic table",
+    "newton's law",
+    "chemical equation",
+    "atomic number",
+    "dna strand",
+    "rna strand",
+]
+
+
+async def find_by_keywords(db) -> list:
+    """Find active ENG questions that contain history or science keywords.
+
+    Scoped to the ENG subject only. Returns rows for human review.
+    """
+    # Build ILIKE conditions for each keyword
+    history_conditions = " OR ".join(
+        f"qb.question_text ILIKE '%' || :hist_{i} || '%'" for i in range(len(HISTORY_KEYWORDS))
+    )
+    science_conditions = " OR ".join(
+        f"qb.question_text ILIKE '%' || :sci_{i} || '%'" for i in range(len(SCIENCE_KEYWORDS))
+    )
+
+    params: dict = {}
+    for i, kw in enumerate(HISTORY_KEYWORDS):
+        params[f"hist_{i}"] = kw
+    for i, kw in enumerate(SCIENCE_KEYWORDS):
+        params[f"sci_{i}"] = kw
+
+    rows = await db.execute(
+        text(f"""
+            SELECT qb.id, st.name AS subtopic, qb.is_active,
+                   LEFT(qb.question_text, 120) AS preview
+            FROM question_bank qb
+            JOIN subtopics st       ON st.id = qb.subtopic_id
+            JOIN curriculum_topics ct ON ct.id = st.curriculum_topic_id
+            JOIN subjects s         ON s.id = ct.subject_id
+            WHERE s.code = 'ENG'
+              AND qb.is_active = true
+              AND ({history_conditions} OR {science_conditions})
+            ORDER BY st.name, qb.id
+        """),
+        params,
+    )
+    return rows.fetchall()
+
 
 async def run(dry_run: bool) -> int:
     engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
@@ -105,27 +181,17 @@ async def run(dry_run: bool) -> int:
     try:
         async with async_session() as db:
             async with db.begin():
-                total = len(MISCLASSIFIED_QUESTION_IDS)
-                log.info("deactivate_misclassified_eng_start", total_flagged=total, dry_run=dry_run)
-
-                # ── Step 1: Verify no student responses reference these questions ──
-                result = await db.execute(
-                    text("SELECT COUNT(*) FROM student_responses WHERE question_id = ANY(:ids)"),
-                    {"ids": MISCLASSIFIED_QUESTION_IDS},
+                log.info(
+                    "deactivate_misclassified_eng_start",
+                    total_uuid_candidates=len(MISCLASSIFIED_QUESTION_IDS),
+                    dry_run=dry_run,
                 )
-                response_count = result.scalar()
-                if response_count > 0:
-                    log.warning(
-                        "student_responses_found",
-                        count=response_count,
-                        action="proceeding_with_deactivation_only",
-                    )
 
-                # ── Step 2: Fetch current state for logging ───────────────────────
+                # ── Step 1: Try UUID match ────────────────────────────────────
                 rows = await db.execute(
                     text("""
-                        SELECT qb.id, st.name as subtopic, qb.is_active,
-                               LEFT(qb.question_text, 100) as preview
+                        SELECT qb.id, st.name AS subtopic, qb.is_active,
+                               LEFT(qb.question_text, 120) AS preview
                         FROM question_bank qb
                         JOIN subtopics st ON st.id = qb.subtopic_id
                         WHERE qb.id = ANY(:ids)
@@ -135,21 +201,53 @@ async def run(dry_run: bool) -> int:
                 )
                 found_rows = rows.fetchall()
 
+                if found_rows:
+                    strategy = "uuid"
+                    log.info(
+                        "uuid_match_succeeded",
+                        found=len(found_rows),
+                        missing=len(MISCLASSIFIED_QUESTION_IDS) - len(found_rows),
+                    )
+                else:
+                    # ── Step 2: Fallback — keyword match ──────────────────────
+                    log.info(
+                        "uuid_match_found_nothing — falling back to keyword search",
+                        hint="This is expected on prod (UUIDs differ from dev)",
+                    )
+                    strategy = "keyword"
+                    found_rows = await find_by_keywords(db)
+                    log.info("keyword_match_found", count=len(found_rows))
+
                 already_inactive = [r for r in found_rows if not r.is_active]
                 to_deactivate = [r for r in found_rows if r.is_active]
-                missing = total - len(found_rows)
 
                 log.info(
                     "pre_deactivation_summary",
+                    strategy=strategy,
                     found=len(found_rows),
                     already_inactive=len(already_inactive),
                     will_deactivate=len(to_deactivate),
-                    missing_from_db=missing,
                 )
 
-                if missing > 0:
-                    log.warning("some_ids_not_found_in_db", count=missing)
+                if not to_deactivate:
+                    log.info("nothing_to_deactivate — all matching questions already inactive or none found")
+                    return 0
 
+                # ── Step 3: Verify no student responses reference these ────────
+                target_ids = [str(r.id) for r in to_deactivate]
+                result = await db.execute(
+                    text("SELECT COUNT(*) FROM student_responses WHERE question_id = ANY(:ids)"),
+                    {"ids": target_ids},
+                )
+                response_count = result.scalar()
+                if response_count > 0:
+                    log.warning(
+                        "student_responses_found",
+                        count=response_count,
+                        action="proceeding_with_deactivation_only — student history preserved",
+                    )
+
+                # ── Step 4: Log each question that will be deactivated ────────
                 for row in to_deactivate:
                     log.info(
                         "will_deactivate" if dry_run else "deactivating",
@@ -161,26 +259,37 @@ async def run(dry_run: bool) -> int:
                 if dry_run:
                     log.info(
                         "dry_run_complete — no changes written",
+                        strategy=strategy,
                         would_deactivate=len(to_deactivate),
                     )
+                    if strategy == "keyword":
+                        log.info(
+                            "review_required",
+                            message=(
+                                "Keyword matches require human review. "
+                                "Check each 'will_deactivate' entry above — confirm every question "
+                                "tests historical/scientific facts rather than an English language skill. "
+                                "Remove any false positives before running without --dry-run."
+                            ),
+                        )
                     return 0
 
-                # ── Step 3: Deactivate ────────────────────────────────────────────
+                # ── Step 5: Deactivate ────────────────────────────────────────
                 result = await db.execute(
                     text("""
                         UPDATE question_bank
                         SET is_active = false, updated_at = now()
                         WHERE id = ANY(:ids) AND is_active = true
                     """),
-                    {"ids": MISCLASSIFIED_QUESTION_IDS},
+                    {"ids": target_ids},
                 )
                 deactivated = result.rowcount
-                log.info("deactivated", count=deactivated)
+                log.info("deactivated", count=deactivated, strategy=strategy)
 
-                # ── Step 4: Verify final state ────────────────────────────────────
+                # ── Step 6: Verify ────────────────────────────────────────────
                 verify = await db.execute(
                     text("SELECT COUNT(*) FROM question_bank WHERE id = ANY(:ids) AND is_active = true"),
-                    {"ids": MISCLASSIFIED_QUESTION_IDS},
+                    {"ids": target_ids},
                 )
                 still_active = verify.scalar()
                 if still_active > 0:
@@ -192,6 +301,7 @@ async def run(dry_run: bool) -> int:
                     deactivated=deactivated,
                     already_were_inactive=len(already_inactive),
                     student_responses_affected=response_count,
+                    strategy=strategy,
                 )
 
     except Exception as exc:
@@ -210,7 +320,14 @@ async def main(dry_run: bool) -> int:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Deactivate ENG questions that test historical facts rather than language skills."
+        description=(
+            "Deactivate ENG questions that test historical or scientific facts rather than "
+            "language skills.\n\n"
+            "Automatically tries UUID match first (fast, exact — works on dev/staging).\n"
+            "Falls back to keyword search if no UUIDs match (works on prod).\n\n"
+            "Always run with --dry-run first and review the output before writing to prod."
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
         "--dry-run",
