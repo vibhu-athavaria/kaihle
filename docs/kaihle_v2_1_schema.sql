@@ -217,15 +217,31 @@ COMMENT ON TABLE grades IS
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE topics (
-    id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    name            TEXT        NOT NULL,
-    canonical_code  VARCHAR(50),        -- e.g. 'MATH-ALG' — reused across grades
-    description     TEXT,
-    keywords        TEXT[],
-    is_active       BOOLEAN     NOT NULL DEFAULT TRUE,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ
+    id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name                    TEXT        NOT NULL,
+    canonical_code          VARCHAR(50),        -- e.g. 'MATH-ALG' — reused across grades
+    description             TEXT,
+    keywords                TEXT[],
+    is_active               BOOLEAN     NOT NULL DEFAULT TRUE,
+    mini_course_status      VARCHAR(20) NOT NULL DEFAULT 'none',  -- none | generating | ready | failed
+    mini_course_teacher_id  UUID        REFERENCES users (id) ON DELETE SET NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ
 );
+
+-- mini_course_student_overrides: teacher override of interest-category variant per student per topic.
+CREATE TABLE mini_course_student_overrides (
+    id                      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id               UUID        NOT NULL REFERENCES schools (id) ON DELETE CASCADE,
+    topic_id                UUID        NOT NULL REFERENCES topics (id) ON DELETE CASCADE,
+    student_id              UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    interest_category_id    UUID        NOT NULL REFERENCES interest_categories (id) ON DELETE CASCADE,
+    set_by_teacher_id       UUID        REFERENCES users (id) ON DELETE SET NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ,
+    CONSTRAINT uq_mini_course_override_school_topic_student UNIQUE (school_id, topic_id, student_id)
+);
+CREATE INDEX idx_mini_course_overrides_school_topic ON mini_course_student_overrides (school_id, topic_id);
 
 COMMENT ON TABLE topics IS
     'Topics are school-agnostic AND grade-agnostic.

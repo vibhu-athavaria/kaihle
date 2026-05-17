@@ -38,5 +38,7 @@ class ClassTopicResponse(BaseModel):
     # Denormalized from curriculum_topics for display
     topic_name: str
     subtopic_count: int
+    # Mini-course generation status from the topics table (global per topic)
+    mini_course_status: str = "none"
 
     model_config = ConfigDict(from_attributes=True)

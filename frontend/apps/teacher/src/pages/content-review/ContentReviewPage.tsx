@@ -12,6 +12,9 @@ import {
 } from "../../hooks/useTeacherExplanationReview";
 import { Badge, EmptyState, Modal, SkeletonCard } from "@kaihle/ui";
 import { CheckCircle, ThumbsUp, XCircle } from "lucide-react";
+import { MiniCoursesTab } from "./MiniCoursesTab";
+
+type ContentTab = "explanations" | "mini-courses";
 
 type FilterStatus = "PENDING" | "APPROVED" | "REJECTED" | "all";
 
@@ -246,6 +249,8 @@ export function ContentReviewPage() {
   const { user } = useAuth();
   const schoolId = user?.school_id ?? null;
 
+  const [contentTab, setContentTab] = useState<ContentTab>("explanations");
+
   const { data: classes = [], isLoading: classesLoading } = useTeacherClasses(
     schoolId,
     false,
@@ -288,81 +293,110 @@ export function ContentReviewPage() {
         Content Review
       </h1>
 
-      {/* Status filter chips */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {filterButtons.map((btn) => (
+      {/* Top-level tab switcher */}
+      <div className="flex items-center gap-1 border-b border-brand-border pb-0">
+        {(
+          [
+            { id: "explanations", label: "Subtopic Explanations" },
+            { id: "mini-courses", label: "Mini Courses" },
+          ] as { id: ContentTab; label: string }[]
+        ).map((tab) => (
           <button
-            key={btn.value}
+            key={tab.id}
             type="button"
-            onClick={() => setStatusFilter(btn.value)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 ${
-              statusFilter === btn.value
-                ? "bg-brand-gold text-white"
-                : "bg-white border border-brand-border text-brand-body hover:text-brand-ink"
+            onClick={() => setContentTab(tab.id)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 ${
+              contentTab === tab.id
+                ? "border-brand-gold text-brand-gold"
+                : "border-transparent text-brand-body hover:text-brand-ink"
             }`}
           >
-            {btn.label}
+            {tab.label}
           </button>
         ))}
+      </div>
 
-        {/* Class filter chips */}
-        {classes.length > 1 && (
-          <>
-            <span className="text-brand-border mx-1" aria-hidden="true">
-              |
-            </span>
-            <button
-              type="button"
-              onClick={() => setClassFilter(null)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 ${
-                classFilter === null
-                  ? "bg-brand-ink text-white"
-                  : "bg-white border border-brand-border text-brand-body hover:text-brand-ink"
-              }`}
-            >
-              All classes
-            </button>
-            {classes.map((cls) => (
+      {contentTab === "mini-courses" && <MiniCoursesTab />}
+
+      {contentTab === "explanations" && (
+        <>
+          {/* Status filter chips */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {filterButtons.map((btn) => (
               <button
-                key={cls.id}
+                key={btn.value}
                 type="button"
-                onClick={() => setClassFilter(cls.id)}
+                onClick={() => setStatusFilter(btn.value)}
                 className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 ${
-                  classFilter === cls.id
-                    ? "bg-brand-ink text-white"
+                  statusFilter === btn.value
+                    ? "bg-brand-gold text-white"
                     : "bg-white border border-brand-border text-brand-body hover:text-brand-ink"
                 }`}
               >
-                {cls.name}
+                {btn.label}
               </button>
             ))}
-          </>
-        )}
-      </div>
 
-      {/* Content */}
-      {isLoading ? (
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
-      ) : filteredItems.length === 0 ? (
-        <EmptyState
-          emoji="✅"
-          title="Nothing to review"
-          description={
-            statusFilter === "PENDING"
-              ? "All AI-generated explanations are up to date."
-              : "No items match this filter."
-          }
-        />
-      ) : (
-        <div className="space-y-3">
-          {filteredItems.map((item) => (
-            <ExplanationCard key={item.subtopicContentId} item={item} />
-          ))}
-        </div>
+            {/* Class filter chips */}
+            {classes.length > 1 && (
+              <>
+                <span className="text-brand-border mx-1" aria-hidden="true">
+                  |
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setClassFilter(null)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 ${
+                    classFilter === null
+                      ? "bg-brand-ink text-white"
+                      : "bg-white border border-brand-border text-brand-body hover:text-brand-ink"
+                  }`}
+                >
+                  All classes
+                </button>
+                {classes.map((cls) => (
+                  <button
+                    key={cls.id}
+                    type="button"
+                    onClick={() => setClassFilter(cls.id)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2 ${
+                      classFilter === cls.id
+                        ? "bg-brand-ink text-white"
+                        : "bg-white border border-brand-border text-brand-body hover:text-brand-ink"
+                    }`}
+                  >
+                    {cls.name}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+
+          {/* Content */}
+          {isLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <EmptyState
+              emoji="✅"
+              title="Nothing to review"
+              description={
+                statusFilter === "PENDING"
+                  ? "All AI-generated explanations are up to date."
+                  : "No items match this filter."
+              }
+            />
+          ) : (
+            <div className="space-y-3">
+              {filteredItems.map((item) => (
+                <ExplanationCard key={item.subtopicContentId} item={item} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

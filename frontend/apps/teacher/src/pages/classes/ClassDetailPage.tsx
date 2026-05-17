@@ -352,7 +352,10 @@ export function ClassDetailPage() {
                         {topic.subtopic_count !== 1 ? "s" : ""}
                       </p>
                     </div>
-                    <TopicMiniCourseButton topicId={topic.topic_id} />
+                    <TopicMiniCourseButton
+                      topicId={topic.topic_id}
+                      classId={classId!}
+                    />
                   </li>
                 ))}
               </ul>

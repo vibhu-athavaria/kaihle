@@ -46,13 +46,14 @@ class ClassTopicService:
                 ClassTopic,
                 Topic.id.label("topic_id"),
                 Topic.name.label("topic_name"),
+                Topic.mini_course_status.label("mini_course_status"),
                 func.count(Subtopic.id).label("subtopic_count"),
             )
             .join(CurriculumTopic, CurriculumTopic.id == ClassTopic.curriculum_topic_id)
             .join(Topic, Topic.id == CurriculumTopic.topic_id)
             .outerjoin(Subtopic, Subtopic.curriculum_topic_id == ClassTopic.curriculum_topic_id)
             .where(ClassTopic.class_id == class_id)
-            .group_by(ClassTopic.id, Topic.id, Topic.name)
+            .group_by(ClassTopic.id, Topic.id, Topic.name, Topic.mini_course_status)
             .order_by(ClassTopic.sequence_order)
         )
         rows = result.all()
@@ -66,6 +67,7 @@ class ClassTopicService:
                 is_covered=row.ClassTopic.is_covered,
                 topic_name=row.topic_name,
                 subtopic_count=row.subtopic_count,
+                mini_course_status=row.mini_course_status,
             )
             for row in rows
         ]

@@ -1,6 +1,6 @@
-"""Mini-course progress and feedback SQLAlchemy models.
+"""Mini-course progress, feedback, and teacher override SQLAlchemy models.
 
-Covers: subtopic_course_progress, subtopic_content_feedback
+Covers: subtopic_course_progress, subtopic_content_feedback, mini_course_student_overrides
 """
 
 import uuid
@@ -116,4 +116,53 @@ class SubtopicContentFeedback(Base, UUIDMixin, TimestampMixin):
             "feedback_type IN ('thumbs_up', 'thumbs_down')",
             name="chk_subtopic_content_feedback_type",
         ),
+    )
+
+
+class MiniCourseStudentOverride(Base, UUIDMixin, TimestampMixin):
+    """Teacher-set interest-category override for a student on a topic's mini-course.
+
+    When set, the mini-course delivery uses this interest category instead of
+    auto-picking from the student's learning profile.
+
+    UNIQUE on (school_id, topic_id, student_id) — one override per student per topic.
+    """
+
+    __tablename__ = "mini_course_student_overrides"
+
+    school_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("schools.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    topic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("topics.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    interest_category_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("interest_categories.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Teacher who set this override — for audit trail.
+    set_by_teacher_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "school_id",
+            "topic_id",
+            "student_id",
+            name="uq_mini_course_override_school_topic_student",
+        ),
+        Index("idx_mini_course_overrides_school_topic", "school_id", "topic_id"),
     )

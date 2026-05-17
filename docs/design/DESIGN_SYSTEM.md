@@ -418,6 +418,7 @@ Every list component MUST have an empty state — never a blank area.
 - ❌ No additional UI kits (MUI, Chakra, shadcn) — see CONSTITUTION Rule 14
 - ❌ No lock icon on locked class items in Student sidebar — arrow icon only
 - ❌ No opacity reduction on locked class cards in Student app
+- ❌ No `bg-gray-200` or `bg-gray-100` as fill for progress bars, charts, or modality bars — use tinted brand colors: `bg-brand-gold/10` (track), `bg-brand-gold/30` (non-dominant), `bg-brand-gold` (dominant) in Teacher; `bg-brand-primary/10` / `bg-brand-primary/30` / `bg-brand-primary` in Student/School-Admin
 
 ---
 

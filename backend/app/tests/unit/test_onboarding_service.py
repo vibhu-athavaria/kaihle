@@ -45,13 +45,14 @@ def school_id() -> uuid.UUID:
 
 
 class TestCalculateModalityScores:
-    """Tests for modality score calculation (v2 plurality-vote format).
+    """Tests for modality score calculation (v2 plurality-vote normalised to float scores).
 
-    v2 returns {"dominant": str, "secondary": str | None} instead of 0.0-1.0 floats.
+    Returns {"visual": float, "auditory": float, "reading_writing": float, "kinesthetic": float}
+    where each value is count/total_votes (CONSTITUTION §11 format).
     """
 
-    def test_when_visual_answers_then_dominant_is_visual(self, service: OnboardingService) -> None:
-        """Test that visual answers result in dominant=visual."""
+    def test_when_visual_answers_then_visual_has_highest_score(self, service: OnboardingService) -> None:
+        """Test that visual answers result in visual having the highest score."""
         # v2 keys: Q1=see_diagram (visual), Q2=draw_it (visual), Q3=find_example (visual)
         responses = [
             {"question_id": "q1", "answer_key": "see_diagram"},
@@ -61,10 +62,13 @@ class TestCalculateModalityScores:
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["dominant"] == "visual"
+        assert scores["visual"] == 1.0
+        assert scores["auditory"] == 0.0
+        assert scores["reading_writing"] == 0.0
+        assert scores["kinesthetic"] == 0.0
 
-    def test_when_kinesthetic_answers_then_dominant_is_kinesthetic(self, service: OnboardingService) -> None:
-        """Test that kinesthetic answers result in dominant=kinesthetic."""
+    def test_when_kinesthetic_answers_then_kinesthetic_has_highest_score(self, service: OnboardingService) -> None:
+        """Test that kinesthetic answers result in kinesthetic having the highest score."""
         # v2 keys: Q1=try_problems (kinesthetic), Q2=show_example (kinesthetic), Q3=try_different (kinesthetic)
         responses = [
             {"question_id": "q1", "answer_key": "try_problems"},
@@ -74,11 +78,12 @@ class TestCalculateModalityScores:
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["dominant"] == "kinesthetic"
+        assert scores["kinesthetic"] == 1.0
+        assert scores["visual"] == 0.0
 
-    def test_when_mixed_answers_then_dominant_is_most_common(self, service: OnboardingService) -> None:
-        """Test that the most-voted modality is dominant."""
-        # Q1=see_diagram (visual), Q2=draw_it (visual), Q3=talk_through (auditory) → visual wins
+    def test_when_mixed_answers_then_highest_score_is_most_voted_modality(self, service: OnboardingService) -> None:
+        """Test that the most-voted modality has the highest numeric score."""
+        # Q1=see_diagram (visual), Q2=draw_it (visual), Q3=ask_someone (auditory) → visual 2/3
         responses = [
             {"question_id": "q1", "answer_key": "see_diagram"},
             {"question_id": "q2", "answer_key": "draw_it"},
@@ -87,11 +92,13 @@ class TestCalculateModalityScores:
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["dominant"] == "visual"
-        assert scores["secondary"] == "auditory"
+        assert scores["visual"] > scores["auditory"]
+        assert scores["auditory"] > 0.0
+        assert scores["visual"] == round(2 / 3, 4)
+        assert scores["auditory"] == round(1 / 3, 4)
 
-    def test_when_auditory_answers_then_dominant_is_auditory(self, service: OnboardingService) -> None:
-        """Test that auditory answers result in dominant=auditory."""
+    def test_when_auditory_answers_then_auditory_has_highest_score(self, service: OnboardingService) -> None:
+        """Test that auditory answers result in auditory having the highest score."""
         responses = [
             {"question_id": "q1", "answer_key": "watch_walkthrough"},
             {"question_id": "q2", "answer_key": "talk_through"},
@@ -100,10 +107,12 @@ class TestCalculateModalityScores:
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["dominant"] == "auditory"
+        assert scores["auditory"] == 1.0
 
-    def test_when_reading_writing_answers_then_dominant_is_reading_writing(self, service: OnboardingService) -> None:
-        """Test that reading/writing answers result in dominant=reading_writing."""
+    def test_when_reading_writing_answers_then_reading_writing_has_highest_score(
+        self, service: OnboardingService
+    ) -> None:
+        """Test that reading/writing answers result in reading_writing having the highest score."""
         responses = [
             {"question_id": "q1", "answer_key": "read_explanation"},
             {"question_id": "q2", "answer_key": "write_points"},
@@ -112,11 +121,10 @@ class TestCalculateModalityScores:
 
         scores = service._calculate_modality_scores(responses)
 
-        assert scores["dominant"] == "reading_writing"
+        assert scores["reading_writing"] == 1.0
 
-    def test_when_no_modality_responses_then_dominant_set_by_tiebreak(self, service: OnboardingService) -> None:
-        """Test that missing modality responses produce a tiebreak-determined dominant."""
-        # No Q1/Q2/Q3 responses → all counts = 0 → reading_writing wins by tiebreak
+    def test_when_no_modality_responses_then_all_scores_are_zero(self, service: OnboardingService) -> None:
+        """Test that missing Q1/Q2/Q3 responses produce all-zero scores."""
         responses: list[dict[str, Any]] = [
             {"question_id": "q4", "answer_key": "short_focused"},
             {"question_id": "q6", "answer_key": "sports_movement"},
@@ -124,9 +132,8 @@ class TestCalculateModalityScores:
 
         scores = service._calculate_modality_scores(responses)
 
-        # All counts are 0 → tiebreak gives reading_writing
-        assert scores["dominant"] == "reading_writing"
-        assert "secondary" in scores
+        assert all(v == 0.0 for v in scores.values())
+        assert set(scores.keys()) == {"visual", "auditory", "reading_writing", "kinesthetic"}
 
 
 class TestCalculateWorkStyle:
@@ -355,7 +362,7 @@ class TestSaveQuestionnaireResponse:
         assert result == existing_profile
         assert result.completed_at is not None
         # v2: dominant should be visual (all three Q1/Q2/Q3 answered visual)
-        assert result.modality_scores["dominant"] == "visual"
+        assert result.modality_scores["visual"] == 1.0  # all 3 Q1/Q2/Q3 answered visual
         service.db.add.assert_not_called()  # type: ignore[attr-defined]  # Should not create new row
         assert service.db.commit.call_count == 2  # type: ignore[attr-defined]  # Once for profile, once for is_learning_profile_complete
 
@@ -403,7 +410,7 @@ class TestSaveQuestionnaireResponse:
 
         assert result == existing_profile
         assert result.completed_at is not None
-        assert result.modality_scores["dominant"] == "visual"
+        assert result.modality_scores["visual"] == 1.0  # all 3 Q1/Q2/Q3 answered visual
         service.db.add.assert_not_called()  # type: ignore[attr-defined]  # Should not create new row
         assert service.db.commit.call_count == 2  # type: ignore[attr-defined]  # Once for profile, once for is_learning_profile_complete
 
