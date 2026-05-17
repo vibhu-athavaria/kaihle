@@ -2,7 +2,41 @@ import { Link } from "react-router-dom";
 import { useScriptsList, ScriptDefinition } from "../../hooks/useScripts";
 import { AdminLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
-import { Terminal, Database, BookOpen, FileText, XCircle } from "lucide-react";
+import {
+  Terminal,
+  Database,
+  BookOpen,
+  FileText,
+  XCircle,
+  FlaskConical,
+} from "lucide-react";
+
+const AI_SMOKE_TESTS = [
+  {
+    name: "concept-explanation",
+    title: "Concept Explanation",
+    description:
+      "Generate a personalised subtopic explanation with optional MCQ check question.",
+  },
+  {
+    name: "mini-course",
+    title: "Mini-Course Generation",
+    description:
+      "Generate interest-personalised explanations across 4 interest categories for a topic.",
+  },
+  {
+    name: "lesson-plan",
+    title: "Lesson Plan",
+    description:
+      "Generate a lesson plan preview for a class. Full LLM + validation pipeline, no DB write.",
+  },
+  {
+    name: "practice-quiz",
+    title: "Practice Quiz",
+    description:
+      "Generate a practice quiz at a given mastery level, with explanation context diagnostics.",
+  },
+];
 
 function getCategoryIcon(category: string) {
   switch (category) {
@@ -115,6 +149,38 @@ export function ScriptsPage() {
                 </div>
               </div>
             ))}
+
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest text-role-admin-muted mb-3">
+                AI Smoke Tests
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {AI_SMOKE_TESTS.map((test) => (
+                  <Link
+                    key={test.name}
+                    to={`/kaihle-admin/scripts/smoke-tests/${test.name}`}
+                    className="block p-4 rounded-xl border border-role-admin-border hover:border-brand-primary/50 bg-white hover:bg-brand-primary/5 transition-all"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-brand-primary/10 flex items-center justify-center flex-shrink-0">
+                        <FlaskConical className="w-5 h-5 text-brand-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-role-admin-ink truncate">
+                          {test.title}
+                        </h3>
+                        <p className="text-xs text-role-admin-subtle mt-1 line-clamp-2">
+                          {test.description}
+                        </p>
+                        <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-primary/10 text-brand-primary">
+                          AI / LLM
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
