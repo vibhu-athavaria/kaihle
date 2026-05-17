@@ -1,9 +1,54 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { ChevronRight, ArrowRight, BookOpen } from "lucide-react";
+import {
+  ChevronRight,
+  ArrowRight,
+  BookOpen,
+  CheckCircle,
+  PlayCircle,
+} from "lucide-react";
 import { StudentLayout } from "@kaihle/ui";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import { useClassTopics } from "../../hooks/useClassTopics";
-import { useTopicSubtopics } from "../../hooks/useTopicSubtopics";
+import {
+  useTopicSubtopics,
+  type SubtopicStatus,
+} from "../../hooks/useTopicSubtopics";
+
+function getSubtopicCtaLabel(status: SubtopicStatus | undefined): string {
+  switch (status) {
+    case "completed":
+      return "Review";
+    case "in_progress":
+      return "Resume";
+    default:
+      return "Start";
+  }
+}
+
+interface BadgeStyle {
+  containerClass: string;
+  label: string;
+}
+
+function getSubtopicBadgeStyle(status: SubtopicStatus | undefined): BadgeStyle {
+  switch (status) {
+    case "completed":
+      return {
+        containerClass: "bg-brand-green-light text-brand-green font-semibold",
+        label: "Finished",
+      };
+    case "in_progress":
+      return {
+        containerClass: "bg-brand-gold/10 text-brand-amber font-semibold",
+        label: "In progress",
+      };
+    default:
+      return {
+        containerClass: "bg-brand-primary/10 text-brand-primary font-medium",
+        label: "Not started",
+      };
+  }
+}
 
 export function TopicDetailPage() {
   const { classId, topicId } = useParams<{
@@ -99,30 +144,53 @@ export function TopicDetailPage() {
           </div>
         ) : subtopics && subtopics.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {subtopics.map((subtopic) => (
-              <button
-                key={subtopic.id}
-                onClick={() =>
-                  navigate(`/student/subtopics/${subtopic.id}/course`)
-                }
-                className="group text-left bg-white rounded-xl border border-brand-border p-5 shadow-sm transition-all hover:border-brand-primary hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-              >
-                <div className="flex flex-col h-full gap-3">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-display font-bold text-base text-brand-ink leading-snug">
-                      {subtopic.name}
-                    </h3>
-                    <span className="inline-block mt-2 px-2 py-0.5 bg-gray-100 text-brand-muted text-xs font-semibold rounded-full">
-                      Not started
-                    </span>
+            {subtopics.map((subtopic) => {
+              const status = subtopic.progress?.status;
+              const badge = getSubtopicBadgeStyle(status);
+              const ctaLabel = getSubtopicCtaLabel(status);
+
+              return (
+                <button
+                  key={subtopic.id}
+                  onClick={() =>
+                    navigate(`/student/subtopics/${subtopic.id}/course`)
+                  }
+                  className="group text-left bg-white rounded-xl border border-brand-border p-5 shadow-sm transition-all hover:border-brand-primary hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                >
+                  <div className="flex flex-col h-full gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-sans font-semibold text-base text-brand-ink leading-snug">
+                        {subtopic.name}
+                      </h3>
+                      <span
+                        className={`inline-block mt-2 px-2 py-0.5 text-xs rounded-full ${badge.containerClass}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs font-semibold text-brand-primary group-hover:gap-2 transition-all">
+                      {status === "completed" ? (
+                        <CheckCircle
+                          className="w-3.5 h-3.5"
+                          aria-hidden="true"
+                        />
+                      ) : status === "in_progress" ? (
+                        <PlayCircle
+                          className="w-3.5 h-3.5"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <ArrowRight
+                          className="w-3.5 h-3.5"
+                          aria-hidden="true"
+                        />
+                      )}
+                      {ctaLabel}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 text-xs font-semibold text-brand-primary group-hover:gap-2 transition-all">
-                    Learn
-                    <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-                  </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-16 px-6">
