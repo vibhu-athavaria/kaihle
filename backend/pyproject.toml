@@ -44,6 +44,11 @@ where = ["."]
 include = ["app*"]
 exclude = ["alembic*"]
 
+[dependency-groups]
+dev = [
+    "psycopg2-binary",
+]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",

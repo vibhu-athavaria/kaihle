@@ -19,7 +19,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
@@ -59,51 +59,42 @@ async def get_review_queue(
     """
     from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic
 
-    # Base query: join subtopic_content with subtopics
-    # We want video content type only
+    # Always join CurriculumTopic + Subject + Grade so filters and eager-load work cleanly.
     base_query = (
         select(SubtopicContent)
         .join(Subtopic, SubtopicContent.subtopic_id == Subtopic.id)
+        .join(CurriculumTopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
+        .join(Subject, CurriculumTopic.subject_id == Subject.id)
+        .join(Grade, CurriculumTopic.grade_id == Grade.id)
         .where(SubtopicContent.content_type == "video")
+        .options(
+            selectinload(SubtopicContent.subtopic)
+            .selectinload(Subtopic.curriculum_topic)
+            .selectinload(CurriculumTopic.subject),  # noqa: E501
+            selectinload(SubtopicContent.subtopic)
+            .selectinload(Subtopic.curriculum_topic)
+            .selectinload(CurriculumTopic.grade),  # noqa: E501
+        )
     )
 
-    # Count query for totals
     count_query = (
         select(func.count())
         .select_from(SubtopicContent)
         .join(Subtopic, SubtopicContent.subtopic_id == Subtopic.id)
+        .join(CurriculumTopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
+        .join(Subject, CurriculumTopic.subject_id == Subject.id)
+        .join(Grade, CurriculumTopic.grade_id == Grade.id)
         .where(SubtopicContent.content_type == "video")
     )
 
-    # Apply subject filter (need to join through curriculum_topic -> subject)
     if subject:
-        base_query = (
-            base_query.join(CurriculumTopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
-            .join(Subject, CurriculumTopic.subject_id == Subject.id)
-            .where(Subject.code == subject.upper())
-        )
-        count_query = (
-            count_query.join(Subtopic, SubtopicContent.subtopic_id == Subtopic.id)
-            .join(CurriculumTopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
-            .join(Subject, CurriculumTopic.subject_id == Subject.id)
-            .where(Subject.code == subject.upper())
-        )
+        base_query = base_query.where(Subject.code == subject.upper())
+        count_query = count_query.where(Subject.code == subject.upper())
 
-    # Apply grade filter
     if grade is not None:
-        base_query = (
-            base_query.join(CurriculumTopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
-            .join(Grade, CurriculumTopic.grade_id == Grade.id)
-            .where(Grade.level == grade)
-        )
-        count_query = (
-            count_query.join(Subtopic, SubtopicContent.subtopic_id == Subtopic.id)
-            .join(CurriculumTopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
-            .join(Grade, CurriculumTopic.grade_id == Grade.id)
-            .where(Grade.level == grade)
-        )
+        base_query = base_query.where(Grade.level == grade)
+        count_query = count_query.where(Grade.level == grade)
 
-    # Apply status filter
     if status_filter == "pending":
         base_query = base_query.where(SubtopicContent.review_status == "pending")
         count_query = count_query.where(SubtopicContent.review_status == "pending")
