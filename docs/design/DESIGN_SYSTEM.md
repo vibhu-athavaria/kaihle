@@ -404,6 +404,7 @@ Every list component MUST have an empty state — never a blank area.
 
 ## 11. Hard Rules
 
+- ❌ No washed-out or gray progress bars, chart fills, or data visuals — use tinted brand colors (`bg-brand-gold/30`, `bg-brand-primary/20`, etc.). `bg-gray-100` / `bg-gray-200` are permitted only for track backgrounds on skeletons and neutral UI chrome, never as data fill colors.
 - ❌ No colored sidebar backgrounds — all sidebars are `bg-white`
 - ❌ No `indigo-*`, `emerald-*` for brand or mastery colors
 - ❌ No `emerald-500` for Strong mastery — use `brand-green`

@@ -8,21 +8,14 @@ import { StudentProfileHeader } from "../components/students/StudentProfileHeade
 import { SubjectMasteryCards } from "../components/students/SubjectMasteryCards";
 import { StudentGapMapTab } from "../components/students/StudentGapMapTab";
 import { LearningProfileTab } from "../components/students/LearningProfileTab";
-import { StudyPlanHistoryTab } from "../components/students/StudyPlanHistoryTab";
 import { AssessmentHistoryTab } from "../components/students/AssessmentHistoryTab";
 import { MiniCoursesTab } from "../components/students/MiniCoursesTab";
 
-type TabId =
-  | "gap-map"
-  | "learning-profile"
-  | "study-plans"
-  | "assessments"
-  | "mini-courses";
+type TabId = "gap-map" | "learning-profile" | "assessments" | "mini-courses";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "gap-map", label: "Gap Map" },
   { id: "learning-profile", label: "Learning Profile" },
-  { id: "study-plans", label: "Study Plans" },
   { id: "assessments", label: "Assessments" },
   { id: "mini-courses", label: "Mini-Courses" },
 ];
@@ -179,7 +172,6 @@ export function StudentProfilePage() {
             This student hasn&apos;t completed their learning profile yet.
           </p>
         )}
-        {activeTab === "study-plans" && <StudyPlanHistoryTab />}
         {activeTab === "assessments" && <AssessmentHistoryTab />}
         {activeTab === "mini-courses" && studentId && (
           <MiniCoursesTab studentId={studentId} />
