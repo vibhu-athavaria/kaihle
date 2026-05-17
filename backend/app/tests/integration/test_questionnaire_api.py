@@ -361,7 +361,7 @@ class TestSubmitQuestionnaire:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["modality_scores"]["dominant"] == "kinesthetic"
+        assert data["modality_scores"]["kinesthetic"] == 1.0
         assert data["work_style"]["prefers_solo"] is False
         assert data["work_style"]["concept_first"] is False
         assert data["work_style"]["task_based"] is True

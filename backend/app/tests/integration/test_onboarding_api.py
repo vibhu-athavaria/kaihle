@@ -233,8 +233,7 @@ async def test_full_onboarding_flow(
 ) -> None:
     """Test the complete onboarding flow end-to-end.
 
-    This test uses the service layer directly since auth middleware
-    is not yet implemented (M0-3-T3).
+    This test uses the service layer directly
     """
 
     service = OnboardingService(db_session)
@@ -263,7 +262,7 @@ async def test_full_onboarding_flow(
     updated_profile = await service.save_questionnaire_response(test_student.id, responses)
 
     # 4. Verify scores
-    assert updated_profile.modality_scores["dominant"] == "visual"
+    assert updated_profile.modality_scores["visual"] == 1.0
     assert updated_profile.work_style["prefers_solo"] is True
     assert updated_profile.work_style["concept_first"] is True
     assert updated_profile.work_style["task_based"] is False

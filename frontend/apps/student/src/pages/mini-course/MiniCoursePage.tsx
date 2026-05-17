@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -42,13 +42,20 @@ interface ExplanationCardProps {
   explanationText: string;
   interestCategory: string | null;
   contentId: string;
+  onMount?: () => void;
 }
 
 function ExplanationCard({
   explanationText,
   interestCategory,
   contentId,
+  onMount,
 }: ExplanationCardProps) {
+  useEffect(() => {
+    onMount?.();
+    // Run once on mount — intentionally no deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [feedbackGiven, setFeedbackGiven] = useState<
     "thumbs_up" | "thumbs_down" | null
   >(null);
@@ -304,10 +311,25 @@ export function MiniCoursePage() {
 
   const { mutate: markProgress } = useMarkCourseProgress(subtopicId!);
 
-  const handleExplanationView = () => {
+  // Derive initial quiz state from persisted score so re-entry skips the start gate
+  const hasCompletedQuiz =
+    course?.progress?.check_questions_score !== null &&
+    course?.progress?.check_questions_score !== undefined;
+
+  // Sync quizStarted when course data arrives
+  useEffect(() => {
+    if (hasCompletedQuiz) setQuizStarted(true);
+  }, [hasCompletedQuiz]);
+
+  // Called when the ExplanationCard mounts — separate from the AI drawer
+  const handleExplanationMount = () => {
     if (!course?.progress?.explanation_accessed) {
       markProgress({ explanation_accessed: true });
     }
+  };
+
+  // Opens the "Explain This" AI drawer — no progress side-effect
+  const handleExplainThisOpen = () => {
     setExplainOpen(true);
   };
 
@@ -400,6 +422,7 @@ export function MiniCoursePage() {
                 explanationText={course.explanation.explanation_text}
                 interestCategory={course.explanation.interest_category}
                 contentId={course.explanation.id}
+                onMount={handleExplanationMount}
               />
             ) : (
               <div className="bg-white rounded-2xl border border-brand-border p-8 text-center">
@@ -482,7 +505,7 @@ export function MiniCoursePage() {
                 </p>
               </div>
               <button
-                onClick={handleExplanationView}
+                onClick={handleExplainThisOpen}
                 className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-brand-primary text-white rounded-full font-sans font-semibold text-sm hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
               >
                 <MessageCircle className="w-4 h-4" aria-hidden="true" />
