@@ -107,17 +107,26 @@ def test_seed_result_when_error_added_then_failed():
 # ---------------------------------------------------------------------------
 
 
-def test_build_record_when_video_type_then_video_fields_set():
+def test_build_record_when_video_type_then_videos_jsonb_set():
     data = {
-        "video_url": "https://youtube.com/watch?v=abc",
-        "video_provider": "youtube",
-        "video_duration_seconds": 300,
-        "video_thumbnail_url": "https://img.youtube.com/vi/abc/maxresdefault.jpg",
+        "candidates": [
+            {
+                "video_url": "https://youtube.com/watch?v=abc",
+                "video_provider": "youtube",
+                "video_duration_seconds": 300,
+                "video_thumbnail_url": "https://img.youtube.com/vi/abc/maxresdefault.jpg",
+                "title": "Test Video",
+            }
+        ]
     }
     rec = seed.build_record(MINIMAL_SUBTOPIC, seed.CONTENT_TYPE_VIDEO, data, seed.REVIEW_STATUS_APPROVED, True)
     assert rec is not None
-    assert rec["video_url"] == "https://youtube.com/watch?v=abc"
-    assert rec["video_provider"] == "youtube"
+    assert rec["videos"] is not None
+    videos = json.loads(rec["videos"])
+    assert len(videos) == 1
+    assert videos[0]["url"] == "https://youtube.com/watch?v=abc"
+    assert videos[0]["status"] == "pending"
+    assert rec["video_url"] is None  # set by admin approval, not seed
     assert rec["explanation_text"] is None
     assert rec["quiz_questions"] is None
 
@@ -219,15 +228,18 @@ def test_seed_subtopic_when_dry_run_and_video_found_then_no_db_write(caplog):
         }
         for i in range(3)
     ]
-    fake_explanation = {"explanation_text": "Great explanation here"}
+    fake_explanation = {
+        "explanation_text": "Algebra is a branch of mathematics dealing with symbols and the rules for manipulating those symbols. It forms the foundation for all higher mathematics."
+    }
     fake_quiz = {
         "questions": [
             {
                 "question_id": "q1",
-                "question_text": "?",
-                "options": ["A: yes"],
-                "correct_answer": "A",
-                "explanation": "",
+                "question_text": "What does a variable represent in algebra?",
+                "options": ["A: A fixed number", "B: An unknown value", "C: A fraction", "D: An exponent"],
+                "correct_answer": "B",
+                "explanation": "A variable is a symbol that stands for an unknown or changeable value.",
+                "difficulty_level": 2,
             }
         ]
     }
@@ -247,7 +259,7 @@ def test_seed_subtopic_when_dry_run_and_video_found_then_no_db_write(caplog):
 
     # LLM only called for explanation + quiz (2 calls, not 3)
     assert mock_llm.call_count == 2
-    assert result.inserted == 5  # 3 videos + 1 explanation + 1 quiz
+    assert result.inserted == 3  # 1 video row (3 candidates in JSONB) + 1 explanation + 1 quiz
     assert not result.failed
     assert "[DRY RUN]" in caplog.text
 
@@ -276,10 +288,11 @@ def test_seed_subtopic_when_pre_gen_questions_exist_then_llm_not_called_for_quiz
             "questions": [
                 {
                     "question_id": "q1",
-                    "question_text": "?",
-                    "options": ["A: yes"],
-                    "correct_answer": "A",
-                    "explanation": "",
+                    "question_text": "What does a variable represent in algebra?",
+                    "options": ["A: A fixed number", "B: An unknown value", "C: A fraction", "D: An exponent"],
+                    "correct_answer": "B",
+                    "explanation": "A variable stands for an unknown value.",
+                    "difficulty_level": 2,
                 }
             ]
         }
@@ -289,7 +302,15 @@ def test_seed_subtopic_when_pre_gen_questions_exist_then_llm_not_called_for_quiz
     def fake_completion(**kwargs: Any):
         prompt = kwargs["messages"][0]["content"]
         llm_calls.append(prompt)
-        return {"choices": [{"message": {"content": '{"explanation_text": "ok"}'}}]}
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"explanation_text": "Algebra is a branch of mathematics dealing with symbols and the rules for manipulating those symbols."}'
+                    }
+                }
+            ]
+        }
 
     with patch("seed_subtopic_content.litellm.completion", side_effect=fake_completion):
         with (

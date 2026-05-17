@@ -38,7 +38,9 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
+import unicodedata
 import uuid
 from collections.abc import Coroutine, Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -49,6 +51,7 @@ from typing import Any
 
 import litellm
 from googleapiclient.discovery import build as yt_build  # type: ignore[import-untyped]
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, text
 
 # Ensure app is on path
@@ -57,6 +60,62 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.core.config import settings
 from app.core.database import CeleryAsyncSessionLocal
 from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic
+
+# ---------------------------------------------------------------------------
+# LLM output validation schemas (Pydantic v2)
+# ---------------------------------------------------------------------------
+
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _is_clean_text(text: str) -> bool:
+    """Return False if text contains control characters or excessive non-Latin Unicode."""
+    if _CONTROL_CHAR_RE.search(text):
+        return False
+    non_printable = sum(1 for c in text if unicodedata.category(c) in ("Cc", "Cf", "Cs", "Co", "Cn"))
+    return non_printable / max(len(text), 1) < 0.05
+
+
+class _QuizQuestion(BaseModel):
+    question_id: str
+    question_text: str = Field(..., min_length=10)
+    options: list[str] = Field(..., min_length=4, max_length=4)
+    correct_answer: str
+    explanation: str = Field(default="")
+    difficulty_level: int = Field(..., ge=1, le=5)
+
+    @field_validator("correct_answer")
+    @classmethod
+    def _valid_answer_key(cls, v: str) -> str:
+        if v.upper() not in ("A", "B", "C", "D"):
+            raise ValueError(f"correct_answer must be A/B/C/D, got {v!r}")
+        return v.upper()
+
+    @field_validator("question_text", "explanation")
+    @classmethod
+    def _clean(cls, v: str) -> str:
+        if v and not _is_clean_text(v):
+            raise ValueError("field contains control/garbage characters")
+        return v
+
+
+class _QuizOutput(BaseModel):
+    questions: list[_QuizQuestion] = Field(..., min_length=1)
+
+
+class _ExplanationOutput(BaseModel):
+    explanation_text: str = Field(..., min_length=50)
+
+    @field_validator("explanation_text")
+    @classmethod
+    def _clean(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("explanation_text is empty")
+        if not _is_clean_text(v):
+            raise ValueError("explanation_text contains control/garbage characters")
+        return v
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -266,13 +325,19 @@ Respond with ONLY a valid JSON object, no markdown:
 """
 
 
-QUIZ_PROMPT = """Generate 5 multiple-choice quiz questions for the subtopic below.
-Each question should:
-- Test understanding of a key concept
-- Have 4 options (A, B, C, D) with one correct answer
-- Include a brief explanation of why the correct answer is right
+QUIZ_PROMPT = """Generate 5 multiple-choice quiz questions for the following subtopic.
+Subtopic: {subtopic_name}
+Subject: {subject}
+Grade level: {grade_level}
 
-Respond with ONLY a valid JSON object, no markdown:
+Each question should:
+- Test understanding of a key concept specific to this subtopic
+- Have exactly 4 options labelled A, B, C, D — one correct answer
+- Include a brief explanation of why the correct answer is right
+- Include a difficulty_level integer from 1 (easy recall) to 5 (hard application/analysis),
+  appropriate for the grade level. Vary difficulty across the 5 questions.
+
+Respond with ONLY a valid JSON object, no markdown, no extra keys:
 {{
   "questions": [
     {{
@@ -280,7 +345,8 @@ Respond with ONLY a valid JSON object, no markdown:
       "question_text": "What is...?",
       "options": ["A: ...", "B: ...", "C: ...", "D: ..."],
       "correct_answer": "A",
-      "explanation": "A is correct because..."
+      "explanation": "A is correct because...",
+      "difficulty_level": 2
     }},
     ...4 more questions...
   ]
@@ -320,8 +386,6 @@ def call_llm(prompt: str, model: str | None = None) -> dict[str, Any] | None:
 
 def _iso8601_duration_to_seconds(duration: str) -> int:
     """Convert ISO 8601 duration (PT4M13S) to total seconds."""
-    import re
-
     m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration or "")
     if not m:
         return 0
@@ -485,7 +549,7 @@ def generate_video_content(subtopic: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def generate_explanation_content(subtopic: dict[str, Any]) -> dict[str, Any] | None:
-    """Generate an LLM-written explanation for a subtopic."""
+    """Generate an LLM-written explanation for a subtopic, validated via Pydantic."""
     if SKIP_EXPLANATIONS:
         return None
     prerequisites = ", ".join(p.get("name", "") for p in subtopic.get("prerequisites", [])[:3])
@@ -495,14 +559,24 @@ def generate_explanation_content(subtopic: dict[str, Any]) -> dict[str, Any] | N
         grade_level=subtopic.get("grade_level", "Grade 8"),
         prerequisites=prerequisites or "basic arithmetic",
     )
-    result = call_llm(prompt)
-    chars = len(result.get("explanation_text", "")) if result else 0
-    log.info("explanation_gen | subtopic=%s | chars=%d", subtopic.get("name", ""), chars)
-    return result
+    raw = call_llm(prompt)
+    if raw is None:
+        return None
+    try:
+        validated = _ExplanationOutput.model_validate(raw)
+        log.info(
+            "explanation_gen | subtopic=%s | chars=%d",
+            subtopic.get("name", ""),
+            len(validated.explanation_text),
+        )
+        return validated.model_dump()
+    except Exception as e:
+        log.warning("explanation_gen validation failed | subtopic=%s | error=%s", subtopic.get("name", ""), e)
+        return None
 
 
 def generate_quiz_content(subtopic: dict[str, Any]) -> dict[str, Any] | None:
-    """Generate practice quiz questions for a subtopic."""
+    """Generate practice quiz questions for a subtopic, validated via Pydantic."""
     if SKIP_QUIZZES:
         return None
     prompt = QUIZ_PROMPT.format(
@@ -510,10 +584,21 @@ def generate_quiz_content(subtopic: dict[str, Any]) -> dict[str, Any] | None:
         subject=subtopic.get("_strand_id", "Mathematics"),
         grade_level=subtopic.get("grade_level", "Grade 8"),
     )
-    result = call_llm(prompt)
-    q_count = len(result.get("questions", [])) if result else 0
-    log.info("quiz_gen | subtopic=%s | questions=%d", subtopic.get("name", ""), q_count)
-    return result
+    raw = call_llm(prompt)
+    if raw is None:
+        return None
+    try:
+        validated = _QuizOutput.model_validate(raw)
+        log.info(
+            "quiz_gen | subtopic=%s | questions=%d | difficulties=%s",
+            subtopic.get("name", ""),
+            len(validated.questions),
+            [q.difficulty_level for q in validated.questions],
+        )
+        return validated.model_dump()
+    except Exception as e:
+        log.warning("quiz_gen validation failed | subtopic=%s | error=%s", subtopic.get("name", ""), e)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -527,79 +612,95 @@ REVIEW_STATUS_APPROVED = "approved"
 REVIEW_STATUS_PENDING = "pending"
 
 
+# All types use the same SELECT key: (subtopic_id, content_type) — one row per type per subtopic.
+_SELECT_CONTENT_SQL = text("""
+    SELECT id FROM subtopic_content
+    WHERE subtopic_id = :subtopic_id
+      AND content_type = CAST(:content_type AS content_type)
+    LIMIT 1
+""")
+
+_INSERT_SQL = text("""
+    INSERT INTO subtopic_content (
+        id, subtopic_id, content_type, is_active,
+        applicable_tiers, review_status, is_stale, is_archived,
+        created_at, updated_at,
+        videos,
+        video_url, video_provider, video_duration_seconds, video_thumbnail_url,
+        explanation_text, quiz_questions, quiz_questions_count,
+        teacher_explanation, teacher_explanation_author_id,
+        interest_category_id, reviewed_at, reviewed_by_id, rejection_reason
+    ) VALUES (
+        :id, :subtopic_id, CAST(:content_type AS content_type), :is_active,
+        :applicable_tiers, CAST(:review_status AS review_status), :is_stale, :is_archived,
+        :created_at, :updated_at,
+        :videos,
+        :video_url, :video_provider, :video_duration_seconds, :video_thumbnail_url,
+        :explanation_text, :quiz_questions, :quiz_questions_count,
+        :teacher_explanation, :teacher_explanation_author_id,
+        :interest_category_id, :reviewed_at, :reviewed_by_id, :rejection_reason
+    )
+""")
+
+_UPDATE_VIDEO_SQL = text("""
+    UPDATE subtopic_content SET
+        is_active = :is_active,
+        applicable_tiers = :applicable_tiers,
+        review_status = CAST(:review_status AS review_status),
+        is_stale = :is_stale,
+        is_archived = :is_archived,
+        videos = :videos,
+        updated_at = NOW()
+    WHERE subtopic_id = :subtopic_id
+      AND content_type = CAST(:content_type AS content_type)
+""")
+
+_UPDATE_CONTENT_SQL = text("""
+    UPDATE subtopic_content SET
+        is_active = :is_active,
+        applicable_tiers = :applicable_tiers,
+        review_status = CAST(:review_status AS review_status),
+        is_stale = :is_stale,
+        is_archived = :is_archived,
+        explanation_text = :explanation_text,
+        quiz_questions = :quiz_questions,
+        quiz_questions_count = :quiz_questions_count,
+        updated_at = NOW()
+    WHERE subtopic_id = :subtopic_id
+      AND content_type = CAST(:content_type AS content_type)
+""")
+
+
 async def _upsert_subtopic_content_async(records: list[dict[str, Any]]) -> int:
-    """Insert or update subtopic_content records (idempotent upsert)."""
+    """Insert or update subtopic_content records (idempotent, SELECT-then-INSERT/UPDATE).
+
+    One row per (subtopic_id, content_type). SELECT by that key, then UPDATE or INSERT.
+    """
     if not records:
         return 0
-    inserted = 0
+    saved = 0
     async with CeleryAsyncSessionLocal() as session:
         for rec in records:
-            if rec["content_type"] == CONTENT_TYPE_VIDEO:
-                update_cols = [k for k in rec.keys() if k not in ("subtopic_id", "content_type", "video_url")]
-                set_clause = ", ".join(f"{k} = EXCLUDED.{k}" for k in update_cols)
-                sql = text(f"""
-                    INSERT INTO subtopic_content (id, subtopic_id, content_type, is_active,
-                        applicable_tiers, review_status, is_stale, is_archived,
-                        created_at, updated_at,
-                        video_url, video_provider, video_duration_seconds, video_thumbnail_url,
-                        explanation_text, quiz_questions, quiz_questions_count,
-                        teacher_explanation, teacher_explanation_author_id,
-                        interest_category_id, reviewed_at, reviewed_by_id, rejection_reason)
-                    VALUES (
-                        :id, :subtopic_id, :content_type::content_type_enum, :is_active,
-                        :applicable_tiers, :review_status::review_status_enum, :is_stale, :is_archived,
-                        :created_at, :updated_at,
-                        :video_url, :video_provider, :video_duration_seconds, :video_thumbnail_url,
-                        :explanation_text, :quiz_questions, :quiz_questions_count,
-                        :teacher_explanation, :teacher_explanation_author_id,
-                        :interest_category_id, :reviewed_at, :reviewed_by_id, :rejection_reason
-                    )
-                    ON CONFLICT (subtopic_id, content_type, video_url)
-                    DO UPDATE SET
-                        {set_clause},
-                        updated_at = NOW()
-                    WHERE subtopic_content.subtopic_id = :subtopic_id
-                      AND subtopic_content.content_type = :content_type::content_type_enum
-                      AND subtopic_content.video_url = :video_url
-                """)
-            else:
-                sql = text("""
-                    INSERT INTO subtopic_content (id, subtopic_id, content_type, is_active,
-                        applicable_tiers, review_status, is_stale, is_archived,
-                        created_at, updated_at,
-                        video_url, video_provider, video_duration_seconds, video_thumbnail_url,
-                        explanation_text, quiz_questions, quiz_questions_count,
-                        teacher_explanation, teacher_explanation_author_id,
-                        interest_category_id, reviewed_at, reviewed_by_id, rejection_reason)
-                    VALUES (
-                        :id, :subtopic_id, :content_type::content_type_enum, :is_active,
-                        :applicable_tiers, :review_status::review_status_enum, :is_stale, :is_archived,
-                        :created_at, :updated_at,
-                        :video_url, :video_provider, :video_duration_seconds, :video_thumbnail_url,
-                        :explanation_text, :quiz_questions, :quiz_questions_count,
-                        :teacher_explanation, :teacher_explanation_author_id,
-                        :interest_category_id, :reviewed_at, :reviewed_by_id, :rejection_reason
-                    )
-                    ON CONFLICT (subtopic_id, content_type)
-                    DO UPDATE SET
-                        is_active = EXCLUDED.is_active,
-                        applicable_tiers = EXCLUDED.applicable_tiers,
-                        review_status = EXCLUDED.review_status,
-                        explanation_text = EXCLUDED.explanation_text,
-                        quiz_questions = EXCLUDED.quiz_questions,
-                        quiz_questions_count = EXCLUDED.quiz_questions_count,
-                        updated_at = NOW()
-                    WHERE subtopic_content.subtopic_id = :subtopic_id
-                      AND subtopic_content.content_type = :content_type::content_type_enum
-                """)
-
+            update_sql = _UPDATE_VIDEO_SQL if rec["content_type"] == CONTENT_TYPE_VIDEO else _UPDATE_CONTENT_SQL
             try:
-                await session.execute(sql, rec)
-                inserted += 1
+                async with session.begin_nested():
+                    existing = await session.execute(_SELECT_CONTENT_SQL, rec)
+                    if existing.fetchone():
+                        await session.execute(update_sql, rec)
+                        log.debug("updated | subtopic=%s | type=%s", rec.get("subtopic_id"), rec.get("content_type"))
+                    else:
+                        await session.execute(_INSERT_SQL, rec)
+                        log.debug("inserted | subtopic=%s | type=%s", rec.get("subtopic_id"), rec.get("content_type"))
+                saved += 1
             except Exception as e:
-                log.error("Failed to upsert content for subtopic %s: %s", rec.get("subtopic_id"), e)
+                log.error(
+                    "Failed to upsert content | subtopic=%s | type=%s | error=%s",
+                    rec.get("subtopic_id"),
+                    rec.get("content_type"),
+                    e,
+                )
         await session.commit()
-    return inserted
+    return saved
 
 
 def upsert_subtopic_content(records: list[dict[str, Any]]) -> int:
@@ -633,6 +734,9 @@ def build_record(
         "is_archived": False,
         "created_at": now,
         "updated_at": now,
+        # videos JSONB array — populated for content_type='video', null otherwise
+        "videos": None,
+        # individual video fields — set by admin approval workflow, not seed
         "video_url": None,
         "video_provider": None,
         "video_duration_seconds": None,
@@ -649,15 +753,28 @@ def build_record(
     }
 
     if content_type == CONTENT_TYPE_VIDEO:
-        base["video_url"] = data.get("video_url")
-        base["video_provider"] = data.get("video_provider")
-        base["video_duration_seconds"] = data.get("video_duration_seconds")
-        base["video_thumbnail_url"] = data.get("video_thumbnail_url")
+        # Store all candidates in the JSONB array for admin review.
+        # Each entry matches the review-queue schema: {url, title, channel, view_count, status, last_checked_at}
+        # json.dumps required: asyncpg does not auto-serialize Python lists for JSONB in raw text() SQL.
+        base["videos"] = json.dumps(
+            [
+                {
+                    "url": v.get("video_url", ""),
+                    "title": v.get("title", ""),
+                    "channel": v.get("video_provider", ""),
+                    "view_count": None,
+                    "status": "pending",
+                    "last_checked_at": None,
+                }
+                for v in data.get("candidates", [])
+            ]
+        )
     elif content_type == CONTENT_TYPE_EXPLANATION:
         base["explanation_text"] = data.get("explanation_text")
     elif content_type == CONTENT_TYPE_PRACTICE:
         questions = data.get("questions", [])
-        base["quiz_questions"] = questions
+        # json.dumps required: asyncpg does not auto-serialize Python lists for JSONB in raw text() SQL.
+        base["quiz_questions"] = json.dumps(questions)
         base["quiz_questions_count"] = len(questions)
 
     return base
@@ -699,26 +816,27 @@ def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run:
     log.info("seeding | subtopic=%s | id=%s | dry_run=%s", subtopic_name, subtopic_id_str, dry_run)
 
     try:
-        # --- Videos (up to YOUTUBE_TOP_N real results) ---
+        # --- Videos — one row per subtopic, all candidates in the videos JSONB array ---
         if not SKIP_VIDEOS:
             videos = generate_video_content(subtopic)
             if videos:
-                recs: list[dict[str, Any]] = [
-                    r
-                    for v in videos
-                    if (r := build_record(subtopic, CONTENT_TYPE_VIDEO, v, REVIEW_STATUS_PENDING, is_active=True))
-                    is not None
-                ]
+                rec = build_record(
+                    subtopic,
+                    CONTENT_TYPE_VIDEO,
+                    {"candidates": videos},
+                    REVIEW_STATUS_PENDING,
+                    is_active=True,
+                )
                 if dry_run:
                     for v in videos:
                         log.info(
-                            "[DRY RUN] would insert video | subtopic=%s | url=%s",
+                            "[DRY RUN] would upsert video candidate | subtopic=%s | url=%s",
                             subtopic_name,
                             v.get("video_url"),
                         )
-                    result.inserted += len(recs)
-                else:
-                    result.inserted += upsert_subtopic_content(recs)
+                    result.inserted += 1
+                elif rec and upsert_subtopic_content([rec]):
+                    result.inserted += 1
             else:
                 log.info("no videos found | subtopic=%s", subtopic_name)
                 result.skipped += 1
