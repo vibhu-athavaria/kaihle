@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
 import { useStudentProfile } from "../hooks/useStudentProfile";
+import { useTeacherStudents } from "../hooks/useTeacherStudents";
 import { useStudentGapMapForTeacher } from "../hooks/useStudentGapMapForTeacher";
 import { StudentProfileHeader } from "../components/students/StudentProfileHeader";
 import { SubjectMasteryCards } from "../components/students/SubjectMasteryCards";
@@ -31,9 +32,16 @@ export function StudentProfilePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const schoolId = user?.school_id ?? null;
+
+  const { data: teacherStudents } = useTeacherStudents(schoolId);
+  const teacherClassIds = useMemo(() => {
+    const match = teacherStudents?.find((s) => s.id === studentId);
+    return match?.class_ids?.map(String) ?? [];
+  }, [teacherStudents, studentId]);
+
   const { data, isLoading, isError } = useStudentProfile(
     studentId ?? null,
-    schoolId,
+    teacherClassIds,
   );
   const activeTab = (searchParams.get("tab") as TabId) ?? "gap-map";
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(

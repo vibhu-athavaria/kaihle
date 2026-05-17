@@ -39,20 +39,38 @@ export interface StudentProfileData {
   studentId: string;
   studentName: string;
   email: string | null;
+  gradeName: string | null;
   className: string | null;
   gapMap: StudentGapMap | null;
   learningProfile: StudentLearningProfile | null;
   availableSubjects: Array<{ subjectId: string; subjectName: string }>;
 }
 
+interface EnrolledClassInfo {
+  classId: string;
+  className: string;
+  subjectId: string;
+  subjectName: string;
+  gradeName: string;
+}
+
+interface StudentInfoApiResponse {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  gradeName: string;
+  enrolledClasses: EnrolledClassInfo[];
+}
+
 async function fetchStudentProfile(
   studentId: string,
-  schoolId: string,
+  teacherClassIds: string[],
 ): Promise<StudentProfileData> {
-  const [classesRes, profileRes] = await Promise.all([
-    apiClient
-      .get(`/api/v1/schools/${schoolId}/classes`)
-      .catch(() => ({ data: [] })),
+  const teacherClassIdSet = new Set(teacherClassIds);
+
+  const [infoRes, profileRes] = await Promise.all([
+    apiClient.get<StudentInfoApiResponse>(`/api/v1/students/${studentId}/info`),
     apiClient
       .get(`/api/v1/onboarding/learning-profile`, {
         params: { student_id: studentId },
@@ -60,66 +78,47 @@ async function fetchStudentProfile(
       .catch(() => ({ data: null })),
   ]);
 
-  const allClasses: any[] = classesRes.data ?? [];
+  const info = infoRes.data;
 
-  // Cap parallel enrollment checks at 5 to avoid N+1 API explosion
-  const enrollmentChecks = await Promise.all(
-    allClasses.slice(0, 5).map(async (cls: any) => {
-      const res = await apiClient
-        .get(`/api/v1/classes/${cls.id}/enrollments`)
-        .catch(() => ({ data: [] }));
-      const students: any[] = res.data ?? [];
-      const match = students.find((s: any) => s.id === studentId);
-      return match ? { cls, student: match } : null;
-    }),
+  // Filter to only classes belonging to this teacher
+  const teacherClasses = (info.enrolledClasses ?? []).filter(
+    (cls) => teacherClassIdSet.size === 0 || teacherClassIdSet.has(cls.classId),
   );
 
-  const studentClasses = enrollmentChecks.filter(Boolean) as Array<{
-    cls: any;
-    student: any;
-  }>;
-
-  const studentName =
-    studentClasses.length > 0
-      ? `${studentClasses[0].student.first_name} ${studentClasses[0].student.last_name}`.trim()
-      : "Unknown Student";
-  const email =
-    studentClasses.length > 0 ? studentClasses[0].student.email : null;
-  const className =
-    studentClasses.length > 0 ? studentClasses[0].cls.name : null;
-
-  // Derive subjects from enrolled classes — NOT from gap map topic_ids
   const subjectMap = new Map<string, string>();
-  for (const entry of studentClasses) {
-    if (entry.cls.subject_id) {
-      const subjectName =
-        entry.cls.subject_name ?? entry.cls.subjectName ?? entry.cls.subject_id;
-      subjectMap.set(entry.cls.subject_id, subjectName);
+  for (const cls of teacherClasses) {
+    if (cls.subjectId && !subjectMap.has(cls.subjectId)) {
+      subjectMap.set(cls.subjectId, cls.subjectName);
     }
   }
-  const availableSubjects = Array.from(subjectMap.entries()).map(
-    ([subjectId, subjectName]) => ({ subjectId, subjectName }),
-  );
 
   return {
     studentId,
-    studentName,
-    email,
-    className,
+    studentName: `${info.firstName} ${info.lastName}`.trim(),
+    email: info.email,
+    gradeName: info.gradeName ?? null,
+    className: teacherClasses[0]?.className ?? null,
     gapMap: null,
     learningProfile: profileRes.data,
-    availableSubjects,
+    availableSubjects: Array.from(subjectMap.entries()).map(
+      ([subjectId, subjectName]) => ({ subjectId, subjectName }),
+    ),
   };
 }
 
 export function useStudentProfile(
   studentId: string | null,
-  schoolId: string | null,
+  teacherClassIds: string[],
 ) {
   return useQuery({
-    queryKey: ["teacher", "student-profile", studentId, schoolId] as const,
-    queryFn: () => fetchStudentProfile(studentId!, schoolId!),
-    enabled: !!studentId && !!schoolId,
+    queryKey: [
+      "teacher",
+      "student-profile",
+      studentId,
+      teacherClassIds,
+    ] as const,
+    queryFn: () => fetchStudentProfile(studentId!, teacherClassIds),
+    enabled: !!studentId,
     staleTime: 30 * 60 * 1000,
   });
 }
