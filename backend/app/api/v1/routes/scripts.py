@@ -68,7 +68,7 @@ SCRIPTS: dict[str, ScriptDefinition] = {
             ScriptParameter(
                 name="resume", type="boolean", default=False, description="Resume from existing output file"
             ),
-            ScriptParameter(name="dry_run", type="boolean", default=False, description="Print output without saving"),
+            ScriptParameter(name="dry-run", type="boolean", default=False, description="Print output without saving"),
             ScriptParameter(
                 name="rate_limit_delay", type="number", default=0.3, description="Seconds to wait between API calls"
             ),
@@ -92,7 +92,7 @@ SCRIPTS: dict[str, ScriptDefinition] = {
             ),
             ScriptParameter(name="mapping_file", type="string", description="Path to subtopic_mapping.json"),
             ScriptParameter(
-                name="dry_run",
+                name="dry-run",
                 type="boolean",
                 default=False,
                 description="Validate and resolve all rows without writing to DB",
@@ -125,7 +125,7 @@ SCRIPTS: dict[str, ScriptDefinition] = {
                 description="Path to the curriculum JSON file",
             ),
             ScriptParameter(
-                name="dry_run",
+                name="dry-run",
                 type="boolean",
                 default=False,
                 description="Validate JSON and simulate inserts without writing to the database",
@@ -150,17 +150,17 @@ SCRIPTS: dict[str, ScriptDefinition] = {
                 default="gpt-4o-mini",
                 description="Model identifier (e.g., gpt-4o-mini, claude-3-5-sonnet-20241022)",
             ),
-            ScriptParameter(name="api_key", type="string", description="API key for the LLM provider"),
+            ScriptParameter(name="api-key", type="string", description="API key for the LLM provider"),
             ScriptParameter(
                 name="limit", type="number", description="Limit number of subtopics to process (for testing)"
             ),
-            ScriptParameter(name="skip_videos", type="boolean", default=False, description="Skip video generation"),
+            ScriptParameter(name="skip-videos", type="boolean", default=False, description="Skip video generation"),
             ScriptParameter(
-                name="skip_explanations", type="boolean", default=False, description="Skip explanation generation"
+                name="skip-explanations", type="boolean", default=False, description="Skip explanation generation"
             ),
-            ScriptParameter(name="skip_quizzes", type="boolean", default=False, description="Skip quiz generation"),
+            ScriptParameter(name="skip-quizzes", type="boolean", default=False, description="Skip quiz generation"),
             ScriptParameter(
-                name="dry_run", type="boolean", default=False, description="Dry run without making DB changes"
+                name="dry-run", type="boolean", default=False, description="Dry run without making DB changes"
             ),
         ],
         requires_api_key=True,
