@@ -5,6 +5,13 @@ const MODALITY_LABELS: Record<string, string> = {
   kinesthetic: "Hands-on",
 };
 
+const INTEREST_LABELS: Record<string, string> = {
+  sports_movement: "Sports & Movement",
+  tech_gaming: "Tech & Gaming",
+  nature_animals: "Nature & Animals",
+  arts_culture: "Arts & Culture",
+};
+
 const MODALITY_EMOJI: Record<string, string> = {
   visual: "👁️",
   auditory: "👂",
@@ -48,9 +55,20 @@ export function LearningProfileTab({
   interests,
   completedAt,
 }: LearningProfileTabProps) {
-  const modalityEntries = Object.entries(modalityScores).sort(
-    (a, b) => b[1] - a[1],
-  );
+  // Always render the 4 known modality keys in order — coerce missing/invalid values to 0.
+  // This naturally excludes old-format keys (dominant, secondary) from broken v2 profiles.
+  const MODALITY_KEYS = [
+    "visual",
+    "auditory",
+    "reading_writing",
+    "kinesthetic",
+  ] as const;
+  const modalityEntries = MODALITY_KEYS.map((key): [string, number] => [
+    key,
+    typeof modalityScores[key] === "number"
+      ? (modalityScores[key] as number)
+      : 0,
+  ]).sort((a, b) => b[1] - a[1]);
 
   const dominantModality =
     modalityEntries.length > 0 ? modalityEntries[0][0] : "";
@@ -172,9 +190,9 @@ export function LearningProfileTab({
             {interests.map((interest) => (
               <span
                 key={interest}
-                className="bg-gray-100 text-brand-body rounded-full px-3 py-1 text-xs font-sans"
+                className="bg-brand-gold/10 text-brand-gold-dark border border-brand-gold/20 rounded-full px-3 py-1 text-xs font-sans font-medium"
               >
-                {interest}
+                {INTEREST_LABELS[interest] ?? interest}
               </span>
             ))}
           </div>

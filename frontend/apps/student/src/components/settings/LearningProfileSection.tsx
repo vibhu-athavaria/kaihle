@@ -23,6 +23,13 @@ const MODALITY_LABELS: Record<string, string> = {
   kinesthetic: "Hands-on",
 };
 
+const INTEREST_LABELS: Record<string, string> = {
+  sports_movement: "Sports & Movement",
+  tech_gaming: "Tech & Gaming",
+  nature_animals: "Nature & Animals",
+  arts_culture: "Arts & Culture",
+};
+
 export function LearningProfileSection() {
   const navigate = useNavigate();
 
@@ -49,8 +56,21 @@ export function LearningProfileSection() {
     });
   };
 
+  // Always render the 4 known modality keys — coerce missing/invalid values to 0.
+  // This naturally excludes old-format keys (dominant, secondary) from broken v2 profiles.
+  const MODALITY_KEYS = [
+    "visual",
+    "auditory",
+    "reading_writing",
+    "kinesthetic",
+  ] as const;
   const modalityEntries = profile?.modality_scores
-    ? Object.entries(profile.modality_scores).sort((a, b) => b[1] - a[1])
+    ? MODALITY_KEYS.map((key): [string, number] => [
+        key,
+        typeof profile.modality_scores[key] === "number"
+          ? (profile.modality_scores[key] as number)
+          : 0,
+      ]).sort((a, b) => b[1] - a[1])
     : [];
 
   const dominantModality =
@@ -84,10 +104,10 @@ export function LearningProfileSection() {
                   <span className="font-sans text-sm text-brand-ink w-36">
                     {MODALITY_LABELS[key] ?? key}
                   </span>
-                  <div className="h-2 rounded-full flex-1 bg-brand-border-soft">
+                  <div className="h-2 rounded-full flex-1 bg-brand-primary/10">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ease-out ${
-                        isDominant ? "bg-brand-primary" : "bg-brand-border"
+                        isDominant ? "bg-brand-primary" : "bg-brand-primary/30"
                       }`}
                       style={{ width: `${score * 100}%` }}
                       role="progressbar"
@@ -158,9 +178,9 @@ export function LearningProfileSection() {
                 {profile.interests.map((interest) => (
                   <span
                     key={interest}
-                    className="bg-green-50 text-brand-primary border border-green-200 text-xs rounded-full px-3 py-1"
+                    className="bg-green-50 text-brand-primary border border-green-200 text-xs rounded-full px-3 py-1 font-medium"
                   >
-                    {interest}
+                    {INTEREST_LABELS[interest] ?? interest}
                   </span>
                 ))}
               </div>

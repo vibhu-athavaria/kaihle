@@ -98,6 +98,14 @@ class Topic(Base, UUIDMixin, TimestampMixin):
     keywords: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # Mini-course generation status (global per topic, school-agnostic).
+    # none → not yet generated; generating → in progress; ready → content exists; failed → last attempt failed.
+    mini_course_status: Mapped[str] = mapped_column(String(20), nullable=False, default="none", server_default="none")
+    # UUID of the teacher who last triggered generation — used to send success email.
+    mini_course_teacher_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
 
 class CurriculumSubject(Base, TimestampMixin):
     """Which subjects belong to a curriculum."""

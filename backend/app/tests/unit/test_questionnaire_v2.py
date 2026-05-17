@@ -10,14 +10,18 @@ def _make_responses(*pairs: tuple[str, str]) -> list[dict]:
 
 
 class TestCalculateModalityScoresV2:
-    """Tests for _calculate_modality_scores with v2 plurality-vote logic."""
+    """Tests for _calculate_modality_scores with v2 plurality-vote logic.
+
+    Returns normalised float scores per modality (CONSTITUTION §11 format):
+    {"visual": float, "auditory": float, "reading_writing": float, "kinesthetic": float}
+    """
 
     def _score(self, responses: list[dict]) -> dict:
         # Instantiate without DB — we only call pure methods
         svc = OnboardingService.__new__(OnboardingService)
         return svc._calculate_modality_scores(responses)
 
-    def test_calculate_modality_scores_v2_when_all_three_visual_then_dominant_is_visual(self) -> None:
+    def test_calculate_modality_scores_v2_when_all_three_visual_then_visual_score_is_one(self) -> None:
         # Arrange: Q1=see_diagram (visual), Q2=draw_it (visual), Q3=find_example (visual)
         responses = _make_responses(
             ("q1", "see_diagram"),
@@ -26,10 +30,13 @@ class TestCalculateModalityScoresV2:
         )
         # Act
         result = self._score(responses)
-        # Assert
-        assert result["dominant"] == "visual"
+        # Assert: visual gets all 3 votes → score 1.0; others 0.0
+        assert result["visual"] == 1.0
+        assert result["auditory"] == 0.0
+        assert result["reading_writing"] == 0.0
+        assert result["kinesthetic"] == 0.0
 
-    def test_calculate_modality_scores_v2_when_split_votes_then_secondary_is_second_most(self) -> None:
+    def test_calculate_modality_scores_v2_when_split_votes_then_visual_score_exceeds_auditory(self) -> None:
         # Arrange: Q1=see_diagram (visual), Q2=talk_through (auditory), Q3=find_example (visual)
         responses = _make_responses(
             ("q1", "see_diagram"),
@@ -38,13 +45,14 @@ class TestCalculateModalityScoresV2:
         )
         # Act
         result = self._score(responses)
-        # Assert
-        assert result["dominant"] == "visual"
-        assert result["secondary"] == "auditory"
+        # Assert: visual=2/3, auditory=1/3
+        assert result["visual"] == round(2 / 3, 4)
+        assert result["auditory"] == round(1 / 3, 4)
+        assert result["visual"] > result["auditory"]
 
-    def test_calculate_modality_scores_v2_when_three_way_tie_then_dominant_is_reading_writing(self) -> None:
+    def test_calculate_modality_scores_v2_when_three_way_tie_then_all_scores_equal(self) -> None:
         # Arrange: Q1=see_diagram (visual), Q2=talk_through (auditory), Q3=reread_alone (reading_writing)
-        # All three modalities get 1 vote each → tie-break: reading_writing wins
+        # Each modality gets exactly 1 vote → equal scores
         responses = _make_responses(
             ("q1", "see_diagram"),
             ("q2", "talk_through"),
@@ -52,8 +60,11 @@ class TestCalculateModalityScoresV2:
         )
         # Act
         result = self._score(responses)
-        # Assert
-        assert result["dominant"] == "reading_writing"
+        # Assert: three modalities each get 1/3, kinesthetic gets 0
+        assert result["visual"] == round(1 / 3, 4)
+        assert result["auditory"] == round(1 / 3, 4)
+        assert result["reading_writing"] == round(1 / 3, 4)
+        assert result["kinesthetic"] == 0.0
 
 
 class TestExtractInterestsV2:

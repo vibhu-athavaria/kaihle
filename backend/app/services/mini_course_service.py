@@ -1,13 +1,14 @@
 """Mini-course service.
 
 Handles student mini-course delivery: interest-matched explanation,
-approved video, check questions, and progress tracking.
+approved video, check questions, progress tracking, teacher course-detail
+view, and teacher interest-category overrides per student.
 
 All business logic lives here — route handlers are thin wrappers.
 """
 
 import uuid
-from typing import Literal
+from typing import Any, Literal
 
 import structlog
 from fastapi import HTTPException, status
@@ -17,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.questionnaire_config import INTEREST_KEY_TO_CATEGORY
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subtopic, Topic
 from app.models.interest_category import InterestCategory
-from app.models.mini_course import SubtopicContentFeedback, SubtopicCourseProgress
+from app.models.mini_course import MiniCourseStudentOverride, SubtopicContentFeedback, SubtopicCourseProgress
 from app.models.onboarding import StudentLearningProfile
 from app.models.subtopic_content import SubtopicContent
 from app.schemas.mini_course import (
@@ -494,4 +495,254 @@ class MiniCourseService:
         return StudentCourseProgressResponse(
             student_id=student_id,
             progress=progress_items,
+        )
+
+    # ------------------------------------------------------------------
+    # Teacher: course-detail view (4-variant grid + student assignments)
+    # ------------------------------------------------------------------
+
+    async def get_course_detail_for_teacher(
+        self,
+        topic_id: uuid.UUID,
+        class_id: uuid.UUID,
+        school_id: uuid.UUID,
+    ) -> dict[str, Any]:
+        """Return full course detail for the teacher Course Detail page.
+
+        Returns:
+          {
+            topic_name: str,
+            subtopics: [
+              {
+                subtopic_id, subtopic_name, sequence_order,
+                variants: {
+                  <interest_category_name>: {
+                    content_id, explanation_text, review_status, interest_label
+                  } | null
+                }
+              }
+            ],
+            students: [
+              {
+                student_id, student_name, email,
+                auto_interest_category: str | null,   -- from learning profile
+                override_interest_category: str | null,  -- teacher-set
+                effective_interest_category: str | null  -- override if set, else auto
+              }
+            ],
+            interest_categories: [{id, name}]
+          }
+        """
+        from app.models.school import Class, ClassEnrollment
+        from app.models.user import User
+
+        # Validate class belongs to this school
+        class_result = await self.db.execute(select(Class).where(Class.id == class_id, Class.school_id == school_id))
+        cls = class_result.scalar_one_or_none()
+        if cls is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+
+        # Topic name
+        topic_result = await self.db.execute(select(Topic.name).where(Topic.id == topic_id))
+        topic_row = topic_result.first()
+        if topic_row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Topic not found")
+        topic_name: str = topic_row.name
+
+        # All interest categories
+        cats_result = await self.db.execute(select(InterestCategory))
+        all_categories = list(cats_result.scalars().all())
+        cat_by_id = {cat.id: cat.name for cat in all_categories}
+        cat_by_name = {cat.name: cat.id for cat in all_categories}
+
+        # Human-readable labels per interest category name
+        interest_labels: dict[str, str] = {
+            "sports_movement": "Sports & Fitness",
+            "tech_gaming": "Technology & Innovation",
+            "nature_animals": "Nature & Science",
+            "arts_culture": "Music & Arts",
+        }
+
+        # Subtopics for this topic
+        subtopics_result = await self.db.execute(
+            select(Subtopic)
+            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .where(CurriculumTopic.topic_id == topic_id, Subtopic.is_active.is_(True))
+            .order_by(Subtopic.sequence_order)
+        )
+        subtopics = list(subtopics_result.scalars().all())
+        subtopic_ids = [s.id for s in subtopics]
+
+        # All SubtopicContent for these subtopics (any review status, not archived)
+        content_result = await self.db.execute(
+            select(SubtopicContent).where(
+                SubtopicContent.subtopic_id.in_(subtopic_ids),
+                SubtopicContent.content_type == "explanation",
+                SubtopicContent.is_archived.is_(False),
+            )
+        )
+        all_content = list(content_result.scalars().all())
+
+        # Index: subtopic_id → {category_name → SubtopicContent}
+        content_index: dict[uuid.UUID, dict[str, SubtopicContent]] = {}
+        for row in all_content:
+            cat_name = cat_by_id.get(row.interest_category_id, "unknown") if row.interest_category_id else "unknown"
+            content_index.setdefault(row.subtopic_id, {})[cat_name] = row
+
+        subtopics_out = []
+        for sub in subtopics:
+            variants: dict[str, dict[str, str] | None] = {}
+            for cat in all_categories:
+                sc = content_index.get(sub.id, {}).get(cat.name)
+                if sc is not None:
+                    variants[cat.name] = {
+                        "content_id": str(sc.id),
+                        "explanation_text": sc.teacher_explanation or sc.explanation_text or "",
+                        "review_status": sc.review_status,
+                        "interest_label": interest_labels.get(cat.name, cat.name),
+                    }
+                else:
+                    variants[cat.name] = None
+            subtopics_out.append(
+                {
+                    "subtopic_id": str(sub.id),
+                    "subtopic_name": sub.name,
+                    "sequence_order": sub.sequence_order,
+                    "variants": variants,
+                }
+            )
+
+        # Enrolled students
+        enrolled_result = await self.db.execute(
+            select(ClassEnrollment.student_id).where(ClassEnrollment.class_id == class_id)
+        )
+        student_ids = [row[0] for row in enrolled_result.all()]
+
+        students_out: list[dict[str, Any]] = []
+        if student_ids:
+            users_result = await self.db.execute(select(User).where(User.id.in_(student_ids)))
+            users = {u.id: u for u in users_result.scalars().all()}
+
+            profiles_result = await self.db.execute(
+                select(StudentLearningProfile).where(StudentLearningProfile.student_id.in_(student_ids))
+            )
+            profiles = {p.student_id: p for p in profiles_result.scalars().all()}
+
+            overrides_result = await self.db.execute(
+                select(MiniCourseStudentOverride).where(
+                    MiniCourseStudentOverride.topic_id == topic_id,
+                    MiniCourseStudentOverride.school_id == school_id,
+                    MiniCourseStudentOverride.student_id.in_(student_ids),
+                )
+            )
+            overrides = {o.student_id: o for o in overrides_result.scalars().all()}
+
+            for sid in student_ids:
+                user = users.get(sid)
+                if user is None:
+                    continue
+
+                # Auto interest from learning profile
+                auto_category: str | None = None
+                profile = profiles.get(sid)
+                if profile and profile.interests:
+                    cat_name_from_interest = INTEREST_KEY_TO_CATEGORY.get(profile.interests[0].lower())
+                    if cat_name_from_interest and cat_name_from_interest in cat_by_name:
+                        auto_category = cat_name_from_interest
+
+                # Teacher override
+                override_category: str | None = None
+                override = overrides.get(sid)
+                if override:
+                    override_category = cat_by_id.get(override.interest_category_id)
+
+                effective = override_category if override_category else auto_category
+
+                students_out.append(
+                    {
+                        "student_id": str(sid),
+                        "student_name": f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email,
+                        "email": user.email,
+                        "auto_interest_category": auto_category,
+                        "override_interest_category": override_category,
+                        "effective_interest_category": effective,
+                        "override_id": str(override.id) if override else None,
+                    }
+                )
+
+        logger.info(
+            "teacher_course_detail_fetched",
+            topic_id=str(topic_id),
+            class_id=str(class_id),
+            subtopic_count=len(subtopics),
+            student_count=len(students_out),
+        )
+
+        return {
+            "topic_id": str(topic_id),
+            "topic_name": topic_name,
+            "subtopics": subtopics_out,
+            "students": students_out,
+            "interest_categories": [
+                {"id": str(cat.id), "name": cat.name, "label": interest_labels.get(cat.name, cat.name)}
+                for cat in all_categories
+            ],
+        }
+
+    # ------------------------------------------------------------------
+    # Teacher: set / clear student interest override
+    # ------------------------------------------------------------------
+
+    async def set_student_override(
+        self,
+        topic_id: uuid.UUID,
+        student_id: uuid.UUID,
+        school_id: uuid.UUID,
+        teacher_id: uuid.UUID,
+        interest_category_id: uuid.UUID | None,
+    ) -> None:
+        """Upsert or delete a teacher interest-category override for a student on a topic.
+
+        If interest_category_id is None, deletes any existing override (clears back to auto).
+        """
+        existing_result = await self.db.execute(
+            select(MiniCourseStudentOverride).where(
+                MiniCourseStudentOverride.school_id == school_id,
+                MiniCourseStudentOverride.topic_id == topic_id,
+                MiniCourseStudentOverride.student_id == student_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+
+        if interest_category_id is None:
+            # Clear override
+            if existing is not None:
+                await self.db.delete(existing)
+                await self.db.commit()
+                logger.info(
+                    "mini_course_student_override_cleared",
+                    topic_id=str(topic_id),
+                    student_id=str(student_id),
+                )
+            return
+
+        if existing is not None:
+            existing.interest_category_id = interest_category_id
+            existing.set_by_teacher_id = teacher_id
+        else:
+            override = MiniCourseStudentOverride(
+                school_id=school_id,
+                topic_id=topic_id,
+                student_id=student_id,
+                interest_category_id=interest_category_id,
+                set_by_teacher_id=teacher_id,
+            )
+            self.db.add(override)
+
+        await self.db.commit()
+        logger.info(
+            "mini_course_student_override_set",
+            topic_id=str(topic_id),
+            student_id=str(student_id),
+            interest_category_id=str(interest_category_id),
         )
