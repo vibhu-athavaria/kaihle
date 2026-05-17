@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     from_email: str = "no-reply@kaihle.com"
     google_api_key: str = ""
     openai_api_key: str = ""
+    openrouter_api_key: str = ""
     anthropic_api_key: str = ""
     youtube_data_api_key: str = ""
     aws_access_key_id: str = ""
@@ -41,7 +42,7 @@ class Settings(BaseSettings):
     llm_embeddings_model: str = "text-embedding-004"
     llm_embeddings_api_base: str | None = None
 
-    llm_question_generation_model: str = "gemini/gemini-2.5-flash"
+    llm_question_generation_model: str = ""
     llm_question_generation_api_base: str | None = None
 
     llm_student_pack_model: str = ""
@@ -57,7 +58,7 @@ class Settings(BaseSettings):
     llm_mini_course_api_base: str | None = None
 
     # Notification recipients
-    kaihle_admin_email: str = "admin@kaihle.ai"
+    kaihle_admin_email: str = ""
 
     # Platform stats — overridable via environment variables
     platform_llm_provider: str = "openai"

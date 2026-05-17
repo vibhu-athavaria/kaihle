@@ -163,18 +163,16 @@ class OnboardingService:
     def _calculate_modality_scores(self, responses: list[dict[str, Any]]) -> dict[str, Any]:
         """Calculate modality scores from Q1, Q2, Q3 responses (v2 plurality vote).
 
-        Collects the modality vote from each of Q1, Q2, Q3.  The modality
-        with the most votes becomes dominant; the one with the second-most
-        becomes secondary.  Tie-break rule: "reading_writing" wins ties.
+        Tallies one vote per question (Q1–Q3) for each modality, then normalises
+        the counts to fractions in [0.0, 1.0] so the result matches the CONSTITUTION
+        §11 format: {"visual": float, "auditory": float, ...}.
 
         Args:
             responses: List of response dictionaries.
 
         Returns:
-            Dictionary with "dominant" and "secondary" modality keys.
+            Dictionary with one float score per modality (0.0–1.0).
         """
-        # Tie-break order: reading_writing first, then the rest alphabetically
-        tie_break_order = ["reading_writing", "auditory", "kinesthetic", "visual"]
         counts: dict[str, int] = {
             "visual": 0,
             "auditory": 0,
@@ -199,22 +197,8 @@ class OnboardingService:
                     if modality in counts:
                         counts[modality] += 1
 
-        # Sort modalities by vote count desc, then by tie_break_order for ties
-        def sort_key(item: tuple[str, int]) -> tuple[int, int]:
-            modality, count = item
-            tie_pos = tie_break_order.index(modality) if modality in tie_break_order else 99
-            return (-count, tie_pos)
-
-        ranked = sorted(counts.items(), key=sort_key)
-
-        dominant = ranked[0][0]
-        # Secondary exists only if its count is > 0 and less than dominant's count,
-        # or if multiple modalities share the top count (then second in order)
-        secondary: str | None = None
-        if len(ranked) > 1 and ranked[1][1] > 0:
-            secondary = ranked[1][0]
-
-        return {"dominant": dominant, "secondary": secondary}
+        total = sum(counts.values()) or 1  # guard against division by zero
+        return {modality: round(count / total, 4) for modality, count in counts.items()}
 
     def _calculate_work_style(self, responses: list[dict[str, Any]]) -> dict[str, Any]:
         """Calculate work style preferences from Q4, Q5, Q7 responses (v2).

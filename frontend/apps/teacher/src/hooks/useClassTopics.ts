@@ -12,6 +12,7 @@ export interface ClassTopicItem {
   subtopic_count: number;
   sequence_order: number;
   is_covered: boolean;
+  mini_course_status: "none" | "generating" | "ready" | "failed";
 }
 
 export interface AvailableCurriculumTopic {

@@ -80,6 +80,7 @@ async def test_list_topics_when_topics_exist_then_returns_response_list() -> Non
     row.topic_id = uuid.uuid4()
     row.topic_name = "Algebra"
     row.subtopic_count = 3
+    row.mini_course_status = "none"
 
     result = MagicMock()
     result.all.return_value = [row]

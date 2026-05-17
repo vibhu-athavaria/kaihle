@@ -8,6 +8,7 @@ To switch a task to a different provider or to a self-hosted LLM server,
 change the corresponding environment variable — no code change required.
 """
 
+import os
 from typing import Any
 
 import litellm
@@ -16,6 +17,19 @@ import structlog
 from app.core.config import settings
 
 logger = structlog.get_logger()
+
+# LiteLLM reads provider API keys from os.environ directly.
+# Pydantic Settings loads .env into Python attributes but never writes to os.environ,
+# so we bridge them here — the one place all LLM calls originate.
+_KEY_MAP = {
+    "OPENAI_API_KEY": settings.openai_api_key,
+    "GOOGLE_API_KEY": settings.google_api_key,
+    "OPENROUTER_API_KEY": settings.openrouter_api_key,
+    "ANTHROPIC_API_KEY": settings.anthropic_api_key,
+}
+for _env_var, _value in _KEY_MAP.items():
+    if _value:
+        os.environ[_env_var] = _value
 
 # Task → model mapping, fully config-driven.
 # These map task names to the environment variable values.
