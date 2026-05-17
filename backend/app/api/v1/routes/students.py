@@ -8,6 +8,7 @@ Routes:
 - POST /api/v1/students/me/concept-guide/answer - MCQ answer evaluation
 - GET  /api/v1/students/me/subtopics/{subtopic_id}/course  - Mini-course for a subtopic
 - POST /api/v1/students/me/subtopics/{subtopic_id}/course/progress  - Mark mini-course progress
+- POST /api/v1/students/me/subtopics/{subtopic_id}/course/quiz      - Submit quiz answers and record score
 - POST /api/v1/students/me/subtopics/{subtopic_id}/explain - SSE streaming explanation
 - POST /api/v1/students/me/subtopic-content/{content_id}/feedback - Submit thumbs up/down feedback
 - GET  /api/v1/students/{student_id}       - Full student detail (school admin)
@@ -29,6 +30,8 @@ from app.schemas.mini_course import (
     FeedbackRequest,
     FeedbackResponse,
     MarkProgressRequest,
+    QuizSubmitRequest,
+    QuizSubmitResponse,
     StudentCourseProgressResponse,
     SubtopicCourseResponse,
 )
@@ -321,6 +324,39 @@ async def mark_subtopic_course_progress(
         request=body,
     )
     return {"ok": True}
+
+
+@router.post(
+    "/me/subtopics/{subtopic_id}/course/quiz",
+    response_model=QuizSubmitResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def submit_subtopic_quiz(
+    subtopic_id: UUID = Path(..., description="Subtopic ID"),
+    body: QuizSubmitRequest = Body(...),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> QuizSubmitResponse:
+    """Score and persist a student's quiz answers for a mini-course.
+
+    Scores the submitted answers against the question bank, then upserts
+    check_questions_score using GREATEST() — the recorded score never
+    decreases on re-submission.
+
+    Raises:
+        403: If user is not a student.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    return await MiniCourseService(db).submit_quiz(
+        subtopic_id=subtopic_id,
+        student_id=current_user.id,
+        school_id=current_user.school_id,
+        request=body,
+    )
 
 
 @router.post("/me/subtopics/{subtopic_id}/explain")

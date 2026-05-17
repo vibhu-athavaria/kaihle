@@ -15,6 +15,7 @@ export interface SubtopicItem {
   name: string;
   order: number;
   progress: SubtopicProgress | null;
+  has_content: boolean;
 }
 
 export function useTopicSubtopics(classId: string, topicId: string) {

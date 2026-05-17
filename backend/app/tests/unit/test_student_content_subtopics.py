@@ -4,6 +4,9 @@ Tests cover:
   - SC-001: SubtopicStudentResponse must expose a `progress` field
   - SC-002: progress derivation — not_started / in_progress / completed
   - SC-003: endpoint must join progress in one query (no N+1)
+  - SC-004: SubtopicStudentResponse must expose a `has_content` bool field
+  - SC-005: card_status must be "no_content" when has_content=False, regardless of progress
+  - SC-006: card_status must be status-derived when has_content=True
 
 Naming: test_<what>_when_<condition>_then_<expected>
 """
@@ -163,3 +166,82 @@ def test_fetch_subtopics_when_using_naive_loop_then_n_plus_1_calls():
     fetch_subtopics_with_progress_naive(db, subtopic_ids, uuid.uuid4())
     # N separate queries — clearly wrong
     assert db.count == 5, "N+1 pattern confirmed: one query per subtopic"
+
+
+# ---------------------------------------------------------------------------
+# SC-004: schema shape — has_content field must exist
+# ---------------------------------------------------------------------------
+
+
+class SubtopicStudentResponseV2(BaseModel):
+    id: uuid.UUID
+    name: str
+    order: int
+    progress: SubtopicProgress | None
+    has_content: bool  # True = at least one approved SubtopicContent row exists
+
+
+def test_subtopic_student_response_when_no_content_then_has_content_is_false():
+    subtopic = SubtopicStudentResponseV2(
+        id=uuid.uuid4(),
+        name="Waves and Vibrations",
+        order=1,
+        progress=None,
+        has_content=False,
+    )
+    assert subtopic.has_content is False
+
+
+def test_subtopic_student_response_when_content_exists_then_has_content_is_true():
+    subtopic = SubtopicStudentResponseV2(
+        id=uuid.uuid4(),
+        name="Waves and Vibrations",
+        order=1,
+        progress=None,
+        has_content=True,
+    )
+    assert subtopic.has_content is True
+
+
+# ---------------------------------------------------------------------------
+# SC-005 / SC-006: card_status derivation
+#
+# card_status is the field the frontend uses to decide what badge + CTA to show.
+# Rules:
+#   - has_content=False  → "no_content"   (always, regardless of any progress)
+#   - has_content=True   → use derive_status() result (not_started/in_progress/completed)
+# ---------------------------------------------------------------------------
+
+CardStatus = Literal["no_content", "not_started", "in_progress", "completed"]
+
+
+def derive_card_status(
+    has_content: bool,
+    explanation_accessed: bool,
+    video_accessed: bool,
+    check_questions_score: float | None,
+) -> CardStatus:
+    if not has_content:
+        return "no_content"
+    return derive_status(explanation_accessed, video_accessed, check_questions_score)
+
+
+def test_derive_card_status_when_no_content_then_no_content_regardless_of_progress():
+    """Even if student somehow has progress, no_content wins when has_content=False."""
+    assert derive_card_status(False, True, True, 0.9) == "no_content"
+
+
+def test_derive_card_status_when_no_content_and_no_progress_then_no_content():
+    assert derive_card_status(False, False, False, None) == "no_content"
+
+
+def test_derive_card_status_when_has_content_and_no_progress_then_not_started():
+    assert derive_card_status(True, False, False, None) == "not_started"
+
+
+def test_derive_card_status_when_has_content_and_explanation_accessed_then_in_progress():
+    assert derive_card_status(True, True, False, None) == "in_progress"
+
+
+def test_derive_card_status_when_has_content_and_score_recorded_then_completed():
+    assert derive_card_status(True, True, True, 0.8) == "completed"

@@ -36,7 +36,23 @@ def _make_subtopic_row(
     row = MagicMock()
     row.subtopic_name = subtopic_name
     row.topic_name = topic_name
+    row.sequence_order = 1
+    row.curriculum_topic_id = uuid.uuid4()
     return row
+
+
+def _make_next_subtopic_result(name: str | None = None) -> MagicMock:
+    """Returns a mock DB result for the next-subtopic query.
+    Pass name=None to simulate 'last subtopic' (no next)."""
+    result = MagicMock()
+    if name is None:
+        result.one_or_none = MagicMock(return_value=None)
+    else:
+        row = MagicMock()
+        row.id = uuid.uuid4()
+        row.name = name
+        result.one_or_none = MagicMock(return_value=row)
+    return result
 
 
 def _make_profile_row(interests: list[str] | None = None) -> MagicMock:
@@ -152,6 +168,7 @@ async def test_get_course_when_interest_matched_explanation_exists_then_returns_
             question_result,
             MagicMock(),  # upsert execute
             progress_result,
+            _make_next_subtopic_result(None),  # next subtopic query
         ]
     )
 
@@ -207,6 +224,7 @@ async def test_get_course_when_no_interest_match_then_falls_back_to_generic() ->
             question_result,
             MagicMock(),
             progress_result,
+            _make_next_subtopic_result(None),
         ]
     )
 
@@ -253,6 +271,7 @@ async def test_get_course_when_no_approved_explanation_then_returns_unavailable_
             question_result,
             MagicMock(),
             progress_result,
+            _make_next_subtopic_result(None),
         ]
     )
 
@@ -300,6 +319,7 @@ async def test_get_course_when_question_bank_has_5_questions_then_returns_3() ->
             question_result,
             MagicMock(),
             progress_result,
+            _make_next_subtopic_result(None),
         ]
     )
 
@@ -345,6 +365,7 @@ async def test_get_course_when_no_video_approved_then_video_is_none() -> None:
             question_result,
             MagicMock(),
             progress_result,
+            _make_next_subtopic_result(None),
         ]
     )
 

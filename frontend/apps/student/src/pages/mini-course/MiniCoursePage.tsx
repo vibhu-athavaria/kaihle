@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
+  ArrowRight,
   BookOpen,
   Play,
   CheckCircle,
@@ -17,8 +18,9 @@ import {
   useSubtopicCourse,
   useMarkCourseProgress,
   useSubmitFeedback,
+  useSubmitQuiz,
 } from "../../hooks/useSubtopicCourse";
-import type { CourseQuestion } from "../../types/miniCourse";
+import type { CourseQuestion, NextSubtopic } from "../../types/miniCourse";
 import { ExplainThisDrawer } from "../../components/mini-course/ExplainThisDrawer";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -187,10 +189,19 @@ function VideoSection({ url, title }: VideoSectionProps) {
 
 interface CheckQuestionsProps {
   questions: CourseQuestion[];
+  subtopicId: string;
+  nextSubtopic: NextSubtopic | null;
+  onNavigateNext: (id: string) => void;
 }
 
-function CheckQuestions({ questions }: CheckQuestionsProps) {
+function CheckQuestions({
+  questions,
+  subtopicId,
+  nextSubtopic,
+  onNavigateNext,
+}: CheckQuestionsProps) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const submitQuiz = useSubmitQuiz(subtopicId);
 
   const answeredCount = Object.keys(answers).length;
   const allAnswered = answeredCount === questions.length;
@@ -204,7 +215,17 @@ function CheckQuestions({ questions }: CheckQuestionsProps) {
 
   const handleSelect = (questionId: string, key: string) => {
     if (answers[questionId]) return; // locked after answering
-    setAnswers((prev) => ({ ...prev, [questionId]: key }));
+    const next = { ...answers, [questionId]: key };
+    setAnswers(next);
+    // Submit when this answer completes the quiz
+    if (Object.keys(next).length === questions.length) {
+      submitQuiz.mutate({
+        answers: Object.entries(next).map(([question_id, selected_key]) => ({
+          question_id,
+          selected_key,
+        })),
+      });
+    }
   };
 
   return (
@@ -268,18 +289,37 @@ function CheckQuestions({ questions }: CheckQuestionsProps) {
       </div>
 
       {allAnswered && (
-        <div
-          className={`rounded-xl p-4 flex items-center gap-3 ${mastery.bgClass}`}
-        >
-          <span
-            className={`w-3 h-3 rounded-full flex-shrink-0 ${mastery.dotClass}`}
-            aria-label={mastery.label}
-            role="img"
-          />
-          <p className={`font-sans font-semibold text-sm ${mastery.textClass}`}>
-            {correctCount}/{questions.length} correct — {mastery.label}
-          </p>
-        </div>
+        <>
+          <div
+            className={`rounded-xl p-4 flex items-center gap-3 ${mastery.bgClass}`}
+          >
+            <span
+              className={`w-3 h-3 rounded-full flex-shrink-0 ${mastery.dotClass}`}
+              aria-label={mastery.label}
+              role="img"
+            />
+            <p
+              className={`font-sans font-semibold text-sm ${mastery.textClass}`}
+            >
+              {correctCount}/{questions.length} correct — {mastery.label}
+            </p>
+          </div>
+
+          {nextSubtopic && (
+            <div className="flex items-center justify-between pt-2 border-t border-brand-border">
+              <p className="font-sans text-sm text-brand-body">
+                Up next in this topic
+              </p>
+              <button
+                onClick={() => onNavigateNext(nextSubtopic.id)}
+                className="flex items-center gap-1.5 text-sm font-sans font-semibold text-brand-primary hover:text-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded"
+              >
+                {nextSubtopic.name}
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -406,7 +446,7 @@ export function MiniCoursePage() {
           <MiniCourseSkeleton />
         ) : course ? (
           <>
-            {/* Page title */}
+            {/* 1. Header */}
             <div className="bg-white rounded-2xl border border-brand-border p-6">
               <h1 className="font-display font-bold text-2xl text-brand-ink mb-1">
                 {course.subtopic_name}
@@ -416,7 +456,17 @@ export function MiniCoursePage() {
               </p>
             </div>
 
-            {/* Explanation */}
+            {/* 2. Video — watch first, then read */}
+            {course.video ? (
+              <div onClick={handleVideoPlay}>
+                <VideoSection
+                  url={course.video.url}
+                  title={course.video.title}
+                />
+              </div>
+            ) : null}
+
+            {/* 3. Explanation — consolidate after watching */}
             {course.explanation ? (
               <ExplanationCard
                 explanationText={course.explanation.explanation_text}
@@ -436,30 +486,17 @@ export function MiniCoursePage() {
               </div>
             )}
 
-            {/* Video */}
-            {course.video ? (
-              <div onClick={handleVideoPlay}>
-                <VideoSection
-                  url={course.video.url}
-                  title={course.video.title}
-                />
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-brand-border p-8 text-center">
-                <Play
-                  className="w-10 h-10 text-brand-muted mx-auto mb-3"
-                  aria-hidden="true"
-                />
-                <p className="font-sans text-sm text-brand-body">
-                  No video available for this subtopic yet.
-                </p>
-              </div>
-            )}
-
-            {/* Check Questions */}
+            {/* 4. Quiz */}
             {(course.check_questions ?? []).length > 0 ? (
               quizStarted ? (
-                <CheckQuestions questions={course.check_questions} />
+                <CheckQuestions
+                  questions={course.check_questions}
+                  subtopicId={subtopicId!}
+                  nextSubtopic={course.next_subtopic ?? null}
+                  onNavigateNext={(id) =>
+                    navigate(`/student/subtopics/${id}/course`)
+                  }
+                />
               ) : (
                 <div className="bg-white rounded-2xl border border-brand-border p-8 text-center">
                   <CheckCircle
@@ -482,34 +519,19 @@ export function MiniCoursePage() {
                   </button>
                 </div>
               )
-            ) : (
-              <div className="bg-white rounded-2xl border border-brand-border p-8 text-center">
-                <CheckCircle
-                  className="w-10 h-10 text-brand-muted mx-auto mb-3"
-                  aria-hidden="true"
-                />
-                <p className="font-sans text-sm text-brand-body">
-                  No practice questions available yet.
-                </p>
-              </div>
-            )}
+            ) : null}
 
-            {/* Explain This */}
-            <div className="bg-white rounded-2xl border border-brand-border p-6 flex items-center justify-between gap-4">
-              <div>
-                <h2 className="font-display font-bold text-lg text-brand-ink">
-                  Still confused?
-                </h2>
-                <p className="font-sans text-sm text-brand-body mt-1">
-                  Ask an AI tutor a specific question about this subtopic.
-                </p>
-              </div>
+            {/* 5. Explain This — demoted escape hatch, not a primary CTA */}
+            <div className="border-t border-brand-border pt-4 flex items-center justify-between gap-4">
+              <p className="font-sans text-sm text-brand-body">
+                Still confused about something?
+              </p>
               <button
                 onClick={handleExplainThisOpen}
-                className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-brand-primary text-white rounded-full font-sans font-semibold text-sm hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                className="flex items-center gap-1.5 text-sm font-sans font-semibold text-brand-primary hover:text-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded"
               >
                 <MessageCircle className="w-4 h-4" aria-hidden="true" />
-                Explain This
+                Ask AI tutor
               </button>
             </div>
           </>

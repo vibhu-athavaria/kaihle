@@ -28,6 +28,7 @@ from app.core.deps import CurrentUser, get_current_user
 from app.models.class_topic import ClassTopic
 from app.models.curriculum import Subtopic
 from app.models.mini_course import SubtopicCourseProgress
+from app.models.subtopic_content import SubtopicContent
 
 logger = structlog.get_logger()
 
@@ -180,6 +181,7 @@ class SubtopicStudentResponse(BaseModel):
     name: str
     order: int
     progress: SubtopicProgressResponse | None
+    has_content: bool  # True when at least one approved SubtopicContent row exists
 
 
 def _derive_subtopic_status(
@@ -215,14 +217,27 @@ async def list_class_topic_subtopics(
     if class_topic is None:
         raise HTTPException(status_code=404, detail="Topic not found in this class")
 
-    # Single LEFT JOIN — no N+1 — fetches subtopics + current student's progress in one query
+    # Correlated subquery: TRUE if at least one approved, non-archived content row exists
+    content_exists_sq = (
+        select(SubtopicContent.id)
+        .where(
+            SubtopicContent.subtopic_id == Subtopic.id,
+            SubtopicContent.review_status == "approved",
+            SubtopicContent.is_archived.is_(False),
+        )
+        .correlate(Subtopic)
+        .exists()
+        .label("has_content")
+    )
+
+    # Single query: subtopics + student progress (LEFT JOIN) + content availability (correlated EXISTS)
     joined = outerjoin(
         Subtopic,
         SubtopicCourseProgress,
         (SubtopicCourseProgress.subtopic_id == Subtopic.id) & (SubtopicCourseProgress.student_id == current_user.id),
     )
     subtopics_result = await db.execute(
-        select(Subtopic, SubtopicCourseProgress)
+        select(Subtopic, SubtopicCourseProgress, content_exists_sq)
         .select_from(joined)
         .where(
             Subtopic.curriculum_topic_id == class_topic.curriculum_topic_id,
@@ -241,7 +256,7 @@ async def list_class_topic_subtopics(
     )
 
     responses = []
-    for subtopic, progress in rows:
+    for subtopic, progress, has_content in rows:
         progress_resp: SubtopicProgressResponse | None = None
         if progress is not None:
             progress_resp = SubtopicProgressResponse(
@@ -260,6 +275,7 @@ async def list_class_topic_subtopics(
                 name=subtopic.name,
                 order=subtopic.sequence_order or 0,
                 progress=progress_resp,
+                has_content=bool(has_content),
             )
         )
     return responses

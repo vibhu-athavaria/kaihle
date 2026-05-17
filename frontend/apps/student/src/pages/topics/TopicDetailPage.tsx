@@ -9,13 +9,23 @@ import {
 import { StudentLayout } from "@kaihle/ui";
 import { useStudentLayoutProps } from "../../hooks/useStudentLayoutProps";
 import { useClassTopics } from "../../hooks/useClassTopics";
-import {
-  useTopicSubtopics,
-  type SubtopicStatus,
-} from "../../hooks/useTopicSubtopics";
+import { useTopicSubtopics } from "../../hooks/useTopicSubtopics";
+import type { SubtopicStatus } from "../../hooks/useTopicSubtopics";
 
-function getSubtopicCtaLabel(status: SubtopicStatus | undefined): string {
+type CardStatus = SubtopicStatus | "no_content";
+
+function deriveCardStatus(
+  hasContent: boolean,
+  progressStatus: SubtopicStatus | undefined,
+): CardStatus {
+  if (!hasContent) return "no_content";
+  return progressStatus ?? "not_started";
+}
+
+function getCardCtaLabel(status: CardStatus): string {
   switch (status) {
+    case "no_content":
+      return "Coming soon";
     case "completed":
       return "Review";
     case "in_progress":
@@ -30,8 +40,13 @@ interface BadgeStyle {
   label: string;
 }
 
-function getSubtopicBadgeStyle(status: SubtopicStatus | undefined): BadgeStyle {
+function getCardBadgeStyle(status: CardStatus): BadgeStyle {
   switch (status) {
+    case "no_content":
+      return {
+        containerClass: "bg-brand-muted/20 text-brand-muted font-medium",
+        label: "Coming soon",
+      };
     case "completed":
       return {
         containerClass: "bg-brand-green-light text-brand-green font-semibold",
@@ -145,17 +160,29 @@ export function TopicDetailPage() {
         ) : subtopics && subtopics.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {subtopics.map((subtopic) => {
-              const status = subtopic.progress?.status;
-              const badge = getSubtopicBadgeStyle(status);
-              const ctaLabel = getSubtopicCtaLabel(status);
+              const cardStatus = deriveCardStatus(
+                subtopic.has_content,
+                subtopic.progress?.status,
+              );
+              const badge = getCardBadgeStyle(cardStatus);
+              const ctaLabel = getCardCtaLabel(cardStatus);
+              const isDisabled = cardStatus === "no_content";
 
               return (
                 <button
                   key={subtopic.id}
-                  onClick={() =>
-                    navigate(`/student/subtopics/${subtopic.id}/course`)
-                  }
-                  className="group text-left bg-white rounded-xl border border-brand-border p-5 shadow-sm transition-all hover:border-brand-primary hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                  onClick={() => {
+                    if (!isDisabled)
+                      navigate(`/student/subtopics/${subtopic.id}/course`);
+                  }}
+                  disabled={isDisabled}
+                  aria-disabled={isDisabled}
+                  className={[
+                    "group text-left bg-white rounded-xl border p-5 shadow-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2",
+                    isDisabled
+                      ? "border-brand-border cursor-not-allowed opacity-70"
+                      : "border-brand-border hover:border-brand-primary hover:shadow-md",
+                  ].join(" ")}
                 >
                   <div className="flex flex-col h-full gap-3">
                     <div className="flex-1 min-w-0">
@@ -168,18 +195,24 @@ export function TopicDetailPage() {
                         {badge.label}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1 text-xs font-semibold text-brand-primary group-hover:gap-2 transition-all">
-                      {status === "completed" ? (
+                    <div
+                      className={`flex items-center gap-1 text-xs font-semibold transition-all ${
+                        isDisabled
+                          ? "text-brand-muted"
+                          : "text-brand-primary group-hover:gap-2"
+                      }`}
+                    >
+                      {cardStatus === "completed" ? (
                         <CheckCircle
                           className="w-3.5 h-3.5"
                           aria-hidden="true"
                         />
-                      ) : status === "in_progress" ? (
+                      ) : cardStatus === "in_progress" ? (
                         <PlayCircle
                           className="w-3.5 h-3.5"
                           aria-hidden="true"
                         />
-                      ) : (
+                      ) : cardStatus === "no_content" ? null : (
                         <ArrowRight
                           className="w-3.5 h-3.5"
                           aria-hidden="true"

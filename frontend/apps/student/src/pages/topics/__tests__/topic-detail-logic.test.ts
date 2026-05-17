@@ -9,6 +9,20 @@
 import type { SubtopicStatus } from "../../../hooks/useTopicSubtopics";
 
 // ─────────────────────────────────────────────────────────────
+//  TD-003: card_status = "no_content" when has_content is false
+//
+//  Bug: subtopic cards show "Not started / Start" even when the
+//  teacher has never generated content. The student clicks in
+//  and sees empty states — misleading and frustrating.
+//
+//  Fix: extend SubtopicStatus to include "no_content" and derive
+//  the displayed badge/CTA from card_status (which merges has_content
+//  + progress) instead of progress.status alone.
+// ─────────────────────────────────────────────────────────────
+
+type CardStatus = SubtopicStatus | "no_content";
+
+// ─────────────────────────────────────────────────────────────
 //  TD-001: CTA label from status
 // ─────────────────────────────────────────────────────────────
 
@@ -101,5 +115,100 @@ describe("TD-002 — subtopic badge styles (no gray data colors)", () => {
     const { containerClass } = getSubtopicBadgeStyle(undefined);
     expect(containerClass).toContain("brand-primary");
     expect(containerClass).not.toContain("gray");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+//  TD-003: card_status derivation from has_content + progress
+// ─────────────────────────────────────────────────────────────
+
+function deriveCardStatus(
+  hasContent: boolean,
+  progressStatus: SubtopicStatus | undefined,
+): CardStatus {
+  if (!hasContent) return "no_content";
+  return progressStatus ?? "not_started";
+}
+
+function getCardBadgeStyle(status: CardStatus): {
+  containerClass: string;
+  label: string;
+} {
+  switch (status) {
+    case "no_content":
+      return {
+        containerClass: "bg-brand-muted/20 text-brand-muted font-medium",
+        label: "Coming soon",
+      };
+    case "completed":
+      return {
+        containerClass: "bg-brand-green-light text-brand-green font-semibold",
+        label: "Finished",
+      };
+    case "in_progress":
+      return {
+        containerClass: "bg-brand-gold/10 text-brand-amber font-semibold",
+        label: "In progress",
+      };
+    default:
+      return {
+        containerClass: "bg-brand-primary/10 text-brand-primary font-medium",
+        label: "Not started",
+      };
+  }
+}
+
+function getCardCtaLabel(status: CardStatus): string {
+  switch (status) {
+    case "no_content":
+      return "Coming soon";
+    case "completed":
+      return "Review";
+    case "in_progress":
+      return "Resume";
+    default:
+      return "Start";
+  }
+}
+
+describe("TD-003 — card_status: no_content when teacher hasn't generated content", () => {
+  test("derives no_content when has_content is false, regardless of progress", () => {
+    expect(deriveCardStatus(false, "not_started")).toBe("no_content");
+    expect(deriveCardStatus(false, "in_progress")).toBe("no_content");
+    expect(deriveCardStatus(false, "completed")).toBe("no_content");
+    expect(deriveCardStatus(false, undefined)).toBe("no_content");
+  });
+
+  test("derives progress status when has_content is true", () => {
+    expect(deriveCardStatus(true, "not_started")).toBe("not_started");
+    expect(deriveCardStatus(true, "in_progress")).toBe("in_progress");
+    expect(deriveCardStatus(true, "completed")).toBe("completed");
+  });
+
+  test("derives not_started when has_content is true but no progress row", () => {
+    expect(deriveCardStatus(true, undefined)).toBe("not_started");
+  });
+
+  test("no_content badge uses muted style — not a call-to-action color", () => {
+    const { containerClass, label } = getCardBadgeStyle("no_content");
+    expect(label).toBe("Coming soon");
+    expect(containerClass).toContain("brand-muted");
+    expect(containerClass).not.toContain("brand-primary");
+    expect(containerClass).not.toContain("brand-green");
+    expect(containerClass).not.toContain("brand-gold");
+    expect(containerClass).not.toContain("gray-100");
+  });
+
+  test("no_content CTA says Coming soon (not Start)", () => {
+    expect(getCardCtaLabel("no_content")).toBe("Coming soon");
+  });
+
+  test("Start CTA only appears when has_content is true and not started", () => {
+    expect(getCardCtaLabel(deriveCardStatus(true, "not_started"))).toBe(
+      "Start",
+    );
+    expect(getCardCtaLabel(deriveCardStatus(false, "not_started"))).not.toBe(
+      "Start",
+    );
   });
 });

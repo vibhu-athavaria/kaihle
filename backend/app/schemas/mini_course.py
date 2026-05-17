@@ -41,6 +41,11 @@ class CourseProgressItem(BaseModel):
     last_visited_at: datetime | None
 
 
+class NextSubtopicItem(BaseModel):
+    id: UUID
+    name: str
+
+
 class SubtopicCourseResponse(BaseModel):
     subtopic_id: UUID
     subtopic_name: str
@@ -50,6 +55,7 @@ class SubtopicCourseResponse(BaseModel):
     video: SubtopicVideoItem | None
     check_questions: list[CheckQuestion]
     progress: CourseProgressItem
+    next_subtopic: NextSubtopicItem | None = None
 
 
 class MarkProgressRequest(BaseModel):
@@ -70,6 +76,22 @@ class SubtopicProgressItem(BaseModel):
 class StudentCourseProgressResponse(BaseModel):
     student_id: UUID
     progress: list[SubtopicProgressItem]
+
+
+class QuizAnswerItem(BaseModel):
+    question_id: UUID
+    selected_key: str
+
+
+class QuizSubmitRequest(BaseModel):
+    answers: list[QuizAnswerItem]
+
+
+class QuizSubmitResponse(BaseModel):
+    score: float
+    correct: int
+    total: int
+    status: Literal["not_started", "in_progress", "completed"]
 
 
 class FeedbackRequest(BaseModel):
