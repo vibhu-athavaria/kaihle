@@ -338,6 +338,58 @@ function MiniCourseSkeleton() {
   );
 }
 
+// ─── Stepper indicator ────────────────────────────────────────────────────────
+
+const STEP_LABELS = ["Watch", "Read", "Quiz"] as const;
+
+interface StepperProps {
+  currentStep: number;
+}
+
+function StepperIndicator({ currentStep }: StepperProps) {
+  return (
+    <div
+      className="flex items-center gap-0"
+      role="list"
+      aria-label="Course steps"
+    >
+      {STEP_LABELS.map((label, i) => {
+        const isDone = i < currentStep;
+        const isActive = i === currentStep;
+        return (
+          <div key={label} className="flex items-center" role="listitem">
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={[
+                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-sans font-bold transition-colors",
+                  isDone
+                    ? "bg-brand-primary text-white"
+                    : isActive
+                      ? "bg-brand-primary/10 text-brand-primary border-2 border-brand-primary"
+                      : "bg-brand-border text-brand-muted",
+                ].join(" ")}
+                aria-current={isActive ? "step" : undefined}
+              >
+                {isDone ? "✓" : i + 1}
+              </div>
+              <span
+                className={`text-xs font-sans ${isActive ? "text-brand-primary font-semibold" : "text-brand-muted"}`}
+              >
+                {label}
+              </span>
+            </div>
+            {i < STEP_LABELS.length - 1 && (
+              <div
+                className={`h-0.5 w-12 mx-1 mb-4 rounded-full transition-colors ${i < currentStep ? "bg-brand-primary" : "bg-brand-border"}`}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export function MiniCoursePage() {
@@ -345,39 +397,34 @@ export function MiniCoursePage() {
   const navigate = useNavigate();
   const layout = useStudentLayoutProps();
   const [explainOpen, setExplainOpen] = useState(false);
-  const [quizStarted, setQuizStarted] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
 
   const { data: course, isPending, isError } = useSubtopicCourse(subtopicId!);
-
   const { mutate: markProgress } = useMarkCourseProgress(subtopicId!);
 
-  // Derive initial quiz state from persisted score so re-entry skips the start gate
+  // Re-entry: if quiz already completed, jump straight to quiz step
   const hasCompletedQuiz =
     course?.progress?.check_questions_score !== null &&
     course?.progress?.check_questions_score !== undefined;
 
-  // Sync quizStarted when course data arrives
   useEffect(() => {
-    if (hasCompletedQuiz) setQuizStarted(true);
+    if (hasCompletedQuiz) setCurrentStep(2);
   }, [hasCompletedQuiz]);
 
-  // Called when the ExplanationCard mounts — separate from the AI drawer
-  const handleExplanationMount = () => {
-    if (!course?.progress?.explanation_accessed) {
-      markProgress({ explanation_accessed: true });
+  const handleNext = () => {
+    // Fire video progress when leaving the video step
+    if (
+      currentStep === 0 &&
+      course?.video &&
+      !course?.progress?.video_accessed
+    ) {
+      markProgress({ video_accessed: true });
     }
+    setCurrentStep((s) => Math.min(s + 1, 2));
   };
 
   // Opens the "Explain This" AI drawer — no progress side-effect
-  const handleExplainThisOpen = () => {
-    setExplainOpen(true);
-  };
-
-  const handleVideoPlay = () => {
-    if (!course?.progress?.video_accessed) {
-      markProgress({ video_accessed: true });
-    }
-  };
+  const handleExplainThisOpen = () => setExplainOpen(true);
 
   const handleBack = () => {
     if (window.history.length > 1) {
@@ -421,7 +468,7 @@ export function MiniCoursePage() {
       onLogout={layout.onLogout}
     >
       <div className="space-y-6">
-        {/* Breadcrumb + back */}
+        {/* Back breadcrumb */}
         <div className="flex items-center gap-2 text-sm">
           <button
             onClick={handleBack}
@@ -446,94 +493,182 @@ export function MiniCoursePage() {
           <MiniCourseSkeleton />
         ) : course ? (
           <>
-            {/* 1. Header */}
+            {/* Header */}
             <div className="bg-white rounded-2xl border border-brand-border p-6">
               <h1 className="font-display font-bold text-2xl text-brand-ink mb-1">
                 {course.subtopic_name}
               </h1>
-              <p className="font-sans text-sm text-brand-muted">
+              <p className="font-sans text-sm text-brand-muted mb-4">
                 {course.subject_name} · Grade {course.grade_level}
               </p>
+              <StepperIndicator currentStep={currentStep} />
             </div>
 
-            {/* 2. Video — watch first, then read */}
-            {course.video ? (
-              <div onClick={handleVideoPlay}>
-                <VideoSection
-                  url={course.video.url}
-                  title={course.video.title}
-                />
-              </div>
-            ) : null}
-
-            {/* 3. Explanation — consolidate after watching */}
-            {course.explanation ? (
-              <ExplanationCard
-                explanationText={course.explanation.explanation_text}
-                interestCategory={course.explanation.interest_category}
-                contentId={course.explanation.id}
-                onMount={handleExplanationMount}
-              />
-            ) : (
-              <div className="bg-white rounded-2xl border border-brand-border p-8 text-center">
-                <BookOpen
-                  className="w-10 h-10 text-brand-muted mx-auto mb-3"
-                  aria-hidden="true"
-                />
-                <p className="font-sans text-sm text-brand-body">
-                  No explanation available for this subtopic yet.
-                </p>
-              </div>
+            {/* Step 0: Video */}
+            {currentStep === 0 && (
+              <>
+                {course.video ? (
+                  <VideoSection
+                    url={course.video.url}
+                    title={course.video.title}
+                  />
+                ) : (
+                  <div className="bg-white rounded-2xl border border-brand-border p-10 text-center">
+                    <Play
+                      className="w-10 h-10 text-brand-muted mx-auto mb-3"
+                      aria-hidden="true"
+                    />
+                    <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
+                      No video yet
+                    </h2>
+                    <p className="font-sans text-sm text-brand-body">
+                      A video for this subtopic hasn't been added yet. Continue
+                      to the reading.
+                    </p>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 items-center gap-3">
+                  <div className="flex justify-start" />
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleExplainThisOpen}
+                      className="flex items-center gap-1.5 border border-brand-primary text-brand-primary rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/10 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                    >
+                      <MessageCircle className="w-4 h-4" aria-hidden="true" />
+                      AI Tutor
+                    </button>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleNext}
+                      className="flex items-center gap-2 bg-brand-primary text-white rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/90 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                    >
+                      Next: Read
+                      <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
 
-            {/* 4. Quiz */}
-            {(course.check_questions ?? []).length > 0 ? (
-              quizStarted ? (
-                <CheckQuestions
-                  questions={course.check_questions}
-                  subtopicId={subtopicId!}
-                  nextSubtopic={course.next_subtopic ?? null}
-                  onNavigateNext={(id) =>
-                    navigate(`/student/subtopics/${id}/course`)
-                  }
-                />
-              ) : (
-                <div className="bg-white rounded-2xl border border-brand-border p-8 text-center">
-                  <CheckCircle
-                    className="w-10 h-10 text-brand-primary mx-auto mb-3"
-                    aria-hidden="true"
+            {/* Step 1: Explanation */}
+            {currentStep === 1 && (
+              <>
+                {course.explanation ? (
+                  <ExplanationCard
+                    explanationText={course.explanation.explanation_text}
+                    interestCategory={course.explanation.interest_category}
+                    contentId={course.explanation.id}
+                    onMount={() => {
+                      if (!course.progress?.explanation_accessed) {
+                        markProgress({ explanation_accessed: true });
+                      }
+                    }}
                   />
-                  <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
-                    Ready to test yourself?
-                  </h2>
-                  <p className="font-sans text-sm text-brand-body mb-5">
-                    {course.check_questions.length} quick question
-                    {course.check_questions.length !== 1 ? "s" : ""} to check
-                    your understanding.
-                  </p>
-                  <button
-                    onClick={() => setQuizStarted(true)}
-                    className="bg-brand-primary text-white rounded-full px-6 py-2.5 text-sm font-semibold hover:bg-brand-primary/90 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-                  >
-                    Quiz me
-                  </button>
+                ) : (
+                  <div className="bg-white rounded-2xl border border-brand-border p-10 text-center">
+                    <BookOpen
+                      className="w-10 h-10 text-brand-muted mx-auto mb-3"
+                      aria-hidden="true"
+                    />
+                    <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
+                      No explanation yet
+                    </h2>
+                    <p className="font-sans text-sm text-brand-body">
+                      Your teacher hasn't generated an explanation for this
+                      subtopic yet. Check back soon.
+                    </p>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 items-center gap-3">
+                  <div className="flex justify-start">
+                    <button
+                      onClick={() => setCurrentStep(0)}
+                      className="flex items-center gap-1.5 border border-brand-border text-brand-ink rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-bg transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                    >
+                      <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                      Back
+                    </button>
+                  </div>
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleExplainThisOpen}
+                      className="flex items-center gap-1.5 border border-brand-primary text-brand-primary rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/10 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                    >
+                      <MessageCircle className="w-4 h-4" aria-hidden="true" />
+                      AI Tutor
+                    </button>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleNext}
+                      className="flex items-center gap-2 bg-brand-primary text-white rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/90 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                    >
+                      Next: Quiz
+                      <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
-              )
-            ) : null}
+              </>
+            )}
 
-            {/* 5. Explain This — demoted escape hatch, not a primary CTA */}
-            <div className="border-t border-brand-border pt-4 flex items-center justify-between gap-4">
-              <p className="font-sans text-sm text-brand-body">
-                Still confused about something?
-              </p>
-              <button
-                onClick={handleExplainThisOpen}
-                className="flex items-center gap-1.5 text-sm font-sans font-semibold text-brand-primary hover:text-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded"
-              >
-                <MessageCircle className="w-4 h-4" aria-hidden="true" />
-                Ask AI tutor
-              </button>
-            </div>
+            {/* Step 2: Quiz */}
+            {currentStep === 2 && (
+              <>
+                {(course.check_questions ?? []).length > 0 ? (
+                  <CheckQuestions
+                    questions={course.check_questions}
+                    subtopicId={subtopicId!}
+                    nextSubtopic={course.next_subtopic ?? null}
+                    onNavigateNext={(id) =>
+                      navigate(`/student/subtopics/${id}/course`)
+                    }
+                  />
+                ) : (
+                  <div className="bg-white rounded-2xl border border-brand-border p-10 text-center">
+                    <CheckCircle
+                      className="w-10 h-10 text-brand-muted mx-auto mb-3"
+                      aria-hidden="true"
+                    />
+                    <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
+                      No quiz questions yet
+                    </h2>
+                    <p className="font-sans text-sm text-brand-body">
+                      Quiz questions for this subtopic haven't been added yet.
+                    </p>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 items-center gap-3">
+                  <div className="flex justify-start">
+                    <button
+                      onClick={() => setCurrentStep(1)}
+                      className="flex items-center gap-1.5 border border-brand-border text-brand-ink rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-bg transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                    >
+                      <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                      Back
+                    </button>
+                  </div>
+                  <div className="flex justify-center">
+                    <button
+                      onClick={handleExplainThisOpen}
+                      className="flex items-center gap-1.5 border border-brand-primary text-brand-primary rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/10 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                    >
+                      <MessageCircle className="w-4 h-4" aria-hidden="true" />
+                      AI Tutor
+                    </button>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleBack}
+                      className="flex items-center gap-2 bg-brand-primary text-white rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/90 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                    >
+                      <CheckCircle className="w-4 h-4" aria-hidden="true" />
+                      Finish
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </>
         ) : null}
       </div>
