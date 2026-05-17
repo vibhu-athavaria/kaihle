@@ -8,6 +8,8 @@ To switch a task to a different provider or to a self-hosted LLM server,
 change the corresponding environment variable — no code change required.
 """
 
+import time
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import litellm
@@ -47,6 +49,37 @@ TASK_API_BASE_MAP: dict[str, str | None] = {
 }
 
 
+def _log_started(task: str, model: str, stream: bool, api_base: str | None) -> float:
+    """Emit llm_call_started and return monotonic start time."""
+    logger.info(
+        "llm_call_started",
+        task=task,
+        model=model,
+        stream=stream,
+        has_custom_api_base=api_base is not None,
+    )
+    return time.monotonic()
+
+
+def _log_completed(
+    task: str,
+    model: str,
+    t0: float,
+    prompt_tokens: int | None,
+    completion_tokens: int | None,
+    total_tokens: int | None,
+) -> None:
+    logger.info(
+        "llm_call_completed",
+        task=task,
+        model=model,
+        latency_ms=int((time.monotonic() - t0) * 1000),
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
+
+
 async def complete(
     task: str,
     messages: list[dict[str, Any]],
@@ -57,7 +90,7 @@ async def complete(
     """Call the configured LLM for the given task. Provider-agnostic.
 
     Args:
-        task: One of "gap_classification", "study_plan", "lesson_plan"
+        task: One of the keys in TASK_MODEL_MAP
         messages: OpenAI-format message list [{"role": "...", "content": "..."}]
         temperature: Sampling temperature (default 0.7)
         max_tokens: Maximum tokens in response (default 2000)
@@ -75,8 +108,7 @@ async def complete(
 
     model = TASK_MODEL_MAP[task]
     api_base = TASK_API_BASE_MAP.get(task)
-
-    logger.info("llm_call_started", task=task, model=model, stream=stream, has_custom_api_base=api_base is not None)
+    t0 = _log_started(task, model, stream=stream, api_base=api_base)
 
     response = await litellm.acompletion(
         model=model,
@@ -85,25 +117,38 @@ async def complete(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=stream,
+        # Request usage stats in the final streaming chunk where supported
+        **({"stream_options": {"include_usage": True}} if stream else {}),
     )
 
     if stream:
         chunks: list[str] = []
+        prompt_tokens: int | None = None
+        completion_tokens: int | None = None
+        total_tokens: int | None = None
         async for chunk in response:
             if not chunk.choices:
+                # Final usage-only chunk from providers that support include_usage
+                if hasattr(chunk, "usage") and chunk.usage:
+                    prompt_tokens = chunk.usage.prompt_tokens
+                    completion_tokens = chunk.usage.completion_tokens
+                    total_tokens = chunk.usage.total_tokens
                 continue
             delta = chunk.choices[0].delta.content
             if delta is not None:
                 chunks.append(delta)
         text = "".join(chunks)
-        logger.info("llm_call_completed_streaming", task=task, model=model, chars=len(text))
+        _log_completed(task, model, t0, prompt_tokens, completion_tokens, total_tokens)
         return text
 
-    logger.info(
-        "llm_call_completed",
-        task=task,
-        model=model,
-        tokens_used=response.usage.total_tokens if response.usage else None,
+    usage = response.usage if hasattr(response, "usage") else None
+    _log_completed(
+        task,
+        model,
+        t0,
+        prompt_tokens=usage.prompt_tokens if usage else None,
+        completion_tokens=usage.completion_tokens if usage else None,
+        total_tokens=usage.total_tokens if usage else None,
     )
 
     # Handle potential empty choices or None content (e.g., tool calls, non-text responses)
@@ -116,6 +161,69 @@ async def complete(
             "or non-text response. Ensure the model is configured for text output."
         )
     return content
+
+
+async def stream_sse(
+    task: str,
+    messages: list[dict[str, Any]],
+    temperature: float = 0.7,
+    max_tokens: int = 2000,
+) -> AsyncGenerator[str, None]:
+    """Stream SSE-formatted chunks for the given task. Provider-agnostic.
+
+    Yields Server-Sent Event strings ("data: <chunk>\\n\\n") as they arrive,
+    then a final "data: [DONE]\\n\\n" sentinel. All LLM routing, logging,
+    and token counting go through this single choke point.
+
+    Use this for HTTP streaming endpoints (EventSourceResponse / StreamingResponse).
+    Use complete() for non-streaming calls that need the full response as a string.
+
+    Args:
+        task: One of the keys in TASK_MODEL_MAP
+        messages: OpenAI-format message list
+        temperature: Sampling temperature (default 0.7)
+        max_tokens: Maximum tokens in response (default 2000)
+
+    Yields:
+        SSE-formatted strings: "data: <text>\\n\\n" and finally "data: [DONE]\\n\\n"
+
+    Raises:
+        ValueError: If task is not in TASK_MODEL_MAP
+    """
+    if task not in TASK_MODEL_MAP:
+        raise ValueError(f"Unknown LLM task: {task!r}. Valid tasks: {list(TASK_MODEL_MAP)}")
+
+    model = TASK_MODEL_MAP[task]
+    api_base = TASK_API_BASE_MAP.get(task)
+    t0 = _log_started(task, model, stream=True, api_base=api_base)
+
+    response = await litellm.acompletion(
+        model=model,
+        api_base=api_base or None,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stream=True,
+        stream_options={"include_usage": True},
+    )
+
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+
+    async for chunk in response:
+        if not chunk.choices:
+            if hasattr(chunk, "usage") and chunk.usage:
+                prompt_tokens = chunk.usage.prompt_tokens
+                completion_tokens = chunk.usage.completion_tokens
+                total_tokens = chunk.usage.total_tokens
+            continue
+        delta = chunk.choices[0].delta.content
+        if delta is not None:
+            yield f"data: {delta}\n\n"
+
+    _log_completed(task, model, t0, prompt_tokens, completion_tokens, total_tokens)
+    yield "data: [DONE]\n\n"
 
 
 async def embed(text: str) -> list[float]:

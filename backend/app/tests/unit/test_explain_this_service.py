@@ -121,15 +121,20 @@ async def test_explain_subtopic_question_when_valid_question_then_yields_sse_chu
 
     db.execute.side_effect = [subtopic_result, profile_result]
 
-    # Mock litellm streaming: two delta chunks
+    # Mock litellm streaming: two delta chunks + final usage-only chunk
     async def _fake_stream() -> AsyncGenerator:
         for text in ["Hello", " world"]:
             chunk = MagicMock()
             chunk.choices = [MagicMock()]
             chunk.choices[0].delta.content = text
             yield chunk
+        # Final usage chunk (no choices) — mirrors include_usage=True behaviour
+        usage_chunk = MagicMock()
+        usage_chunk.choices = []
+        usage_chunk.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+        yield usage_chunk
 
-    with patch("app.services.concept_guide_service.litellm.acompletion", new_callable=AsyncMock) as mock_completion:
+    with patch("app.ai.providers.router.litellm.acompletion", new_callable=AsyncMock) as mock_completion:
         mock_completion.return_value = _fake_stream()
 
         gen = await explain_subtopic_question(
@@ -167,8 +172,12 @@ async def test_explain_subtopic_question_when_student_has_no_profile_then_uses_d
         chunk.choices = [MagicMock()]
         chunk.choices[0].delta.content = "Sure!"
         yield chunk
+        usage_chunk = MagicMock()
+        usage_chunk.choices = []
+        usage_chunk.usage = MagicMock(prompt_tokens=8, completion_tokens=3, total_tokens=11)
+        yield usage_chunk
 
-    with patch("app.services.concept_guide_service.litellm.acompletion", new_callable=AsyncMock) as mock_completion:
+    with patch("app.ai.providers.router.litellm.acompletion", new_callable=AsyncMock) as mock_completion:
         mock_completion.return_value = _fake_stream()
 
         gen = await explain_subtopic_question(

@@ -14,7 +14,6 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 from uuid import UUID
 
-import litellm
 import structlog
 from fastapi import HTTPException, status
 from jinja2 import Environment, FileSystemLoader
@@ -334,9 +333,6 @@ async def explain_subtopic_question(
         interest_category=interest_category,
     )
 
-    model = llm_router.TASK_MODEL_MAP["explain_this"]
-    api_base = llm_router.TASK_API_BASE_MAP.get("explain_this")
-
     logger.info(
         "explain_this_stream_started",
         student_id=str(student_id),
@@ -347,8 +343,6 @@ async def explain_subtopic_question(
     )
 
     return _stream_explain_this(
-        model=model,
-        api_base=api_base,
         system_prompt=system_prompt,
         question=question,
         student_id=student_id,
@@ -358,41 +352,32 @@ async def explain_subtopic_question(
 
 async def _stream_explain_this(
     *,
-    model: str,
-    api_base: str | None,
     system_prompt: str,
     question: str,
     student_id: UUID,
     subtopic_id: UUID,
 ) -> AsyncGenerator[str, None]:
-    """Inner async generator that drives the litellm streaming call.
+    """Inner async generator for the explain-this SSE stream.
 
     Separated from explain_subtopic_question so that the outer function can perform
     all DB lookups and validation before returning the generator to the caller — this
     ensures HTTPExceptions are raised immediately rather than lazily.
+
+    Delegates to llm_router.stream_sse() so all routing, logging, and token
+    counting go through the single choke point (CONSTITUTION Rule 4).
     """
-    response = await litellm.acompletion(
-        model=model,
-        api_base=api_base or None,
+    logger.info(
+        "explain_this_stream_started_inner",
+        student_id=str(student_id),
+        subtopic_id=str(subtopic_id),
+    )
+    async for chunk in llm_router.stream_sse(
+        task="explain_this",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
         ],
         temperature=0.6,
         max_tokens=400,
-        stream=True,
-    )
-
-    async for chunk in response:
-        if not chunk.choices:
-            continue
-        delta = chunk.choices[0].delta.content
-        if delta is not None:
-            yield f"data: {delta}\n\n"
-
-    logger.info(
-        "explain_this_stream_completed",
-        student_id=str(student_id),
-        subtopic_id=str(subtopic_id),
-    )
-    yield "data: [DONE]\n\n"
+    ):
+        yield chunk
