@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 class _StudentClassData(TypedDict):
     class_ids: list[uuid.UUID]
     class_names: list[str]
+    grade_name: str | None
 
 
 class ClassService:
@@ -412,6 +413,7 @@ class ClassService:
 
         class_ids = [c.id for c in classes]
         class_name_map = {c.id: c.name for c in classes}
+        class_grade_map = {c.id: c.grade.name if c.grade else None for c in classes}
 
         # Fetch all enrollments for these classes
         enrollments_result = await self.db.execute(
@@ -443,7 +445,11 @@ class ClassService:
             sid = enrollment.student_id
             cid = enrollment.class_id
             if sid not in student_classes:
-                student_classes[sid] = {"class_ids": [], "class_names": []}
+                student_classes[sid] = {
+                    "class_ids": [],
+                    "class_names": [],
+                    "grade_name": class_grade_map.get(cid),
+                }
             student_classes[sid]["class_ids"].append(cid)
             student_classes[sid]["class_names"].append(class_name_map[cid])
 
@@ -453,6 +459,7 @@ class ClassService:
                 first_name=students[student_id].first_name,
                 last_name=students[student_id].last_name,
                 email=students[student_id].email,
+                grade_name=data["grade_name"],
                 class_ids=data["class_ids"],
                 class_names=data["class_names"],
             )

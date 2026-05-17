@@ -28,6 +28,8 @@ interface ClassSetupWizardProps {
   onClose: () => void;
   /** Jump directly to step 2 when class already has topics */
   initialStep?: 1 | 2;
+  /** "edit" hides the diagnostic step and shows "Done" instead of "Next: Design Diagnostic" */
+  mode?: "setup" | "edit";
 }
 
 type Step = 1 | 2;
@@ -38,9 +40,15 @@ interface Step1Props {
   classId: string;
   onNext: () => void;
   onCancel: () => void;
+  mode?: "setup" | "edit";
 }
 
-function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
+function TopicListStep({
+  classId,
+  onNext,
+  onCancel,
+  mode = "setup",
+}: Step1Props) {
   const { data: classTopics = [], isLoading: loadingTopics } =
     useClassTopics(classId);
   const { data: available = [], isLoading: loadingAvailable } =
@@ -325,14 +333,20 @@ function TopicListStep({ classId, onNext, onCancel }: Step1Props) {
           <Button type="button" variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
-          <Button
-            type="button"
-            variant="primary"
-            onClick={onNext}
-            disabled={sorted.length === 0}
-          >
-            Next: Design Diagnostic →
-          </Button>
+          {mode === "edit" ? (
+            <Button type="button" variant="primary" onClick={onCancel}>
+              Done
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="primary"
+              onClick={onNext}
+              disabled={sorted.length === 0}
+            >
+              Next: Design Diagnostic →
+            </Button>
+          )}
         </div>
       </div>
     </div>
@@ -662,6 +676,7 @@ export function ClassSetupWizard({
   isOpen,
   onClose,
   initialStep = 1,
+  mode = "setup",
 }: ClassSetupWizardProps) {
   const [step, setStep] = useState<Step>(initialStep);
   const [done, setDone] = useState(false);
@@ -678,65 +693,67 @@ export function ClassSetupWizard({
       onOpenChange={(open) => {
         if (!open) handleClose();
       }}
-      title="Class Curriculum Setup"
+      title={mode === "edit" ? "Edit Topics" : "Class Curriculum Setup"}
       maxWidth="3xl"
     >
       <div className="mt-2">
-        {/* Step indicator */}
-        <div className="flex items-center gap-3 mb-5">
-          <div
-            className={[
-              "w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0",
-              step === 1
-                ? "bg-brand-gold text-white"
-                : "bg-brand-primary text-white",
-            ].join(" ")}
-            aria-current={step === 1 ? "step" : undefined}
-          >
-            {step > 1 ? (
-              <Check className="w-3.5 h-3.5" aria-hidden="true" />
-            ) : (
-              "1"
-            )}
+        {/* Step indicator — only shown during initial setup flow */}
+        {mode === "setup" && (
+          <div className="flex items-center gap-3 mb-5">
+            <div
+              className={[
+                "w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0",
+                step === 1
+                  ? "bg-brand-gold text-white"
+                  : "bg-brand-primary text-white",
+              ].join(" ")}
+              aria-current={step === 1 ? "step" : undefined}
+            >
+              {step > 1 ? (
+                <Check className="w-3.5 h-3.5" aria-hidden="true" />
+              ) : (
+                "1"
+              )}
+            </div>
+            <span
+              className={[
+                "text-xs font-bold",
+                step === 1
+                  ? "text-brand-gold"
+                  : step > 1
+                    ? "text-brand-primary"
+                    : "text-brand-muted",
+              ].join(" ")}
+            >
+              Topics
+            </span>
+            <div
+              className={[
+                "flex-1 h-0.5 rounded",
+                step > 1 ? "bg-brand-gold" : "bg-gray-200",
+              ].join(" ")}
+            />
+            <div
+              className={[
+                "w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0",
+                step === 2
+                  ? "bg-brand-gold text-white"
+                  : "bg-gray-200 text-gray-400",
+              ].join(" ")}
+              aria-current={step === 2 ? "step" : undefined}
+            >
+              2
+            </div>
+            <span
+              className={[
+                "text-xs font-bold",
+                step === 2 ? "text-brand-gold" : "text-brand-muted",
+              ].join(" ")}
+            >
+              Diagnostic
+            </span>
           </div>
-          <span
-            className={[
-              "text-xs font-bold",
-              step === 1
-                ? "text-brand-gold"
-                : step > 1
-                  ? "text-brand-primary"
-                  : "text-brand-muted",
-            ].join(" ")}
-          >
-            Topics
-          </span>
-          <div
-            className={[
-              "flex-1 h-0.5 rounded",
-              step > 1 ? "bg-brand-gold" : "bg-gray-200",
-            ].join(" ")}
-          />
-          <div
-            className={[
-              "w-[26px] h-[26px] rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0",
-              step === 2
-                ? "bg-brand-gold text-white"
-                : "bg-gray-200 text-gray-400",
-            ].join(" ")}
-            aria-current={step === 2 ? "step" : undefined}
-          >
-            2
-          </div>
-          <span
-            className={[
-              "text-xs font-bold",
-              step === 2 ? "text-brand-gold" : "text-brand-muted",
-            ].join(" ")}
-          >
-            Diagnostic
-          </span>
-        </div>
+        )}
 
         {done ? (
           <div className="text-center py-8 space-y-3">
@@ -767,6 +784,7 @@ export function ClassSetupWizard({
             classId={classId}
             onNext={() => setStep(2)}
             onCancel={handleClose}
+            mode={mode}
           />
         ) : (
           <DiagnosticBuilderStep

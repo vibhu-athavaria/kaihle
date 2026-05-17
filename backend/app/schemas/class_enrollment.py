@@ -98,6 +98,7 @@ class TeacherStudentItem(BaseModel):
     first_name: str
     last_name: str
     email: str
+    grade_name: str | None = None
     class_ids: list[uuid.UUID]
     class_names: list[str]
 

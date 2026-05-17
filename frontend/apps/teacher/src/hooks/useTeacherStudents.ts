@@ -6,6 +6,7 @@ export interface TeacherStudent {
   first_name: string;
   last_name: string;
   email: string;
+  grade_name: string | null;
   class_ids: string[];
   class_names: string[];
 }

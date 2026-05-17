@@ -36,6 +36,7 @@ export function MyStudentsPage() {
       id: s.id,
       name: `${s.first_name} ${s.last_name}`.trim(),
       email: s.email,
+      gradeName: s.grade_name ?? null,
       classIds: s.class_ids,
       classNames: s.class_names,
     }));

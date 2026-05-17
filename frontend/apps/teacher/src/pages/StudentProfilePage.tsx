@@ -1,27 +1,21 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@kaihle/auth";
 import { useStudentProfile } from "../hooks/useStudentProfile";
+import { useTeacherStudents } from "../hooks/useTeacherStudents";
 import { useStudentGapMapForTeacher } from "../hooks/useStudentGapMapForTeacher";
 import { StudentProfileHeader } from "../components/students/StudentProfileHeader";
 import { SubjectMasteryCards } from "../components/students/SubjectMasteryCards";
 import { StudentGapMapTab } from "../components/students/StudentGapMapTab";
 import { LearningProfileTab } from "../components/students/LearningProfileTab";
-import { StudyPlanHistoryTab } from "../components/students/StudyPlanHistoryTab";
 import { AssessmentHistoryTab } from "../components/students/AssessmentHistoryTab";
 import { MiniCoursesTab } from "../components/students/MiniCoursesTab";
 
-type TabId =
-  | "gap-map"
-  | "learning-profile"
-  | "study-plans"
-  | "assessments"
-  | "mini-courses";
+type TabId = "gap-map" | "learning-profile" | "assessments" | "mini-courses";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "gap-map", label: "Gap Map" },
   { id: "learning-profile", label: "Learning Profile" },
-  { id: "study-plans", label: "Study Plans" },
   { id: "assessments", label: "Assessments" },
   { id: "mini-courses", label: "Mini-Courses" },
 ];
@@ -31,9 +25,16 @@ export function StudentProfilePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const schoolId = user?.school_id ?? null;
+
+  const { data: teacherStudents } = useTeacherStudents(schoolId);
+  const teacherClassIds = useMemo(() => {
+    const match = teacherStudents?.find((s) => s.id === studentId);
+    return match?.class_ids?.map(String) ?? [];
+  }, [teacherStudents, studentId]);
+
   const { data, isLoading, isError } = useStudentProfile(
     studentId ?? null,
-    schoolId,
+    teacherClassIds,
   );
   const activeTab = (searchParams.get("tab") as TabId) ?? "gap-map";
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(
@@ -72,10 +73,27 @@ export function StudentProfilePage() {
     );
   }
 
+  const avgMasteryBySubject = new Map<string, number | null>();
+  for (const s of data.availableSubjects) {
+    if (gapMap && gapMap.subject_id === s.subjectId) {
+      const assessed = gapMap.scores
+        .map((sc) => sc.mastery_score)
+        .filter((v): v is number => v !== null);
+      avgMasteryBySubject.set(
+        s.subjectId,
+        assessed.length > 0
+          ? assessed.reduce((a, b) => a + b, 0) / assessed.length
+          : null,
+      );
+    } else {
+      avgMasteryBySubject.set(s.subjectId, null);
+    }
+  }
+
   const subjectMasteryCards = data.availableSubjects.map((s) => ({
     subjectId: s.subjectId,
     subjectName: s.subjectName,
-    avgMastery: null as number | null,
+    avgMastery: avgMasteryBySubject.get(s.subjectId) ?? null,
   }));
 
   return (
@@ -154,7 +172,6 @@ export function StudentProfilePage() {
             This student hasn&apos;t completed their learning profile yet.
           </p>
         )}
-        {activeTab === "study-plans" && <StudyPlanHistoryTab />}
         {activeTab === "assessments" && <AssessmentHistoryTab />}
         {activeTab === "mini-courses" && studentId && (
           <MiniCoursesTab studentId={studentId} />
