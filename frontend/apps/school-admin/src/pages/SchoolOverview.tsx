@@ -214,15 +214,15 @@ export function SchoolOverview() {
                             {c.name}
                           </span>
                           <span
-                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${subjectBadgeClass(c.subject_name)}`}
+                            className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${subjectBadgeClass(c.subject_name)}`}
                           >
                             {subjectShortLabel(c.subject_name)}
                           </span>
-                          <span className="text-[10px] text-brand-muted">
+                          <span className="text-xs text-brand-muted">
                             Grade {c.grade_name} · {c.student_count} students
                           </span>
                           <span
-                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${badgeClasses}`}
+                            className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${badgeClasses}`}
                           >
                             {badgeLabel}
                           </span>
@@ -230,7 +230,7 @@ export function SchoolOverview() {
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0 ml-auto">
                         {c.teacher_name && (
-                          <span className="text-[10px] text-brand-muted hidden lg:block">
+                          <span className="text-xs text-brand-muted hidden lg:block">
                             {c.teacher_name}
                           </span>
                         )}
@@ -240,7 +240,7 @@ export function SchoolOverview() {
                               `/school-admin/classes/${c.id}?tab=gap-map`,
                             )
                           }
-                          className="text-[10px] font-bold text-brand-primary hover:underline focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 rounded whitespace-nowrap"
+                          className="text-xs font-bold text-brand-primary hover:underline focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 rounded whitespace-nowrap"
                         >
                           Gap map →
                         </button>
@@ -274,7 +274,7 @@ export function SchoolOverview() {
                     className="w-2 h-2 rounded-full bg-brand-red flex-shrink-0"
                     aria-hidden="true"
                   />
-                  <span className="text-[10px] text-brand-red">
+                  <span className="text-xs text-brand-red">
                     Mastery below threshold in at least one class
                   </span>
                 </div>
@@ -285,7 +285,7 @@ export function SchoolOverview() {
                       className="flex items-center justify-between py-1"
                     >
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-[10px] font-black flex-shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-xs font-black flex-shrink-0">
                           {s.first_name.charAt(0)}
                           {s.last_name.charAt(0)}
                         </div>
@@ -297,7 +297,7 @@ export function SchoolOverview() {
                         <div className="text-xs font-bold text-brand-red">
                           Needs Work
                         </div>
-                        <div className="text-[10px] text-brand-muted">
+                        <div className="text-xs text-brand-muted">
                           {s.needs_work_class_count}{" "}
                           {s.needs_work_class_count === 1
                             ? "subject"
