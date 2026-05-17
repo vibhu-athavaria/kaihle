@@ -10,10 +10,10 @@ Usage:
 
 Environment variables required:
     DATABASE_URL       — PostgreSQL connection string
-    LITELLM_API_KEY     — API key for LLM calls (used directly via litellm.acompletion)
+    LITELLM_API_KEY     — API key for LLM calls (used directly via litellm.completion)
     OPENAI_API_KEY      — Alias for LITELLM_API_KEY
 
-The seed script uses litellm.acompletion() directly (not router.complete())
+The seed script uses litellm.completion() directly (not router.complete())
 per CLAUDE.md § Direct LLM Access.
 
 Content types generated:
@@ -39,8 +39,10 @@ import logging
 import os
 import sys
 import uuid
+from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -61,45 +63,65 @@ logging.basicConfig(
 log = logging.getLogger("seed_subtopic_content")
 
 # ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-
-BATCH_SIZE = int(os.environ.get("SEED_BATCH_SIZE", "10"))
-MAX_WORKERS = int(os.environ.get("SEED_MAX_WORKERS", "4"))
-LITELLM_MODEL = os.environ.get("LITELLM_SEED_MODEL", "gpt-4o-mini")
-DRY_RUN = os.environ.get("DRY_RUN", "false").lower() in ("1", "true", "yes")
-SKIP_VIDEOS = os.environ.get("SKIP_VIDEOS", "false").lower() in ("1", "true", "yes")
-SKIP_EXPLANATIONS = os.environ.get("SKIP_EXPLANATIONS", "false").lower() in (
-    "1",
-    "true",
-    "yes",
-)
-SKIP_QUIZZES = os.environ.get("SKIP_QUIZZES", "false").lower() in ("1", "true", "yes")
-
-CURRICULUM_PATH = Path(__file__).parent.parent / "data" / "curriculum" / "cambridge_v1.json"
-
-# ---------------------------------------------------------------------------
-# Argument parsing
+# Argument parsing — must happen before config constants so CLI flags win
 # ---------------------------------------------------------------------------
 
 parser = argparse.ArgumentParser(description="Seed subtopic content to database")
 parser.add_argument("--limit", type=int, default=None, help="Limit number of subtopics to process (for testing)")
-parser.add_argument("--dry-run", action="store_true", help="Dry run without making DB changes")
+parser.add_argument("--dry-run", action="store_true", help="Dry run: simulate full flow without DB writes")
 parser.add_argument("--skip-videos", action="store_true", help="Skip video generation")
 parser.add_argument("--skip-explanations", action="store_true", help="Skip explanation generation")
 parser.add_argument("--skip-quizzes", action="store_true", help="Skip quiz generation")
 args = parser.parse_args()
 
 # ---------------------------------------------------------------------------
-# Database setup
+# Config — CLI flags take priority over env vars
 # ---------------------------------------------------------------------------
 
-engine = create_engine(settings.database_url, pool_pre_ping=True, echo=False)
-SessionLocal = sessionmaker(bind=engine)
+BATCH_SIZE = int(os.environ.get("SEED_BATCH_SIZE", "10"))
+MAX_WORKERS = int(os.environ.get("SEED_MAX_WORKERS", "4"))
+LITELLM_MODEL = os.environ.get("LITELLM_SEED_MODEL", "gpt-4o-mini")
+
+# CLI flags take priority; fall back to env vars so docker/API invocations still work
+DRY_RUN: bool = args.dry_run or os.environ.get("DRY_RUN", "false").lower() in ("1", "true", "yes")
+SKIP_VIDEOS: bool = args.skip_videos or os.environ.get("SKIP_VIDEOS", "false").lower() in ("1", "true", "yes")
+SKIP_EXPLANATIONS: bool = args.skip_explanations or os.environ.get("SKIP_EXPLANATIONS", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+SKIP_QUIZZES: bool = args.skip_quizzes or os.environ.get("SKIP_QUIZZES", "false").lower() in ("1", "true", "yes")
+
+CURRICULUM_PATH = Path(__file__).parent.parent / "data" / "curriculum" / "cambridge_v1.json"
+
+# ---------------------------------------------------------------------------
+# Database setup — strip asyncpg driver; sync engine requires psycopg2/pg8000
+# ---------------------------------------------------------------------------
+
+
+def _make_sync_db_url(url: str) -> str:
+    """Replace +asyncpg with +psycopg2 so sync SQLAlchemy can connect."""
+    return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://").replace(
+        "postgres+asyncpg://", "postgresql+psycopg2://"
+    )
+
+
+_engine: Any = None
+_SessionLocal: Any = None
+
+
+def _get_engine() -> Any:
+    global _engine, _SessionLocal
+    if _engine is None:
+        _engine = create_engine(_make_sync_db_url(settings.database_url), pool_pre_ping=True, echo=False)
+        _SessionLocal = sessionmaker(bind=_engine)
+    return _engine
 
 
 def get_session() -> Session:
-    return SessionLocal()
+    _get_engine()
+    session: Session = _SessionLocal()  # type: ignore[misc]
+    return session
 
 
 # ---------------------------------------------------------------------------
@@ -121,14 +143,12 @@ def load_pre_generated_questions(session: Session) -> dict[str, Any]:
         if subtopic_id not in result:
             result[subtopic_id] = {"questions": []}
 
-        # Map QuestionBank schema to the quiz_questions JSONB format expected by build_record
         options = []
         if q.options:
-            # options stored as [{"key": "A", "text": "..."}, ...]
             for opt in q.options:
-                key = opt.get("key", "")
-                text = opt.get("text", "")
-                options.append(f"{key}: {text}")
+                key = opt.get("key", "") if isinstance(opt, dict) else ""
+                text_val = opt.get("text", "") if isinstance(opt, dict) else ""
+                options.append(f"{key}: {text_val}")
 
         question_entry = {
             "question_id": str(q.id),
@@ -150,7 +170,6 @@ def load_curriculum_subtopics() -> list[dict[str, Any]]:
         return []
     with open(CURRICULUM_PATH) as f:
         data = json.load(f)
-    # The cambridge_v1.json has subtopics nested inside strands/chapters/units
     subtopics: list[dict[str, Any]] = []
     for strand in data.get("strands", []):
         for chapter in strand.get("chapters", []):
@@ -241,24 +260,27 @@ Respond with ONLY a valid JSON object, no markdown:
 
 
 # ---------------------------------------------------------------------------
-# LLM calls
+# LLM calls — synchronous (litellm.completion), thread-safe
 # ---------------------------------------------------------------------------
 
 
 def call_llm(prompt: str, model: str | None = None) -> dict[str, Any] | None:
-    """Call LLM via litellm.acompletion (direct, not via router)."""
+    """Call LLM via litellm.completion (sync, direct, not via router)."""
     actual_model = model or LITELLM_MODEL
+    log.debug("LLM request | model=%s | prompt_chars=%d", actual_model, len(prompt))
     try:
-        response = litellm.acompletion(
+        response = litellm.completion(
             model=actual_model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             timeout=60,
         )
         raw = response["choices"][0]["message"]["content"]
-        return json.loads(raw)
+        log.debug("LLM response | chars=%d | snippet=%.120s", len(raw), raw)
+        parsed: dict[str, Any] = json.loads(raw)
+        return parsed
     except Exception as e:
-        log.error("LLM call failed: %s", e)
+        log.error("LLM call failed | model=%s | error=%s", actual_model, e)
         return None
 
 
@@ -277,7 +299,13 @@ def generate_video_content(subtopic: dict[str, Any]) -> dict[str, Any] | None:
         subject=subtopic.get("_strand_id", "Mathematics"),
         grade_level=subtopic.get("grade_level", "Grade 8"),
     )
-    return call_llm(prompt)
+    result = call_llm(prompt)
+    log.info(
+        "video_gen | subtopic=%s | found=%s",
+        subtopic.get("name", ""),
+        bool(result and result.get("video_url")),
+    )
+    return result
 
 
 def generate_explanation_content(subtopic: dict[str, Any]) -> dict[str, Any] | None:
@@ -291,7 +319,10 @@ def generate_explanation_content(subtopic: dict[str, Any]) -> dict[str, Any] | N
         grade_level=subtopic.get("grade_level", "Grade 8"),
         prerequisites=prerequisites or "basic arithmetic",
     )
-    return call_llm(prompt)
+    result = call_llm(prompt)
+    chars = len(result.get("explanation_text", "")) if result else 0
+    log.info("explanation_gen | subtopic=%s | chars=%d", subtopic.get("name", ""), chars)
+    return result
 
 
 def generate_quiz_content(subtopic: dict[str, Any]) -> dict[str, Any] | None:
@@ -303,7 +334,10 @@ def generate_quiz_content(subtopic: dict[str, Any]) -> dict[str, Any] | None:
         subject=subtopic.get("_strand_id", "Mathematics"),
         grade_level=subtopic.get("grade_level", "Grade 8"),
     )
-    return call_llm(prompt)
+    result = call_llm(prompt)
+    q_count = len(result.get("questions", [])) if result else 0
+    log.info("quiz_gen | subtopic=%s | questions=%d", subtopic.get("name", ""), q_count)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -328,19 +362,14 @@ def upsert_subtopic_content(session: Session, records: list[dict[str, Any]]) -> 
         return 0
     inserted = 0
     for rec in records:
-        # Build upsert based on content type
         if rec["content_type"] == CONTENT_TYPE_VIDEO:
-            # Conflict on (subtopic_id, content_type, video_url)
             constraint = "uq_subtopic_content_one_video_per_url"
             update_cols = [k for k in rec.keys() if k not in ("subtopic_id", "content_type", "video_url")]
         else:
-            # Conflict on (subtopic_id, content_type) — partial, so use subtopic_id
-            # We handle this by matching on subtopic_id and content_type
-            # since non-videos don't have a unique video_url
-            constraint = None  # will use raw SQL
+            constraint = None
             update_cols = None
 
-        if constraint:
+        if constraint and update_cols is not None:
             set_clause = ", ".join(f"{k} = EXCLUDED.{k}" for k in update_cols)
             sql = text(f"""
                 INSERT INTO subtopic_content (id, subtopic_id, content_type, is_active,
@@ -368,8 +397,6 @@ def upsert_subtopic_content(session: Session, records: list[dict[str, Any]]) -> 
                   AND subtopic_content.video_url = :video_url
             """)
         else:
-            # For non-video content, use subtopic_id + content_type as unique key
-            # We need a different approach — use raw SQL with ON CONFLICT
             sql = text("""
                 INSERT INTO subtopic_content (id, subtopic_id, content_type, is_active,
                     applicable_tiers, review_status, is_stale, is_archived,
@@ -467,97 +494,158 @@ def build_record(
 
 
 # ---------------------------------------------------------------------------
-# Main seed logic
+# Per-subtopic seed logic
 # ---------------------------------------------------------------------------
 
 
-def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any]) -> tuple[int, int]:
-    """Generate and insert content for a single subtopic. Returns (inserted, skipped)."""
-    subtopic_id_str = str(subtopic.get("id") or "")
-    if not subtopic_id_str:
-        return 0, 0
+class SeedResult:
+    """Outcome for a single subtopic seed attempt."""
 
-    session = get_session()
-    inserted = 0
-    skipped = 0
+    def __init__(self, subtopic_id: str, subtopic_name: str) -> None:
+        self.subtopic_id = subtopic_id
+        self.subtopic_name = subtopic_name
+        self.inserted = 0
+        self.skipped = 0
+        self.errors: list[str] = []
+
+    def add_error(self, msg: str) -> None:
+        self.errors.append(msg)
+
+    @property
+    def failed(self) -> bool:
+        return bool(self.errors)
+
+
+def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run: bool = False) -> SeedResult:
+    """Generate and insert content for a single subtopic."""
+    subtopic_id_str = str(subtopic.get("id") or "")
+    subtopic_name = subtopic.get("name", "<unknown>")
+    result = SeedResult(subtopic_id_str, subtopic_name)
+
+    if not subtopic_id_str:
+        result.add_error("missing subtopic id")
+        return result
+
+    log.info("seeding | subtopic=%s | id=%s | dry_run=%s", subtopic_name, subtopic_id_str, dry_run)
+
+    session = get_session() if not dry_run else None
 
     try:
         # --- Video ---
         if not SKIP_VIDEOS:
             video_data = generate_video_content(subtopic)
             if video_data and video_data.get("video_url"):
-                rec = build_record(
-                    subtopic,
-                    CONTENT_TYPE_VIDEO,
-                    video_data,
-                    REVIEW_STATUS_APPROVED,
-                    is_active=True,
-                )
-                if rec and upsert_subtopic_content(session, [rec]):
-                    inserted += 1
+                rec = build_record(subtopic, CONTENT_TYPE_VIDEO, video_data, REVIEW_STATUS_APPROVED, is_active=True)
+                if dry_run:
+                    log.info(
+                        "[DRY RUN] would insert video | subtopic=%s | url=%s",
+                        subtopic_name,
+                        video_data.get("video_url"),
+                    )
+                    result.inserted += 1
+                elif rec and session and upsert_subtopic_content(session, [rec]):
+                    result.inserted += 1
             else:
-                skipped += 1
+                log.info("no video found | subtopic=%s", subtopic_name)
+                result.skipped += 1
         else:
-            skipped += 1
+            result.skipped += 1
 
         # --- Explanation ---
         if not SKIP_EXPLANATIONS:
             explanation_data = generate_explanation_content(subtopic)
             if explanation_data and explanation_data.get("explanation_text"):
                 rec = build_record(
-                    subtopic,
-                    CONTENT_TYPE_EXPLANATION,
-                    explanation_data,
-                    REVIEW_STATUS_APPROVED,
-                    is_active=True,
+                    subtopic, CONTENT_TYPE_EXPLANATION, explanation_data, REVIEW_STATUS_APPROVED, is_active=True
                 )
-                if rec and upsert_subtopic_content(session, [rec]):
-                    inserted += 1
+                if dry_run:
+                    log.info(
+                        "[DRY RUN] would insert explanation | subtopic=%s | chars=%d",
+                        subtopic_name,
+                        len(explanation_data.get("explanation_text", "")),
+                    )
+                    result.inserted += 1
+                elif rec and session and upsert_subtopic_content(session, [rec]):
+                    result.inserted += 1
             else:
-                skipped += 1
+                log.info("no explanation generated | subtopic=%s", subtopic_name)
+                result.skipped += 1
         else:
-            skipped += 1
+            result.skipped += 1
 
         # --- Practice Quiz ---
         if not SKIP_QUIZZES:
-            # Check pre-generated questions first
             if subtopic_id_str in pre_gen_qs:
-                qs_data = {"questions": pre_gen_qs[subtopic_id_str].get("questions", [])}
+                pre_qs: list[Any] = pre_gen_qs[subtopic_id_str].get("questions", [])
+                qs_data: dict[str, Any] | None = {"questions": pre_qs}
+                log.info("using pre-generated questions | subtopic=%s | count=%d", subtopic_name, len(pre_qs))
             else:
                 qs_data = generate_quiz_content(subtopic)
             if qs_data and qs_data.get("questions"):
-                rec = build_record(
-                    subtopic,
-                    CONTENT_TYPE_PRACTICE,
-                    qs_data,
-                    REVIEW_STATUS_PENDING,
-                    is_active=True,
-                )
-                if rec and upsert_subtopic_content(session, [rec]):
-                    inserted += 1
+                rec = build_record(subtopic, CONTENT_TYPE_PRACTICE, qs_data, REVIEW_STATUS_PENDING, is_active=True)
+                if dry_run:
+                    log.info(
+                        "[DRY RUN] would insert quiz | subtopic=%s | questions=%d",
+                        subtopic_name,
+                        len(qs_data.get("questions", [])),
+                    )
+                    result.inserted += 1
+                elif rec and session and upsert_subtopic_content(session, [rec]):
+                    result.inserted += 1
             else:
-                skipped += 1
+                log.info("no quiz generated | subtopic=%s", subtopic_name)
+                result.skipped += 1
         else:
-            skipped += 1
+            result.skipped += 1
 
     except Exception as e:
-        log.error("Error seeding subtopic %s: %s", subtopic_id_str, e)
-        session.rollback()
+        msg = f"{type(e).__name__}: {e}"
+        log.error("seed failed | subtopic=%s | error=%s", subtopic_name, msg)
+        result.add_error(msg)
+        if session:
+            session.rollback()
     finally:
-        session.close()
+        if session:
+            session.close()
 
-    return inserted, skipped
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Batching helper
+# ---------------------------------------------------------------------------
+
+
+def _batches(items: list[Any], size: int) -> Generator[list[Any], None, None]:
+    """Yield successive chunks of `size` from `items`."""
+    it = iter(items)
+    while True:
+        batch = list(islice(it, size))
+        if not batch:
+            break
+        yield batch
+
+
+# ---------------------------------------------------------------------------
+# Main seed logic
+# ---------------------------------------------------------------------------
 
 
 def main() -> None:
     log.info("=" * 60)
     log.info("Subtopic Content Seeder")
     log.info("Model: %s | Dry run: %s", LITELLM_MODEL, DRY_RUN)
-    log.info("Skip videos: %s | explanations: %s | quizzes: %s", SKIP_VIDEOS, SKIP_EXPLANATIONS, SKIP_QUIZZES)
+    log.info(
+        "Skip videos: %s | explanations: %s | quizzes: %s",
+        SKIP_VIDEOS,
+        SKIP_EXPLANATIONS,
+        SKIP_QUIZZES,
+    )
+    log.info("Batch size: %d | Workers: %d", BATCH_SIZE, MAX_WORKERS)
     log.info("=" * 60)
 
     if DRY_RUN:
-        log.warning("DRY RUN — no database changes will be made")
+        log.warning("DRY RUN — LLM calls will be made but no DB writes will occur")
 
     # Load curriculum
     subtopics = load_curriculum_subtopics()
@@ -565,47 +653,60 @@ def main() -> None:
         log.error("No subtopics loaded — aborting")
         return
 
-    # Apply limit if specified
     if args.limit:
         subtopics = subtopics[: args.limit]
-        log.info("Limited to %d subtopics for testing", args.limit)
+        log.info("Limited to %d subtopics", args.limit)
 
-    session = get_session()
-    try:
-        pre_gen_qs = load_pre_generated_questions(session)
-    finally:
-        session.close()
+    # Load pre-generated questions (skip DB in dry-run)
+    if DRY_RUN:
+        pre_gen_qs: dict[str, Any] = {}
+        log.info("[DRY RUN] skipping question_bank load")
+    else:
+        session = get_session()
+        try:
+            pre_gen_qs = load_pre_generated_questions(session)
+        finally:
+            session.close()
 
     total_inserted = 0
     total_skipped = 0
+    failed_subtopics: list[SeedResult] = []
 
-    if DRY_RUN:
-        log.info("Dry run complete — no records were written")
-        return
+    # Process in batches
+    for batch_num, batch in enumerate(_batches(subtopics, BATCH_SIZE), 1):
+        log.info("--- Batch %d | subtopics %d", batch_num, len(batch))
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {executor.submit(seed_subtopic, s, pre_gen_qs, DRY_RUN): s for s in batch}
+            for future in as_completed(futures):
+                seed_result = future.result()
+                total_inserted += seed_result.inserted
+                total_skipped += seed_result.skipped
+                if seed_result.failed:
+                    failed_subtopics.append(seed_result)
 
-    # Process in batches with thread pool
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {executor.submit(seed_subtopic, s, pre_gen_qs): s for s in subtopics}
-        for i, future in enumerate(as_completed(futures), 1):
-            inserted, skipped = future.result()
-            total_inserted += inserted
-            total_skipped += skipped
-            if i % 50 == 0 or i == len(subtopics):
-                log.info(
-                    "Progress: %d/%d subtopics processed | inserted: %d | skipped: %d",
-                    i,
-                    len(subtopics),
-                    total_inserted,
-                    total_skipped,
-                )
+        log.info(
+            "Batch %d done | cumulative: inserted=%d skipped=%d failed=%d",
+            batch_num,
+            total_inserted,
+            total_skipped,
+            len(failed_subtopics),
+        )
 
+    # Final summary
     log.info("=" * 60)
     log.info(
-        "SEED COMPLETE — inserted: %d | skipped: %d | total: %d",
+        "SEED COMPLETE — inserted: %d | skipped: %d | failed: %d | total: %d",
         total_inserted,
         total_skipped,
-        total_inserted + total_skipped,
+        len(failed_subtopics),
+        total_inserted + total_skipped + len(failed_subtopics),
     )
+
+    if failed_subtopics:
+        log.warning("FAILED SUBTOPICS (%d):", len(failed_subtopics))
+        for r in failed_subtopics:
+            log.warning("  - %s (%s): %s", r.subtopic_name, r.subtopic_id, "; ".join(r.errors))
+
     log.info("=" * 60)
 
 
