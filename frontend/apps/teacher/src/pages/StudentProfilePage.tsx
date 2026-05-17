@@ -72,10 +72,27 @@ export function StudentProfilePage() {
     );
   }
 
+  const avgMasteryBySubject = new Map<string, number | null>();
+  for (const s of data.availableSubjects) {
+    if (gapMap && gapMap.subject_id === s.subjectId) {
+      const assessed = gapMap.scores
+        .map((sc) => sc.mastery_score)
+        .filter((v): v is number => v !== null);
+      avgMasteryBySubject.set(
+        s.subjectId,
+        assessed.length > 0
+          ? assessed.reduce((a, b) => a + b, 0) / assessed.length
+          : null,
+      );
+    } else {
+      avgMasteryBySubject.set(s.subjectId, null);
+    }
+  }
+
   const subjectMasteryCards = data.availableSubjects.map((s) => ({
     subjectId: s.subjectId,
     subjectName: s.subjectName,
-    avgMastery: null as number | null,
+    avgMastery: avgMasteryBySubject.get(s.subjectId) ?? null,
   }));
 
   return (
