@@ -55,10 +55,20 @@ export function LearningProfileTab({
   interests,
   completedAt,
 }: LearningProfileTabProps) {
-  // Filter to numeric-score entries only (old v2 profiles stored {dominant, secondary} strings)
-  const modalityEntries = Object.entries(modalityScores)
-    .filter(([, v]) => typeof v === "number")
-    .sort((a, b) => (b[1] as number) - (a[1] as number));
+  // Always render the 4 known modality keys in order — coerce missing/invalid values to 0.
+  // This naturally excludes old-format keys (dominant, secondary) from broken v2 profiles.
+  const MODALITY_KEYS = [
+    "visual",
+    "auditory",
+    "reading_writing",
+    "kinesthetic",
+  ] as const;
+  const modalityEntries = MODALITY_KEYS.map((key): [string, number] => [
+    key,
+    typeof modalityScores[key] === "number"
+      ? (modalityScores[key] as number)
+      : 0,
+  ]).sort((a, b) => b[1] - a[1]);
 
   const dominantModality =
     modalityEntries.length > 0 ? modalityEntries[0][0] : "";
@@ -97,25 +107,32 @@ export function LearningProfileTab({
           Learning style breakdown
         </h3>
         <div className="space-y-2">
-          {modalityEntries.map(([key, value]) => (
-            <div key={key} className="flex items-center gap-3 py-1">
-              <span className="font-sans text-sm text-brand-body w-36 flex-shrink-0">
-                {MODALITY_LABELS[key] ?? key}
-              </span>
-              <div className="flex-1 h-2.5 bg-brand-gold/10 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    key === dominantModality
-                      ? "bg-brand-gold"
-                      : "bg-brand-gold/30"
-                  }`}
-                  style={{ width: `${Math.round(value * 100)}%` }}
-                  role="progressbar"
-                  aria-valuenow={Math.round(value * 100)}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label={`${MODALITY_LABELS[key] ?? key} score`}
-                />
+          {modalityEntries.map(([key, rawValue]) => {
+            const value = Number(rawValue) || 0;
+            const pct = Math.round(value * 100);
+            return (
+              <div key={key} className="flex items-center gap-3 py-1">
+                <span className="font-sans text-sm text-brand-body w-36 flex-shrink-0">
+                  {MODALITY_LABELS[key] ?? key}
+                </span>
+                <div className="flex-1 h-2.5 bg-brand-gold/10 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      key === dominantModality
+                        ? "bg-brand-gold"
+                        : "bg-brand-gold/30"
+                    }`}
+                    style={{ width: `${pct}%` }}
+                    role="progressbar"
+                    aria-valuenow={pct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`${MODALITY_LABELS[key] ?? key} score`}
+                  />
+                </div>
+                <span className="font-sans text-sm text-brand-muted w-10 text-right">
+                  {pct}%
+                </span>
               </div>
             );
           })}

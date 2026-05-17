@@ -56,11 +56,21 @@ export function LearningProfileSection() {
     });
   };
 
-  // Filter to numeric-score entries only (old v2 profiles stored {dominant, secondary} strings)
+  // Always render the 4 known modality keys — coerce missing/invalid values to 0.
+  // This naturally excludes old-format keys (dominant, secondary) from broken v2 profiles.
+  const MODALITY_KEYS = [
+    "visual",
+    "auditory",
+    "reading_writing",
+    "kinesthetic",
+  ] as const;
   const modalityEntries = profile?.modality_scores
-    ? Object.entries(profile.modality_scores)
-        .filter(([, v]) => typeof v === "number")
-        .sort((a, b) => (b[1] as number) - (a[1] as number))
+    ? MODALITY_KEYS.map((key): [string, number] => [
+        key,
+        typeof profile.modality_scores[key] === "number"
+          ? (profile.modality_scores[key] as number)
+          : 0,
+      ]).sort((a, b) => b[1] - a[1])
     : [];
 
   const dominantModality =
