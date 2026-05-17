@@ -136,15 +136,22 @@ class TestGenerateForTopic:
 
         categories = [_make_interest_category(db_name) for db_name, _, _ in INTEREST_CATEGORIES]
 
+        # Simulate this subtopic already having 5 llm questions → skip quiz generation
+        # so the LLM call count stays at exactly len(INTEREST_CATEGORIES).
+        question_count_row = MagicMock()
+        question_count_row.subtopic_id = subtopic.id
+        question_count_row.cnt = 5
+
         # execute call sequence:
         # Setup (3): _fetch_topic_context, _fetch_subtopics, _resolve_interest_category_ids
-        # Batch (1): _fetch_existing_content_pairs → result.all() → empty (no prior content)
+        # Batch (2): _fetch_existing_content_pairs, _fetch_existing_question_counts
         # Loop ×4:   _upsert_content rejected-row check → scalar_one_or_none()
         execute_returns = [
             _make_first_result(topic_context_row),  # _fetch_topic_context
             _make_scalars_result([subtopic]),  # _fetch_subtopics
             _make_scalars_result(categories),  # _resolve_interest_category_ids
-            _make_all_result([]),  # _fetch_existing_content_pairs → no prior content
+            _make_all_result([]),  # _fetch_existing_content_pairs
+            _make_all_result([question_count_row]),  # _fetch_existing_question_counts (5 → skip quiz)
             # upsert check ×4 — no rejected row exists → fresh insert each time
             _make_scalar_one_or_none_result(None),
             _make_scalar_one_or_none_result(None),
@@ -205,11 +212,17 @@ class TestGenerateForTopic:
             pair.interest_category_id = cat.id
             existing_pairs.append(pair)
 
+        # Simulate this subtopic already having 5 llm questions → skip quiz generation
+        question_count_row = MagicMock()
+        question_count_row.subtopic_id = subtopic.id
+        question_count_row.cnt = 5
+
         execute_returns = [
             _make_first_result(topic_context_row),
             _make_scalars_result([subtopic]),
             _make_scalars_result(categories),
             _make_all_result(existing_pairs),  # _fetch_existing_content_pairs → all 4 pairs present
+            _make_all_result([question_count_row]),  # _fetch_existing_question_counts (5 → skip quiz)
         ]
         db.execute.side_effect = execute_returns
 
@@ -221,7 +234,7 @@ class TestGenerateForTopic:
         ) as mock_llm:
             result = await service.generate_for_topic(topic_id=topic_id, school_id=school_id)
 
-        # LLM must not be called at all
+        # LLM must not be called at all — both explanations and quiz gen are skipped
         mock_llm.assert_not_called()
         assert result["subtopics_found"] == 1
         assert result["explanations_written"] == 0
@@ -253,7 +266,8 @@ class TestGenerateForTopic:
             _make_first_result(topic_context_row),
             _make_scalars_result([subtopic]),
             _make_scalars_result(categories),
-            _make_all_result([]),  # _fetch_existing_content_pairs → no prior content
+            _make_all_result([]),  # _fetch_existing_content_pairs
+            _make_all_result([]),  # _fetch_existing_question_counts
         ]
         db.execute.side_effect = execute_returns
 

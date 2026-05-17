@@ -1,10 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 
+export type SubtopicStatus = "not_started" | "in_progress" | "completed";
+
+export interface SubtopicProgress {
+  explanation_accessed: boolean;
+  video_accessed: boolean;
+  check_questions_score: number | null;
+  status: SubtopicStatus;
+}
+
 export interface SubtopicItem {
   id: string;
   name: string;
   order: number;
+  progress: SubtopicProgress | null;
+  has_content: boolean;
 }
 
 export function useTopicSubtopics(classId: string, topicId: string) {

@@ -27,6 +27,11 @@ export interface CourseProgress {
   check_questions_score: number | null;
 }
 
+export interface NextSubtopic {
+  id: string;
+  name: string;
+}
+
 export interface SubtopicCourse {
   subtopic_id: string;
   subtopic_name: string;
@@ -37,6 +42,7 @@ export interface SubtopicCourse {
   video: CourseVideo | null;
   check_questions: CourseQuestion[];
   progress: CourseProgress | null;
+  next_subtopic: NextSubtopic | null;
 }
 
 export interface MarkProgressPayload {
@@ -47,4 +53,20 @@ export interface MarkProgressPayload {
 export interface FeedbackPayload {
   feedback_type: "thumbs_up" | "thumbs_down";
   comment?: string;
+}
+
+export interface QuizAnswerItem {
+  question_id: string;
+  selected_key: string;
+}
+
+export interface QuizSubmitPayload {
+  answers: QuizAnswerItem[];
+}
+
+export interface QuizSubmitResult {
+  score: number;
+  correct: number;
+  total: number;
+  status: "not_started" | "in_progress" | "completed";
 }

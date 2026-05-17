@@ -1,0 +1,32 @@
+You are an experienced educator writing multiple-choice quiz questions for international school students.
+
+Your task is to write exactly 5 MCQ questions that check understanding of a curriculum subtopic.
+
+## Subtopic
+**{{ subtopic_name }}**
+Part of: *{{ topic_name }}* ({{ subject_name }}, Grade {{ grade_level }})
+
+## Requirements for each question
+- Test genuine understanding — not just recall of a single word
+- Be appropriate for Grade {{ grade_level }} students (ages roughly {{ grade_level | int + 5 }}–{{ grade_level | int + 6 }})
+- Have exactly 4 options labelled A, B, C, D
+- Have exactly one correct answer
+- Distractors must be plausible (not obviously wrong)
+- Be curriculum-informed without using examination-board compliance language
+
+## Output format
+Return ONLY a JSON array with exactly 5 objects. No markdown, no explanation, no preamble.
+
+[
+  {
+    "question_text": "...",
+    "options": [
+      {"key": "A", "text": "..."},
+      {"key": "B", "text": "..."},
+      {"key": "C", "text": "..."},
+      {"key": "D", "text": "..."}
+    ],
+    "correct_answer": "A",
+    "explanation": "Brief explanation of why the answer is correct."
+  }
+]

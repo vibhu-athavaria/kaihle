@@ -4,6 +4,8 @@ import type {
   SubtopicCourse,
   MarkProgressPayload,
   FeedbackPayload,
+  QuizSubmitPayload,
+  QuizSubmitResult,
 } from "../types/miniCourse";
 
 export function useSubtopicCourse(subtopicId: string) {
@@ -33,6 +35,27 @@ export function useMarkCourseProgress(subtopicId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["subtopic-course", subtopicId],
+      });
+    },
+  });
+}
+
+export function useSubmitQuiz(subtopicId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<QuizSubmitResult, Error, QuizSubmitPayload>({
+    mutationFn: async (payload) => {
+      const response = await apiClient.post<QuizSubmitResult>(
+        `/api/v1/students/me/subtopics/${subtopicId}/course/quiz`,
+        payload,
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["subtopic-course", subtopicId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["student", "class-topic-subtopics"],
       });
     },
   });

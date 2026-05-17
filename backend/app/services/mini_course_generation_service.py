@@ -13,17 +13,18 @@ Architecture:
 
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 from typing import Any
 
 import structlog
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.providers import router as llm_router
-from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic, Topic
+from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic, Topic
 from app.models.interest_category import InterestCategory
 from app.models.subtopic_content import SubtopicContent
 
@@ -31,6 +32,42 @@ logger = structlog.get_logger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "ai" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)), autoescape=False)
+
+_QUIZ_QUESTION_TARGET = 5
+_QUIZ_DIFFICULTY_LEVEL = 3.0  # medium-hard, within the 3–5 range per user requirement
+
+
+def _parse_quiz_response(raw: str) -> list[dict[str, Any]]:
+    """Parse LLM JSON output into a list of question dicts.
+
+    Strips optional markdown code fences, validates required fields.
+    Raises ValueError on malformed output.
+    """
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+
+    try:
+        questions = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM returned invalid JSON: {exc}") from exc
+
+    if not isinstance(questions, list) or len(questions) < 1:
+        raise ValueError(f"Expected a JSON array of questions, got: {type(questions)}")
+
+    for i, q in enumerate(questions):
+        for field in ("question_text", "options", "correct_answer"):
+            if field not in q:
+                raise ValueError(f"Question {i} missing field '{field}'")
+        if len(q["options"]) != 4:
+            raise ValueError(f"Question {i} must have exactly 4 options, got {len(q['options'])}")
+        option_keys = {opt["key"] for opt in q["options"]}
+        if q["correct_answer"] not in option_keys:
+            raise ValueError(f"Question {i} correct_answer '{q['correct_answer']}' not in option keys {option_keys}")
+
+    return questions
+
 
 # Interest categories: (db_name, human_label, interest_key)
 # db_name must match interest_category_enum values in PostgreSQL.
@@ -104,8 +141,12 @@ class MiniCourseGenerationService:
         subtopic_ids = [s.id for s in subtopics]
         existing_pairs = await self._fetch_existing_content_pairs(subtopic_ids)
 
-        # 5. Generate for each subtopic × interest_category
+        # 5. Batch-fetch existing llm question counts per subtopic (one query)
+        existing_question_counts = await self._fetch_existing_question_counts(subtopic_ids)
+
+        # 6. Generate for each subtopic × interest_category (explanations) + quiz questions
         explanations_written = 0
+        questions_written = 0
         subtopics_processed = 0
         dry_run_results: list[dict[str, Any]] = []
 
@@ -130,7 +171,7 @@ class MiniCourseGenerationService:
                     )
                     continue
 
-                explanation = await self._call_llm(
+                explanation = await self._call_llm_explanation(
                     subtopic_name=subtopic.name,
                     topic_name=topic_name,
                     subject_name=subject_name,
@@ -160,6 +201,19 @@ class MiniCourseGenerationService:
             if subtopic_written > 0:
                 subtopics_processed += 1
 
+            # Generate quiz questions if fewer than target exist (idempotent)
+            existing_count = existing_question_counts.get(subtopic.id, 0)
+            if existing_count < _QUIZ_QUESTION_TARGET:
+                written = await self._generate_quiz_questions(
+                    subtopic_id=subtopic.id,
+                    subtopic_name=subtopic.name,
+                    topic_name=topic_name,
+                    subject_name=subject_name,
+                    grade_level=grade_level,
+                    dry_run=dry_run,
+                )
+                questions_written += written
+
         if not dry_run:
             await self.db.commit()
 
@@ -167,6 +221,7 @@ class MiniCourseGenerationService:
             "subtopics_found": len(subtopics),
             "subtopics_processed": subtopics_processed,
             "explanations_written": explanations_written,
+            "questions_written": questions_written,
         }
         if dry_run:
             result["dry_run_results"] = dry_run_results
@@ -228,7 +283,82 @@ class MiniCourseGenerationService:
         )
         return {(row.subtopic_id, row.interest_category_id) for row in result.all()}
 
-    async def _call_llm(
+    async def _fetch_existing_question_counts(self, subtopic_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+        """Return {subtopic_id: count} of active llm questions per subtopic. One query."""
+        if not subtopic_ids:
+            return {}
+        result = await self.db.execute(
+            select(QuestionBank.subtopic_id, func.count().label("cnt"))
+            .where(
+                QuestionBank.subtopic_id.in_(subtopic_ids),
+                QuestionBank.source == "llm",
+                QuestionBank.is_active.is_(True),
+            )
+            .group_by(QuestionBank.subtopic_id)
+        )
+        return {row.subtopic_id: row.cnt for row in result.all()}
+
+    async def _generate_quiz_questions(
+        self,
+        subtopic_id: uuid.UUID,
+        subtopic_name: str,
+        topic_name: str,
+        subject_name: str,
+        grade_level: int,
+        dry_run: bool,
+    ) -> int:
+        """Generate and insert quiz questions for one subtopic. Returns count written."""
+        template = _jinja_env.get_template("mini_course_quiz.jinja2")
+        prompt_text = template.render(
+            subtopic_name=subtopic_name,
+            topic_name=topic_name,
+            subject_name=subject_name,
+            grade_level=grade_level,
+        )
+        messages = [{"role": "user", "content": prompt_text}]
+        raw = await llm_router.complete(
+            task="mini_course_explanation",
+            messages=messages,
+            temperature=0.5,
+            max_tokens=1500,
+        )
+
+        try:
+            questions = _parse_quiz_response(raw)
+        except ValueError:
+            logger.warning(
+                "mini_course_quiz_parse_failed",
+                subtopic_id=str(subtopic_id),
+                raw_preview=raw[:200],
+            )
+            return 0
+
+        if dry_run:
+            return len(questions)
+
+        for question in questions:
+            row = QuestionBank(
+                subtopic_id=subtopic_id,
+                question_text=question["question_text"],
+                question_type="MCQ",
+                options=question["options"],
+                correct_answer=question["correct_answer"],
+                explanation=question.get("explanation"),
+                canonical_form=question["question_text"],
+                source="llm",
+                difficulty_level=_QUIZ_DIFFICULTY_LEVEL,
+                is_active=True,
+            )
+            self.db.add(row)
+
+        logger.info(
+            "mini_course_quiz_questions_generated",
+            subtopic_id=str(subtopic_id),
+            count=len(questions),
+        )
+        return len(questions)
+
+    async def _call_llm_explanation(
         self,
         subtopic_name: str,
         topic_name: str,

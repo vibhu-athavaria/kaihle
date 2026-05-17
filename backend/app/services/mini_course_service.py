@@ -26,6 +26,9 @@ from app.schemas.mini_course import (
     CheckQuestionOption,
     CourseProgressItem,
     MarkProgressRequest,
+    NextSubtopicItem,
+    QuizSubmitRequest,
+    QuizSubmitResponse,
     StudentCourseProgressResponse,
     SubtopicCourseResponse,
     SubtopicExplanationItem,
@@ -60,11 +63,13 @@ class MiniCourseService:
         6. Upsert SubtopicCourseProgress (update last_visited_at).
         7. Return assembled SubtopicCourseResponse.
         """
-        # 1. Resolve subtopic + topic name
+        # 1. Resolve subtopic + topic name + sequence_order + curriculum_topic_id
         subtopic_row = await self.db.execute(
             select(
                 Subtopic.id,
                 Subtopic.name.label("subtopic_name"),
+                Subtopic.sequence_order,
+                Subtopic.curriculum_topic_id,
                 Topic.name.label("topic_name"),
             )
             .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
@@ -80,6 +85,8 @@ class MiniCourseService:
 
         subtopic_name: str = subtopic_data.subtopic_name
         topic_name: str = subtopic_data.topic_name
+        current_order: int | None = subtopic_data.sequence_order
+        curriculum_topic_id: uuid.UUID = subtopic_data.curriculum_topic_id
 
         logger.debug(
             "mini_course_fetch_started",
@@ -133,6 +140,26 @@ class MiniCourseService:
 
         content_status: Literal["ready", "unavailable"] = "ready" if explanation_item is not None else "unavailable"
 
+        # 9. Resolve next subtopic in sequence (skip inactive)
+        next_subtopic_item: NextSubtopicItem | None = None
+        if current_order is not None:
+            next_row = await self.db.execute(
+                select(Subtopic.id, Subtopic.name)
+                .where(
+                    Subtopic.curriculum_topic_id == curriculum_topic_id,
+                    Subtopic.sequence_order > current_order,
+                    Subtopic.is_active.is_(True),
+                )
+                .order_by(Subtopic.sequence_order)
+                .limit(1)
+            )
+            next_subtopic_data = next_row.one_or_none()
+            if next_subtopic_data is not None:
+                next_subtopic_item = NextSubtopicItem(
+                    id=next_subtopic_data.id,
+                    name=next_subtopic_data.name,
+                )
+
         return SubtopicCourseResponse(
             subtopic_id=subtopic_id,
             subtopic_name=subtopic_name,
@@ -142,6 +169,7 @@ class MiniCourseService:
             video=video_item,
             check_questions=check_questions,
             progress=progress,
+            next_subtopic=next_subtopic_item,
         )
 
     async def mark_progress(
@@ -193,6 +221,75 @@ class MiniCourseService:
             subtopic_id=str(subtopic_id),
             explanation_accessed=request.explanation_accessed,
             video_accessed=request.video_accessed,
+        )
+
+    async def submit_quiz(
+        self,
+        subtopic_id: uuid.UUID,
+        student_id: uuid.UUID,
+        school_id: uuid.UUID,
+        request: QuizSubmitRequest,
+    ) -> QuizSubmitResponse:
+        """Score the student's quiz answers and persist the result.
+
+        Fetches the correct answers from the question bank, derives the score,
+        then upserts check_questions_score using GREATEST() so the recorded score
+        never decreases on re-submission.
+        """
+        # Fetch correct answers for submitted question IDs
+        question_ids = [a.question_id for a in request.answers]
+        rows = await self.db.execute(
+            select(QuestionBank.id, QuestionBank.correct_answer).where(QuestionBank.id.in_(question_ids))
+        )
+        correct_map: dict[str, str] = {str(row.id): row.correct_answer for row in rows}
+
+        answer_map: dict[str, str] = {str(a.question_id): a.selected_key for a in request.answers}
+        total = len(correct_map)
+        correct_count = sum(1 for qid, key in answer_map.items() if correct_map.get(qid) == key)
+        score = correct_count / total if total > 0 else 0.0
+
+        # Upsert — GREATEST() ensures score never regresses on re-submission
+        await self.db.execute(
+            text(
+                """
+                INSERT INTO subtopic_course_progress
+                    (student_id, subtopic_id, school_id,
+                     explanation_accessed, video_accessed,
+                     check_questions_score, last_visited_at)
+                VALUES
+                    (:student_id, :subtopic_id, :school_id,
+                     false, false, :score, now())
+                ON CONFLICT (student_id, subtopic_id) DO UPDATE SET
+                    check_questions_score = GREATEST(
+                        subtopic_course_progress.check_questions_score,
+                        EXCLUDED.check_questions_score
+                    ),
+                    last_visited_at = now()
+                """
+            ),
+            {
+                "student_id": student_id,
+                "subtopic_id": subtopic_id,
+                "school_id": school_id,
+                "score": score,
+            },
+        )
+        await self.db.commit()
+
+        logger.info(
+            "mini_course_quiz_submitted",
+            student_id=str(student_id),
+            subtopic_id=str(subtopic_id),
+            score=score,
+            correct=correct_count,
+            total=total,
+        )
+
+        return QuizSubmitResponse(
+            score=score,
+            correct=correct_count,
+            total=total,
+            status="completed",
         )
 
     async def submit_content_feedback(
