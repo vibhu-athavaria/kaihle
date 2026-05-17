@@ -6,6 +6,7 @@ export interface StudentListItem {
   id: string;
   name: string;
   email: string;
+  gradeName: string | null;
   classIds: string[];
   classNames: string[];
 }
@@ -104,8 +105,15 @@ export function StudentListTable({
                       <div className="font-medium text-brand-ink group-hover:text-brand-primary transition-colors">
                         {student.name || "Unknown Student"}
                       </div>
-                      <div className="text-xs text-brand-muted">
-                        {student.email}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {student.gradeName && (
+                          <span className="text-xs font-semibold text-brand-gold">
+                            {student.gradeName}
+                          </span>
+                        )}
+                        <span className="text-xs text-brand-muted">
+                          {student.email}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3 border-b border-brand-border">

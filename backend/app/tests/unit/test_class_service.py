@@ -864,6 +864,67 @@ class TestGetTeacherStudents:
         assert result == []
 
     @pytest.mark.asyncio
+    async def test_get_teacher_students_when_class_has_grade_then_grade_name_included(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Test that grade_name from the class's joined grade is included in the response."""
+        from app.models.curriculum import Grade
+
+        teacher_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+
+        grade = MagicMock(spec=Grade)
+        grade.name = "Grade 9"
+
+        cls = Class(
+            id=uuid.uuid4(),
+            teacher_id=teacher_id,
+            school_id=school_id,
+            name="Math 9A",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            academic_year="2025-2026",
+        )
+        cls.grade = grade
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            first_name="Bob",
+            last_name="B",
+            email="bob@test.com",
+            role=UserRole.STUDENT,
+        )
+
+        enrollment = ClassEnrollment(class_id=cls.id, student_id=student.id, is_active=True)
+
+        mock_classes_result = MagicMock()
+        mock_classes_result.scalars.return_value.all.return_value = [cls]
+        mock_enrollments_result = MagicMock()
+        mock_enrollments_result.scalars.return_value.all.return_value = [enrollment]
+        mock_students_result = MagicMock()
+        mock_students_result.scalars.return_value.all.return_value = [student]
+
+        call_count = [0]
+
+        async def mock_execute(q: Any) -> Any:
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return mock_classes_result
+            elif call_count[0] == 2:
+                return mock_enrollments_result
+            else:
+                return mock_students_result
+
+        mock_db.execute = AsyncMock(side_effect=mock_execute)
+
+        result = await class_service.get_teacher_students(teacher_id, school_id)
+
+        assert len(result) == 1
+        assert result[0].grade_name == "Grade 9"
+
+    @pytest.mark.asyncio
     async def test_get_teacher_students_when_classes_have_no_enrollments_then_returns_empty(
         self, class_service: ClassService, mock_db: MagicMock
     ) -> None:
