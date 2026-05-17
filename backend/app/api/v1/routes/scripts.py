@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from typing import Any
 
 import structlog
@@ -207,7 +208,7 @@ async def run_script_process(script_name: str, args: list[str], env: dict[str, s
 
     try:
         result = subprocess.run(
-            ["python", script_path] + args,
+            [sys.executable, script_path] + args,
             cwd=backend_dir,
             env=full_env,
             capture_output=True,
@@ -332,18 +333,22 @@ async def execute_script(
     # Run the script
     return_code, stdout, stderr = await run_script_process(script_name, args, env_vars)
 
+    # Merge stdout + stderr so logging output (which goes to stderr by default)
+    # is always visible in the UI, regardless of exit code.
+    combined_output = "\n".join(s for s in [stdout, stderr] if s).strip() or None
+
     if return_code == 0:
         return ScriptExecuteResponse(
             script_name=script_name,
             status="completed",
-            output=stdout,
+            output=combined_output,
             return_code=return_code,
         )
     else:
         return ScriptExecuteResponse(
             script_name=script_name,
             status="failed",
-            output=stdout if stdout else None,
+            output=combined_output,
             error=stderr,
             return_code=return_code,
         )

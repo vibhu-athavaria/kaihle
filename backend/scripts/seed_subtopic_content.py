@@ -34,12 +34,13 @@ Teachers/KAIHLE_ADMIN can update applicable_tiers after review.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 import os
 import sys
 import uuid
-from collections.abc import Generator
+from collections.abc import Coroutine, Generator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from itertools import islice
@@ -47,18 +48,20 @@ from pathlib import Path
 from typing import Any
 
 import litellm
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session, sessionmaker
+from googleapiclient.discovery import build as yt_build  # type: ignore[import-untyped]
+from sqlalchemy import select, text
 
 # Ensure app is on path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.config import settings
-from app.models.curriculum import QuestionBank
+from app.core.database import CeleryAsyncSessionLocal
+from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=sys.stdout,
 )
 log = logging.getLogger("seed_subtopic_content")
 
@@ -72,6 +75,23 @@ parser.add_argument("--dry-run", action="store_true", help="Dry run: simulate fu
 parser.add_argument("--skip-videos", action="store_true", help="Skip video generation")
 parser.add_argument("--skip-explanations", action="store_true", help="Skip explanation generation")
 parser.add_argument("--skip-quizzes", action="store_true", help="Skip quiz generation")
+parser.add_argument(
+    "--grade",
+    type=int,
+    default=None,
+    help="Only process subtopics for this grade level (e.g. --grade 8)",
+)
+parser.add_argument(
+    "--subject",
+    type=str,
+    default=None,
+    help="Only process subtopics for this subject name (e.g. --subject Mathematics)",
+)
+parser.add_argument(
+    "--list",
+    action="store_true",
+    help="List all available grades and subjects in the DB, then exit",
+)
 args = parser.parse_args()
 
 # ---------------------------------------------------------------------------
@@ -92,36 +112,15 @@ SKIP_EXPLANATIONS: bool = args.skip_explanations or os.environ.get("SKIP_EXPLANA
 )
 SKIP_QUIZZES: bool = args.skip_quizzes or os.environ.get("SKIP_QUIZZES", "false").lower() in ("1", "true", "yes")
 
-CURRICULUM_PATH = Path(__file__).parent.parent / "data" / "curriculum" / "cambridge_v1.json"
 
 # ---------------------------------------------------------------------------
-# Database setup — strip asyncpg driver; sync engine requires psycopg2/pg8000
+# Database helpers — async session via CeleryAsyncSessionLocal (NullPool)
 # ---------------------------------------------------------------------------
 
 
-def _make_sync_db_url(url: str) -> str:
-    """Replace +asyncpg with +psycopg2 so sync SQLAlchemy can connect."""
-    return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://").replace(
-        "postgres+asyncpg://", "postgresql+psycopg2://"
-    )
-
-
-_engine: Any = None
-_SessionLocal: Any = None
-
-
-def _get_engine() -> Any:
-    global _engine, _SessionLocal
-    if _engine is None:
-        _engine = create_engine(_make_sync_db_url(settings.database_url), pool_pre_ping=True, echo=False)
-        _SessionLocal = sessionmaker(bind=_engine)
-    return _engine
-
-
-def get_session() -> Session:
-    _get_engine()
-    session: Session = _SessionLocal()  # type: ignore[misc]
-    return session
+def run_async[T](coro: Coroutine[Any, Any, T]) -> T:
+    """Run an async coroutine from sync context (thread-safe, no shared loop)."""
+    return asyncio.run(coro)
 
 
 # ---------------------------------------------------------------------------
@@ -129,19 +128,20 @@ def get_session() -> Session:
 # ---------------------------------------------------------------------------
 
 
-def load_pre_generated_questions(session: Session) -> dict[str, Any]:
-    """Load pre-generated questions from question_bank keyed by subtopic id."""
-    try:
-        rows = session.query(QuestionBank).filter(QuestionBank.is_active.is_(True)).all()
-    except Exception as e:
-        log.error("Failed to load questions from question_bank: %s", e)
-        return {}
+async def _load_pre_generated_questions_async() -> dict[str, Any]:
+    async with CeleryAsyncSessionLocal() as session:
+        try:
+            result = await session.execute(select(QuestionBank).where(QuestionBank.is_active.is_(True)))
+            rows = result.scalars().all()
+        except Exception as e:
+            log.error("Failed to load questions from question_bank: %s", e)
+            return {}
 
-    result: dict[str, Any] = {}
+    out: dict[str, Any] = {}
     for q in rows:
         subtopic_id = str(q.subtopic_id)
-        if subtopic_id not in result:
-            result[subtopic_id] = {"questions": []}
+        if subtopic_id not in out:
+            out[subtopic_id] = {"questions": []}
 
         options = []
         if q.options:
@@ -150,77 +150,106 @@ def load_pre_generated_questions(session: Session) -> dict[str, Any]:
                 text_val = opt.get("text", "") if isinstance(opt, dict) else ""
                 options.append(f"{key}: {text_val}")
 
-        question_entry = {
-            "question_id": str(q.id),
-            "question_text": q.question_text,
-            "options": options,
-            "correct_answer": q.correct_answer,
-            "explanation": q.explanation or "",
-        }
-        result[subtopic_id]["questions"].append(question_entry)
+        out[subtopic_id]["questions"].append(
+            {
+                "question_id": str(q.id),
+                "question_text": q.question_text,
+                "options": options,
+                "correct_answer": q.correct_answer,
+                "explanation": q.explanation or "",
+            }
+        )
 
-    log.info("Loaded %d question sets from question_bank", len(result))
-    return result
+    log.info("Loaded %d question sets from question_bank", len(out))
+    return out
 
 
-def load_curriculum_subtopics() -> list[dict[str, Any]]:
-    """Load all subtopics from the curriculum graph."""
-    if not CURRICULUM_PATH.exists():
-        log.error("Curriculum file not found at %s", CURRICULUM_PATH)
-        return []
-    with open(CURRICULUM_PATH) as f:
-        data = json.load(f)
+def load_pre_generated_questions() -> dict[str, Any]:
+    return run_async(_load_pre_generated_questions_async())
+
+
+async def _load_curriculum_subtopics_async(
+    grade_level: int | None = None,
+    subject_name: str | None = None,
+) -> list[dict[str, Any]]:
+    async with CeleryAsyncSessionLocal() as session:
+        try:
+            stmt = (
+                select(
+                    Subtopic,
+                    Subject.name.label("subject_name"),
+                    Grade.name.label("grade_name"),
+                    Grade.level.label("grade_level"),
+                )
+                .join(CurriculumTopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
+                .join(Subject, CurriculumTopic.subject_id == Subject.id)
+                .join(Grade, CurriculumTopic.grade_id == Grade.id)
+                .where(CurriculumTopic.is_active.is_(True))
+            )
+            if grade_level is not None:
+                stmt = stmt.where(Grade.level == grade_level)
+            if subject_name is not None:
+                stmt = stmt.where(Subject.name.ilike(subject_name))
+            stmt = stmt.order_by(Grade.level, Subject.name, Subtopic.name)
+            result = await session.execute(stmt)
+            rows = result.all()
+        except Exception as e:
+            log.error("Failed to load subtopics from DB: %s", e)
+            return []
+
     subtopics: list[dict[str, Any]] = []
-    for strand in data.get("strands", []):
-        for chapter in strand.get("chapters", []):
-            for unit in chapter.get("units", []):
-                for topic in unit.get("topics", []):
-                    for subtopic in topic.get("subtopics", []):
-                        subtopic["_unit_id"] = unit.get("id")
-                        subtopic["_topic_id"] = topic.get("id")
-                        subtopic["_chapter_id"] = chapter.get("id")
-                        subtopic["_strand_id"] = strand.get("id")
-                        subtopics.append(subtopic)
-    log.info("Loaded %d subtopics from curriculum", len(subtopics))
+    for row in rows:
+        subtopic = row[0]
+        subtopics.append(
+            {
+                "id": str(subtopic.id),
+                "name": subtopic.name,
+                "description": subtopic.description or "",
+                "learning_objective": subtopic.learning_objective,
+                "grade_level": f"Grade {row.grade_level}",
+                "prerequisites": [],
+                "_strand_id": row.subject_name,
+                "_grade_name": row.grade_name,
+            }
+        )
+
+    log.info("Loaded %d subtopics from database", len(subtopics))
     return subtopics
+
+
+async def _list_grades_and_subjects_async() -> None:
+    async with CeleryAsyncSessionLocal() as session:
+        grade_rows = (await session.execute(select(Grade.level, Grade.name).order_by(Grade.level))).all()
+        subject_rows = (await session.execute(select(Subject.name).order_by(Subject.name))).all()
+
+    print("\nAvailable grades:")
+    for level, name in grade_rows:
+        print(f"  --grade {level:<3}  ({name})")
+
+    print("\nAvailable subjects:")
+    for (name,) in subject_rows:
+        print(f'  --subject "{name}"')
+    print()
+
+
+def list_grades_and_subjects() -> None:
+    run_async(_list_grades_and_subjects_async())
+
+
+def load_curriculum_subtopics(grade_level: int | None = None, subject_name: str | None = None) -> list[dict[str, Any]]:
+    return run_async(_load_curriculum_subtopics_async(grade_level=grade_level, subject_name=subject_name))
 
 
 # ---------------------------------------------------------------------------
 # LLM prompts
 # ---------------------------------------------------------------------------
 
-YOUTUBE_SEARCH_PROMPT = """You are a curriculum specialist finding educational videos.
-
-Given the subtopic: "{subtopic_name}" (ID: {subtopic_id})
-Subject: {subject}
-Grade level: {grade_level}
-
-Search YouTube for a high-quality educational video that:
-- Directly explains this subtopic concept
-- Is between 3 and 15 minutes long
-- Is appropriate for the grade level
-- Has clear audio and visuals (not a whiteboard lecture recording)
-
-Respond with ONLY a valid JSON object, no markdown:
-{{
-  "video_url": "https://www.youtube.com/watch?v=XXXXXXXXXXX",
-  "video_provider": "youtube",
-  "video_duration_seconds": 420,
-  "video_thumbnail_url": "https://img.youtube.com/vi/XXXXXXXXXXX/maxresdefault.jpg",
-  "search_terms_used": "search terms you used",
-  "title_candidates": ["video title 1", "video title 2"]
-}}
-
-If no suitable video is found, respond with:
-{{
-  "video_url": null,
-  "video_provider": null,
-  "video_duration_seconds": null,
-  "video_thumbnail_url": null,
-  "search_terms_used": "...",
-  "title_candidates": []
-}}
-"""
+YOUTUBE_CANDIDATES_PER_REGION = 10  # search results fetched per region
+YOUTUBE_TOP_N = 3
+YOUTUBE_REGIONS = ["US", "GB", "AU"]  # bias search toward English-speaking creators
+# Only keep videos from channels explicitly set to these countries.
+# Channels with no country set are also kept (many US/UK creators leave it blank).
+YOUTUBE_ALLOWED_CHANNEL_COUNTRIES = {"US", "GB", "AU", "CA", "NZ"}
 
 
 EXPLANATION_PROMPT = """Write a clear, concise explanation of the subtopic below.
@@ -289,23 +318,170 @@ def call_llm(prompt: str, model: str | None = None) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
-def generate_video_content(subtopic: dict[str, Any]) -> dict[str, Any] | None:
-    """Generate video metadata for a subtopic."""
+def _iso8601_duration_to_seconds(duration: str) -> int:
+    """Convert ISO 8601 duration (PT4M13S) to total seconds."""
+    import re
+
+    m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration or "")
+    if not m:
+        return 0
+    h, mn, s = (int(x or 0) for x in m.groups())
+    return h * 3600 + mn * 60 + s
+
+
+def _search_region(yt: Any, query: str, region: str) -> list[str]:
+    """Return video IDs from a single region search (recently uploaded, medium duration)."""
+    try:
+        resp = (
+            yt.search()
+            .list(
+                q=query,
+                part="id",
+                type="video",
+                videoDuration="medium",  # 4–20 min per YouTube's own filter
+                order="date",
+                maxResults=YOUTUBE_CANDIDATES_PER_REGION,
+                regionCode=region,
+                relevanceLanguage="en",
+                safeSearch="strict",
+            )
+            .execute()
+        )
+        return [item["id"]["videoId"] for item in resp.get("items", [])]
+    except Exception as e:
+        log.warning("youtube_search region=%s failed: %s", region, e)
+        return []
+
+
+def search_youtube_videos(subtopic: dict[str, Any]) -> list[dict[str, Any]]:
+    """Search YouTube across US/GB/AU, rank by engagement, return top YOUTUBE_TOP_N.
+
+    Steps:
+      1. search.list × 3 regions — collect up to 30 candidate IDs (deduplicated)
+      2. videos.list — fetch statistics + contentDetails in one batch call
+      3. channels.list — fetch channel countries in one batch call
+      4. Filter: drop non-allowed channel countries, drop out-of-range durations,
+         rank by likes + 0.1×views, return top YOUTUBE_TOP_N
+    """
+    api_key = settings.youtube_data_api_key
+    if not api_key:
+        log.warning("YOUTUBE_DATA_API_KEY not set — skipping video search for %s", subtopic.get("name"))
+        return []
+
+    name = subtopic.get("name", "")
+    subject = subtopic.get("_strand_id", "Mathematics")
+    grade = subtopic.get("grade_level", "Grade 8")
+    query = f"{name} {subject} {grade} explained tutorial"
+
+    try:
+        yt = yt_build("youtube", "v3", developerKey=api_key, cache_discovery=False)
+
+        # Step 1: search all three regions, deduplicate preserving order
+        seen: set[str] = set()
+        video_ids: list[str] = []
+        for region in YOUTUBE_REGIONS:
+            for vid_id in _search_region(yt, query, region):
+                if vid_id not in seen:
+                    seen.add(vid_id)
+                    video_ids.append(vid_id)
+
+        if not video_ids:
+            log.info("youtube_search | no results | subtopic=%s | query=%s", name, query)
+            return []
+
+        # Step 2: fetch stats + duration for all candidates in one call
+        stats_resp = (
+            yt.videos()
+            .list(
+                id=",".join(video_ids),
+                part="id,snippet,statistics,contentDetails",
+            )
+            .execute()
+        )
+
+        # Step 3: fetch channel countries in one batch call, build an allow-set
+        channel_ids = list({item["snippet"]["channelId"] for item in stats_resp.get("items", [])})
+        channel_country: dict[str, str | None] = {}
+        if channel_ids:
+            ch_resp = (
+                yt.channels()
+                .list(
+                    id=",".join(channel_ids),
+                    part="id,snippet",
+                )
+                .execute()
+            )
+            for ch in ch_resp.get("items", []):
+                channel_country[ch["id"]] = ch.get("snippet", {}).get("country") or None
+
+        # Step 4: filter by duration + channel country, score by engagement
+        candidates = []
+        dropped_country: list[str] = []
+        dropped_duration: list[str] = []
+        for item in stats_resp.get("items", []):
+            vid_id = item["id"]
+            stats = item.get("statistics", {})
+            snippet = item.get("snippet", {})
+            details = item.get("contentDetails", {})
+            title = snippet.get("title", "")
+
+            # Drop videos from channels explicitly set to a non-allowed country.
+            # Channels with country=None are kept (many EN creators leave it blank).
+            ch_country = channel_country.get(snippet.get("channelId", ""))
+            if ch_country is not None and ch_country not in YOUTUBE_ALLOWED_CHANNEL_COUNTRIES:
+                dropped_country.append(f"{title!r} (channel_country={ch_country})")
+                continue
+
+            likes = int(stats.get("likeCount", 0))
+            views = int(stats.get("viewCount", 0))
+            duration_s = _iso8601_duration_to_seconds(details.get("duration", ""))
+            if not (60 <= duration_s <= 1200):
+                dropped_duration.append(f"{title!r} ({duration_s}s)")
+                continue
+
+            score = likes + 0.1 * views
+            candidates.append(
+                {
+                    "video_url": f"https://www.youtube.com/watch?v={vid_id}",
+                    "video_provider": "youtube",
+                    "video_duration_seconds": duration_s,
+                    "video_thumbnail_url": f"https://img.youtube.com/vi/{vid_id}/maxresdefault.jpg",
+                    "title": title,
+                    "_score": score,
+                }
+            )
+
+        if dropped_country:
+            log.info("youtube_filter | dropped by country (%d): %s", len(dropped_country), ", ".join(dropped_country))
+        if dropped_duration:
+            log.info(
+                "youtube_filter | dropped by duration (%d): %s", len(dropped_duration), ", ".join(dropped_duration)
+            )
+
+        candidates.sort(key=lambda x: x["_score"], reverse=True)
+        top = candidates[:YOUTUBE_TOP_N]
+        for v in top:
+            del v["_score"]
+
+        log.info(
+            "youtube_search | subtopic=%s | pool=%d | after_filter=%d | selected=%d",
+            name,
+            len(video_ids),
+            len(candidates),
+            len(top),
+        )
+        return top
+
+    except Exception as e:
+        log.error("YouTube API error | subtopic=%s | error=%s", name, e)
+        return []
+
+
+def generate_video_content(subtopic: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return up to YOUTUBE_TOP_N real YouTube video records for a subtopic."""
     if SKIP_VIDEOS:
-        return None
-    prompt = YOUTUBE_SEARCH_PROMPT.format(
-        subtopic_name=subtopic.get("name", ""),
-        subtopic_id=subtopic.get("id", ""),
-        subject=subtopic.get("_strand_id", "Mathematics"),
-        grade_level=subtopic.get("grade_level", "Grade 8"),
-    )
-    result = call_llm(prompt)
-    log.info(
-        "video_gen | subtopic=%s | found=%s",
-        subtopic.get("name", ""),
-        bool(result and result.get("video_url")),
-    )
-    return result
+        return []
+    return search_youtube_videos(subtopic)
 
 
 def generate_explanation_content(subtopic: dict[str, Any]) -> dict[str, Any] | None:
@@ -351,89 +527,83 @@ REVIEW_STATUS_APPROVED = "approved"
 REVIEW_STATUS_PENDING = "pending"
 
 
-def upsert_subtopic_content(session: Session, records: list[dict[str, Any]]) -> int:
-    """Insert or update subtopic_content records.
-
-    Uses INSERT ... ON CONFLICT DO UPDATE (upsert) so re-running the seed
-    is idempotent.  Conflicts are identified by (subtopic_id, content_type, video_url)
-    for videos and (subtopic_id, content_type) for non-videos.
-    """
+async def _upsert_subtopic_content_async(records: list[dict[str, Any]]) -> int:
+    """Insert or update subtopic_content records (idempotent upsert)."""
     if not records:
         return 0
     inserted = 0
-    for rec in records:
-        if rec["content_type"] == CONTENT_TYPE_VIDEO:
-            constraint = "uq_subtopic_content_one_video_per_url"
-            update_cols = [k for k in rec.keys() if k not in ("subtopic_id", "content_type", "video_url")]
-        else:
-            constraint = None
-            update_cols = None
+    async with CeleryAsyncSessionLocal() as session:
+        for rec in records:
+            if rec["content_type"] == CONTENT_TYPE_VIDEO:
+                update_cols = [k for k in rec.keys() if k not in ("subtopic_id", "content_type", "video_url")]
+                set_clause = ", ".join(f"{k} = EXCLUDED.{k}" for k in update_cols)
+                sql = text(f"""
+                    INSERT INTO subtopic_content (id, subtopic_id, content_type, is_active,
+                        applicable_tiers, review_status, is_stale, is_archived,
+                        created_at, updated_at,
+                        video_url, video_provider, video_duration_seconds, video_thumbnail_url,
+                        explanation_text, quiz_questions, quiz_questions_count,
+                        teacher_explanation, teacher_explanation_author_id,
+                        interest_category_id, reviewed_at, reviewed_by_id, rejection_reason)
+                    VALUES (
+                        :id, :subtopic_id, :content_type::content_type_enum, :is_active,
+                        :applicable_tiers, :review_status::review_status_enum, :is_stale, :is_archived,
+                        :created_at, :updated_at,
+                        :video_url, :video_provider, :video_duration_seconds, :video_thumbnail_url,
+                        :explanation_text, :quiz_questions, :quiz_questions_count,
+                        :teacher_explanation, :teacher_explanation_author_id,
+                        :interest_category_id, :reviewed_at, :reviewed_by_id, :rejection_reason
+                    )
+                    ON CONFLICT (subtopic_id, content_type, video_url)
+                    DO UPDATE SET
+                        {set_clause},
+                        updated_at = NOW()
+                    WHERE subtopic_content.subtopic_id = :subtopic_id
+                      AND subtopic_content.content_type = :content_type::content_type_enum
+                      AND subtopic_content.video_url = :video_url
+                """)
+            else:
+                sql = text("""
+                    INSERT INTO subtopic_content (id, subtopic_id, content_type, is_active,
+                        applicable_tiers, review_status, is_stale, is_archived,
+                        created_at, updated_at,
+                        video_url, video_provider, video_duration_seconds, video_thumbnail_url,
+                        explanation_text, quiz_questions, quiz_questions_count,
+                        teacher_explanation, teacher_explanation_author_id,
+                        interest_category_id, reviewed_at, reviewed_by_id, rejection_reason)
+                    VALUES (
+                        :id, :subtopic_id, :content_type::content_type_enum, :is_active,
+                        :applicable_tiers, :review_status::review_status_enum, :is_stale, :is_archived,
+                        :created_at, :updated_at,
+                        :video_url, :video_provider, :video_duration_seconds, :video_thumbnail_url,
+                        :explanation_text, :quiz_questions, :quiz_questions_count,
+                        :teacher_explanation, :teacher_explanation_author_id,
+                        :interest_category_id, :reviewed_at, :reviewed_by_id, :rejection_reason
+                    )
+                    ON CONFLICT (subtopic_id, content_type)
+                    DO UPDATE SET
+                        is_active = EXCLUDED.is_active,
+                        applicable_tiers = EXCLUDED.applicable_tiers,
+                        review_status = EXCLUDED.review_status,
+                        explanation_text = EXCLUDED.explanation_text,
+                        quiz_questions = EXCLUDED.quiz_questions,
+                        quiz_questions_count = EXCLUDED.quiz_questions_count,
+                        updated_at = NOW()
+                    WHERE subtopic_content.subtopic_id = :subtopic_id
+                      AND subtopic_content.content_type = :content_type::content_type_enum
+                """)
 
-        if constraint and update_cols is not None:
-            set_clause = ", ".join(f"{k} = EXCLUDED.{k}" for k in update_cols)
-            sql = text(f"""
-                INSERT INTO subtopic_content (id, subtopic_id, content_type, is_active,
-                    applicable_tiers, review_status, is_stale, is_archived,
-                    created_at, updated_at,
-                    video_url, video_provider, video_duration_seconds, video_thumbnail_url,
-                    explanation_text, quiz_questions, quiz_questions_count,
-                    teacher_explanation, teacher_explanation_author_id,
-                    interest_category_id, reviewed_at, reviewed_by_id, rejection_reason)
-                VALUES (
-                    :id, :subtopic_id, :content_type::content_type_enum, :is_active,
-                    :applicable_tiers, :review_status::review_status_enum, :is_stale, :is_archived,
-                    :created_at, :updated_at,
-                    :video_url, :video_provider, :video_duration_seconds, :video_thumbnail_url,
-                    :explanation_text, :quiz_questions, :quiz_questions_count,
-                    :teacher_explanation, :teacher_explanation_author_id,
-                    :interest_category_id, :reviewed_at, :reviewed_by_id, :rejection_reason
-                )
-                ON CONFLICT (subtopic_id, content_type, video_url)
-                DO UPDATE SET
-                    {set_clause},
-                    updated_at = NOW()
-                WHERE subtopic_content.subtopic_id = :subtopic_id
-                  AND subtopic_content.content_type = :content_type::content_type_enum
-                  AND subtopic_content.video_url = :video_url
-            """)
-        else:
-            sql = text("""
-                INSERT INTO subtopic_content (id, subtopic_id, content_type, is_active,
-                    applicable_tiers, review_status, is_stale, is_archived,
-                    created_at, updated_at,
-                    video_url, video_provider, video_duration_seconds, video_thumbnail_url,
-                    explanation_text, quiz_questions, quiz_questions_count,
-                    teacher_explanation, teacher_explanation_author_id,
-                    interest_category_id, reviewed_at, reviewed_by_id, rejection_reason)
-                VALUES (
-                    :id, :subtopic_id, :content_type::content_type_enum, :is_active,
-                    :applicable_tiers, :review_status::review_status_enum, :is_stale, :is_archived,
-                    :created_at, :updated_at,
-                    :video_url, :video_provider, :video_duration_seconds, :video_thumbnail_url,
-                    :explanation_text, :quiz_questions, :quiz_questions_count,
-                    :teacher_explanation, :teacher_explanation_author_id,
-                    :interest_category_id, :reviewed_at, :reviewed_by_id, :rejection_reason
-                )
-                ON CONFLICT (subtopic_id, content_type)
-                DO UPDATE SET
-                    is_active = EXCLUDED.is_active,
-                    applicable_tiers = EXCLUDED.applicable_tiers,
-                    review_status = EXCLUDED.review_status,
-                    explanation_text = EXCLUDED.explanation_text,
-                    quiz_questions = EXCLUDED.quiz_questions,
-                    quiz_questions_count = EXCLUDED.quiz_questions_count,
-                    updated_at = NOW()
-                WHERE subtopic_content.subtopic_id = :subtopic_id
-                  AND subtopic_content.content_type = :content_type::content_type_enum
-            """)
-
-        try:
-            session.execute(sql, rec)
-            inserted += 1
-        except Exception as e:
-            log.error("Failed to upsert content for subtopic %s: %s", rec.get("subtopic_id"), e)
-    session.commit()
+            try:
+                await session.execute(sql, rec)
+                inserted += 1
+            except Exception as e:
+                log.error("Failed to upsert content for subtopic %s: %s", rec.get("subtopic_id"), e)
+        await session.commit()
     return inserted
+
+
+def upsert_subtopic_content(records: list[dict[str, Any]]) -> int:
+    return run_async(_upsert_subtopic_content_async(records))
 
 
 def build_record(
@@ -528,25 +698,29 @@ def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run:
 
     log.info("seeding | subtopic=%s | id=%s | dry_run=%s", subtopic_name, subtopic_id_str, dry_run)
 
-    session = get_session() if not dry_run else None
-
     try:
-        # --- Video ---
+        # --- Videos (up to YOUTUBE_TOP_N real results) ---
         if not SKIP_VIDEOS:
-            video_data = generate_video_content(subtopic)
-            if video_data and video_data.get("video_url"):
-                rec = build_record(subtopic, CONTENT_TYPE_VIDEO, video_data, REVIEW_STATUS_APPROVED, is_active=True)
+            videos = generate_video_content(subtopic)
+            if videos:
+                recs: list[dict[str, Any]] = [
+                    r
+                    for v in videos
+                    if (r := build_record(subtopic, CONTENT_TYPE_VIDEO, v, REVIEW_STATUS_PENDING, is_active=True))
+                    is not None
+                ]
                 if dry_run:
-                    log.info(
-                        "[DRY RUN] would insert video | subtopic=%s | url=%s",
-                        subtopic_name,
-                        video_data.get("video_url"),
-                    )
-                    result.inserted += 1
-                elif rec and session and upsert_subtopic_content(session, [rec]):
-                    result.inserted += 1
+                    for v in videos:
+                        log.info(
+                            "[DRY RUN] would insert video | subtopic=%s | url=%s",
+                            subtopic_name,
+                            v.get("video_url"),
+                        )
+                    result.inserted += len(recs)
+                else:
+                    result.inserted += upsert_subtopic_content(recs)
             else:
-                log.info("no video found | subtopic=%s", subtopic_name)
+                log.info("no videos found | subtopic=%s", subtopic_name)
                 result.skipped += 1
         else:
             result.skipped += 1
@@ -565,7 +739,7 @@ def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run:
                         len(explanation_data.get("explanation_text", "")),
                     )
                     result.inserted += 1
-                elif rec and session and upsert_subtopic_content(session, [rec]):
+                elif rec and upsert_subtopic_content([rec]):
                     result.inserted += 1
             else:
                 log.info("no explanation generated | subtopic=%s", subtopic_name)
@@ -590,7 +764,7 @@ def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run:
                         len(qs_data.get("questions", [])),
                     )
                     result.inserted += 1
-                elif rec and session and upsert_subtopic_content(session, [rec]):
+                elif rec and upsert_subtopic_content([rec]):
                     result.inserted += 1
             else:
                 log.info("no quiz generated | subtopic=%s", subtopic_name)
@@ -602,11 +776,6 @@ def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run:
         msg = f"{type(e).__name__}: {e}"
         log.error("seed failed | subtopic=%s | error=%s", subtopic_name, msg)
         result.add_error(msg)
-        if session:
-            session.rollback()
-    finally:
-        if session:
-            session.close()
 
     return result
 
@@ -632,6 +801,10 @@ def _batches(items: list[Any], size: int) -> Generator[list[Any], None, None]:
 
 
 def main() -> None:
+    if args.list:
+        list_grades_and_subjects()
+        return
+
     log.info("=" * 60)
     log.info("Subtopic Content Seeder")
     log.info("Model: %s | Dry run: %s", LITELLM_MODEL, DRY_RUN)
@@ -647,10 +820,12 @@ def main() -> None:
     if DRY_RUN:
         log.warning("DRY RUN — LLM calls will be made but no DB writes will occur")
 
-    # Load curriculum
-    subtopics = load_curriculum_subtopics()
+    # Load curriculum — optionally filtered by grade/subject
+    if args.grade or args.subject:
+        log.info("Filters — grade: %s | subject: %s", args.grade or "all", args.subject or "all")
+    subtopics = load_curriculum_subtopics(grade_level=args.grade, subject_name=args.subject)
     if not subtopics:
-        log.error("No subtopics loaded — aborting")
+        log.error("No subtopics loaded — aborting (check --grade / --subject filters)")
         return
 
     if args.limit:
@@ -662,11 +837,7 @@ def main() -> None:
         pre_gen_qs: dict[str, Any] = {}
         log.info("[DRY RUN] skipping question_bank load")
     else:
-        session = get_session()
-        try:
-            pre_gen_qs = load_pre_generated_questions(session)
-        finally:
-            session.close()
+        pre_gen_qs = load_pre_generated_questions()
 
     total_inserted = 0
     total_skipped = 0

@@ -1,7 +1,6 @@
 """Unit tests for scripts/seed_subtopic_content.py
 
 Covers:
-  - _make_sync_db_url: asyncpg → psycopg2 URL rewriting
   - call_llm: sync litellm.completion path, error handling, logging
   - CLI flag / env-var priority for DRY_RUN / SKIP_* constants
   - SeedResult: inserted/skipped/errors tracking
@@ -43,35 +42,6 @@ MINIMAL_SUBTOPIC_NO_ID: dict[str, Any] = {
     "id": "",
     "name": "No ID Subtopic",
 }
-
-
-# ---------------------------------------------------------------------------
-# _make_sync_db_url
-# ---------------------------------------------------------------------------
-
-
-def test_make_sync_db_url_when_asyncpg_prefix_then_replaced_with_psycopg2():
-    url = "postgresql+asyncpg://user:pass@localhost:5432/kaihle"
-    result = seed._make_sync_db_url(url)
-    assert result == "postgresql+psycopg2://user:pass@localhost:5432/kaihle"
-
-
-def test_make_sync_db_url_when_postgres_asyncpg_prefix_then_replaced():
-    url = "postgres+asyncpg://user:pass@localhost:5432/kaihle"
-    result = seed._make_sync_db_url(url)
-    assert result == "postgresql+psycopg2://user:pass@localhost:5432/kaihle"
-
-
-def test_make_sync_db_url_when_already_psycopg2_then_unchanged():
-    url = "postgresql+psycopg2://user:pass@localhost:5432/kaihle"
-    result = seed._make_sync_db_url(url)
-    assert result == url
-
-
-def test_make_sync_db_url_when_plain_postgresql_then_unchanged():
-    url = "postgresql://user:pass@localhost:5432/kaihle"
-    result = seed._make_sync_db_url(url)
-    assert result == url
 
 
 # ---------------------------------------------------------------------------
@@ -239,12 +209,16 @@ def test_seed_subtopic_when_subtopic_id_missing_then_error_recorded():
 
 
 def test_seed_subtopic_when_dry_run_and_video_found_then_no_db_write(caplog):
-    fake_video = {
-        "video_url": "https://youtube.com/watch?v=xyz",
-        "video_provider": "youtube",
-        "video_duration_seconds": 300,
-        "video_thumbnail_url": "https://img.youtube.com/vi/xyz/maxresdefault.jpg",
-    }
+    fake_videos = [
+        {
+            "video_url": f"https://youtube.com/watch?v=vid{i}",
+            "video_provider": "youtube",
+            "video_duration_seconds": 300,
+            "video_thumbnail_url": f"https://img.youtube.com/vi/vid{i}/maxresdefault.jpg",
+            "title": f"Video {i}",
+        }
+        for i in range(3)
+    ]
     fake_explanation = {"explanation_text": "Great explanation here"}
     fake_quiz = {
         "questions": [
@@ -258,11 +232,11 @@ def test_seed_subtopic_when_dry_run_and_video_found_then_no_db_write(caplog):
         ]
     }
 
-    call_results = [fake_video, fake_explanation, fake_quiz]
-
-    with patch("seed_subtopic_content.litellm.completion") as mock_llm:
-        mock_llm.side_effect = [{"choices": [{"message": {"content": json.dumps(r)}}]} for r in call_results]
-        with patch("seed_subtopic_content.get_session") as mock_session:
+    with patch("seed_subtopic_content.search_youtube_videos", return_value=fake_videos):
+        with patch("seed_subtopic_content.litellm.completion") as mock_llm:
+            mock_llm.side_effect = [
+                {"choices": [{"message": {"content": json.dumps(r)}}]} for r in [fake_explanation, fake_quiz]
+            ]
             with (
                 patch("seed_subtopic_content.SKIP_VIDEOS", False),
                 patch("seed_subtopic_content.SKIP_EXPLANATIONS", False),
@@ -271,25 +245,21 @@ def test_seed_subtopic_when_dry_run_and_video_found_then_no_db_write(caplog):
                 with caplog.at_level("INFO", logger="seed_subtopic_content"):
                     result = seed.seed_subtopic(MINIMAL_SUBTOPIC, {}, dry_run=True)
 
-    mock_session.assert_not_called()
-    assert mock_llm.call_count == 3
-    assert result.inserted == 3
+    # LLM only called for explanation + quiz (2 calls, not 3)
+    assert mock_llm.call_count == 2
+    assert result.inserted == 5  # 3 videos + 1 explanation + 1 quiz
     assert not result.failed
     assert "[DRY RUN]" in caplog.text
 
 
-def test_seed_subtopic_when_dry_run_and_llm_returns_nothing_then_skipped_not_inserted():
-    with patch(
-        "seed_subtopic_content.litellm.completion",
-        return_value={"choices": [{"message": {"content": '{"video_url": null}'}}]},
-    ):
-        with patch("seed_subtopic_content.get_session"):
-            with (
-                patch("seed_subtopic_content.SKIP_VIDEOS", False),
-                patch("seed_subtopic_content.SKIP_EXPLANATIONS", True),
-                patch("seed_subtopic_content.SKIP_QUIZZES", True),
-            ):
-                result = seed.seed_subtopic(MINIMAL_SUBTOPIC, {}, dry_run=True)
+def test_seed_subtopic_when_youtube_returns_nothing_then_skipped_not_inserted():
+    with patch("seed_subtopic_content.search_youtube_videos", return_value=[]):
+        with (
+            patch("seed_subtopic_content.SKIP_VIDEOS", False),
+            patch("seed_subtopic_content.SKIP_EXPLANATIONS", True),
+            patch("seed_subtopic_content.SKIP_QUIZZES", True),
+        ):
+            result = seed.seed_subtopic(MINIMAL_SUBTOPIC, {}, dry_run=True)
 
     assert result.inserted == 0
     assert result.skipped >= 1
@@ -356,16 +326,18 @@ def test_seed_subtopic_when_llm_raises_then_skipped_not_failed():
 
 
 def test_seed_subtopic_when_build_record_raises_then_error_captured_in_result():
-    """Exceptions outside call_llm (e.g. in build_record) are captured in SeedResult.errors."""
-    fake_video = {
-        "video_url": "https://youtube.com/watch?v=xyz",
-        "video_provider": "youtube",
-        "video_duration_seconds": 300,
-        "video_thumbnail_url": "https://img.youtube.com/vi/xyz/maxresdefault.jpg",
-    }
-    fake_response = {"choices": [{"message": {"content": json.dumps(fake_video)}}]}
+    """Exceptions in build_record are captured in SeedResult.errors."""
+    fake_videos = [
+        {
+            "video_url": "https://youtube.com/watch?v=xyz",
+            "video_provider": "youtube",
+            "video_duration_seconds": 300,
+            "video_thumbnail_url": "https://img.youtube.com/vi/xyz/maxresdefault.jpg",
+            "title": "Test Video",
+        }
+    ]
 
-    with patch("seed_subtopic_content.litellm.completion", return_value=fake_response):
+    with patch("seed_subtopic_content.search_youtube_videos", return_value=fake_videos):
         with patch("seed_subtopic_content.build_record", side_effect=ValueError("corrupt subtopic")):
             with (
                 patch("seed_subtopic_content.SKIP_VIDEOS", False),
