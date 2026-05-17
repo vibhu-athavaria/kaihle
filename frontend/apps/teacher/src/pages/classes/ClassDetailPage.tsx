@@ -453,6 +453,7 @@ export function ClassDetailPage() {
           isOpen={wizardOpen}
           onClose={() => setWizardOpen(false)}
           initialStep={wizardInitialStep}
+          mode={wizardInitialStep === 1 ? "edit" : "setup"}
         />
       )}
     </div>
