@@ -9,6 +9,7 @@ export interface ExplainThisDrawerProps {
   onClose: () => void;
   subtopicId: string;
   subtopicName: string;
+  initialQuestion?: string;
 }
 
 export function ExplainThisDrawer({
@@ -16,6 +17,7 @@ export function ExplainThisDrawer({
   onClose,
   subtopicId,
   subtopicName,
+  initialQuestion,
 }: ExplainThisDrawerProps) {
   const [question, setQuestion] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -72,7 +74,7 @@ export function ExplainThisDrawer({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
 
-  // Abort stream on close
+  // Abort stream on close, pre-fill question on open
   useEffect(() => {
     if (!open) {
       abortRef.current?.abort();
@@ -80,8 +82,12 @@ export function ExplainThisDrawer({
       setAnswer("");
       setStreamError(null);
       setStreaming(false);
+    } else if (initialQuestion) {
+      setQuestion(initialQuestion);
+      setAnswer("");
+      setStreamError(null);
     }
-  }, [open]);
+  }, [open, initialQuestion]);
 
   const handleAsk = useCallback(async () => {
     if (!question.trim() || streaming) return;

@@ -80,6 +80,7 @@ class TestGetStudentCourseProgress:
         response = await service.get_student_course_progress(
             student_id=student_id,
             school_id=school_id,
+            teacher_id=uuid4(),
         )
 
         assert response.student_id == student_id
@@ -122,6 +123,7 @@ class TestGetStudentCourseProgress:
         response = await service.get_student_course_progress(
             student_id=student_id,
             school_id=school_id,
+            teacher_id=uuid4(),
         )
 
         assert response.student_id == student_id
@@ -148,6 +150,7 @@ class TestGetStudentCourseProgress:
             await service.get_student_course_progress(
                 student_id=student_id,
                 school_id=school_id,
+                teacher_id=uuid4(),
             )
 
         assert exc_info.value.status_code == 403

@@ -662,6 +662,7 @@ class GapService:
                 Class.teacher_id == teacher_id,
                 Class.school_id == school_id,
             )
+            .limit(1)
         )
         return result.scalar_one_or_none() is not None
 
