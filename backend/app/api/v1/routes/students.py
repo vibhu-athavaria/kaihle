@@ -425,6 +425,7 @@ async def get_student_mini_course_progress(
     return await MiniCourseService(db).get_student_course_progress(
         student_id=student_id,
         school_id=current_user.school_id,
+        teacher_id=current_user.id,
     )
 
 

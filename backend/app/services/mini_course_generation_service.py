@@ -291,7 +291,6 @@ class MiniCourseGenerationService:
             select(QuestionBank.subtopic_id, func.count().label("cnt"))
             .where(
                 QuestionBank.subtopic_id.in_(subtopic_ids),
-                QuestionBank.source == "llm",
                 QuestionBank.is_active.is_(True),
             )
             .group_by(QuestionBank.subtopic_id)

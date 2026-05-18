@@ -20,7 +20,7 @@ import {
   useSubmitFeedback,
   useSubmitQuiz,
 } from "../../hooks/useSubtopicCourse";
-import type { CourseQuestion, NextSubtopic } from "../../types/miniCourse";
+import type { CourseQuestion, CourseOption } from "../../types/miniCourse";
 import { ExplainThisDrawer } from "../../components/mini-course/ExplainThisDrawer";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -187,20 +187,36 @@ function VideoSection({ url, title }: VideoSectionProps) {
   );
 }
 
+const TRUE_FALSE_OPTIONS: CourseOption[] = [
+  { key: "True", text: "True" },
+  { key: "False", text: "False" },
+];
+
+function resolveOptions(q: CourseQuestion): CourseOption[] {
+  if (q.options.length > 0) return q.options;
+  // True/False questions may have empty options in the question bank
+  const answer = q.correct_answer.toLowerCase();
+  if (answer === "true" || answer === "false") return TRUE_FALSE_OPTIONS;
+  return q.options;
+}
+
 interface CheckQuestionsProps {
   questions: CourseQuestion[];
   subtopicId: string;
-  nextSubtopic: NextSubtopic | null;
-  onNavigateNext: (id: string) => void;
+  subtopicName: string;
 }
 
 function CheckQuestions({
-  questions,
+  questions: initialQuestions,
   subtopicId,
-  nextSubtopic,
-  onNavigateNext,
+  subtopicName,
 }: CheckQuestionsProps) {
+  // Freeze questions on mount — invalidated refetches re-randomize the backend
+  // order, which would reset answers state and hide the AI tutor button.
+  const [questions] = useState(initialQuestions);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [explainOpen, setExplainOpen] = useState(false);
+  const [explainQuestion, setExplainQuestion] = useState("");
   const submitQuiz = useSubmitQuiz(subtopicId);
 
   const answeredCount = Object.keys(answers).length;
@@ -228,68 +244,92 @@ function CheckQuestions({
     }
   };
 
+  const handleAskTutor = (q: CourseQuestion) => {
+    setExplainQuestion(
+      `I got this question wrong. Can you explain why the correct answer is "${q.correct_answer}"?\n\nQuestion: ${q.question_text}`,
+    );
+    setExplainOpen(true);
+  };
+
   return (
-    <div className="bg-white rounded-2xl border border-brand-border p-6 space-y-6">
-      <div className="flex items-center gap-2">
-        <CheckCircle
-          className="w-5 h-5 text-brand-primary"
-          aria-hidden="true"
-        />
-        <h2 className="font-display font-bold text-xl text-brand-ink">
-          Check Your Understanding
-        </h2>
-      </div>
+    <>
+      <div className="bg-white rounded-2xl border border-brand-border p-6 space-y-6">
+        <div className="flex items-center gap-2">
+          <CheckCircle
+            className="w-5 h-5 text-brand-primary"
+            aria-hidden="true"
+          />
+          <h2 className="font-display font-bold text-xl text-brand-ink">
+            Check Your Understanding
+          </h2>
+        </div>
 
-      <div className="space-y-6">
-        {questions.map((q, idx) => {
-          const chosen = answers[q.question_id];
-          const isCorrect = chosen === q.correct_answer;
+        <ol className="space-y-0">
+          {questions.map((q, idx) => {
+            const chosen = answers[q.question_id];
+            const isCorrect = chosen === q.correct_answer;
+            const opts = resolveOptions(q);
 
-          return (
-            <div key={q.question_id} className="space-y-3">
-              <p className="font-sans font-semibold text-sm text-brand-ink">
-                {idx + 1}. {q.question_text}
-              </p>
-              <div className="space-y-2">
-                {q.options.map((opt) => {
-                  const isChosen = chosen === opt.key;
-                  const isCorrectOpt = opt.key === q.correct_answer;
-                  let optClass =
-                    "w-full text-left px-4 py-3 rounded-xl border font-sans text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2";
+            return (
+              <li
+                key={q.question_id}
+                className={`space-y-3 py-5 ${idx > 0 ? "border-t border-brand-border" : ""}`}
+              >
+                <p className="font-sans font-semibold text-sm text-brand-ink">
+                  {idx + 1}. {q.question_text}
+                </p>
+                <ul className="space-y-2 list-none">
+                  {opts.map((opt) => {
+                    const isChosen = chosen === opt.key;
+                    const isCorrectOpt = opt.key === q.correct_answer;
+                    let optClass =
+                      "w-full text-left px-4 py-3 rounded-xl border font-sans text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 flex items-center gap-2";
 
-                  if (!chosen) {
-                    optClass +=
-                      " border-brand-border text-brand-body hover:border-brand-primary hover:bg-brand-primary/5";
-                  } else if (isCorrectOpt) {
-                    optClass +=
-                      " border-brand-green bg-brand-green-light text-brand-green-dark font-semibold";
-                  } else if (isChosen && !isCorrect) {
-                    optClass +=
-                      " border-brand-red bg-brand-red-light text-brand-red-dark";
-                  } else {
-                    optClass += " border-brand-border text-brand-muted";
-                  }
+                    if (!chosen) {
+                      optClass +=
+                        " border-brand-border text-brand-body hover:border-brand-primary hover:bg-brand-primary/5";
+                    } else if (isCorrectOpt) {
+                      optClass +=
+                        " border-brand-green bg-brand-green-light text-brand-green-dark font-semibold";
+                    } else if (isChosen && !isCorrect) {
+                      optClass +=
+                        " border-brand-red bg-brand-red-light text-brand-red-dark";
+                    } else {
+                      optClass += " border-brand-border text-brand-muted";
+                    }
 
-                  return (
-                    <button
-                      key={opt.key}
-                      onClick={() => handleSelect(q.question_id, opt.key)}
-                      disabled={!!chosen}
-                      className={optClass}
-                    >
-                      <span className="font-semibold mr-2">{opt.key}.</span>
-                      {opt.text}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                    return (
+                      <li key={opt.key}>
+                        <button
+                          onClick={() => handleSelect(q.question_id, opt.key)}
+                          disabled={!!chosen}
+                          className={optClass}
+                        >
+                          <span className="w-5 h-5 rounded-full border border-current flex-shrink-0 flex items-center justify-center text-xs font-bold">
+                            {opt.key.length === 1 ? opt.key : opt.key[0]}
+                          </span>
+                          {opt.text}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
 
-      {allAnswered && (
-        <>
+                {chosen && !isCorrect && (
+                  <button
+                    onClick={() => handleAskTutor(q)}
+                    className="flex items-center gap-1.5 text-xs font-sans font-semibold text-brand-primary hover:text-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                    Ask AI tutor to explain this
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+
+        {allAnswered && (
           <div
             className={`rounded-xl p-4 flex items-center gap-3 ${mastery.bgClass}`}
           >
@@ -304,24 +344,17 @@ function CheckQuestions({
               {correctCount}/{questions.length} correct — {mastery.label}
             </p>
           </div>
+        )}
+      </div>
 
-          {nextSubtopic && (
-            <div className="flex items-center justify-between pt-2 border-t border-brand-border">
-              <p className="font-sans text-sm text-brand-body">
-                Up next in this topic
-              </p>
-              <button
-                onClick={() => onNavigateNext(nextSubtopic.id)}
-                className="flex items-center gap-1.5 text-sm font-sans font-semibold text-brand-primary hover:text-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded"
-              >
-                {nextSubtopic.name}
-                <ArrowRight className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+      <ExplainThisDrawer
+        open={explainOpen}
+        onClose={() => setExplainOpen(false)}
+        subtopicId={subtopicId}
+        subtopicName={subtopicName}
+        initialQuestion={explainQuestion}
+      />
+    </>
   );
 }
 
@@ -619,10 +652,7 @@ export function MiniCoursePage() {
                   <CheckQuestions
                     questions={course.check_questions}
                     subtopicId={subtopicId!}
-                    nextSubtopic={course.next_subtopic ?? null}
-                    onNavigateNext={(id) =>
-                      navigate(`/student/subtopics/${id}/course`)
-                    }
+                    subtopicName={course.subtopic_name}
                   />
                 ) : (
                   <div className="bg-white rounded-2xl border border-brand-border p-10 text-center">

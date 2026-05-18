@@ -16,10 +16,12 @@ from sqlalchemy import case, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.questionnaire_config import INTEREST_KEY_TO_CATEGORY
+from app.models.class_topic import ClassTopic
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subtopic, Topic
 from app.models.interest_category import InterestCategory
 from app.models.mini_course import MiniCourseStudentOverride, SubtopicContentFeedback, SubtopicCourseProgress
 from app.models.onboarding import StudentLearningProfile
+from app.models.school import Class
 from app.models.subtopic_content import SubtopicContent
 from app.schemas.mini_course import (
     CheckQuestion,
@@ -525,10 +527,12 @@ class MiniCourseService:
         self,
         student_id: uuid.UUID,
         school_id: uuid.UUID,
+        teacher_id: uuid.UUID,
     ) -> StudentCourseProgressResponse:
-        """Return all mini-course progress rows for a student, ordered by last_visited_at DESC.
+        """Return mini-course progress for a student, scoped to the teacher's classes.
 
-        Validates that the student belongs to the given school before querying.
+        Validates the student belongs to the school and only returns subtopics
+        whose curriculum topic is assigned to one of this teacher's classes.
         Cross-school access raises HTTP 403.
         """
         from app.models.user import User, UserRole
@@ -561,10 +565,15 @@ class MiniCourseService:
             .join(Subtopic, Subtopic.id == SubtopicCourseProgress.subtopic_id)
             .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
             .join(Topic, Topic.id == CurriculumTopic.topic_id)
+            .join(ClassTopic, ClassTopic.curriculum_topic_id == CurriculumTopic.id)
+            .join(Class, Class.id == ClassTopic.class_id)
             .where(
                 SubtopicCourseProgress.student_id == student_id,
                 SubtopicCourseProgress.school_id == school_id,
+                Class.teacher_id == teacher_id,
+                Class.school_id == school_id,
             )
+            .distinct()
             .order_by(SubtopicCourseProgress.last_visited_at.desc())
         )
         rows = rows_result.all()

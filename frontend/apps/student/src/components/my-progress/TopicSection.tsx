@@ -22,14 +22,11 @@ export function TopicSection({
 }: TopicSectionProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
+  const assessedSubtopics = subtopics.filter((s) => s.masteryScore !== null);
   const topicAvgScore =
-    subtopics.length > 0
-      ? subtopics.reduce((acc, s) => {
-          if (s.masteryScore !== null) {
-            return acc + s.masteryScore;
-          }
-          return acc;
-        }, 0) / subtopics.filter((s) => s.masteryScore !== null).length || null
+    assessedSubtopics.length > 0
+      ? assessedSubtopics.reduce((acc, s) => acc + s.masteryScore!, 0) /
+        assessedSubtopics.length
       : null;
 
   const { dotClass, textClass, label } = getMasteryStyle(topicAvgScore);
