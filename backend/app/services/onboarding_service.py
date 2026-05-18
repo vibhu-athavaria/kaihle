@@ -357,6 +357,7 @@ class OnboardingService:
                 ClassEnrollment.student_id == student_id,
                 ClassEnrollment.is_active.is_(True),
             )
+            .limit(1)
         )
 
         enrollment = result.scalar_one_or_none()
