@@ -1476,3 +1476,27 @@ class TestUpdateUserPermissions:
 
         # Assert
         assert result.permissions == {"billing": False, "user_management": False}
+
+    async def test_update_user_permissions_when_existing_permissions_then_merges(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        """Updating one key must not overwrite unrelated existing keys."""
+        # Arrange
+        user_id = uuid.uuid4()
+        user = User(
+            id=user_id,
+            email="admin@school.com",
+            first_name="Admin",
+            last_name="User",
+            role=UserRole.SCHOOL_ADMIN,
+            school_id=school_id,
+            is_active=True,
+            permissions={"billing": False, "user_management": False},
+        )
+        mock_db.scalar = AsyncMock(return_value=user)
+
+        # Act — restore billing only; user_management override must be preserved
+        result = await user_service.update_user_permissions(school_id, user_id, {"billing": True})
+
+        # Assert
+        assert result.permissions == {"billing": True, "user_management": False}

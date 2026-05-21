@@ -320,11 +320,17 @@ class UserService:
         """Merge permission overrides onto a user. Kaihle Admin only.
 
         Merges the provided dict into existing permissions — keys not present
-        in the request are preserved. Pass an empty dict to clear all overrides.
+        in the request are preserved. Pass an empty dict to clear all overrides
+        (restores all permission defaults).
         """
         user = await self.get_user(user_id, school_id)
         previous = user.permissions
-        user.permissions = permissions if permissions else None
+        if not permissions:
+            user.permissions = None
+        else:
+            merged = dict(user.permissions) if user.permissions else {}
+            merged.update(permissions)
+            user.permissions = merged
         await self.db.flush()
 
         logger.info(
