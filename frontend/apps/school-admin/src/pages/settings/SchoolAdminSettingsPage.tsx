@@ -335,7 +335,7 @@ function MyAccountSection({
                       : "Show current password"
                   }
                 >
-                  {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showCurrent ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
               </div>
             </div>
@@ -364,7 +364,7 @@ function MyAccountSection({
                     showNew ? "Hide new password" : "Show new password"
                   }
                 >
-                  {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showNew ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
               </div>
             </div>
@@ -402,7 +402,7 @@ function MyAccountSection({
                       : "Show confirm password"
                   }
                 >
-                  {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showConfirm ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
               </div>
             </div>

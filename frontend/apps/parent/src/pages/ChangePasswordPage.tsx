@@ -87,7 +87,7 @@ export function ChangePasswordPage() {
                     : "Show current password"
                 }
               >
-                {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
+                {showCurrent ? <Eye size={18} /> : <EyeOff size={18} />}
               </button>
             </div>
           </div>
@@ -109,7 +109,7 @@ export function ChangePasswordPage() {
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-brand-muted hover:text-brand-body"
                 aria-label={showNew ? "Hide new password" : "Show new password"}
               >
-                {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+                {showNew ? <Eye size={18} /> : <EyeOff size={18} />}
               </button>
             </div>
           </div>
@@ -135,7 +135,7 @@ export function ChangePasswordPage() {
                     : "Show confirm password"
                 }
               >
-                {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                {showConfirm ? <Eye size={18} /> : <EyeOff size={18} />}
               </button>
             </div>
           </div>
