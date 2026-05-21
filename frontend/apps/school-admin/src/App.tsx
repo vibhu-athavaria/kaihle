@@ -18,6 +18,7 @@ import { ParentDetailPage } from "./pages/ParentDetailPage";
 import { ClassManagement } from "./pages/ClassManagement";
 import { ClassDetailPage } from "./pages/ClassDetailPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
+import { BillingPage } from "./pages/BillingPage";
 import { SchoolAdminSettingsPage } from "./pages/settings/SchoolAdminSettingsPage";
 
 export default function App() {
@@ -73,10 +74,7 @@ export default function App() {
                         element={<SchoolAdminSettingsPage />}
                       />
                       <Route path="analytics" element={<AnalyticsPage />} />
-                      <Route
-                        path="billing"
-                        element={<Navigate to="dashboard" replace />}
-                      />
+                      <Route path="billing" element={<BillingPage />} />
                       <Route
                         index
                         element={<Navigate to="dashboard" replace />}

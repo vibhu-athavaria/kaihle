@@ -15,12 +15,15 @@ import {
   Library,
   GraduationCap,
   Terminal,
+  CreditCard,
 } from "lucide-react";
+import { hasPermission, Permission } from "@kaihle/types";
 import { NavItem } from "./NavItem";
 
 interface SidebarProps {
   variant: "teacher" | "school-admin" | "admin";
   onLogout?: () => void;
+  permissions?: Record<string, boolean> | null;
 }
 
 interface NavSection {
@@ -59,27 +62,41 @@ const teacherSections: NavSection[] = [
   },
 ];
 
-const schoolAdminSections: NavSection[] = [
-  {
-    section: "SCHOOL",
-    items: [
-      {
-        label: "Dashboard",
-        href: "/school-admin/dashboard",
-        icon: LayoutDashboard,
-      },
-      { label: "Users", href: "/school-admin/users", icon: Users },
-      { label: "Classes", href: "/school-admin/classes", icon: Building2 },
-    ],
-  },
-  {
-    section: "ADMIN",
-    items: [
-      { label: "Analytics", href: "/school-admin/analytics", icon: BarChart3 },
-      { label: "Settings", href: "/school-admin/settings", icon: Settings },
-    ],
-  },
-];
+function buildSchoolAdminSections(
+  permissions?: Record<string, boolean> | null,
+): NavSection[] {
+  const adminItems: { label: string; href: string; icon: LucideIcon }[] = [
+    { label: "Analytics", href: "/school-admin/analytics", icon: BarChart3 },
+    { label: "Settings", href: "/school-admin/settings", icon: Settings },
+  ];
+
+  if (hasPermission(permissions, Permission.BILLING)) {
+    adminItems.splice(1, 0, {
+      label: "Billing",
+      href: "/school-admin/billing",
+      icon: CreditCard,
+    });
+  }
+
+  return [
+    {
+      section: "SCHOOL",
+      items: [
+        {
+          label: "Dashboard",
+          href: "/school-admin/dashboard",
+          icon: LayoutDashboard,
+        },
+        { label: "Users", href: "/school-admin/users", icon: Users },
+        { label: "Classes", href: "/school-admin/classes", icon: Building2 },
+      ],
+    },
+    {
+      section: "ADMIN",
+      items: adminItems,
+    },
+  ];
+}
 
 const adminSections: NavSection[] = [
   {
@@ -137,12 +154,12 @@ function getCurrentPath(): string {
   return "";
 }
 
-export function Sidebar({ variant, onLogout }: SidebarProps) {
+export function Sidebar({ variant, onLogout, permissions }: SidebarProps) {
   const sections =
     variant === "teacher"
       ? teacherSections
       : variant === "school-admin"
-        ? schoolAdminSections
+        ? buildSchoolAdminSections(permissions)
         : adminSections;
 
   const borderClass =

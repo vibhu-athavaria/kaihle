@@ -1,3 +1,4 @@
+import { useAuth } from "@kaihle/auth";
 import { useParams, useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
@@ -10,12 +11,17 @@ function initials(first: string, last: string) {
 export function ParentDetailPage() {
   const { parentId } = useParams<{ parentId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const { data: parent, isLoading, isError } = useParentDetail(parentId ?? "");
 
   if (isLoading) {
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Parent">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Parent"
+        permissions={user?.permissions}
+      >
         <div className="animate-pulse space-y-4">
           <div className="h-6 bg-role-school-border rounded-full w-1/3" />
           <div className="bg-white border border-role-school-border rounded-xl p-5 flex items-center gap-4">
@@ -37,7 +43,11 @@ export function ParentDetailPage() {
 
   if (isError || !parent) {
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Parent">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Parent"
+        permissions={user?.permissions}
+      >
         <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
           Failed to load parent details. Please go back and try again.
         </div>

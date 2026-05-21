@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
+import { useAuth } from "@kaihle/auth";
 import { getMasteryStyle } from "@kaihle/types";
 import { ArrowRight } from "lucide-react";
 import { useSchoolAnalytics, useSchoolClasses } from "../hooks/useSchoolAdmin";
@@ -38,6 +39,7 @@ function subjectShortLabel(subject: string): string {
 
 export function SchoolOverview() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: analytics, isLoading, isError } = useSchoolAnalytics();
   const { data: classes = [] } = useSchoolClasses();
 
@@ -61,7 +63,11 @@ export function SchoolOverview() {
 
   if (isLoading)
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Overview">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Overview"
+        permissions={user?.permissions}
+      >
         <div className="animate-pulse space-y-5">
           <div className="grid grid-cols-3 gap-4">
             {[...Array(3)].map((_, i) => (
@@ -83,7 +89,11 @@ export function SchoolOverview() {
 
   if (isError)
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Overview">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Overview"
+        permissions={user?.permissions}
+      >
         <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
           Failed to load data. Please refresh the page.
         </div>
@@ -91,7 +101,11 @@ export function SchoolOverview() {
     );
 
   return (
-    <DashboardLayout variant="school-admin" pageTitle="Overview">
+    <DashboardLayout
+      variant="school-admin"
+      pageTitle="Overview"
+      permissions={user?.permissions}
+    >
       <div className="space-y-5">
         {/* ── KPI row ── */}
         <div className="grid grid-cols-3 gap-4">

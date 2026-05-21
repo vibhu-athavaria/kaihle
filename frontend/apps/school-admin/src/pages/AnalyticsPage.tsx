@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
+import { useAuth } from "@kaihle/auth";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
@@ -17,6 +18,7 @@ function periodDates(p: Period): { from: string; to: string } {
 
 export function AnalyticsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [period, setPeriod] = useState<Period>("month");
   const { from, to } = periodDates(period);
   const { data, isLoading, isError } = useSchoolAnalytics(from, to);
@@ -61,7 +63,11 @@ export function AnalyticsPage() {
 
   if (isLoading)
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Analytics">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Analytics"
+        permissions={user?.permissions}
+      >
         <div className="animate-pulse space-y-4">
           <div className="grid grid-cols-4 gap-4">
             {[...Array(4)].map((_, i) => (
@@ -74,7 +80,11 @@ export function AnalyticsPage() {
 
   if (isError)
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Analytics">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Analytics"
+        permissions={user?.permissions}
+      >
         <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
           Failed to load data. Please refresh the page.
         </div>
@@ -82,7 +92,11 @@ export function AnalyticsPage() {
     );
 
   return (
-    <DashboardLayout variant="school-admin" pageTitle="Analytics">
+    <DashboardLayout
+      variant="school-admin"
+      pageTitle="Analytics"
+      permissions={user?.permissions}
+    >
       <div className="flex items-center gap-1 mb-5 bg-white border border-role-school-border rounded-lg p-1 self-start w-fit">
         {(["week", "month"] as Period[]).map((p) => (
           <button

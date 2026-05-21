@@ -1,16 +1,23 @@
+import { Navigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { Card } from "@kaihle/ui";
 import { CreditCard, Receipt, Clock, CheckCircle } from "lucide-react";
 import { useAuth } from "@kaihle/auth";
+import { hasPermission, Permission } from "@kaihle/types";
 
 export function BillingPage() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  if (!hasPermission(user?.permissions, Permission.BILLING)) {
+    return <Navigate to="/school-admin/dashboard" replace />;
+  }
 
   return (
     <DashboardLayout
       variant="school-admin"
       pageTitle="Billing"
       onLogout={logout}
+      permissions={user?.permissions}
     >
       <div className="space-y-6">
         <div>

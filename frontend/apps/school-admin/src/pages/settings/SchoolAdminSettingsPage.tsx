@@ -691,6 +691,7 @@ export function SchoolAdminSettingsPage() {
       variant="school-admin"
       pageTitle="Settings"
       onLogout={logout}
+      permissions={user?.permissions}
     >
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="mb-6">

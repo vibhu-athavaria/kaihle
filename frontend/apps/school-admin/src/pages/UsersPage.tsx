@@ -1,7 +1,8 @@
 import { useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
-import { getMasteryStyle } from "@kaihle/types";
+import { getMasteryStyle, hasPermission, Permission } from "@kaihle/types";
+import { useAuth } from "@kaihle/auth";
 import { Plus } from "lucide-react";
 import {
   useSchoolStudents,
@@ -50,6 +51,11 @@ function diagnosticStatus(s: StudentListItem): "Completed" | "Pending" | null {
 
 export function UsersPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canManageUsers = hasPermission(
+    user?.permissions,
+    Permission.USER_MANAGEMENT,
+  );
   const [tab, setTab] = useState<Tab>("students");
   const [filter, setFilter] = useState<StudentFilter>("all");
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>(null);
@@ -116,7 +122,11 @@ export function UsersPage() {
 
   if (studentsError)
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Users">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Users"
+        permissions={user?.permissions}
+      >
         <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
           Failed to load data. Please refresh the page.
         </div>
@@ -124,7 +134,11 @@ export function UsersPage() {
     );
 
   return (
-    <DashboardLayout variant="school-admin" pageTitle="Users">
+    <DashboardLayout
+      variant="school-admin"
+      pageTitle="Users"
+      permissions={user?.permissions}
+    >
       <div className="flex items-center justify-between mb-4">
         <div className="flex border-b-2 border-role-school-border">
           {[
@@ -185,8 +199,8 @@ export function UsersPage() {
             {showActive ? "Active" : "Inactive"}
           </span>
 
-          {/* Contextual CTA */}
-          {tab === "students" && (
+          {/* Contextual CTA — hidden when USER_MANAGEMENT is restricted */}
+          {canManageUsers && tab === "students" && (
             <button
               onClick={() => setStudentModalOpen(true)}
               className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
@@ -195,7 +209,7 @@ export function UsersPage() {
               New Student
             </button>
           )}
-          {tab === "teachers" && (
+          {canManageUsers && tab === "teachers" && (
             <button
               onClick={() => setTeacherModalOpen(true)}
               className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
@@ -204,7 +218,7 @@ export function UsersPage() {
               New Teacher
             </button>
           )}
-          {tab === "parents" && (
+          {canManageUsers && tab === "parents" && (
             <button
               onClick={() => setParentModalOpen(true)}
               className="flex items-center gap-1.5 bg-brand-primary text-white text-xs font-bold px-4 py-2 rounded-full hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"

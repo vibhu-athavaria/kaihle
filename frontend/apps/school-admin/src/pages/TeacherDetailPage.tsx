@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useAuth } from "@kaihle/auth";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
 import { useTeacherDetail } from "../hooks/useSchoolAdmin";
@@ -26,6 +27,7 @@ function subjectBadgeClass(subject: string) {
 export function TeacherDetailPage() {
   const { teacherId } = useParams<{ teacherId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [editPanelOpen, setEditPanelOpen] = useState(false);
 
   const {
@@ -36,7 +38,11 @@ export function TeacherDetailPage() {
 
   if (isLoading) {
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Teacher">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Teacher"
+        permissions={user?.permissions}
+      >
         <div className="animate-pulse space-y-4">
           <div className="h-6 bg-role-school-border rounded-full w-1/3" />
           <div className="bg-white border border-role-school-border rounded-xl p-5 flex items-center gap-4">
@@ -58,7 +64,11 @@ export function TeacherDetailPage() {
 
   if (isError || !teacher) {
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Teacher">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Teacher"
+        permissions={user?.permissions}
+      >
         <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
           Failed to load teacher details. Please go back and try again.
         </div>

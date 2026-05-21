@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
+import { useAuth } from "@kaihle/auth";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
@@ -7,6 +8,7 @@ import { CreateClassModal } from "./CreateClassModal";
 
 export function ClassManagement() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [showActive, setShowActive] = useState(true);
   const {
     data: classes = [],
@@ -47,7 +49,11 @@ export function ClassManagement() {
 
   if (isLoading)
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Classes">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Classes"
+        permissions={user?.permissions}
+      >
         <div className="animate-pulse space-y-3">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="h-12 bg-role-school-border rounded-lg" />
@@ -58,7 +64,11 @@ export function ClassManagement() {
 
   if (isError)
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Classes">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Classes"
+        permissions={user?.permissions}
+      >
         <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
           Failed to load data. Please refresh the page.
         </div>
@@ -66,7 +76,11 @@ export function ClassManagement() {
     );
 
   return (
-    <DashboardLayout variant="school-admin" pageTitle="Classes">
+    <DashboardLayout
+      variant="school-admin"
+      pageTitle="Classes"
+      permissions={user?.permissions}
+    >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 bg-white border border-role-school-border rounded-lg px-3 py-[7px]">
