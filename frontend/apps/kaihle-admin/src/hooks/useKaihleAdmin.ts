@@ -310,13 +310,14 @@ export function useSchoolAdmins(schoolId: string) {
   });
 }
 
-export function useInviteSchoolAdmin(schoolId: string) {
+export function useCreateSchoolAdmin(schoolId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: {
       email: string;
       first_name: string;
       last_name: string;
+      password: string;
     }) => {
       const response = await apiClient.post(
         `/api/v1/schools/${schoolId}/users`,

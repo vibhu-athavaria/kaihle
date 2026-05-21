@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "@kaihle/ui";
 import { Button, Input } from "@kaihle/ui";
-import { useInviteSchoolAdmin } from "../../hooks/useKaihleAdmin";
+import { useCreateSchoolAdmin } from "../../hooks/useKaihleAdmin";
 
 interface Props {
   schoolId: string;
@@ -10,12 +10,12 @@ interface Props {
   onClose: () => void;
 }
 
-function validateEmail(email: string): string | null {
-  if (!email.trim()) return "Email is required";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-    return "Please enter a valid email address";
-  return null;
-}
+const EMPTY_FORM = {
+  email: "",
+  first_name: "",
+  last_name: "",
+  password: "",
+};
 
 export function InviteAdminModal({
   schoolId,
@@ -23,20 +23,20 @@ export function InviteAdminModal({
   open,
   onClose,
 }: Props) {
-  const invite = useInviteSchoolAdmin(schoolId);
-  const [form, setForm] = useState({
-    email: "",
-    first_name: "",
-    last_name: "",
-  });
+  const create = useCreateSchoolAdmin(schoolId);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = (): boolean => {
     const next: Record<string, string> = {};
-    const emailErr = validateEmail(form.email);
-    if (emailErr) next.email = emailErr;
+    if (!form.email.trim()) next.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+      next.email = "Please enter a valid email address";
     if (!form.first_name.trim()) next.first_name = "First name is required";
     if (!form.last_name.trim()) next.last_name = "Last name is required";
+    if (!form.password.trim()) next.password = "Password is required";
+    else if (form.password.length < 8)
+      next.password = "Password must be at least 8 characters";
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -45,18 +45,36 @@ export function InviteAdminModal({
     e.preventDefault();
     if (!validate()) return;
     try {
-      await invite.mutateAsync(form);
-      setForm({ email: "", first_name: "", last_name: "" });
+      await create.mutateAsync(form);
+      setForm(EMPTY_FORM);
       onClose();
-    } catch {
+    } catch (err: unknown) {
+      const axiosErr = err as {
+        response?: { status?: number; data?: { detail?: unknown } };
+        message?: string;
+      };
+      const status = axiosErr?.response?.status;
+      const detail = axiosErr?.response?.data?.detail;
+      const detailStr =
+        typeof detail === "string"
+          ? detail
+          : Array.isArray(detail)
+            ? detail
+                .map((d) =>
+                  typeof d === "object" && d !== null && "msg" in d
+                    ? (d as { msg: string }).msg
+                    : String(d),
+                )
+                .join(", ")
+            : (axiosErr?.message ?? "Unknown error");
       setErrors({
-        submit: "Failed to send invite. The email may already be registered.",
+        submit: `[${status ?? "ERR"}] ${detailStr}`,
       });
     }
   };
 
   const handleClose = () => {
-    setForm({ email: "", first_name: "", last_name: "" });
+    setForm(EMPTY_FORM);
     setErrors({});
     onClose();
   };
@@ -65,7 +83,8 @@ export function InviteAdminModal({
     <Modal
       open={open}
       onOpenChange={handleClose}
-      title={`Invite admin to ${schoolName}`}
+      title={`Add admin to ${schoolName}`}
+      titleClassName="font-['Inter'] font-bold"
     >
       <form onSubmit={handleSubmit} className="space-y-4 mt-2">
         <Input
@@ -92,9 +111,17 @@ export function InviteAdminModal({
             placeholder="Doe"
           />
         </div>
+        <Input
+          label="Temporary password"
+          type="password"
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          error={errors.password}
+          placeholder="Min. 8 characters"
+        />
 
         <p className="text-xs text-role-admin-muted">
-          A magic link will be sent to this email address to complete setup.
+          The admin will be prompted to change their password on first login.
         </p>
 
         {errors.submit && (
@@ -105,8 +132,8 @@ export function InviteAdminModal({
           <Button type="button" variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
-          <Button type="submit" loading={invite.isPending}>
-            Send invite
+          <Button type="submit" loading={create.isPending}>
+            Create admin
           </Button>
         </div>
       </form>

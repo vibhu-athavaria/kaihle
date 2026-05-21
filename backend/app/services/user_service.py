@@ -76,15 +76,19 @@ class UserService:
         if existing:
             raise ValueError(f"Email '{data.email}' is already registered at this school")
 
-        # Create user with a random unusable password (they log in via magic link)
+        # When a password is provided use it directly (admin-set flow);
+        # otherwise use a random unusable password and send a magic link.
+        direct_password = data.password is not None
+        raw_password: str = data.password if data.password is not None else secrets.token_hex(32)
         user = User(
             email=data.email,
-            hashed_password=hash_password(secrets.token_hex(32)),
+            hashed_password=hash_password(raw_password),
             role=data.role,
             school_id=school_id,
             first_name=data.first_name,
             last_name=data.last_name,
             is_active=True,
+            must_change_password=direct_password,
         )
         self.db.add(user)
         await self.db.flush()
@@ -115,20 +119,22 @@ class UserService:
                 self.db.add(ParentStudent(parent_id=user.id, student_id=sid))
             await self.db.flush()
 
-        # Send magic link welcome email
-        token = create_magic_link_token(user.id, expires_in_minutes=72 * 60)  # 72-hour welcome link
-        token_hash = hash_token(token)
-        await store_magic_link_token(self.db, user.id, token_hash, expires_minutes=72 * 60)
-
         logger.info(
             "user_invited",
             user_id=str(user.id),
             school_id=str(school_id),
             role=user.role,
             email=user.email,
+            direct_password=direct_password,
         )
 
-        await self._send_welcome_email(user, token, base_url)
+        if direct_password:
+            await self._send_credentials_email(user, raw_password, school_id)
+        else:
+            token = create_magic_link_token(user.id, expires_in_minutes=72 * 60)
+            token_hash = hash_token(token)
+            await store_magic_link_token(self.db, user.id, token_hash, expires_minutes=72 * 60)
+            await self._send_welcome_email(user, token, base_url)
 
         return user
 
