@@ -311,6 +311,37 @@ class UserService:
             new_state=False,
         )
 
+    async def update_user_permissions(
+        self,
+        school_id: uuid.UUID,
+        user_id: uuid.UUID,
+        permissions: dict[str, bool],
+    ) -> User:
+        """Merge permission overrides onto a user. Kaihle Admin only.
+
+        Merges the provided dict into existing permissions — keys not present
+        in the request are preserved. Pass an empty dict to clear all overrides
+        (restores all permission defaults).
+        """
+        user = await self.get_user(user_id, school_id)
+        previous = user.permissions
+        if not permissions:
+            user.permissions = None
+        else:
+            merged = dict(user.permissions) if user.permissions else {}
+            merged.update(permissions)
+            user.permissions = merged
+        await self.db.flush()
+
+        logger.info(
+            "user_permissions_updated",
+            user_id=str(user.id),
+            school_id=str(school_id),
+            previous=previous,
+            new=user.permissions,
+        )
+        return user
+
     async def _send_welcome_email(self, user: User, token: str, base_url: str) -> None:
         """Send magic link welcome email via EmailService."""
         verify_url = f"{base_url}/api/v1/auth/magic-link/verify?token={token}"

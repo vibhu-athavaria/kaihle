@@ -42,6 +42,7 @@ class UserResponse(BaseModel):
     last_name: str
     is_active: bool
     school_id: uuid.UUID | None
+    permissions: dict[str, bool] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -118,8 +119,15 @@ class MeResponse(BaseModel):
     role: str
     school_id: uuid.UUID | None
     is_active: bool
+    permissions: dict[str, bool] | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserPermissionsUpdate(BaseModel):
+    """Schema for updating a user's permission overrides. Kaihle Admin only."""
+
+    permissions: dict[str, bool]
 
 
 class UserDirectCreate(BaseModel):
