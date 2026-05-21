@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout, ClassGapMapTable } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuth } from "@kaihle/auth";
 import {
   useClassDetail,
   useClassEnrollments,
@@ -399,6 +399,7 @@ type TabKey = (typeof TABS)[number]["key"];
 export function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [editPanelOpen, setEditPanelOpen] = useState(false);
@@ -422,7 +423,11 @@ export function ClassDetailPage() {
 
   if (detailError) {
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Class">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Class"
+        permissions={user?.permissions}
+      >
         <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
           Could not load class. Please refresh.
         </div>

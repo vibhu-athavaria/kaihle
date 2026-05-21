@@ -16,6 +16,9 @@ export { ACADEMIC_YEAR_REGEX, currentAcademicYear } from "./academic-year";
 
 export type { Topic, TopicDetail } from "./curriculum";
 
+export { Permission, PERMISSION_DEFAULTS, hasPermission } from "./permissions";
+export type { PermissionKey } from "./permissions";
+
 export {
   UserRole,
   RoleGroup,

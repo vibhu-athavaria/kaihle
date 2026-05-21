@@ -10,6 +10,7 @@ export interface User {
   first_name: string;
   role: UserRoleType;
   school_id: string | null;
+  permissions: Record<string, boolean> | null;
 }
 
 export interface LoginResponse {

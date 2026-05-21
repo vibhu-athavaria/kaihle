@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout, GapMapCell } from "@kaihle/ui";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuth } from "@kaihle/auth";
 
 interface GapMapData {
   class_name: string;
@@ -17,6 +17,7 @@ interface GapMapData {
 export function AdminGapMapPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["class-gap-map", classId],
@@ -34,7 +35,11 @@ export function AdminGapMapPage() {
 
   if (isError)
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Gap Map">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Gap Map"
+        permissions={user?.permissions}
+      >
         <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
           Failed to load data. Please refresh the page.
         </div>
@@ -42,7 +47,11 @@ export function AdminGapMapPage() {
     );
 
   return (
-    <DashboardLayout variant="school-admin" pageTitle="Gap Map">
+    <DashboardLayout
+      variant="school-admin"
+      pageTitle="Gap Map"
+      permissions={user?.permissions}
+    >
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2 text-sm">
           <button

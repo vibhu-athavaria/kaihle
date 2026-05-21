@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { DashboardLayout, StudentGapMapTab } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuth } from "@kaihle/auth";
 import {
   useStudentAttempts,
   useStudentStudyPlans,
@@ -47,6 +47,7 @@ function initials(first: string, last: string) {
 export function StudentDetailPage() {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [editPanelOpen, setEditPanelOpen] = useState(false);
 
   const {
@@ -103,7 +104,11 @@ export function StudentDetailPage() {
 
   if (isError)
     return (
-      <DashboardLayout variant="school-admin" pageTitle="Student Detail">
+      <DashboardLayout
+        variant="school-admin"
+        pageTitle="Student Detail"
+        permissions={user?.permissions}
+      >
         <div className="flex items-center justify-center py-24 text-sm font-semibold text-brand-red font-sans">
           Failed to load data. Please refresh the page.
         </div>
@@ -111,7 +116,11 @@ export function StudentDetailPage() {
     );
 
   return (
-    <DashboardLayout variant="school-admin" pageTitle="Student Detail">
+    <DashboardLayout
+      variant="school-admin"
+      pageTitle="Student Detail"
+      permissions={user?.permissions}
+    >
       <div className="flex items-center gap-2 text-sm mb-5">
         <button
           onClick={() => navigate("/school-admin/users")}
