@@ -92,12 +92,6 @@ async def create_user_direct(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Email '{body.email}' is already registered in the system.",
         )
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"A user with email '{body.email}' already exists in the system.",
-        )
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
