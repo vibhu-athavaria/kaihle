@@ -417,7 +417,7 @@ def _search_region(yt: Any, query: str, region: str) -> list[str]:
         return []
 
 
-def search_youtube_videos(subtopic: dict[str, Any]) -> list[dict[str, Any]]:
+def search_youtube_videos(subtopic: dict[str, Any], yt_client: Any = None) -> list[dict[str, Any]]:
     """Search YouTube across US/GB/AU, rank by engagement, return top YOUTUBE_TOP_N.
 
     Steps:
@@ -438,7 +438,7 @@ def search_youtube_videos(subtopic: dict[str, Any]) -> list[dict[str, Any]]:
     query = f"{name} {subject} {grade} explained tutorial"
 
     try:
-        yt = yt_build("youtube", "v3", developerKey=api_key, cache_discovery=False)
+        yt = yt_client or yt_build("youtube", "v3", developerKey=api_key, cache_discovery=False)
 
         # Step 1: search all three regions, deduplicate preserving order
         seen: set[str] = set()
@@ -803,8 +803,18 @@ class SeedResult:
         return bool(self.errors)
 
 
-def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run: bool = False) -> SeedResult:
-    """Generate and insert content for a single subtopic."""
+def seed_subtopic(
+    subtopic: dict[str, Any],
+    pre_gen_qs: dict[str, Any],
+    dry_run: bool = False,
+    yt_client: Any = None,
+) -> SeedResult:
+    """Generate and insert content for a single subtopic.
+
+    All records are collected first, then written in ONE DB round-trip (one asyncio.run,
+    one connection open/close) instead of three separate calls.
+    yt_client is the pre-built YouTube API resource — shared per thread to avoid rebuilding it.
+    """
     subtopic_id_str = str(subtopic.get("id") or "")
     subtopic_name = subtopic.get("name", "<unknown>")
     result = SeedResult(subtopic_id_str, subtopic_name)
@@ -815,10 +825,14 @@ def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run:
 
     log.info("seeding | subtopic=%s | id=%s | dry_run=%s", subtopic_name, subtopic_id_str, dry_run)
 
+    records_to_write: list[dict[str, Any]] = []
+
     try:
         # --- Videos — one row per subtopic, all candidates in the videos JSONB array ---
         if not SKIP_VIDEOS:
-            videos = generate_video_content(subtopic)
+            videos = (
+                search_youtube_videos(subtopic, yt_client=yt_client) if yt_client else generate_video_content(subtopic)
+            )
             if videos:
                 rec = build_record(
                     subtopic,
@@ -835,8 +849,8 @@ def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run:
                             v.get("video_url"),
                         )
                     result.inserted += 1
-                elif rec and upsert_subtopic_content([rec]):
-                    result.inserted += 1
+                elif rec:
+                    records_to_write.append(rec)
             else:
                 log.info("no videos found | subtopic=%s", subtopic_name)
                 result.skipped += 1
@@ -857,8 +871,8 @@ def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run:
                         len(explanation_data.get("explanation_text", "")),
                     )
                     result.inserted += 1
-                elif rec and upsert_subtopic_content([rec]):
-                    result.inserted += 1
+                elif rec:
+                    records_to_write.append(rec)
             else:
                 log.info("no explanation generated | subtopic=%s", subtopic_name)
                 result.skipped += 1
@@ -882,13 +896,17 @@ def seed_subtopic(subtopic: dict[str, Any], pre_gen_qs: dict[str, Any], dry_run:
                         len(qs_data.get("questions", [])),
                     )
                     result.inserted += 1
-                elif rec and upsert_subtopic_content([rec]):
-                    result.inserted += 1
+                elif rec:
+                    records_to_write.append(rec)
             else:
                 log.info("no quiz generated | subtopic=%s", subtopic_name)
                 result.skipped += 1
         else:
             result.skipped += 1
+
+        # Single DB round-trip for all content types — one connection open/close per subtopic.
+        if records_to_write:
+            result.inserted += upsert_subtopic_content(records_to_write)
 
     except Exception as e:
         msg = f"{type(e).__name__}: {e}"
@@ -961,11 +979,28 @@ def main() -> None:
     total_skipped = 0
     failed_subtopics: list[SeedResult] = []
 
-    # Process in batches
-    for batch_num, batch in enumerate(_batches(subtopics, BATCH_SIZE), 1):
-        log.info("--- Batch %d | subtopics %d", batch_num, len(batch))
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = {executor.submit(seed_subtopic, s, pre_gen_qs, DRY_RUN): s for s in batch}
+    # Build one YouTube client per worker thread using thread-local storage.
+    # yt_build() creates an httplib2 client — not thread-safe to share, but cheap to create once per thread.
+    _thread_local = __import__("threading").local()
+
+    def _get_yt_client() -> Any | None:
+        if SKIP_VIDEOS:
+            return None
+        api_key = settings.youtube_data_api_key
+        if not api_key:
+            return None
+        if not hasattr(_thread_local, "yt"):
+            _thread_local.yt = yt_build("youtube", "v3", developerKey=api_key, cache_discovery=False)
+        return _thread_local.yt
+
+    def _seed_with_client(subtopic: dict[str, Any]) -> SeedResult:
+        return seed_subtopic(subtopic, pre_gen_qs, DRY_RUN, yt_client=_get_yt_client())
+
+    # Single executor for the entire run — thread creation paid once, not per batch.
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        for batch_num, batch in enumerate(_batches(subtopics, BATCH_SIZE), 1):
+            log.info("--- Batch %d | subtopics %d", batch_num, len(batch))
+            futures = {executor.submit(_seed_with_client, s): s for s in batch}
             for future in as_completed(futures):
                 seed_result = future.result()
                 total_inserted += seed_result.inserted
@@ -973,13 +1008,13 @@ def main() -> None:
                 if seed_result.failed:
                     failed_subtopics.append(seed_result)
 
-        log.info(
-            "Batch %d done | cumulative: inserted=%d skipped=%d failed=%d",
-            batch_num,
-            total_inserted,
-            total_skipped,
-            len(failed_subtopics),
-        )
+            log.info(
+                "Batch %d done | cumulative: inserted=%d skipped=%d failed=%d",
+                batch_num,
+                total_inserted,
+                total_skipped,
+                len(failed_subtopics),
+            )
 
     # Final summary
     log.info("=" * 60)

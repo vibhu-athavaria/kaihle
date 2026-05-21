@@ -283,6 +283,76 @@ export function useSetPrimarySchoolCurriculum(schoolId: string) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// School admin management hooks
+// ---------------------------------------------------------------------------
+
+export interface SchoolAdmin {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  is_active: boolean;
+  permissions: Record<string, boolean> | null;
+}
+
+export function useSchoolAdmins(schoolId: string) {
+  return useQuery({
+    queryKey: ["admin", "school", schoolId, "admins"],
+    queryFn: async () => {
+      const response = await apiClient.get(
+        `/api/v1/schools/${schoolId}/users`,
+        { params: { role: "SCHOOL_ADMIN", page_size: 50 } },
+      );
+      return response.data.users as SchoolAdmin[];
+    },
+    enabled: !!schoolId,
+  });
+}
+
+export function useInviteSchoolAdmin(schoolId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      email: string;
+      first_name: string;
+      last_name: string;
+    }) => {
+      const response = await apiClient.post(
+        `/api/v1/schools/${schoolId}/users`,
+        { ...data, role: "SCHOOL_ADMIN" },
+      );
+      return response.data as SchoolAdmin;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "school", schoolId, "admins"],
+      });
+    },
+  });
+}
+
+export function useUpdateAdminPermissions(schoolId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      userId: string;
+      permissions: Record<string, boolean>;
+    }) => {
+      const response = await apiClient.patch(
+        `/api/v1/schools/${schoolId}/users/${payload.userId}/permissions`,
+        { permissions: payload.permissions },
+      );
+      return response.data as SchoolAdmin;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "school", schoolId, "admins"],
+      });
+    },
+  });
+}
+
 export function useExtendTrial() {
   const queryClient = useQueryClient();
 
