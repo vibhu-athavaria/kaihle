@@ -7,6 +7,7 @@ import { useAdminSchool, useSchoolAnalytics } from "../hooks/useKaihleAdmin";
 import { AdminExtendTrialModal } from "./AdminExtendTrialModal";
 import { AdminEditSchoolModal } from "./AdminEditSchoolModal";
 import { SchoolCurriculumPanel } from "../components/schools/SchoolCurriculumPanel";
+import { SchoolAdminsPanel } from "../components/schools/SchoolAdminsPanel";
 import {
   ArrowLeft,
   Users,
@@ -269,6 +270,8 @@ export function AdminSchoolDetail() {
         )}
 
         <StatsSection analytics={analytics} loading={analyticsLoading} />
+
+        <SchoolAdminsPanel schoolId={schoolId!} schoolName={school.name} />
 
         <SchoolCurriculumPanel schoolId={schoolId!} />
       </div>
