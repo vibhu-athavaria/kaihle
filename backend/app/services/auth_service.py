@@ -115,6 +115,7 @@ class AuthService:
                 "first_name": user.first_name,
                 "role": user.role,
                 "school_id": str(user.school_id) if user.school_id else None,
+                "permissions": user.permissions,
             },
         )
 
@@ -189,6 +190,7 @@ class AuthService:
                 "first_name": user.first_name,
                 "role": user.role,
                 "school_id": str(user.school_id) if user.school_id else None,
+                "permissions": user.permissions,
             },
         )
 
@@ -280,6 +282,7 @@ class AuthService:
                 "first_name": user.first_name,
                 "role": user.role,
                 "school_id": str(user.school_id) if user.school_id else None,
+                "permissions": user.permissions,
             },
         )
 

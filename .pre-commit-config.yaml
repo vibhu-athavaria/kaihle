@@ -1,5 +1,5 @@
 repos:
-  # ─── BACKEND ────────────────────────────────────────────────────────────────
+  # ─── Type Checks, Lints and Prettier ────────────────────────────────────────────────────────────────
 
   # Ruff: lint + import sorting (replaces isort/flake8)
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -22,20 +22,6 @@ repos:
         types: [python]
         pass_filenames: false
         require_serial: true
-
-  # Backend unit tests only (integration tests need Postgres/Redis — run in CI)
-  - repo: local
-    hooks:
-      - id: pytest-unit
-        name: pytest unit tests
-        entry: bash -c "cd backend && uv run pytest app/tests/unit/ -v --tb=long --cov=app/services --cov-fail-under=80 --cov-report=term-missing"
-        language: system
-        files: ^backend/
-        types: [python]
-        pass_filenames: false
-        require_serial: true
-
-  # ─── FRONTEND ───────────────────────────────────────────────────────────────
 
   # Prettier: formatting check (matches CI's `prettier --check`)
   # Using pnpm exec prettier directly to match CI's version (v3.8.2 from package.json)
@@ -69,6 +55,20 @@ repos:
           '
         language: system
         files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+        require_serial: true
+
+# ─── Tests ───────────────────────────────────────────────────────────────
+
+  # Backend unit tests only (integration tests need Postgres/Redis — run in CI)
+  - repo: local
+    hooks:
+      - id: pytest-unit
+        name: pytest unit tests
+        entry: bash -c "cd backend && uv run pytest app/tests/unit/ -v --tb=long --cov=app/services --cov-fail-under=80 --cov-report=term-missing"
+        language: system
+        files: ^backend/
+        types: [python]
         pass_filenames: false
         require_serial: true
 

@@ -62,11 +62,9 @@ function PermissionToggle({
 function AdminRow({
   admin,
   schoolId,
-  isOnly,
 }: {
   admin: SchoolAdmin;
   schoolId: string;
-  isOnly: boolean;
 }) {
   const updatePermissions = useUpdateAdminPermissions(schoolId);
 
@@ -106,26 +104,18 @@ function AdminRow({
       </div>
 
       <div className="flex items-center gap-6 flex-shrink-0 ml-4">
-        {isOnly ? (
-          <p className="text-xs text-role-admin-muted italic">
-            Primary admin — full access
-          </p>
-        ) : (
-          <>
-            <PermissionToggle
-              label="Billing"
-              enabled={billingEnabled}
-              loading={updatePermissions.isPending}
-              onChange={(next) => toggle("billing", next)}
-            />
-            <PermissionToggle
-              label="User mgmt"
-              enabled={userMgmtEnabled}
-              loading={updatePermissions.isPending}
-              onChange={(next) => toggle("user_management", next)}
-            />
-          </>
-        )}
+        <PermissionToggle
+          label="Billing"
+          enabled={billingEnabled}
+          loading={updatePermissions.isPending}
+          onChange={(next) => toggle("billing", next)}
+        />
+        <PermissionToggle
+          label="User mgmt"
+          enabled={userMgmtEnabled}
+          loading={updatePermissions.isPending}
+          onChange={(next) => toggle("user_management", next)}
+        />
       </div>
     </div>
   );
@@ -179,19 +169,8 @@ export function SchoolAdminsPanel({
           </div>
         ) : (
           <div>
-            {admins.length > 1 && (
-              <p className="text-xs text-role-admin-muted mb-3">
-                Toggle permissions for co-admins. The first admin always has
-                full access.
-              </p>
-            )}
-            {admins.map((admin, idx) => (
-              <AdminRow
-                key={admin.id}
-                admin={admin}
-                schoolId={schoolId}
-                isOnly={admins.length === 1 || idx === 0}
-              />
+            {admins.map((admin) => (
+              <AdminRow key={admin.id} admin={admin} schoolId={schoolId} />
             ))}
           </div>
         )}

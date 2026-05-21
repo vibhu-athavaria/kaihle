@@ -213,7 +213,37 @@ class TestLogin:
             assert result.access_token == "access_token_123"
             assert result.refresh_token == "raw_refresh_token"
             assert result.token_type == "bearer"
+            assert result.user["id"] == str(sample_user.id)
+            assert result.user["email"] == sample_user.email
+            assert result.user["role"] == sample_user.role
+            assert result.user["school_id"] == str(sample_user.school_id)
+            assert "permissions" in result.user
+            assert result.user["permissions"] == sample_user.permissions
             mock_store_refresh.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_login_when_user_has_permissions_then_permissions_included_in_response(
+        self, auth_service: AuthService, mock_db: MagicMock, sample_user: User
+    ) -> None:
+        """Permissions set on the user model must be present in the login response user dict."""
+        # Arrange
+        sample_user.permissions = {"billing": False, "user_management": False}
+        with (
+            patch("app.services.auth_service.create_access_token") as mock_create_token,
+            patch("app.services.auth_service.generate_refresh_token") as mock_gen_refresh,
+            patch("app.services.auth_service.store_refresh_token"),
+            patch("app.services.auth_service.verify_password") as mock_verify,
+        ):
+            mock_verify.return_value = True
+            mock_create_token.return_value = "access_token_123"
+            mock_gen_refresh.return_value = ("raw_refresh_token", "hashed_refresh")
+            mock_db.scalar = AsyncMock(return_value=sample_user)
+
+            # Act
+            result = await auth_service.login(email=sample_user.email, password="correct_password")
+
+        # Assert — permissions must survive the serialization path
+        assert result.user["permissions"] == {"billing": False, "user_management": False}
 
     @pytest.mark.asyncio
     async def test_login_when_invalid_password_raises_value_error(

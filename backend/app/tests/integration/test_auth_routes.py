@@ -116,12 +116,40 @@ async def test_login_correct_credentials_returns_valid_jwt(client: AsyncClient, 
     assert data["token_type"] == "bearer"
     assert "user" in data
 
+    # Verify user shape includes all fields the frontend stores
+    assert data["user"]["id"] == str(user.id)
+    assert data["user"]["email"] == user.email
+    assert data["user"]["role"] == user.role
+    assert "permissions" in data["user"]
+
     # Verify JWT contains expected claims
     from app.core.security import decode_token
 
     payload = decode_token(data["access_token"])
     assert payload["sub"] == str(user.id)
     assert payload["role"] == user.role
+
+
+@pytest.mark.asyncio
+async def test_login_when_user_has_restricted_permissions_then_permissions_in_response(
+    client: AsyncClient, user: User, db_session: AsyncSession
+) -> None:
+    """Permissions set before login must be present in the login response user dict."""
+    # Arrange — set permissions on the user before login
+    user.permissions = {"billing": False, "user_management": False}
+    db_session.add(user)
+    await db_session.commit()
+
+    # Act
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "correct-password"},
+    )
+
+    # Assert
+    assert response.status_code == 200
+    data = response.json()
+    assert data["user"]["permissions"] == {"billing": False, "user_management": False}
 
 
 @pytest.mark.asyncio

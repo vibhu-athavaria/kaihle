@@ -17,6 +17,10 @@ class UserInvite(BaseModel):
     last_name: str
     subjects: list[str] | None = None  # for TEACHER role only
     student_ids: list[uuid.UUID] | None = None  # for PARENT role only
+    # Optional password — when provided, account is created with this password
+    # (must_change_password=True) and no magic link is sent. Used by Kaihle Admin
+    # when creating school admins directly.
+    password: str | None = Field(default=None, min_length=8, max_length=72)
 
 
 class UserUpdate(BaseModel):
