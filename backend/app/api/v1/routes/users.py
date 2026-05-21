@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import CurrentUser, _check_school_access, require_full_access, require_role
+from app.core.permissions import Permission, has_permission
 from app.models.curriculum import Grade
 from app.models.user import StudentProfile, UserRole
 from app.schemas.user import (
@@ -17,6 +18,7 @@ from app.schemas.user import (
     UserDirectCreate,
     UserInvite,
     UserListResponse,
+    UserPermissionsUpdate,
     UserResponse,
     UserSelfUpdate,
     UserUpdate,
@@ -103,6 +105,11 @@ async def invite_user(
     - **subjects**: Optional list of subjects (only for TEACHER role)
     """
     _check_school_access(school_id, current_user)
+    if not has_permission(current_user, Permission.USER_MANAGEMENT):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to invite users",
+        )
     service = UserService(db)
     try:
         user = await service.invite_user(
@@ -222,8 +229,35 @@ async def deactivate_user(
 ) -> None:
     """Deactivate a user (soft delete)."""
     _check_school_access(school_id, current_user)
+    if not has_permission(current_user, Permission.USER_MANAGEMENT):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to deactivate users",
+        )
     service = UserService(db)
     try:
         await service.deactivate_user(school_id, user_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+
+@router.patch("/{user_id}/permissions", response_model=UserResponse)
+async def update_user_permissions(
+    school_id: uuid.UUID,
+    user_id: uuid.UUID,
+    body: UserPermissionsUpdate,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    """Update a user's permission overrides. Kaihle Admin only.
+
+    Only keys provided in the request body are updated — existing keys not
+    present in the request are left unchanged. Pass an empty dict to clear
+    all overrides (restores all defaults).
+    """
+    service = UserService(db)
+    try:
+        user = await service.update_user_permissions(school_id, user_id, body.permissions)
+        return UserResponse.model_validate(user)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
