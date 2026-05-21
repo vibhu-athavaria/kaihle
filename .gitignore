@@ -44,7 +44,7 @@ backend/data/curriculum/curriculum_review.csv
 
 # .gitignore
 .kilocode/mcp.json
-mcp.json
+*.mcp.json
 .pnpm-store
 
 

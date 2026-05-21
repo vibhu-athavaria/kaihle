@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -38,6 +39,7 @@ export function EditStudentPanel({
   const updateUser = useUpdateUser();
   const { data: grades, isLoading: gradesLoading } = useGrades();
   const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -309,13 +311,27 @@ export function EditStudentPanel({
           >
             Reset Password
           </label>
-          <input
-            id="password"
-            type="password"
-            {...register("password")}
-            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
-            placeholder="Leave blank to keep current password"
-          />
+          <div className="relative">
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              {...register("password")}
+              className="w-full px-4 py-2.5 pr-10 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+              placeholder="Leave blank to keep current password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-muted hover:text-brand-ink transition-colors"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? (
+                <Eye size={18} aria-hidden="true" />
+              ) : (
+                <EyeOff size={18} aria-hidden="true" />
+              )}
+            </button>
+          </div>
           {errors.password && (
             <p className="mt-1 text-xs text-brand-red">
               {errors.password.message}
