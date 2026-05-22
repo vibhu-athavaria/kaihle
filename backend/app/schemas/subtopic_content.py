@@ -128,7 +128,7 @@ class SubtopicContentSummary(SubtopicContentBase):
     created_at: datetime
 
 
-# --- Video review schemas (M3-0-T2a) ---
+# --- Content review schemas (KaihleAdmin review queue) ---
 
 
 class VideoEntry(BaseModel):
@@ -142,8 +142,48 @@ class VideoEntry(BaseModel):
     last_checked_at: str | None = None
 
 
-class SubtopicContentReviewResponse(BaseModel):
-    """Full subtopic content detail for video review."""
+class VideoSection(BaseModel):
+    """Video candidates section for the full content review detail."""
+
+    content_id: uuid.UUID
+    videos: list[VideoEntry]
+    review_status: str
+    pending_count: int
+    approved_count: int
+
+
+class ExplanationSection(BaseModel):
+    """Explanation section for the full content review detail."""
+
+    content_id: uuid.UUID
+    explanation_text: str | None
+    review_status: str
+    reviewed_at: datetime | None = None
+
+
+class QuizQuestionEntry(BaseModel):
+    """A single question entry from the quiz_questions JSONB array."""
+
+    question_id: str
+    question_text: str
+    options: list[str]
+    correct_answer: str
+    explanation: str = ""
+    difficulty_level: int | None = None
+
+
+class QuizSection(BaseModel):
+    """Practice quiz section for the full content review detail."""
+
+    content_id: uuid.UUID
+    questions: list[QuizQuestionEntry]
+    quiz_questions_count: int
+    review_status: str
+    reviewed_at: datetime | None = None
+
+
+class FullSubtopicContentReviewResponse(BaseModel):
+    """Full subtopic detail for content review — all three content sections."""
 
     subtopic_id: uuid.UUID
     subtopic_name: str
@@ -151,21 +191,27 @@ class SubtopicContentReviewResponse(BaseModel):
     grade_level: int
     curriculum_code: str
     learning_objective: str
-    videos: list[VideoEntry]
-    pending_count: int
-    approved_count: int
-    explanation_review_status: str
+    # Each section is None when the seed script hasn't run for that content type yet
+    video: VideoSection | None = None
+    explanation: ExplanationSection | None = None
+    quiz: QuizSection | None = None
 
 
 class ReviewQueueItem(BaseModel):
-    """One subtopic in the review queue list."""
+    """One subtopic row in the review queue list — aggregates all 3 content type statuses."""
 
     subtopic_id: uuid.UUID
     subtopic_name: str
     subject_code: str
     grade_level: int
+    # Video
     pending_video_count: int
     approved_video_count: int
+    video_status: str | None = None  # None = not yet seeded
+    # Explanation
+    explanation_status: str | None = None  # pending | approved | rejected | None
+    # Quiz
+    quiz_status: str | None = None  # pending | approved | rejected | None
 
 
 class ReviewQueueResponse(BaseModel):
@@ -173,7 +219,7 @@ class ReviewQueueResponse(BaseModel):
 
     items: list[ReviewQueueItem]
     total: int
-    pending_total: int  # total videos awaiting review across all subtopics
+    pending_total: int  # total items (across all types) awaiting review
 
 
 class VideoStatusUpdateRequest(BaseModel):
@@ -188,6 +234,26 @@ class ManualVideoAddRequest(BaseModel):
     url: str
     title: str
     channel: str = "manual"
+
+
+class ExplanationUpdateRequest(BaseModel):
+    """Request to update explanation text and/or review status."""
+
+    explanation_text: str = Field(..., min_length=1)
+    review_status: str = Field(..., pattern="^(approved|rejected)$")
+    rejection_reason: str | None = None
+
+
+class QuizUpdateRequest(BaseModel):
+    """Request to update quiz questions and/or review status."""
+
+    questions: list[dict[str, Any]]
+    review_status: str = Field(..., pattern="^(approved|rejected)$")
+    rejection_reason: str | None = None
+
+
+# Keep old alias for backward compat with any existing imports
+SubtopicContentReviewResponse = FullSubtopicContentReviewResponse
 
 
 # --- StudentLessonPack schemas ---

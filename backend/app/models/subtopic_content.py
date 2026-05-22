@@ -21,6 +21,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -135,6 +136,7 @@ class SubtopicContent(Base, UUIDMixin, TimestampMixin):
     subtopic = relationship("Subtopic", viewonly=True)
 
     __table_args__ = (
+        UniqueConstraint("subtopic_id", "content_type", name="uq_subtopic_content_type"),
         Index("idx_subtopic_content_subtopic", "subtopic_id"),
         Index("idx_subtopic_content_explanation_status", "review_status"),
     )

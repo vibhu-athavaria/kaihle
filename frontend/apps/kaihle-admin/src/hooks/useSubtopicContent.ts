@@ -12,17 +12,48 @@ export interface VideoEntry {
   last_checked_at: string | null;
 }
 
-export interface SubtopicContentReviewResponse {
+export interface VideoSection {
+  content_id: string;
+  videos: VideoEntry[];
+  review_status: string;
+  pending_count: number;
+  approved_count: number;
+}
+
+export interface ExplanationSection {
+  content_id: string;
+  explanation_text: string | null;
+  review_status: string;
+  reviewed_at: string | null;
+}
+
+export interface QuizQuestionEntry {
+  question_id: string;
+  question_text: string;
+  options: string[];
+  correct_answer: string;
+  explanation: string;
+  difficulty_level: number | null;
+}
+
+export interface QuizSection {
+  content_id: string;
+  questions: QuizQuestionEntry[];
+  quiz_questions_count: number;
+  review_status: string;
+  reviewed_at: string | null;
+}
+
+export interface FullSubtopicContentReviewResponse {
   subtopic_id: string;
   subtopic_name: string;
   subject_code: string;
   grade_level: number;
   curriculum_code: string;
   learning_objective: string;
-  videos: VideoEntry[];
-  pending_count: number;
-  approved_count: number;
-  explanation_review_status: string;
+  video: VideoSection | null;
+  explanation: ExplanationSection | null;
+  quiz: QuizSection | null;
 }
 
 export interface ReviewQueueItem {
@@ -32,6 +63,9 @@ export interface ReviewQueueItem {
   grade_level: number;
   pending_video_count: number;
   approved_video_count: number;
+  video_status: string | null;
+  explanation_status: string | null;
+  quiz_status: string | null;
 }
 
 export interface ReviewQueueResponse {
@@ -50,6 +84,23 @@ export interface ManualVideoAddRequest {
   channel?: string;
 }
 
+export interface ExplanationUpdateRequest {
+  explanation_text: string;
+  review_status: "approved" | "rejected";
+  rejection_reason?: string;
+}
+
+export interface QuizUpdateRequest {
+  questions: QuizQuestionEntry[];
+  review_status: "approved" | "rejected";
+  rejection_reason?: string;
+}
+
+// ── Query keys ─────────────────────────────────────────────────────────────
+
+const QUEUE_KEY = ["subtopic-content", "review-queue"] as const;
+const detailKey = (id: string) => ["subtopic-content", id] as const;
+
 // ── Hooks ──────────────────────────────────────────────────────────────────
 
 export function useReviewQueue(params?: {
@@ -62,11 +113,7 @@ export function useReviewQueue(params?: {
   const { subject, grade, status, page = 1, page_size = 20 } = params ?? {};
 
   return useQuery({
-    queryKey: [
-      "subtopic-content",
-      "review-queue",
-      { subject, grade, status, page, page_size },
-    ],
+    queryKey: [...QUEUE_KEY, { subject, grade, status, page, page_size }],
     queryFn: async () => {
       const searchParams = new URLSearchParams();
       if (subject) searchParams.set("subject", subject);
@@ -85,9 +132,9 @@ export function useReviewQueue(params?: {
 
 export function useSubtopicContent(subtopicId: string) {
   return useQuery({
-    queryKey: ["subtopic-content", subtopicId],
+    queryKey: detailKey(subtopicId),
     queryFn: async () => {
-      const response = await apiClient.get<SubtopicContentReviewResponse>(
+      const response = await apiClient.get<FullSubtopicContentReviewResponse>(
         `/api/v1/subtopic-content/${subtopicId}`,
       );
       return response.data;
@@ -109,17 +156,15 @@ export function useUpdateVideoStatus() {
       videoIndex: number;
       status: "approved" | "rejected";
     }) => {
-      const response = await apiClient.patch<SubtopicContentReviewResponse>(
+      const response = await apiClient.patch<FullSubtopicContentReviewResponse>(
         `/api/v1/subtopic-content/${subtopicId}/videos/${videoIndex}`,
         { status } as VideoStatusUpdateRequest,
       );
       return response.data;
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["subtopic-content", data.subtopic_id], data);
-      queryClient.invalidateQueries({
-        queryKey: ["subtopic-content", "review-queue"],
-      });
+      queryClient.setQueryData(detailKey(data.subtopic_id), data);
+      queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
     },
   });
 }
@@ -135,17 +180,97 @@ export function useAddManualVideo() {
       subtopicId: string;
       payload: ManualVideoAddRequest;
     }) => {
-      const response = await apiClient.post<SubtopicContentReviewResponse>(
+      const response = await apiClient.post<FullSubtopicContentReviewResponse>(
         `/api/v1/subtopic-content/${subtopicId}/videos`,
         payload,
       );
       return response.data;
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["subtopic-content", data.subtopic_id], data);
-      queryClient.invalidateQueries({
-        queryKey: ["subtopic-content", "review-queue"],
-      });
+      queryClient.setQueryData(detailKey(data.subtopic_id), data);
+      queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
+    },
+  });
+}
+
+export function useRefreshVideoCandidates() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (subtopicId: string) => {
+      const response = await apiClient.post<FullSubtopicContentReviewResponse>(
+        `/api/v1/subtopic-content/${subtopicId}/videos/refresh`,
+      );
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(detailKey(data.subtopic_id), data);
+      queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
+    },
+  });
+}
+
+export function useUpdateExplanation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      subtopicId,
+      payload,
+    }: {
+      subtopicId: string;
+      payload: ExplanationUpdateRequest;
+    }) => {
+      const response = await apiClient.patch<FullSubtopicContentReviewResponse>(
+        `/api/v1/subtopic-content/${subtopicId}/explanation`,
+        payload,
+      );
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(detailKey(data.subtopic_id), data);
+      queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
+    },
+  });
+}
+
+export function useGenerateQuiz() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (subtopicId: string) => {
+      const response = await apiClient.post<FullSubtopicContentReviewResponse>(
+        `/api/v1/subtopic-content/${subtopicId}/quiz/generate`,
+      );
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(detailKey(data.subtopic_id), data);
+      queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
+    },
+  });
+}
+
+export function useUpdateQuiz() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      subtopicId,
+      payload,
+    }: {
+      subtopicId: string;
+      payload: QuizUpdateRequest;
+    }) => {
+      const response = await apiClient.patch<FullSubtopicContentReviewResponse>(
+        `/api/v1/subtopic-content/${subtopicId}/quiz`,
+        payload,
+      );
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(detailKey(data.subtopic_id), data);
+      queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
     },
   });
 }

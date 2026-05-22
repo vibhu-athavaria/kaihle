@@ -1,25 +1,57 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useReviewQueue } from "../../hooks/useSubtopicContent";
+import {
+  useReviewQueue,
+  type ReviewQueueItem,
+} from "../../hooks/useSubtopicContent";
 import { AdminLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
-import { PlaySquare } from "lucide-react";
+import { BookOpen } from "lucide-react";
 
-// ── Status helpers ──────────────────────────────────────────────────────────
+// ── Status pill ─────────────────────────────────────────────────────────────
 
-type QueueStatus = "all" | "pending" | "complete";
-
-function rowStatus(item: {
-  pending_video_count: number;
-  approved_video_count: number;
-}): { label: string; cls: string } {
-  if (item.approved_video_count > 0 && item.pending_video_count === 0) {
-    return { label: "✓ Done", cls: "text-brand-primary" };
+function StatusPill({ status }: { status: string | null }) {
+  if (!status) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-role-admin-muted">
+        — not seeded
+      </span>
+    );
   }
-  if (item.pending_video_count > 0 && item.approved_video_count === 0) {
-    return { label: "● Pending", cls: "text-brand-amber" };
-  }
-  return { label: "● Partial", cls: "text-brand-gold" };
+  const map: Record<string, string> = {
+    pending: "bg-amber-50 text-amber-700 border border-amber-200",
+    approved: "bg-green-50 text-brand-primary border border-green-200",
+    rejected: "bg-red-50 text-red-700 border border-red-200",
+  };
+  const label: Record<string, string> = {
+    pending: "Pending",
+    approved: "Approved",
+    rejected: "Rejected",
+  };
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? "bg-gray-100 text-gray-600"}`}
+    >
+      {label[status] ?? status}
+    </span>
+  );
+}
+
+// ── Overall row completion badge ────────────────────────────────────────────
+
+function rowBadge(item: ReviewQueueItem): { label: string; cls: string } {
+  const statuses = [
+    item.video_status,
+    item.explanation_status,
+    item.quiz_status,
+  ].filter(Boolean);
+  if (statuses.length === 0)
+    return { label: "Empty", cls: "text-role-admin-muted" };
+  if (statuses.every((s) => s === "approved"))
+    return { label: "✓ Complete", cls: "text-brand-primary font-semibold" };
+  if (statuses.some((s) => s === "pending"))
+    return { label: "● Needs review", cls: "text-amber-600" };
+  return { label: "⊘ Rejected", cls: "text-red-600" };
 }
 
 // ── Skeleton row ────────────────────────────────────────────────────────────
@@ -27,34 +59,24 @@ function rowStatus(item: {
 function SkeletonRow() {
   return (
     <tr className="animate-pulse">
-      <td className="px-4 py-3">
-        <div className="h-4 bg-gray-200 rounded w-40" />
-      </td>
-      <td className="px-4 py-3">
-        <div className="h-4 bg-gray-200 rounded w-16" />
-      </td>
-      <td className="px-4 py-3">
-        <div className="h-4 bg-gray-200 rounded w-12" />
-      </td>
-      <td className="px-4 py-3">
-        <div className="h-4 bg-gray-200 rounded w-20" />
-      </td>
-      <td className="px-4 py-3">
-        <div className="h-4 bg-gray-200 rounded w-24" />
-      </td>
+      {[48, 16, 12, 24, 24, 24, 24].map((w, i) => (
+        <td key={i} className="px-4 py-3">
+          <div className={`h-4 bg-gray-200 rounded w-${w}`} />
+        </td>
+      ))}
     </tr>
   );
 }
 
 // ── Main page ───────────────────────────────────────────────────────────────
 
-export function VideoReviewQueue() {
+export function ContentReviewQueue() {
   const { logout } = useAuth();
   const navigate = useNavigate();
 
   const [subject, setSubject] = useState<string>("");
   const [grade, setGrade] = useState<string>("");
-  const [status, setStatus] = useState<QueueStatus>("all");
+  const [status, setStatus] = useState<"all" | "pending" | "complete">("all");
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError } = useReviewQueue({
@@ -70,27 +92,23 @@ export function VideoReviewQueue() {
   const pendingTotal = data?.pending_total ?? 0;
 
   const handleRowClick = (subtopicId: string) => {
-    navigate(`/kaihle-admin/content/videos/${subtopicId}`);
+    navigate(`/kaihle-admin/content/review/${subtopicId}`);
   };
 
   return (
-    <AdminLayout pageTitle="Video Library Review" onLogout={logout}>
+    <AdminLayout pageTitle="Subtopic Content Review" onLogout={logout}>
       <div className="p-6">
         {/* Page header */}
         <div className="mb-6">
           <h1 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-            <PlaySquare className="w-4 h-4 text-brand-primary" />
-            Video Library Review
+            <BookOpen className="w-4 h-4 text-brand-primary" />
+            Subtopic Content Review
           </h1>
-          {pendingTotal > 0 ? (
-            <p className="text-xs text-role-admin-muted mt-1">
-              {pendingTotal} videos pending review across {total} subtopics
-            </p>
-          ) : (
-            <p className="text-xs text-role-admin-muted mt-1">
-              {total} subtopics
-            </p>
-          )}
+          <p className="text-xs text-role-admin-muted mt-1">
+            {pendingTotal > 0
+              ? `${pendingTotal} items pending review across ${total} subtopics`
+              : `${total} subtopics seeded`}
+          </p>
         </div>
 
         {/* Filter bar */}
@@ -166,7 +184,7 @@ export function VideoReviewQueue() {
                   {s === "all"
                     ? "All"
                     : s === "pending"
-                      ? "Pending"
+                      ? "Needs Review"
                       : "Complete"}
                 </button>
               ))}
@@ -189,10 +207,16 @@ export function VideoReviewQueue() {
                   Grade
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Videos
+                  Video
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  Status
+                  Explanation
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Quiz
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Overall
                 </th>
               </tr>
             </thead>
@@ -202,7 +226,7 @@ export function VideoReviewQueue() {
               ) : isError ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={7}
                     className="px-4 py-8 text-center text-sm text-red-600"
                   >
                     Failed to load review queue. Please try again.
@@ -211,22 +235,23 @@ export function VideoReviewQueue() {
               ) : items.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={7}
                     className="px-4 py-8 text-center text-sm text-gray-500"
                   >
-                    No subtopics found matching your filters.
+                    No subtopics found. Run the seed script first, or adjust
+                    your filters.
                   </td>
                 </tr>
               ) : (
                 items.map((item) => {
-                  const statusInfo = rowStatus(item);
+                  const badge = rowBadge(item);
                   return (
                     <tr
-                      key={item.subtopic_id}
-                      onClick={() => handleRowClick(item.subtopic_id)}
+                      key={String(item.subtopic_id)}
+                      onClick={() => handleRowClick(String(item.subtopic_id))}
                       className="hover:bg-gray-50 cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                      <td className="px-4 py-3 text-sm text-gray-900 font-medium max-w-[200px] truncate">
                         {item.subtopic_name}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">
@@ -235,14 +260,23 @@ export function VideoReviewQueue() {
                       <td className="px-4 py-3 text-sm text-gray-600">
                         Gr.{item.grade_level}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {item.approved_video_count}/
-                        {item.approved_video_count + item.pending_video_count} ✓
+                      <td className="px-4 py-3">
+                        <StatusPill status={item.video_status} />
+                        {item.video_status === "pending" &&
+                          item.pending_video_count > 0 && (
+                            <span className="ml-1.5 text-xs text-role-admin-muted">
+                              {item.pending_video_count} pending
+                            </span>
+                          )}
                       </td>
-                      <td
-                        className={`px-4 py-3 text-sm font-medium ${statusInfo.cls}`}
-                      >
-                        {statusInfo.label}
+                      <td className="px-4 py-3">
+                        <StatusPill status={item.explanation_status} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusPill status={item.quiz_status} />
+                      </td>
+                      <td className={`px-4 py-3 text-xs ${badge.cls}`}>
+                        {badge.label}
                       </td>
                     </tr>
                   );

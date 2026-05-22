@@ -131,8 +131,8 @@ const adminSections: NavSection[] = [
         icon: FileText,
       },
       {
-        label: "Video Library",
-        href: "/kaihle-admin/content/videos",
+        label: "Content Review",
+        href: "/kaihle-admin/content/review",
         icon: Video,
       },
     ],

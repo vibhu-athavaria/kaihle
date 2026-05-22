@@ -1,4 +1,4 @@
-"""Integration tests for SubtopicContent API routes (M3-0-T2a).
+"""Integration tests for SubtopicContent API routes.
 
 Tests verify real service calls through HTTP endpoints using a live test DB.
 Naming convention: test_<what>_when_<condition>_then_<expected>
@@ -6,7 +6,11 @@ Naming convention: test_<what>_when_<condition>_then_<expected>
 Run with: pytest backend/app/tests/integration/test_subtopic_content_routes.py -v
 """
 
+from __future__ import annotations
+
+import json
 import uuid
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -40,10 +44,8 @@ def make_auth_header(user: User) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _create_video_content_setup(
-    db: AsyncSession,
-) -> tuple[SubtopicContent, Subject, Grade, Curriculum, CurriculumTopic, Subtopic]:
-    """Create a minimal curriculum + subtopic with video content for route tests."""
+async def _create_curriculum_tree(db: AsyncSession) -> tuple[Subject, Grade, Curriculum, CurriculumTopic, Subtopic]:
+    """Create a minimal curriculum + subtopic."""
     subject = Subject(
         id=uuid.uuid4(), name=f"Math-{uuid.uuid4().hex[:4]}", code=f"M{uuid.uuid4().hex[:4]}", is_active=True
     )
@@ -76,6 +78,15 @@ async def _create_video_content_setup(
     db.add(st)
     await db.flush()
 
+    return subject, grade, curriculum, ct, st
+
+
+async def _create_video_content_setup(
+    db: AsyncSession,
+) -> tuple[SubtopicContent, Subject, Grade, Curriculum, CurriculumTopic, Subtopic]:
+    """Create a subtopic with video content for route tests."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db)
+
     content = SubtopicContent(
         id=uuid.uuid4(),
         subtopic_id=st.id,
@@ -106,6 +117,59 @@ async def _create_video_content_setup(
     return content, subject, grade, curriculum, ct, st
 
 
+async def _create_explanation_content(db: AsyncSession, subtopic_id: uuid.UUID) -> SubtopicContent:
+    """Create an explanation content row for a subtopic."""
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=subtopic_id,
+        content_type="explanation",
+        explanation_text="Linear equations are equations with one variable. To solve, isolate the variable.",
+        review_status="pending",
+    )
+    db.add(content)
+    await db.commit()
+    return content
+
+
+async def _create_quiz_content(db: AsyncSession, subtopic_id: uuid.UUID) -> SubtopicContent:
+    """Create a practice quiz content row for a subtopic."""
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=subtopic_id,
+        content_type="practice",
+        quiz_questions=[
+            {
+                "question_id": str(uuid.uuid4()),
+                "question_text": "What is 2x = 8?",
+                "options": ["A: 2", "B: 4", "C: 6", "D: 8"],
+                "correct_answer": "B: 4",
+                "explanation": "Divide both sides by 2.",
+                "difficulty_level": 2,
+            }
+        ],
+        quiz_questions_count=1,
+        review_status="pending",
+    )
+    db.add(content)
+    await db.commit()
+    return content
+
+
+async def _make_admin(db: AsyncSession) -> User:
+    admin = User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Kaihle",
+        last_name="Admin",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db.add(admin)
+    await db.commit()
+    return admin
+
+
 # ---------------------------------------------------------------------------
 # Tests: GET /subtopic-content/review-queue
 # ---------------------------------------------------------------------------
@@ -116,21 +180,9 @@ async def test_review_queue_when_kaihle_admin_then_returns_queue(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """GET /review-queue returns paginated list of subtopics with video content."""
-    content, subject, grade, curriculum, ct, st = await _create_video_content_setup(db_session)
-
-    # Create a KAIHLE_ADMIN user for auth
-    admin = User(
-        id=uuid.uuid4(),
-        school_id=None,
-        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
-        first_name="Kaihle",
-        last_name="Admin",
-        role=UserRole.KAIHLE_ADMIN,
-        is_active=True,
-    )
-    db_session.add(admin)
-    await db_session.commit()
+    """GET /review-queue returns paginated list of subtopics with content."""
+    content, subject, grade, curriculum, ct, st2 = await _create_video_content_setup(db_session)
+    admin = await _make_admin(db_session)
 
     response = await client.get(
         "/api/v1/subtopic-content/review-queue",
@@ -143,6 +195,12 @@ async def test_review_queue_when_kaihle_admin_then_returns_queue(
     assert "pending_total" in data
     assert data["total"] >= 1
 
+    item = next((i for i in data["items"] if i["subtopic_id"] == str(st2.id)), None)
+    assert item is not None
+    assert "video_status" in item
+    assert "explanation_status" in item
+    assert "quiz_status" in item
+
 
 @pytest.mark.asyncio
 async def test_review_queue_when_teacher_role_then_403(
@@ -151,7 +209,6 @@ async def test_review_queue_when_teacher_role_then_403(
     school: School,
 ) -> None:
     """GET /review-queue returns 403 for non-KAIHLE_ADMIN roles."""
-    # Create a teacher user
     teacher = User(
         id=uuid.uuid4(),
         school_id=school.id,
@@ -190,20 +247,9 @@ async def test_get_subtopic_content_when_valid_id_then_returns_detail(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """GET /{subtopic_id} returns full video content detail."""
+    """GET /{subtopic_id} returns full content detail with video, explanation, quiz sections."""
     content, subject, grade, curriculum, ct, st = await _create_video_content_setup(db_session)
-
-    admin = User(
-        id=uuid.uuid4(),
-        school_id=None,
-        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
-        first_name="Kaihle",
-        last_name="Admin",
-        role=UserRole.KAIHLE_ADMIN,
-        is_active=True,
-    )
-    db_session.add(admin)
-    await db_session.commit()
+    admin = await _make_admin(db_session)
 
     response = await client.get(
         f"/api/v1/subtopic-content/{st.id}",
@@ -215,7 +261,35 @@ async def test_get_subtopic_content_when_valid_id_then_returns_detail(
     assert data["subtopic_name"] == "Linear Equations"
     assert data["subject_code"] == subject.code
     assert data["grade_level"] == grade.level
-    assert len(data["videos"]) == 2
+    # New nested shape: video section contains videos list
+    assert data["video"] is not None
+    assert len(data["video"]["videos"]) == 2
+    assert data["explanation"] is None
+    assert data["quiz"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_subtopic_content_when_all_sections_present_then_returns_all(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """GET /{subtopic_id} returns all three content sections when all exist."""
+    _, subject, grade, curriculum, ct, st = await _create_video_content_setup(db_session)
+    await _create_explanation_content(db_session, st.id)
+    await _create_quiz_content(db_session, st.id)
+    admin = await _make_admin(db_session)
+
+    response = await client.get(
+        f"/api/v1/subtopic-content/{st.id}",
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["video"] is not None
+    assert data["explanation"] is not None
+    assert data["explanation"]["explanation_text"] is not None
+    assert data["quiz"] is not None
+    assert len(data["quiz"]["questions"]) == 1
 
 
 @pytest.mark.asyncio
@@ -224,18 +298,7 @@ async def test_get_subtopic_content_when_invalid_id_then_404(
     db_session: AsyncSession,
 ) -> None:
     """GET /{subtopic_id} returns 404 for non-existent subtopic."""
-    admin = User(
-        id=uuid.uuid4(),
-        school_id=None,
-        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
-        first_name="Kaihle",
-        last_name="Admin",
-        role=UserRole.KAIHLE_ADMIN,
-        is_active=True,
-    )
-    db_session.add(admin)
-    await db_session.commit()
-
+    admin = await _make_admin(db_session)
     fake_id = uuid.uuid4()
     response = await client.get(
         f"/api/v1/subtopic-content/{fake_id}",
@@ -263,9 +326,8 @@ async def test_get_subtopic_content_when_teacher_then_403(
     db_session.add(teacher)
     await db_session.commit()
 
-    fake_id = uuid.uuid4()
     response = await client.get(
-        f"/api/v1/subtopic-content/{fake_id}",
+        f"/api/v1/subtopic-content/{uuid.uuid4()}",
         headers=make_auth_header(teacher),
     )
     assert response.status_code == 403
@@ -281,20 +343,9 @@ async def test_update_video_status_when_valid_index_then_status_updated(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """PATCH updates video status and returns updated content."""
+    """PATCH /videos/0 approves a video and returns updated nested response."""
     content, subject, grade, curriculum, ct, st = await _create_video_content_setup(db_session)
-
-    admin = User(
-        id=uuid.uuid4(),
-        school_id=None,
-        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
-        first_name="Kaihle",
-        last_name="Admin",
-        role=UserRole.KAIHLE_ADMIN,
-        is_active=True,
-    )
-    db_session.add(admin)
-    await db_session.commit()
+    admin = await _make_admin(db_session)
 
     response = await client.patch(
         f"/api/v1/subtopic-content/{st.id}/videos/0",
@@ -303,7 +354,26 @@ async def test_update_video_status_when_valid_index_then_status_updated(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["videos"][0]["status"] == "approved"
+    assert data["video"]["videos"][0]["status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_update_video_status_when_rejected_then_status_updated(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """PATCH /videos/1 rejects a video candidate."""
+    content, subject, grade, curriculum, ct, st = await _create_video_content_setup(db_session)
+    admin = await _make_admin(db_session)
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/videos/1",
+        json={"status": "rejected"},
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["video"]["videos"][1]["status"] == "rejected"
 
 
 @pytest.mark.asyncio
@@ -311,20 +381,9 @@ async def test_update_video_status_when_invalid_index_then_404(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """PATCH with invalid video index returns 404."""
+    """PATCH with out-of-bounds video index returns 404."""
     content, subject, grade, curriculum, ct, st = await _create_video_content_setup(db_session)
-
-    admin = User(
-        id=uuid.uuid4(),
-        school_id=None,
-        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
-        first_name="Kaihle",
-        last_name="Admin",
-        role=UserRole.KAIHLE_ADMIN,
-        is_active=True,
-    )
-    db_session.add(admin)
-    await db_session.commit()
+    admin = await _make_admin(db_session)
 
     response = await client.patch(
         f"/api/v1/subtopic-content/{st.id}/videos/999",
@@ -353,9 +412,8 @@ async def test_update_video_status_when_teacher_then_403(
     db_session.add(teacher)
     await db_session.commit()
 
-    fake_id = uuid.uuid4()
     response = await client.patch(
-        f"/api/v1/subtopic-content/{fake_id}/videos/0",
+        f"/api/v1/subtopic-content/{uuid.uuid4()}/videos/0",
         json={"status": "approved"},
         headers=make_auth_header(teacher),
     )
@@ -372,20 +430,9 @@ async def test_add_manual_video_when_valid_then_appended_to_array(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """POST adds a new manual video entry to the subtopic's video array."""
+    """POST /videos appends a new manual video and returns updated nested response."""
     content, subject, grade, curriculum, ct, st = await _create_video_content_setup(db_session)
-
-    admin = User(
-        id=uuid.uuid4(),
-        school_id=None,
-        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
-        first_name="Kaihle",
-        last_name="Admin",
-        role=UserRole.KAIHLE_ADMIN,
-        is_active=True,
-    )
-    db_session.add(admin)
-    await db_session.commit()
+    admin = await _make_admin(db_session)
 
     response = await client.post(
         f"/api/v1/subtopic-content/{st.id}/videos",
@@ -398,9 +445,10 @@ async def test_add_manual_video_when_valid_then_appended_to_array(
     )
     assert response.status_code == 200
     data = response.json()
-    assert len(data["videos"]) == 3
-    assert data["videos"][2]["url"] == "https://youtube.com/watch?v=newvideo"
-    assert data["videos"][2]["status"] == "pending"
+    videos = data["video"]["videos"]
+    assert len(videos) == 3
+    assert videos[2]["url"] == "https://youtube.com/watch?v=newvideo"
+    assert videos[2]["status"] == "pending"
 
 
 @pytest.mark.asyncio
@@ -409,7 +457,7 @@ async def test_add_manual_video_when_teacher_then_403(
     db_session: AsyncSession,
     school: School,
 ) -> None:
-    """POST returns 403 for non-KAIHLE_ADMIN roles."""
+    """POST /videos returns 403 for non-KAIHLE_ADMIN roles."""
     teacher = User(
         id=uuid.uuid4(),
         school_id=school.id,
@@ -422,14 +470,9 @@ async def test_add_manual_video_when_teacher_then_403(
     db_session.add(teacher)
     await db_session.commit()
 
-    fake_id = uuid.uuid4()
     response = await client.post(
-        f"/api/v1/subtopic-content/{fake_id}/videos",
-        json={
-            "url": "https://youtube.com/watch?v=newvideo",
-            "title": "New Video Title",
-            "channel": "New Channel",
-        },
+        f"/api/v1/subtopic-content/{uuid.uuid4()}/videos",
+        json={"url": "https://youtube.com/watch?v=newvideo", "title": "New Video Title"},
         headers=make_auth_header(teacher),
     )
     assert response.status_code == 403
@@ -440,23 +483,360 @@ async def test_add_manual_video_when_no_body_then_422(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """POST without request body returns 422."""
+    """POST /videos without request body returns 422."""
     content, subject, grade, curriculum, ct, st = await _create_video_content_setup(db_session)
-
-    admin = User(
-        id=uuid.uuid4(),
-        school_id=None,
-        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
-        first_name="Kaihle",
-        last_name="Admin",
-        role=UserRole.KAIHLE_ADMIN,
-        is_active=True,
-    )
-    db_session.add(admin)
-    await db_session.commit()
+    admin = await _make_admin(db_session)
 
     response = await client.post(
         f"/api/v1/subtopic-content/{st.id}/videos",
         headers=make_auth_header(admin),
     )
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Tests: PATCH /subtopic-content/{subtopic_id}/explanation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_explanation_when_approved_then_status_saved(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """PATCH /explanation approves the explanation text and persists it."""
+    _, _, _, _, st = await _create_curriculum_tree(db_session)
+    await _create_explanation_content(db_session, st.id)
+    admin = await _make_admin(db_session)
+
+    new_text = "A linear equation has the form ax + b = 0. Solve by isolating x on one side."
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/explanation",
+        json={"explanation_text": new_text, "review_status": "approved"},
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["explanation"]["explanation_text"] == new_text
+    assert data["explanation"]["review_status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_update_explanation_when_rejected_then_status_saved(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """PATCH /explanation rejects with a reason and sets status to rejected."""
+    _, _, _, _, st = await _create_curriculum_tree(db_session)
+    await _create_explanation_content(db_session, st.id)
+    admin = await _make_admin(db_session)
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/explanation",
+        json={
+            "explanation_text": "Some explanation text here for testing purposes.",
+            "review_status": "rejected",
+            "rejection_reason": "Too brief — needs more worked examples.",
+        },
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["explanation"]["review_status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_update_explanation_when_no_content_row_then_404(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """PATCH /explanation returns 404 when no explanation row exists."""
+    _, _, _, _, st = await _create_curriculum_tree(db_session)
+    admin = await _make_admin(db_session)
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/explanation",
+        json={"explanation_text": "Some text for testing.", "review_status": "approved"},
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_explanation_when_teacher_then_403(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """PATCH /explanation returns 403 for non-KAIHLE_ADMIN roles."""
+    teacher = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"teacher-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Test",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(teacher)
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{uuid.uuid4()}/explanation",
+        json={"explanation_text": "Some text here.", "review_status": "approved"},
+        headers=make_auth_header(teacher),
+    )
+    assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Tests: PATCH /subtopic-content/{subtopic_id}/quiz
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_quiz_when_approved_then_questions_and_status_saved(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """PATCH /quiz updates questions and sets review_status to approved."""
+    _, _, _, _, st = await _create_curriculum_tree(db_session)
+    await _create_quiz_content(db_session, st.id)
+    admin = await _make_admin(db_session)
+
+    updated_questions = [
+        {
+            "question_id": str(uuid.uuid4()),
+            "question_text": "What value of x satisfies 2x = 8?",
+            "options": ["A: 2", "B: 4", "C: 6", "D: 8"],
+            "correct_answer": "B: 4",
+            "explanation": "Divide both sides of the equation by 2 to get x = 4.",
+            "difficulty_level": 2,
+        }
+    ]
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/quiz",
+        json={"questions": updated_questions, "review_status": "approved"},
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["quiz"]["review_status"] == "approved"
+    assert data["quiz"]["questions"][0]["question_text"] == "What value of x satisfies 2x = 8?"
+
+
+@pytest.mark.asyncio
+async def test_update_quiz_when_rejected_then_status_saved(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """PATCH /quiz rejects the quiz with a reason."""
+    _, _, _, _, st = await _create_curriculum_tree(db_session)
+    await _create_quiz_content(db_session, st.id)
+    admin = await _make_admin(db_session)
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/quiz",
+        json={
+            "questions": [
+                {
+                    "question_id": str(uuid.uuid4()),
+                    "question_text": "What is 2x = 8?",
+                    "options": ["A: 2", "B: 4", "C: 6", "D: 8"],
+                    "correct_answer": "B: 4",
+                    "explanation": "Divide both sides by 2.",
+                    "difficulty_level": 2,
+                }
+            ],
+            "review_status": "rejected",
+            "rejection_reason": "Questions are too trivial for Grade 8.",
+        },
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["quiz"]["review_status"] == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_update_quiz_when_no_content_row_then_404(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """PATCH /quiz returns 404 when no practice content row exists."""
+    _, _, _, _, st = await _create_curriculum_tree(db_session)
+    admin = await _make_admin(db_session)
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/quiz",
+        json={
+            "questions": [
+                {
+                    "question_id": str(uuid.uuid4()),
+                    "question_text": "Test question text here",
+                    "options": ["A: 1", "B: 2", "C: 3", "D: 4"],
+                    "correct_answer": "A: 1",
+                    "explanation": "Explanation here.",
+                    "difficulty_level": 1,
+                }
+            ],
+            "review_status": "approved",
+        },
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_quiz_when_teacher_then_403(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """PATCH /quiz returns 403 for non-KAIHLE_ADMIN roles."""
+    teacher = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"teacher-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Test",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(teacher)
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{uuid.uuid4()}/quiz",
+        json={"questions": [], "review_status": "approved"},
+        headers=make_auth_header(teacher),
+    )
+    assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Tests: POST /subtopic-content/{subtopic_id}/quiz/generate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_quiz_when_llm_succeeds_then_creates_practice_row(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """POST /quiz/generate creates a practice row with LLM-generated questions."""
+    _, _, _, _, st = await _create_curriculum_tree(db_session)
+    admin = await _make_admin(db_session)
+
+    mock_llm_response = json.dumps(
+        {
+            "questions": [
+                {
+                    "question_id": str(uuid.uuid4()),
+                    "question_text": "What is x in 2x + 4 = 10?",
+                    "options": ["A: 1", "B: 2", "C: 3", "D: 4"],
+                    "correct_answer": "C: 3",
+                    "explanation": "Subtract 4 from both sides: 2x = 6. Divide by 2: x = 3.",
+                    "difficulty_level": 3,
+                }
+            ]
+        }
+    )
+
+    with patch("app.ai.providers.router.complete", new_callable=AsyncMock) as mock_complete:
+        mock_complete.return_value = mock_llm_response
+        response = await client.post(
+            f"/api/v1/subtopic-content/{st.id}/quiz/generate",
+            headers=make_auth_header(admin),
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["quiz"] is not None
+    assert len(data["quiz"]["questions"]) == 1
+    assert data["quiz"]["review_status"] == "pending"
+    assert data["quiz"]["questions"][0]["question_text"] == "What is x in 2x + 4 = 10?"
+
+
+@pytest.mark.asyncio
+async def test_generate_quiz_when_quiz_exists_then_overwrites_questions(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """POST /quiz/generate overwrites existing quiz questions with new LLM output."""
+    _, _, _, _, st = await _create_curriculum_tree(db_session)
+    await _create_quiz_content(db_session, st.id)
+    admin = await _make_admin(db_session)
+
+    new_question_text = "Solve: 3x - 6 = 9"
+    mock_llm_response = json.dumps(
+        {
+            "questions": [
+                {
+                    "question_id": str(uuid.uuid4()),
+                    "question_text": new_question_text,
+                    "options": ["A: 3", "B: 4", "C: 5", "D: 6"],
+                    "correct_answer": "C: 5",
+                    "explanation": "Add 6 to both sides: 3x = 15. Divide by 3: x = 5.",
+                    "difficulty_level": 3,
+                }
+            ]
+        }
+    )
+
+    with patch("app.ai.providers.router.complete", new_callable=AsyncMock) as mock_complete:
+        mock_complete.return_value = mock_llm_response
+        response = await client.post(
+            f"/api/v1/subtopic-content/{st.id}/quiz/generate",
+            headers=make_auth_header(admin),
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["quiz"]["questions"][0]["question_text"] == new_question_text
+    assert data["quiz"]["review_status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_generate_quiz_when_llm_fails_then_502(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """POST /quiz/generate returns 502 when LLM call raises an exception."""
+    _, _, _, _, st = await _create_curriculum_tree(db_session)
+    admin = await _make_admin(db_session)
+
+    with patch("app.ai.providers.router.complete", new_callable=AsyncMock) as mock_complete:
+        mock_complete.side_effect = Exception("LLM timeout")
+        response = await client.post(
+            f"/api/v1/subtopic-content/{st.id}/quiz/generate",
+            headers=make_auth_header(admin),
+        )
+
+    assert response.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_generate_quiz_when_teacher_then_403(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """POST /quiz/generate returns 403 for non-KAIHLE_ADMIN roles."""
+    teacher = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"teacher-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Test",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db_session.add(teacher)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/subtopic-content/{uuid.uuid4()}/quiz/generate",
+        headers=make_auth_header(teacher),
+    )
+    assert response.status_code == 403
