@@ -28,8 +28,17 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Add scope + school_id columns; replace old unique constraint with partial indexes."""
-    # Create enum type before adding column — IF NOT EXISTS guards against re-runs
-    op.execute("CREATE TYPE IF NOT EXISTS subtopic_content_scope_enum AS ENUM ('curriculum', 'school')")
+    # Create enum type before adding column.
+    # DO block catches duplicate_object so this is safe to run on a DB that already has the type.
+    op.execute(
+        """
+        DO $$ BEGIN
+            CREATE TYPE subtopic_content_scope_enum AS ENUM ('curriculum', 'school');
+        EXCEPTION
+            WHEN duplicate_object THEN NULL;
+        END $$;
+        """
+    )
 
     op.add_column(
         "subtopic_content",
