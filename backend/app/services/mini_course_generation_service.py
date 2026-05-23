@@ -22,6 +22,7 @@ import structlog
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import attributes as orm_attrs
 
 from app.ai.providers import router as llm_router
 from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic, Topic
@@ -335,23 +336,42 @@ class MiniCourseGenerationService:
         if dry_run:
             return len(questions)
 
-        for question in questions:
-            row = QuestionBank(
-                subtopic_id=subtopic_id,
-                question_text=question["question_text"],
-                question_type="MCQ",
-                options=question["options"],
-                correct_answer=question["correct_answer"],
-                explanation=question.get("explanation"),
-                canonical_form=question["question_text"],
-                source="llm",
-                difficulty_level=_QUIZ_DIFFICULTY_LEVEL,
-                is_active=True,
+        # Write to subtopic_content staging (not question_bank directly).
+        # KaihleAdmin reviews and approves the batch, which then publishes to question_bank.
+        existing_result = await self.db.execute(
+            select(SubtopicContent).where(
+                SubtopicContent.subtopic_id == subtopic_id,
+                SubtopicContent.content_type == "quiz",
             )
-            self.db.add(row)
+        )
+        quiz_content = existing_result.scalars().first()
+
+        normalized = [
+            {
+                "question_text": q["question_text"],
+                "options": q["options"],
+                "correct_answer": q["correct_answer"],
+                "explanation": q.get("explanation"),
+                "difficulty_level": _QUIZ_DIFFICULTY_LEVEL,
+            }
+            for q in questions
+        ]
+
+        if quiz_content is not None:
+            quiz_content.quiz_questions = normalized
+            quiz_content.review_status = "pending"
+            orm_attrs.flag_modified(quiz_content, "quiz_questions")
+        else:
+            quiz_content = SubtopicContent(
+                subtopic_id=subtopic_id,
+                content_type="quiz",
+                quiz_questions=normalized,
+                review_status="pending",
+            )
+            self.db.add(quiz_content)
 
         logger.info(
-            "mini_course_quiz_questions_generated",
+            "mini_course_quiz_questions_staged",
             subtopic_id=str(subtopic_id),
             count=len(questions),
         )
