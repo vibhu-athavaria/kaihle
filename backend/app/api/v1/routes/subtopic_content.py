@@ -832,7 +832,12 @@ async def get_subtopic_content_status(
     assert current_user.school_id is not None
     await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
 
-    result = await db.execute(select(SubtopicContent).where(SubtopicContent.subtopic_id == subtopic_id))
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type.in_(["video", "explanation", "quiz"]),
+        )
+    )
     rows = result.scalars().all()
     by_type: dict[str, SubtopicContent | None] = {"video": None, "explanation": None, "quiz": None}
     for row in rows:
@@ -1067,6 +1072,18 @@ async def promote_content(
 
     now = datetime.now(UTC)
     if body.action == "promote":
+        existing_curriculum = await db.execute(
+            select(SubtopicContent).where(
+                SubtopicContent.subtopic_id == subtopic_id,
+                SubtopicContent.content_type == content_type,
+                SubtopicContent.scope == "curriculum",
+            )
+        )
+        if existing_curriculum.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A curriculum-scoped row already exists for this subtopic and content type",
+            )
         content.scope = "curriculum"
         content.school_id = None
         content.reviewed_at = now
