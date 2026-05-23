@@ -21,6 +21,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -135,27 +136,18 @@ class SubtopicContent(Base, UUIDMixin, TimestampMixin):
     subtopic = relationship("Subtopic", viewonly=True)
 
     __table_args__ = (
+        UniqueConstraint("subtopic_id", "content_type", name="uq_subtopic_content_type"),
         Index("idx_subtopic_content_subtopic", "subtopic_id"),
         Index("idx_subtopic_content_explanation_status", "review_status"),
     )
 
     def get_approved_videos(self) -> list[dict[str, Any]]:
-        """Return video metadata as a list if this is an approved active video content type."""
+        """Return approved video entries from the JSONB videos array."""
         if self.content_type != ContentType.VIDEO:
-            return []
-        if self.review_status != ReviewStatus.APPROVED:
             return []
         if not self.is_active or self.is_archived:
             return []
-        return [
-            {
-                "url": self.video_url,
-                "title": None,
-                "channel": self.video_provider,
-                "duration_seconds": self.video_duration_seconds,
-                "thumbnail_url": self.video_thumbnail_url,
-            }
-        ]
+        return [v for v in (self.videos or []) if v.get("status") == "approved"]
 
     def get_display_explanation(self) -> str | None:
         """Return teacher explanation if available, otherwise explanation_text."""

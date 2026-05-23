@@ -172,12 +172,15 @@ class TestSubtopicContent:
         col = SubtopicContent.__table__.c.is_archived
         assert col.server_default is not None
 
-    def test_get_approved_videos_returns_only_active_approved(self) -> None:
-        """get_approved_videos should return only active, approved, non-archived videos."""
+    def test_get_approved_videos_returns_only_approved_entries(self) -> None:
+        """get_approved_videos returns entries with status='approved' from the JSONB array."""
         content = SubtopicContent(
             subtopic_id=uuid.uuid4(),
             content_type="video",
-            video_url="https://youtube.com/watch?v=abc",
+            videos=[
+                {"url": "https://youtube.com/watch?v=abc", "status": "approved", "title": "Vid 1"},
+                {"url": "https://youtube.com/watch?v=def", "status": "pending", "title": "Vid 2"},
+            ],
             review_status=ReviewStatus.APPROVED,
             is_active=True,
             is_stale=False,
@@ -185,12 +188,16 @@ class TestSubtopicContent:
         )
         videos = content.get_approved_videos()
         assert len(videos) == 1
+        assert videos[0]["url"] == "https://youtube.com/watch?v=abc"
 
-    def test_get_approved_videos_excludes_pending(self) -> None:
+    def test_get_approved_videos_excludes_pending_entries(self) -> None:
+        """get_approved_videos returns empty list when all video entries are pending."""
         content = SubtopicContent(
             subtopic_id=uuid.uuid4(),
             content_type="video",
-            video_url="https://youtube.com/watch?v=abc",
+            videos=[
+                {"url": "https://youtube.com/watch?v=abc", "status": "pending", "title": "Vid 1"},
+            ],
             review_status=ReviewStatus.PENDING,
             is_active=True,
             is_stale=False,
@@ -199,11 +206,14 @@ class TestSubtopicContent:
         videos = content.get_approved_videos()
         assert len(videos) == 0
 
-    def test_get_approved_videos_excludes_archived(self) -> None:
+    def test_get_approved_videos_excludes_archived_content(self) -> None:
+        """get_approved_videos returns empty list when the content row is archived."""
         content = SubtopicContent(
             subtopic_id=uuid.uuid4(),
             content_type="video",
-            video_url="https://youtube.com/watch?v=abc",
+            videos=[
+                {"url": "https://youtube.com/watch?v=abc", "status": "approved", "title": "Vid 1"},
+            ],
             review_status=ReviewStatus.APPROVED,
             is_active=True,
             is_stale=False,

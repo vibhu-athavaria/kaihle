@@ -48,6 +48,7 @@ TASK_MODEL_MAP: dict[str, str] = {
     "concept_guide": settings.llm_concept_guide_model,
     "explain_this": settings.llm_explain_this_model,
     "mini_course_explanation": settings.llm_mini_course_model,
+    "content_seed": settings.llm_content_seed_model,
 }
 
 TASK_API_BASE_MAP: dict[str, str | None] = {
@@ -60,6 +61,7 @@ TASK_API_BASE_MAP: dict[str, str | None] = {
     "concept_guide": settings.llm_concept_guide_api_base,
     "explain_this": settings.llm_explain_this_api_base,
     "mini_course_explanation": settings.llm_mini_course_api_base,
+    "content_seed": settings.llm_content_seed_api_base,
 }
 
 

@@ -19,8 +19,8 @@ import { AdminConfig } from "./pages/AdminConfig";
 import { AdminUsers } from "./pages/AdminUsers";
 import { AdminGrades } from "./pages/AdminGrades";
 import { AdminQuestionReview } from "./pages/AdminQuestionReview";
-import { VideoReviewQueue } from "./pages/content/VideoReviewQueue";
-import { VideoReviewDetail } from "./pages/content/VideoReviewDetail";
+import { ContentReviewQueue } from "./pages/content/VideoReviewQueue";
+import { ContentReviewDetail } from "./pages/content/VideoReviewDetail";
 import { ScriptsPage } from "./pages/scripts/ScriptsPage";
 import { ScriptDetailPage } from "./pages/scripts/ScriptDetailPage";
 import { SmokeTestPage } from "./pages/scripts/SmokeTestPage";
@@ -65,12 +65,21 @@ export default function App() {
                         element={<AdminQuestionReview />}
                       />
                       <Route
+                        path="content/review"
+                        element={<ContentReviewQueue />}
+                      />
+                      <Route
+                        path="content/review/:subtopicId"
+                        element={<ContentReviewDetail />}
+                      />
+                      {/* Legacy redirect */}
+                      <Route
                         path="content/videos"
-                        element={<VideoReviewQueue />}
+                        element={<ContentReviewQueue />}
                       />
                       <Route
                         path="content/videos/:subtopicId"
-                        element={<VideoReviewDetail />}
+                        element={<ContentReviewDetail />}
                       />
                       <Route path="scripts" element={<ScriptsPage />} />
                       <Route
