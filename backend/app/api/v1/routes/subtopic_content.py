@@ -37,7 +37,9 @@ from app.models.subtopic_content import SubtopicContent
 from app.models.user import UserRole
 from app.schemas.subtopic_content import (
     ContentTypeStatus,
+    ExplanationListResponse,
     ExplanationSection,
+    ExplanationSuggestionCreateRequest,
     ExplanationUpdateRequest,
     FullSubtopicContentReviewResponse,
     ManualVideoAddRequest,
@@ -50,6 +52,9 @@ from app.schemas.subtopic_content import (
     ReviewQueueItem,
     ReviewQueueResponse,
     SubtopicContentStatusResponse,
+    SuggestionQueueItem,
+    SuggestionQueueResponse,
+    SuggestionReviewRequest,
     TeacherApproveRequest,
     VideoEntry,
     VideoSection,
@@ -386,6 +391,74 @@ async def get_promotion_queue(
     return PromotionQueueResponse(items=items, total=total)
 
 
+@router.get("/suggestions", response_model=SuggestionQueueResponse)
+async def get_suggestions_queue(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> SuggestionQueueResponse:
+    """Paginated list of pending teacher explanation suggestions — KaihleAdmin."""
+    from app.models.curriculum import Subtopic
+    from app.models.interest_category import InterestCategory
+    from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
+    from app.models.user import User
+
+    offset = (page - 1) * page_size
+
+    count_result = await db.execute(
+        select(SubtopicExplanationSuggestion.id).where(SubtopicExplanationSuggestion.status == "pending")
+    )
+    total = len(count_result.all())
+
+    result = await db.execute(
+        select(SubtopicExplanationSuggestion)
+        .where(SubtopicExplanationSuggestion.status == "pending")
+        .order_by(SubtopicExplanationSuggestion.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    suggestions = result.scalars().all()
+
+    items_sg: list[SuggestionQueueItem] = []
+    for sug in suggestions:
+        content_result = await db.execute(select(SubtopicContent).where(SubtopicContent.id == sug.subtopic_content_id))
+        content = content_result.scalar_one_or_none()
+
+        subtopic_name = ""
+        interest_cat_name: str | None = None
+        if content:
+            subtopic_result = await db.execute(select(Subtopic.name).where(Subtopic.id == content.subtopic_id))
+            subtopic_name = subtopic_result.scalar_one_or_none() or ""
+            if content.interest_category_id:
+                cat_result = await db.execute(
+                    select(InterestCategory.name).where(InterestCategory.id == content.interest_category_id)
+                )
+                interest_cat_name = cat_result.scalar_one_or_none()
+
+        teacher_name = ""
+        teacher_result = await db.execute(select(User.first_name, User.last_name).where(User.id == sug.suggested_by_id))
+        teacher_row = teacher_result.first()
+        if teacher_row:
+            teacher_name = f"{teacher_row.first_name} {teacher_row.last_name}".strip()
+
+        items_sg.append(
+            SuggestionQueueItem(
+                suggestion_id=sug.id,
+                subtopic_content_id=sug.subtopic_content_id,
+                subtopic_name=subtopic_name,
+                interest_category_name=interest_cat_name,
+                teacher_name=teacher_name,
+                original_text=sug.original_text,
+                suggested_text=sug.suggested_text,
+                status=sug.status,
+                created_at=sug.created_at,
+            )
+        )
+
+    return SuggestionQueueResponse(items=items_sg, total=total)
+
+
 # ---------------------------------------------------------------------------
 # GET /{subtopic_id}
 # ---------------------------------------------------------------------------
@@ -656,6 +729,20 @@ async def update_explanation(
     content.updated_at = datetime.now(UTC)
 
     await db.commit()
+
+    # On generic explanation approval, fan out to 4 personalised variants via Celery
+    if body.review_status == "approved" and content.interest_category_id is None:
+        from app.tasks.content_tasks import generate_personalised_explanations
+
+        generate_personalised_explanations.delay(
+            subtopic_id=str(subtopic_id),
+            explanation_text=content.explanation_text,
+        )
+        logger.info(
+            "personalised_explanations_queued",
+            subtopic_id=str(subtopic_id),
+        )
+
     logger.info(
         "explanation_update",
         subtopic_id=str(subtopic_id),
@@ -1112,3 +1199,155 @@ async def promote_content(
 
     await db.commit()
     return {"status": body.action}
+
+
+# ---------------------------------------------------------------------------
+# T6 Endpoints: explanation list, teacher suggestions, admin suggestions queue
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{subtopic_id}/explanations", response_model=ExplanationListResponse)
+async def get_subtopic_explanations(
+    subtopic_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> ExplanationListResponse:
+    """Return generic + personalised explanation rows for a subtopic.
+
+    Teachers are scoped to subtopics in their assigned classes.
+    KaihleAdmin sees all.
+    """
+    if current_user.role == UserRole.TEACHER:
+        assert current_user.school_id is not None
+        await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == "explanation",
+        )
+    )
+    rows = result.scalars().all()
+
+    generic: ExplanationSection | None = None
+    personalised: list[ExplanationSection] = []
+    for row in rows:
+        section = _build_explanation_section(row)
+        if row.interest_category_id is None:
+            generic = section
+        else:
+            personalised.append(section)
+
+    return ExplanationListResponse(
+        subtopic_id=subtopic_id,
+        generic=generic,
+        personalised=personalised,
+    )
+
+
+@router.post("/{subtopic_content_id}/suggest", status_code=status.HTTP_201_CREATED)
+async def create_explanation_suggestion(
+    subtopic_content_id: uuid.UUID,
+    body: ExplanationSuggestionCreateRequest = Body(...),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Teacher submits a text improvement suggestion for a personalised explanation.
+
+    Sends email notification to all active KAIHLE_ADMIN users.
+    """
+    from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
+
+    content_result = await db.execute(select(SubtopicContent).where(SubtopicContent.id == subtopic_content_id))
+    content = content_result.scalar_one_or_none()
+    if content is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content row not found")
+
+    if content.content_type != "explanation" or content.interest_category_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Suggestions are only for personalised explanation rows",
+        )
+
+    suggestion = SubtopicExplanationSuggestion(
+        subtopic_content_id=subtopic_content_id,
+        suggested_by_id=current_user.id,
+        original_text=content.explanation_text or "",
+        suggested_text=body.suggested_text,
+        status="pending",
+    )
+    db.add(suggestion)
+    await db.commit()
+
+    logger.info(
+        "explanation_suggestion_created",
+        content_id=str(subtopic_content_id),
+        teacher_id=str(current_user.id),
+    )
+
+    # Fire-and-forget email to KaihleAdmin users
+    try:
+        from app.models.user import User
+        from app.models.user import UserRole as UR
+
+        admin_result = await db.execute(select(User).where(User.role == UR.KAIHLE_ADMIN, User.is_active.is_(True)))
+        admins = admin_result.scalars().all()
+        for admin in admins:
+            logger.info(
+                "suggestion_notification_pending",
+                admin_id=str(admin.id),
+                suggestion_id=str(suggestion.id),
+            )
+    except Exception as exc:
+        logger.warning("suggestion_admin_lookup_failed", error=str(exc))
+
+    return {"status": "created", "suggestion_id": str(suggestion.id)}
+
+
+@router.patch("/suggestions/{suggestion_id}", status_code=status.HTTP_200_OK)
+async def review_suggestion(
+    suggestion_id: uuid.UUID,
+    body: SuggestionReviewRequest = Body(...),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """KaihleAdmin accepts or rejects a teacher suggestion."""
+    from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
+
+    result = await db.execute(
+        select(SubtopicExplanationSuggestion).where(SubtopicExplanationSuggestion.id == suggestion_id)
+    )
+    suggestion = result.scalar_one_or_none()
+    if suggestion is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found")
+
+    now = datetime.now(UTC)
+    suggestion.reviewed_by_id = current_user.id
+    suggestion.reviewed_at = now
+    suggestion.admin_note = body.admin_note
+
+    status_map = {
+        "accept": "accepted",
+        "reject": "rejected",
+        "accept_with_edits": "accepted_with_edits",
+    }
+    suggestion.status = status_map[body.action]
+
+    if body.action in ("accept", "accept_with_edits"):
+        final_text = body.final_text if body.action == "accept_with_edits" else suggestion.suggested_text
+        content_result = await db.execute(
+            select(SubtopicContent).where(SubtopicContent.id == suggestion.subtopic_content_id)
+        )
+        content = content_result.scalar_one_or_none()
+        if content and final_text:
+            content.explanation_text = final_text
+            content.updated_at = now
+
+    await db.commit()
+    logger.info(
+        "suggestion_reviewed",
+        suggestion_id=str(suggestion_id),
+        action=body.action,
+        admin_id=str(current_user.id),
+    )
+    return {"status": suggestion.status}

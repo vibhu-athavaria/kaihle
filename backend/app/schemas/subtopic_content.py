@@ -322,6 +322,69 @@ class PromoteRequest(BaseModel):
     rejection_reason: str | None = None
 
 
+# --- Explanation suggestion schemas ---
+
+
+class ExplanationSuggestionCreateRequest(BaseModel):
+    """Teacher submits a suggestion for a personalised explanation."""
+
+    suggested_text: str = Field(..., min_length=10)
+
+
+class ExplanationSuggestionResponse(BaseModel):
+    """One suggestion in the suggestions queue."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    subtopic_content_id: uuid.UUID
+    suggested_by_id: uuid.UUID
+    original_text: str
+    suggested_text: str
+    status: str
+    admin_note: str | None = None
+    reviewed_by_id: uuid.UUID | None = None
+    reviewed_at: datetime | None = None
+    created_at: datetime
+
+
+class SuggestionQueueItem(BaseModel):
+    """One item in the KaihleAdmin suggestions queue."""
+
+    suggestion_id: uuid.UUID
+    subtopic_content_id: uuid.UUID
+    subtopic_name: str
+    interest_category_name: str | None = None
+    teacher_name: str
+    original_text: str
+    suggested_text: str
+    status: str
+    created_at: datetime
+
+
+class SuggestionQueueResponse(BaseModel):
+    """Paginated suggestions queue."""
+
+    items: list[SuggestionQueueItem]
+    total: int
+
+
+class SuggestionReviewRequest(BaseModel):
+    """KaihleAdmin accepts or rejects a suggestion."""
+
+    action: str = Field(..., pattern="^(accept|reject|accept_with_edits)$")
+    final_text: str | None = None  # used when action='accept_with_edits'
+    admin_note: str | None = None
+
+
+class ExplanationListResponse(BaseModel):
+    """Generic + personalised explanation rows for a subtopic."""
+
+    subtopic_id: uuid.UUID
+    generic: ExplanationSection | None = None
+    personalised: list[ExplanationSection] = []
+
+
 # --- StudentLessonPack schemas ---
 
 

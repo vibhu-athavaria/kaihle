@@ -511,11 +511,12 @@ async def test_update_explanation_when_approved_then_status_saved(
     admin = await _make_admin(db_session)
 
     new_text = "A linear equation has the form ax + b = 0. Solve by isolating x on one side."
-    response = await client.patch(
-        f"/api/v1/subtopic-content/{st.id}/explanation",
-        json={"explanation_text": new_text, "review_status": "approved"},
-        headers=make_auth_header(admin),
-    )
+    with patch("app.tasks.content_tasks.generate_personalised_explanations.delay"):
+        response = await client.patch(
+            f"/api/v1/subtopic-content/{st.id}/explanation",
+            json={"explanation_text": new_text, "review_status": "approved"},
+            headers=make_auth_header(admin),
+        )
     assert response.status_code == 200
     data = response.json()
     assert data["explanation"]["explanation_text"] == new_text
@@ -985,7 +986,7 @@ async def test_get_status_when_school_scoped_other_school_then_shows_other_schoo
 
 @pytest.mark.asyncio
 async def test_generate_when_content_exists_any_scope_then_409(client: AsyncClient, db_session: AsyncSession) -> None:
-    """POST /{subtopic_id}/quiz/generate returns 409 if any row exists for that (subtopic, type)."""
+    """POST /{subtopic_id}/explanation/generate returns 409 if any row exists for that (subtopic, type)."""
     subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
     school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
 
@@ -1188,5 +1189,247 @@ async def test_promote_when_teacher_then_403(client: AsyncClient, db_session: As
         f"/api/v1/subtopic-content/{st.id}/quiz/promote",
         headers=make_auth_header(teacher),
         json={"action": "promote"},
+    )
+    assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# T6 — Explanation personalisation & suggestion flow
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_explanations_when_no_content_then_returns_empty(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """GET /{subtopic_id}/explanations returns empty payload when no content exists."""
+    _, _, _, _, st = await _create_curriculum_tree(db_session)
+    admin = User(
+        id=uuid.uuid4(),
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Admin",
+        last_name="K",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/subtopic-content/{st.id}/explanations",
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["subtopic_id"] == str(st.id)
+    assert data["generic"] is None
+    assert data["personalised"] == []
+
+
+@pytest.mark.asyncio
+async def test_suggest_explanation_when_personalised_content_exists_then_201(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """POST /suggest records a pending suggestion against a personalised explanation row."""
+    from app.models.interest_category import InterestCategory
+
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    from sqlalchemy import select as sa_select
+
+    interest_cat_result = await db_session.execute(sa_select(InterestCategory).limit(1))
+    interest_cat = interest_cat_result.scalar_one_or_none()
+    if interest_cat is None:
+        pytest.skip("No interest categories seeded — run seed_test_data first")
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="explanation",
+        scope="curriculum",
+        interest_category_id=interest_cat.id,
+        explanation_text="Original personalised explanation text here.",
+        review_status="approved",
+    )
+    db_session.add(content)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/subtopic-content/{content.id}/suggest",
+        headers=make_auth_header(teacher),
+        json={"suggested_text": "My improved explanation text for students."},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "created"
+    assert "suggestion_id" in data
+
+
+@pytest.mark.asyncio
+async def test_suggest_explanation_when_generic_content_then_400(client: AsyncClient, db_session: AsyncSession) -> None:
+    """POST /suggest returns 400 for generic explanations (no interest_category_id)."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="explanation",
+        scope="curriculum",
+        explanation_text="Generic explanation without category.",
+        review_status="approved",
+    )
+    db_session.add(content)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/subtopic-content/{content.id}/suggest",
+        headers=make_auth_header(teacher),
+        json={"suggested_text": "Better version."},
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_suggestions_queue_when_admin_then_returns_pending(client: AsyncClient, db_session: AsyncSession) -> None:
+    """GET /suggestions returns only pending suggestion rows for KaihleAdmin."""
+    from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
+
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="explanation",
+        scope="curriculum",
+        explanation_text="Base explanation.",
+        review_status="approved",
+    )
+    db_session.add(content)
+    await db_session.flush()
+
+    suggestion = SubtopicExplanationSuggestion(
+        id=uuid.uuid4(),
+        subtopic_content_id=content.id,
+        suggested_by_id=teacher.id,
+        original_text="Base explanation.",
+        suggested_text="Improved version of base explanation.",
+        status="pending",
+    )
+    db_session.add(suggestion)
+
+    admin = User(
+        id=uuid.uuid4(),
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Admin",
+        last_name="K",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    response = await client.get(
+        "/api/v1/subtopic-content/suggestions",
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] >= 1
+    ids = [item["suggestion_id"] for item in data["items"]]
+    assert str(suggestion.id) in ids
+
+
+@pytest.mark.asyncio
+async def test_review_suggestion_when_admin_accepts_then_updates_explanation(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """PATCH /suggestions/{id} with action=accept updates explanation_text and marks accepted."""
+    from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
+
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="explanation",
+        scope="curriculum",
+        explanation_text="Original text.",
+        review_status="approved",
+    )
+    db_session.add(content)
+    await db_session.flush()
+
+    suggestion = SubtopicExplanationSuggestion(
+        id=uuid.uuid4(),
+        subtopic_content_id=content.id,
+        suggested_by_id=teacher.id,
+        original_text="Original text.",
+        suggested_text="Better text from teacher.",
+        status="pending",
+    )
+    db_session.add(suggestion)
+
+    admin = User(
+        id=uuid.uuid4(),
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Admin",
+        last_name="K",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/suggestions/{suggestion.id}",
+        headers=make_auth_header(admin),
+        json={"action": "accept"},
+    )
+    assert response.status_code == 200
+
+    await db_session.refresh(content)
+    await db_session.refresh(suggestion)
+    assert content.explanation_text == "Better text from teacher."
+    assert suggestion.status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_review_suggestion_when_teacher_then_403(client: AsyncClient, db_session: AsyncSession) -> None:
+    """PATCH /suggestions/{id} returns 403 for teacher role."""
+    from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
+
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="explanation",
+        scope="curriculum",
+        explanation_text="Original text.",
+        review_status="approved",
+    )
+    db_session.add(content)
+    await db_session.flush()
+
+    suggestion = SubtopicExplanationSuggestion(
+        id=uuid.uuid4(),
+        subtopic_content_id=content.id,
+        suggested_by_id=teacher.id,
+        original_text="Original text.",
+        suggested_text="Better text.",
+        status="pending",
+    )
+    db_session.add(suggestion)
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/suggestions/{suggestion.id}",
+        headers=make_auth_header(teacher),
+        json={"action": "accept"},
     )
     assert response.status_code == 403

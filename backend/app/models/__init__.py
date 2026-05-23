@@ -36,6 +36,7 @@ from app.models.school import Class, ClassEnrollment, School, SchoolCurriculum
 from app.models.student_lesson_pack import StudentLessonPack
 from app.models.study_plan import StudyPlan, StudyPlanQuiz, StudyPlanResource
 from app.models.subtopic_content import SubtopicContent
+from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
 from app.models.user import (
     AuthToken,
     ParentStudent,
@@ -55,6 +56,7 @@ __all__ = [
     "Subtopic",
     "StudentLessonPack",
     "SubtopicContent",
+    "SubtopicExplanationSuggestion",
     "SubtopicPrerequisite",
     "CurriculumChunk",
     "QuestionBank",
