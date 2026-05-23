@@ -1,7 +1,11 @@
 """Subtopic content SQLAlchemy model.
 
 Stores content per subtopic across 4 content types: video, explanation, practice, quiz.
-One row per (subtopic, content_type) combination — curriculum-layer table (no school_id).
+
+scope='curriculum': KaihleAdmin-owned global content (school_id=NULL).
+  Unique per (subtopic_id, content_type).
+scope='school': Teacher-generated content for a specific school (school_id set).
+  Unique per (subtopic_id, content_type, school_id).
 
 Architecture: Replaces deprecated curriculum_chunks PDF RAG approach.
 Resources are KaihleAdmin-approved YouTube videos stored as JSONB.
@@ -21,7 +25,6 @@ from sqlalchemy import (
     Index,
     Integer,
     Text,
-    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -56,6 +59,22 @@ class SubtopicContent(Base, UUIDMixin, TimestampMixin):
         UUID(as_uuid=True),
         ForeignKey("subtopics.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+
+    # Scope: 'curriculum' (KaihleAdmin global, school_id=NULL) or 'school' (teacher-generated, school_id set)
+    scope: Mapped[str] = mapped_column(
+        Enum("curriculum", "school", name="subtopic_content_scope_enum", create_type=False),
+        nullable=False,
+        server_default="curriculum",
+        index=True,
+    )
+
+    # NULL for curriculum-scope rows; set for school-scope rows
+    school_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("schools.id", ondelete="CASCADE"),
+        nullable=True,
         index=True,
     )
 
@@ -136,7 +155,24 @@ class SubtopicContent(Base, UUIDMixin, TimestampMixin):
     subtopic = relationship("Subtopic", viewonly=True)
 
     __table_args__ = (
-        UniqueConstraint("subtopic_id", "content_type", name="uq_subtopic_content_type"),
+        # Partial unique indexes enforce different uniqueness rules per scope:
+        # curriculum rows: one per (subtopic_id, content_type) globally
+        # school rows: one per (subtopic_id, content_type, school_id) per school
+        Index(
+            "uq_subtopic_content_curriculum",
+            "subtopic_id",
+            "content_type",
+            unique=True,
+            postgresql_where="scope = 'curriculum'",
+        ),
+        Index(
+            "uq_subtopic_content_school",
+            "subtopic_id",
+            "content_type",
+            "school_id",
+            unique=True,
+            postgresql_where="scope = 'school'",
+        ),
         Index("idx_subtopic_content_subtopic", "subtopic_id"),
         Index("idx_subtopic_content_explanation_status", "review_status"),
     )

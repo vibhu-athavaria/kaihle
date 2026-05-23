@@ -143,10 +143,15 @@ class TestSubtopicContent:
     def test_tablename_is_subtopic_content(self) -> None:
         assert SubtopicContent.__tablename__ == "subtopic_content"
 
-    def test_no_school_id_column(self) -> None:
-        """subtopic_content has no school_id — curriculum-layer table per CONSTITUTION Rule 2."""
-        columns = {c.name for c in SubtopicContent.__table__.columns}
-        assert "school_id" not in columns
+    def test_has_school_id_column_nullable(self) -> None:
+        """subtopic_content.school_id is nullable — NULL for curriculum-scope, set for school-scope rows."""
+        col = SubtopicContent.__table__.c.school_id
+        assert col.nullable is True
+
+    def test_has_scope_column_with_curriculum_default(self) -> None:
+        """subtopic_content.scope defaults to 'curriculum'."""
+        col = SubtopicContent.__table__.c.scope
+        assert str(col.server_default.arg) == "curriculum"  # type: ignore[union-attr]
 
     def test_has_subtopic_id_foreign_key(self) -> None:
         fk_cols = {c.name for c in SubtopicContent.__table__.columns if c.foreign_keys}
