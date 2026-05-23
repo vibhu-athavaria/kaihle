@@ -299,6 +299,94 @@ async def get_review_queue(
 
 
 # ---------------------------------------------------------------------------
+# KaihleAdmin promotion queue
+# Must be registered before GET /{subtopic_id} — FastAPI matches static paths
+# before dynamic ones only when they are registered first in the same router.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/promotion-queue", response_model=PromotionQueueResponse)
+async def get_promotion_queue(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> PromotionQueueResponse:
+    """Paginated list of school-scoped approved content awaiting promotion."""
+    from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic
+    from app.models.school import School
+    from app.models.user import User
+
+    offset = (page - 1) * page_size
+
+    count_result = await db.execute(
+        select(SubtopicContent.id).where(
+            SubtopicContent.scope == "school",
+            SubtopicContent.review_status == "approved",
+            SubtopicContent.is_archived.is_(False),
+        )
+    )
+    total = len(count_result.all())
+
+    result = await db.execute(
+        select(SubtopicContent)
+        .where(
+            SubtopicContent.scope == "school",
+            SubtopicContent.review_status == "approved",
+            SubtopicContent.is_archived.is_(False),
+        )
+        .order_by(SubtopicContent.reviewed_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    rows = result.scalars().all()
+
+    items: list[PromotionQueueItem] = []
+    for row in rows:
+        subtopic_result = await db.execute(
+            select(
+                Subtopic.name.label("subtopic_name"),
+                Subject.code.label("subject_code"),
+                Grade.level.label("grade_level"),
+            )
+            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .join(Subject, Subject.id == CurriculumTopic.subject_id)
+            .join(Grade, Grade.id == CurriculumTopic.grade_id)
+            .where(Subtopic.id == row.subtopic_id)
+            .limit(1)
+        )
+        meta = subtopic_result.first()
+
+        school_result = await db.execute(select(School.name).where(School.id == row.school_id))
+        school_name = school_result.scalar_one_or_none() or "Unknown School"
+
+        reviewer_name: str | None = None
+        if row.reviewed_by_id:
+            user_result = await db.execute(select(User.first_name, User.last_name).where(User.id == row.reviewed_by_id))
+            user_row = user_result.first()
+            if user_row:
+                reviewer_name = f"{user_row.first_name} {user_row.last_name}".strip()
+
+        items.append(
+            PromotionQueueItem(
+                subtopic_content_id=row.id,
+                subtopic_id=row.subtopic_id,
+                subtopic_name=meta.subtopic_name if meta else "",
+                content_type=row.content_type,
+                school_name=school_name,
+                reviewed_by_name=reviewer_name,
+                subject_code=meta.subject_code if meta else "",
+                grade_level=meta.grade_level if meta else 0,
+                review_status=row.review_status,
+                reviewed_at=row.reviewed_at,
+                school_id=row.school_id,
+            )
+        )
+
+    return PromotionQueueResponse(items=items, total=total)
+
+
+# ---------------------------------------------------------------------------
 # GET /{subtopic_id}
 # ---------------------------------------------------------------------------
 
@@ -958,92 +1046,6 @@ async def teacher_approve_content(
         teacher_id=str(current_user.id),
     )
     return {"status": body.action}
-
-
-# ---------------------------------------------------------------------------
-# KaihleAdmin promotion queue
-# ---------------------------------------------------------------------------
-
-
-@router.get("/promotion-queue", response_model=PromotionQueueResponse)
-async def get_promotion_queue(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
-    db: AsyncSession = Depends(get_db),
-) -> PromotionQueueResponse:
-    """Paginated list of school-scoped approved content awaiting promotion."""
-    from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic
-    from app.models.school import School
-    from app.models.user import User
-
-    offset = (page - 1) * page_size
-
-    count_result = await db.execute(
-        select(SubtopicContent.id).where(
-            SubtopicContent.scope == "school",
-            SubtopicContent.review_status == "approved",
-            SubtopicContent.is_archived.is_(False),
-        )
-    )
-    total = len(count_result.all())
-
-    result = await db.execute(
-        select(SubtopicContent)
-        .where(
-            SubtopicContent.scope == "school",
-            SubtopicContent.review_status == "approved",
-            SubtopicContent.is_archived.is_(False),
-        )
-        .order_by(SubtopicContent.reviewed_at.desc())
-        .offset(offset)
-        .limit(page_size)
-    )
-    rows = result.scalars().all()
-
-    items: list[PromotionQueueItem] = []
-    for row in rows:
-        subtopic_result = await db.execute(
-            select(
-                Subtopic.name.label("subtopic_name"),
-                Subject.code.label("subject_code"),
-                Grade.level.label("grade_level"),
-            )
-            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
-            .join(Subject, Subject.id == CurriculumTopic.subject_id)
-            .join(Grade, Grade.id == CurriculumTopic.grade_id)
-            .where(Subtopic.id == row.subtopic_id)
-            .limit(1)
-        )
-        meta = subtopic_result.first()
-
-        school_result = await db.execute(select(School.name).where(School.id == row.school_id))
-        school_name = school_result.scalar_one_or_none() or "Unknown School"
-
-        reviewer_name: str | None = None
-        if row.reviewed_by_id:
-            user_result = await db.execute(select(User.first_name, User.last_name).where(User.id == row.reviewed_by_id))
-            user_row = user_result.first()
-            if user_row:
-                reviewer_name = f"{user_row.first_name} {user_row.last_name}".strip()
-
-        items.append(
-            PromotionQueueItem(
-                subtopic_content_id=row.id,
-                subtopic_id=row.subtopic_id,
-                subtopic_name=meta.subtopic_name if meta else "",
-                content_type=row.content_type,
-                school_name=school_name,
-                reviewed_by_name=reviewer_name,
-                subject_code=meta.subject_code if meta else "",
-                grade_level=meta.grade_level if meta else 0,
-                review_status=row.review_status,
-                reviewed_at=row.reviewed_at,
-                school_id=row.school_id,
-            )
-        )
-
-    return PromotionQueueResponse(items=items, total=total)
 
 
 @router.patch("/{subtopic_id}/{content_type}/promote")

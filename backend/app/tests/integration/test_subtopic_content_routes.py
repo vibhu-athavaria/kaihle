@@ -989,11 +989,11 @@ async def test_generate_when_content_exists_any_scope_then_409(client: AsyncClie
     subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
     school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
 
-    # Curriculum-scope row already exists
+    # Curriculum-scope row already exists (use video to avoid admin quiz/generate route)
     content = SubtopicContent(
         id=uuid.uuid4(),
         subtopic_id=st.id,
-        content_type="quiz",
+        content_type="video",
         scope="curriculum",
         review_status="pending",
     )
@@ -1001,7 +1001,7 @@ async def test_generate_when_content_exists_any_scope_then_409(client: AsyncClie
     await db_session.commit()
 
     response = await client.post(
-        f"/api/v1/subtopic-content/{st.id}/quiz/generate",
+        f"/api/v1/subtopic-content/{st.id}/video/generate",
         headers=make_auth_header(teacher),
     )
     assert response.status_code == 409
