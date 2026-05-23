@@ -5,12 +5,18 @@ Naming convention: test_<what>_when_<condition>_then_<expected>
 Run with: pytest app/tests/unit/test_mini_course_generation_service.py -v
 """
 
+import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.mini_course_generation_service import MiniCourseGenerationService, _parse_quiz_response
+from app.models.subtopic_content import SubtopicContent
+from app.services.mini_course_generation_service import (
+    _QUIZ_QUESTION_TARGET,
+    MiniCourseGenerationService,
+    _parse_quiz_response,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -46,8 +52,6 @@ _VALID_QUESTIONS = [
 
 
 def test_parse_quiz_response_when_valid_json_then_returns_list() -> None:
-    import json
-
     raw = json.dumps(_VALID_QUESTIONS)
     result = _parse_quiz_response(raw)
     assert len(result) == 1
@@ -97,8 +101,6 @@ async def test_generate_quiz_when_no_existing_content_then_creates_staging_row()
     no_content_result.scalars = MagicMock(return_value=MagicMock(first=MagicMock(return_value=None)))
     db.execute = AsyncMock(return_value=no_content_result)
 
-    import json
-
     service = MiniCourseGenerationService(db)
 
     with patch("app.services.mini_course_generation_service.llm_router") as mock_router:
@@ -116,11 +118,11 @@ async def test_generate_quiz_when_no_existing_content_then_creates_staging_row()
     # db.add must have been called with a SubtopicContent (not QuestionBank)
     db.add.assert_called_once()
     added_obj = db.add.call_args[0][0]
-    from app.models.subtopic_content import SubtopicContent
-
     assert isinstance(added_obj, SubtopicContent)
     assert added_obj.content_type == "quiz"
     assert added_obj.review_status == "pending"
+    assert added_obj.is_archived is False
+    assert added_obj.quiz_questions_count == 1
     assert len(added_obj.quiz_questions) == 1
 
 
@@ -129,8 +131,6 @@ async def test_generate_quiz_when_existing_quiz_content_then_updates_staging_row
     """When a quiz staging row already exists, it is updated in place, not duplicated."""
     db = _make_db()
     subtopic_id = uuid.uuid4()
-
-    from app.models.subtopic_content import SubtopicContent
 
     existing = SubtopicContent(
         subtopic_id=subtopic_id,
@@ -141,8 +141,6 @@ async def test_generate_quiz_when_existing_quiz_content_then_updates_staging_row
     existing_result = MagicMock()
     existing_result.scalars = MagicMock(return_value=MagicMock(first=MagicMock(return_value=existing)))
     db.execute = AsyncMock(return_value=existing_result)
-
-    import json
 
     service = MiniCourseGenerationService(db)
 
@@ -161,6 +159,8 @@ async def test_generate_quiz_when_existing_quiz_content_then_updates_staging_row
     # db.add must NOT have been called — existing row updated in place
     db.add.assert_not_called()
     assert existing.review_status == "pending"
+    assert existing.is_archived is False
+    assert existing.quiz_questions_count == 1
     assert len(existing.quiz_questions) == 1
 
 
@@ -168,8 +168,6 @@ async def test_generate_quiz_when_existing_quiz_content_then_updates_staging_row
 async def test_generate_quiz_when_dry_run_then_does_not_write_to_db() -> None:
     """dry_run=True returns count but never writes to DB."""
     db = _make_db()
-
-    import json
 
     service = MiniCourseGenerationService(db)
 
@@ -187,3 +185,71 @@ async def test_generate_quiz_when_dry_run_then_does_not_write_to_db() -> None:
     assert count == 1
     db.add.assert_not_called()
     db.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_generate_quiz_when_archived_row_exists_then_creates_new_row() -> None:
+    """An archived staging row must not be mutated — the SELECT filters it out and a fresh row is inserted."""
+    db = _make_db()
+    subtopic_id = uuid.uuid4()
+
+    # Simulate DB returning no active (non-archived) row
+    empty_result = MagicMock()
+    empty_result.scalars = MagicMock(return_value=MagicMock(first=MagicMock(return_value=None)))
+    db.execute = AsyncMock(return_value=empty_result)
+
+    service = MiniCourseGenerationService(db)
+
+    with patch("app.services.mini_course_generation_service.llm_router") as mock_router:
+        mock_router.complete = AsyncMock(return_value=json.dumps(_VALID_QUESTIONS))
+        count = await service._generate_quiz_questions(
+            subtopic_id=subtopic_id,
+            subtopic_name="Linear Equations",
+            topic_name="Algebra",
+            subject_name="Mathematics",
+            grade_level=8,
+            dry_run=False,
+        )
+
+    assert count == 1
+    # A new row must be inserted — the archived row is invisible to the query
+    db.add.assert_called_once()
+    added_obj = db.add.call_args[0][0]
+    assert isinstance(added_obj, SubtopicContent)
+    assert added_obj.is_archived is False
+    assert added_obj.quiz_questions_count == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_quiz_when_row_already_at_target_then_skips_llm_and_returns_zero() -> None:
+    """Self-gating: if the existing row has >= _QUIZ_QUESTION_TARGET questions, the LLM is never called."""
+    db = _make_db()
+    subtopic_id = uuid.uuid4()
+
+    saturated = SubtopicContent(
+        subtopic_id=subtopic_id,
+        content_type="quiz",
+        quiz_questions=[{}] * _QUIZ_QUESTION_TARGET,
+        quiz_questions_count=_QUIZ_QUESTION_TARGET,
+        review_status="pending",
+        is_archived=False,
+    )
+    saturated_result = MagicMock()
+    saturated_result.scalars = MagicMock(return_value=MagicMock(first=MagicMock(return_value=saturated)))
+    db.execute = AsyncMock(return_value=saturated_result)
+
+    service = MiniCourseGenerationService(db)
+
+    with patch("app.services.mini_course_generation_service.llm_router") as mock_router:
+        count = await service._generate_quiz_questions(
+            subtopic_id=subtopic_id,
+            subtopic_name="Linear Equations",
+            topic_name="Algebra",
+            subject_name="Mathematics",
+            grade_level=8,
+            dry_run=False,
+        )
+        mock_router.complete.assert_not_called()
+
+    assert count == 0
+    db.add.assert_not_called()

@@ -307,7 +307,27 @@ class MiniCourseGenerationService:
         grade_level: int,
         dry_run: bool,
     ) -> int:
-        """Generate and insert quiz questions for one subtopic. Returns count written."""
+        """Generate and stage quiz questions for one subtopic. Returns count written.
+
+        Self-gating: fetches the existing active staging row before calling the LLM.
+        Returns 0 immediately if the row already has >= _QUIZ_QUESTION_TARGET questions,
+        so callers do not need to perform their own sufficiency check.
+        """
+        # Fetch once; reused for both the gate check and the write below.
+        # Skipped in dry_run — dry_run never touches the DB.
+        quiz_content = None
+        if not dry_run:
+            existing_result = await self.db.execute(
+                select(SubtopicContent).where(
+                    SubtopicContent.subtopic_id == subtopic_id,
+                    SubtopicContent.content_type == "quiz",
+                    SubtopicContent.is_archived == False,  # noqa: E712
+                )
+            )
+            quiz_content = existing_result.scalars().first()
+            if quiz_content is not None and (quiz_content.quiz_questions_count or 0) >= _QUIZ_QUESTION_TARGET:
+                return 0
+
         template = _jinja_env.get_template("mini_course_quiz.jinja2")
         prompt_text = template.render(
             subtopic_name=subtopic_name,
@@ -338,13 +358,6 @@ class MiniCourseGenerationService:
 
         # Write to subtopic_content staging (not question_bank directly).
         # KaihleAdmin reviews and approves the batch, which then publishes to question_bank.
-        existing_result = await self.db.execute(
-            select(SubtopicContent).where(
-                SubtopicContent.subtopic_id == subtopic_id,
-                SubtopicContent.content_type == "quiz",
-            )
-        )
-        quiz_content = existing_result.scalars().first()
 
         normalized = [
             {
@@ -359,14 +372,18 @@ class MiniCourseGenerationService:
 
         if quiz_content is not None:
             quiz_content.quiz_questions = normalized
+            quiz_content.quiz_questions_count = len(normalized)
             quiz_content.review_status = "pending"
+            quiz_content.is_archived = False
             orm_attrs.flag_modified(quiz_content, "quiz_questions")
         else:
             quiz_content = SubtopicContent(
                 subtopic_id=subtopic_id,
                 content_type="quiz",
                 quiz_questions=normalized,
+                quiz_questions_count=len(normalized),
                 review_status="pending",
+                is_archived=False,
             )
             self.db.add(quiz_content)
 
