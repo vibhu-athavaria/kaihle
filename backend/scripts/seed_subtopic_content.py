@@ -62,6 +62,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.core.config import settings
 from app.core.database import CeleryAsyncSessionLocal
 from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic
+from app.services.mini_course_generation_service import _QUIZ_QUESTION_TARGET
 
 # ---------------------------------------------------------------------------
 # LLM output validation schemas (Pydantic v2)
@@ -723,9 +724,18 @@ def seed_subtopic(
 
         # --- Practice Quiz ---
         if not SKIP_QUIZZES:
-            if subtopic_id_str in pre_gen_qs:
+            existing_count = len(pre_gen_qs.get(subtopic_id_str, {}).get("questions", []))
+            qs_data: dict[str, Any] | None = None
+            if existing_count >= _QUIZ_QUESTION_TARGET:
+                log.info(
+                    "quiz_sufficiency_met — skipping generation | subtopic=%s | count=%d",
+                    subtopic_name,
+                    existing_count,
+                )
+                result.skipped += 1
+            elif subtopic_id_str in pre_gen_qs:
                 pre_qs: list[Any] = pre_gen_qs[subtopic_id_str].get("questions", [])
-                qs_data: dict[str, Any] | None = {"questions": pre_qs}
+                qs_data = {"questions": pre_qs}
                 log.info("using pre-generated questions | subtopic=%s | count=%d", subtopic_name, len(pre_qs))
             else:
                 qs_data = generate_quiz_content(subtopic)
