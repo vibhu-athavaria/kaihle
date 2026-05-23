@@ -328,7 +328,7 @@ class PromoteRequest(BaseModel):
 class ExplanationSuggestionCreateRequest(BaseModel):
     """Teacher submits a suggestion for a personalised explanation."""
 
-    suggested_text: str = Field(..., min_length=10)
+    suggested_text: str = Field(..., min_length=10, max_length=10000)
 
 
 class ExplanationSuggestionResponse(BaseModel):

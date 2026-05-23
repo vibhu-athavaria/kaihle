@@ -411,44 +411,38 @@ async def get_suggestions_queue(
     )
     total = len(count_result.all())
 
-    result = await db.execute(
-        select(SubtopicExplanationSuggestion)
+    # Single JOIN query — avoids N+1 per suggestion
+    enriched_result = await db.execute(
+        select(
+            SubtopicExplanationSuggestion,
+            Subtopic.name.label("subtopic_name"),
+            InterestCategory.name.label("interest_category_name"),
+            User.first_name.label("teacher_first_name"),
+            User.last_name.label("teacher_last_name"),
+        )
+        .outerjoin(SubtopicContent, SubtopicContent.id == SubtopicExplanationSuggestion.subtopic_content_id)
+        .outerjoin(Subtopic, Subtopic.id == SubtopicContent.subtopic_id)
+        .outerjoin(InterestCategory, InterestCategory.id == SubtopicContent.interest_category_id)
+        .outerjoin(User, User.id == SubtopicExplanationSuggestion.suggested_by_id)
         .where(SubtopicExplanationSuggestion.status == "pending")
         .order_by(SubtopicExplanationSuggestion.created_at.desc())
         .offset(offset)
         .limit(page_size)
     )
-    suggestions = result.scalars().all()
+    rows_sg = enriched_result.all()
 
     items_sg: list[SuggestionQueueItem] = []
-    for sug in suggestions:
-        content_result = await db.execute(select(SubtopicContent).where(SubtopicContent.id == sug.subtopic_content_id))
-        content = content_result.scalar_one_or_none()
-
-        subtopic_name = ""
-        interest_cat_name: str | None = None
-        if content:
-            subtopic_result = await db.execute(select(Subtopic.name).where(Subtopic.id == content.subtopic_id))
-            subtopic_name = subtopic_result.scalar_one_or_none() or ""
-            if content.interest_category_id:
-                cat_result = await db.execute(
-                    select(InterestCategory.name).where(InterestCategory.id == content.interest_category_id)
-                )
-                interest_cat_name = cat_result.scalar_one_or_none()
-
-        teacher_name = ""
-        teacher_result = await db.execute(select(User.first_name, User.last_name).where(User.id == sug.suggested_by_id))
-        teacher_row = teacher_result.first()
-        if teacher_row:
-            teacher_name = f"{teacher_row.first_name} {teacher_row.last_name}".strip()
-
+    for row_sg in rows_sg:
+        sug = row_sg[0]
+        first = row_sg.teacher_first_name or ""
+        last = row_sg.teacher_last_name or ""
         items_sg.append(
             SuggestionQueueItem(
                 suggestion_id=sug.id,
                 subtopic_content_id=sug.subtopic_content_id,
-                subtopic_name=subtopic_name,
-                interest_category_name=interest_cat_name,
-                teacher_name=teacher_name,
+                subtopic_name=row_sg.subtopic_name or "",
+                interest_category_name=row_sg.interest_category_name,
+                teacher_name=f"{first} {last}".strip(),
                 original_text=sug.original_text,
                 suggested_text=sug.suggested_text,
                 status=sug.status,

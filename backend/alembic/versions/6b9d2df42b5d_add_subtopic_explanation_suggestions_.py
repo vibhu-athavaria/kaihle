@@ -87,4 +87,4 @@ def downgrade() -> None:
         table_name="subtopic_explanation_suggestions",
     )
     op.drop_table("subtopic_explanation_suggestions")
-    sa.Enum(name="suggestion_status_enum").drop(op.get_bind(), checkfirst=False)
+    sa.Enum(name="suggestion_status_enum").drop(op.get_bind(), checkfirst=True)

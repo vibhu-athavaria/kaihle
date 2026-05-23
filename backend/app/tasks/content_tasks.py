@@ -8,8 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from typing import TYPE_CHECKING
 
+import resend  # type: ignore[import-untyped]
 import structlog
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 from app.tasks.celery_app import celery_app
 
@@ -138,22 +143,16 @@ async def _run_generate_personalised_explanations(
 
 
 async def _notify_admins_personalised_ready(
-    admins: list[object],
+    admins: list[User],
     subtopic_id: str,
     count: int,
 ) -> None:
     """Send email notification to all active KaihleAdmin users."""
-    import resend  # type: ignore[import-untyped]
-
     from app.core.config import settings
 
     resend.api_key = settings.resend_api_key
 
     for admin in admins:
-        from app.models.user import User
-
-        if not isinstance(admin, User):
-            continue
         try:
             resend.Emails.send(
                 {
