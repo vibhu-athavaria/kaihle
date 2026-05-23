@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select as sa_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token
@@ -26,8 +27,10 @@ from app.models.curriculum import (
     Subtopic,
     Topic,
 )
-from app.models.school import School
+from app.models.interest_category import InterestCategory
+from app.models.school import Class, School
 from app.models.subtopic_content import SubtopicContent
+from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
 from app.models.user import User, UserRole
 
 # ---------------------------------------------------------------------------
@@ -627,8 +630,6 @@ async def test_update_quiz_when_approved_then_questions_and_status_saved(
     assert data["quiz"]["questions"][0]["question_text"] == "What value of x satisfies 2x = 8?"
 
     # Approval must publish questions to question_bank so assessments and mini-courses can use them
-    from sqlalchemy import select as sa_select
-
     qb_result = await db_session.execute(
         sa_select(QuestionBank).where(QuestionBank.subtopic_id == st.id, QuestionBank.source == "llm")
     )
@@ -868,8 +869,6 @@ async def _setup_teacher_with_class(
     curriculum: Curriculum,
 ) -> tuple[School, User]:
     """Create a school, teacher, and class linked to curriculum tree."""
-    from app.models.school import Class, School
-
     school = School(
         id=uuid.uuid4(),
         name=f"School-{uuid.uuid4().hex[:6]}",
@@ -1022,8 +1021,6 @@ async def test_generate_when_no_content_then_creates_school_scoped_pending_row(
         headers=make_auth_header(teacher),
     )
     assert response.status_code == 202
-
-    from sqlalchemy import select as sa_select
 
     result = await db_session.execute(
         sa_select(SubtopicContent).where(
@@ -1231,12 +1228,8 @@ async def test_suggest_explanation_when_personalised_content_exists_then_201(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     """POST /suggest records a pending suggestion against a personalised explanation row."""
-    from app.models.interest_category import InterestCategory
-
     subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
     school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
-
-    from sqlalchemy import select as sa_select
 
     interest_cat_result = await db_session.execute(sa_select(InterestCategory).limit(1))
     interest_cat = interest_cat_result.scalar_one_or_none()
@@ -1294,8 +1287,6 @@ async def test_suggest_explanation_when_generic_content_then_400(client: AsyncCl
 @pytest.mark.asyncio
 async def test_suggestions_queue_when_admin_then_returns_pending(client: AsyncClient, db_session: AsyncSession) -> None:
     """GET /suggestions returns only pending suggestion rows for KaihleAdmin."""
-    from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
-
     subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
     school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
 
@@ -1347,8 +1338,6 @@ async def test_review_suggestion_when_admin_accepts_then_updates_explanation(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     """PATCH /suggestions/{id} with action=accept updates explanation_text and marks accepted."""
-    from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
-
     subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
     school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
 
@@ -1400,8 +1389,6 @@ async def test_review_suggestion_when_admin_accepts_then_updates_explanation(
 @pytest.mark.asyncio
 async def test_review_suggestion_when_teacher_then_403(client: AsyncClient, db_session: AsyncSession) -> None:
     """PATCH /suggestions/{id} returns 403 for teacher role."""
-    from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
-
     subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
     school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
 

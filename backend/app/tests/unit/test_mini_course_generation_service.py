@@ -59,8 +59,6 @@ def test_parse_quiz_response_when_valid_json_then_returns_list() -> None:
 
 
 def test_parse_quiz_response_when_markdown_fenced_then_strips_and_parses() -> None:
-    import json
-
     raw = f"```json\n{json.dumps(_VALID_QUESTIONS)}\n```"
     result = _parse_quiz_response(raw)
     assert len(result) == 1
@@ -72,8 +70,6 @@ def test_parse_quiz_response_when_invalid_json_then_raises_value_error() -> None
 
 
 def test_parse_quiz_response_when_wrong_option_count_then_raises_value_error() -> None:
-    import json
-
     bad = [
         {
             "question_text": "Q?",

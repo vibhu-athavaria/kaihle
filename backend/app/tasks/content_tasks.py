@@ -8,14 +8,17 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import TYPE_CHECKING
 
 import resend  # type: ignore[import-untyped]
 import structlog
+from sqlalchemy import select
 
-if TYPE_CHECKING:
-    from app.models.user import User
-
+from app.ai.providers import router as llm_router
+from app.core.config import settings
+from app.core.database import CeleryAsyncSessionLocal
+from app.models.interest_category import InterestCategory
+from app.models.subtopic_content import SubtopicContent
+from app.models.user import User, UserRole
 from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
@@ -51,14 +54,6 @@ async def _run_generate_personalised_explanations(
     subtopic_id: str,
     explanation_text: str,
 ) -> dict[str, object]:
-    from sqlalchemy import select
-
-    from app.ai.providers import router as llm_router
-    from app.core.database import CeleryAsyncSessionLocal
-    from app.models.interest_category import InterestCategory
-    from app.models.subtopic_content import SubtopicContent
-    from app.models.user import User, UserRole
-
     subtopic_uuid = uuid.UUID(subtopic_id)
     written = 0
     errors = 0
@@ -120,6 +115,8 @@ async def _run_generate_personalised_explanations(
 
         await db.commit()
 
+        resend.api_key = settings.resend_api_key
+
         # Email all active KAIHLE_ADMIN users
         try:
             admin_result = await db.execute(
@@ -148,10 +145,6 @@ async def _notify_admins_personalised_ready(
     count: int,
 ) -> None:
     """Send email notification to all active KaihleAdmin users."""
-    from app.core.config import settings
-
-    resend.api_key = settings.resend_api_key
-
     for admin in admins:
         try:
             resend.Emails.send(
