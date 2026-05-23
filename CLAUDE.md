@@ -7,12 +7,6 @@ Guidance for Claude Code when working in this repository.
 @CLAUDE.local.md
 ---
 
-## What Is Kaihle?
-
-AI-powered learning diagnostics platform for international schools (Cambridge, IB). See `docs/CONSTITUTION.md` for full project spec, tech stack, repo structure, rules, and architecture decisions.
-
----
-
 ## Commands
 
 ### Backend (Python)
@@ -109,19 +103,9 @@ frontend/packages/types/      ← getMasteryStyle() + shared interfaces
 
 ---
 
-## LLM Task Routing
+## Critical Safety Rule
 
-All LLM calls go through `backend/app/ai/providers/router.py`. See `docs/CONSTITUTION.md §8` for the full task table and rules.
-
-| Task | Model |
-|---|---|
-| `gap_classification` | `gemini/gemini-2.5-flash` |
-| `study_plan` | `gpt-4.1-mini` |
-| `lesson_plan` | `openrouter/anthropic/claude-sonnet-4-6` |
-| `student_pack` | `gemini/gemini-2.5-pro` |
-
-NEVER run docker compose down -v, docker volume rm, or any variant 
-that removes postgres_data without explicit written confirmation from Vibhu.<!-- BEGIN BYTEROVER RULES -->
+NEVER run docker compose down -v, docker volume rm, or any variant that removes postgres_data without explicit written confirmation from Vibhu.<!-- BEGIN BYTEROVER RULES -->
 
 # Workflow Instruction
 

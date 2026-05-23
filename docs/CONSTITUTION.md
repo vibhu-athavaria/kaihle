@@ -9,62 +9,22 @@
 
 ## 1. What Is Kaihle?
 
-AI-powered learning diagnostics platform for schools. Identifies knowledge gaps, generates personalised study plans, gives teachers, school admins, and parents real-time visibility into student progress.
+AI-powered learning diagnostics platform for international schools (Cambridge, IB). Identifies knowledge gaps, generates personalised study plans, gives teachers, school admins, and parents real-time visibility into student progress.
 
 **Target users:** Students (age 11–18), Teachers, School Admins, Parents, Kaihle Admin (internal).
-**Curriculum scope (v1):** Cambridge Lower Secondary (Grades 6–8) + Cambridge IGCSE (Grades 9–10).
-
-| Programme | Grades | Subjects |
-|---|---|---|
-| Cambridge Primary | 5 | Mathematics (MATH), English Language (ENG) |
-| Cambridge Lower Secondary | 6–8 | Mathematics (MATH), Integrated Science (SCI), English Language (ENG) |
-| Cambridge IGCSE | 9–10 | Mathematics (MATH), Biology (BIO), Chemistry (CHEM), Physics (PHY), English Language (ENG), English Literature (ENGL) |
-| Cambridge AS & A Level | 11–12 | Mathematics (MATH), Biology (BIO), Chemistry (CHEM), Physics (PHY), English Language (ENG) |
-
-**Subject binding rules (absolute):**
-- SCI belongs to `cambridge_lower` ONLY — not IGCSE or AS/A Level.
-- BIO, CHEM, PHY, ENGL belong to `igcse` and `cambridge_as_a` — not Lower Secondary or Primary.
-- MATH and ENG span all four programmes.
-- Grade level constraint in `grades` table: `level BETWEEN 1 AND 13` (supports future expansion).
-
 **Pilot target:** Micro-schools in Southeast Asia. Max 10 schools, ~400 students in v1.
+
+> Curriculum scope table and subject binding rules: `brv query "Kaihle curriculum scope and subject binding rules"`
 
 ---
 
 ## 2. Locked Tech Stack
 
-### Backend
-| Concern | Choice |
-|---|---|
-| Language | Python 3.12 |
-| Framework | FastAPI (async) |
-| ORM | SQLAlchemy 2.x async + Alembic |
-| Validation | Pydantic v2 |
-| Auth | JWT (15min access + 7day refresh) + magic links via Resend |
-| Task queue | Celery + Redis broker |
-| Testing | pytest + pytest-asyncio + httpx |
-| Logging | structlog, JSON to stdout |
+**Backend:** Python 3.12, FastAPI (async), SQLAlchemy 2.x + Alembic, Pydantic v2, JWT + magic links, Celery + Redis, pytest + pytest-asyncio.
+**Frontend:** React + Vite + TypeScript (strict), Tailwind CSS v3, Zustand + React Query v5, React Hook Form + Zod, React Router v6.
+**Infrastructure:** PostgreSQL 16 + pgvector, Redis 7, AWS S3, Docker Compose, Render.com.
 
-### Frontend
-| Concern | Choice |
-|---|---|
-| Framework | React + Vite + TypeScript (strict mode) |
-| CSS | Tailwind CSS v3 — no custom CSS files |
-| UI library | TailAdmin Free as the base admin/dashboard template |
-| State | Zustand (global) + React Query v5 (server) |
-| Forms | React Hook Form + Zod |
-| Router | React Router v6 |
-| Testing unit | Jest + React Testing Library |
-| Testing E2E | Playwright |
-
-### Infrastructure
-| Concern | Choice |
-|---|---|
-| Database | PostgreSQL 16 + pgvector extension |
-| Cache | Redis 7 |
-| File storage | AWS S3 |
-| Dev | Docker Compose |
-| Production | Render.com |
+> Full tech stack detail: `brv query "Kaihle locked tech stack"`
 
 ---
 
@@ -141,7 +101,7 @@ Each of the five frontend apps serves **exactly one role**. Zero cross-role code
 **Rule 11 — Student onboarding has one gate; study plans require diagnostic completion.**
 - Gate 1 (learning profile): Dashboard inaccessible until `student_profiles.is_learning_profile_complete = TRUE`. Enforced by `OnboardingRoute` in `packages/auth`.
 - Class content: Immediately accessible after enrollment — no diagnostic gate.
-- Study plans: Only generated after student completes the diagnostic for that class. Teachers cannot assign study plans until diagnostic is completed. This is enforced at the service layer.
+- Study plans: Only generated after student completes the diagnostic for that class. This is enforced at the service layer.
 
 **Rule 12 — KaihleAdmin `school_id` bypass must always be explicit.**
 ```python
@@ -163,8 +123,6 @@ if current_user.school_id != school_id:
 
 **Rule 18 — Celery tasks must emit a `CRITICAL` log on final retry exhaustion.** Include `class_id`, `student_id` (if applicable), task name, `exc_info=True`.
 
-
-
 **Rule 20 — Test-Driven Development is non-negotiable.** Every task file creating or modifying backend service/route logic MUST include: (1) named unit test functions with mock setup and assertions, (2) named integration test functions, (3) test file paths. Acceptance criteria checkboxes alone are not sufficient.
 
 **Rule 21 — All modals must trap focus.** Use the `Modal` component from `packages/ui` (Radix UI Dialog wrapper). Tab cycles within modal, Escape closes, focus returns to trigger. Custom div-based modals without focus trapping are WCAG 2.1 Level AA violations. See `docs/design/DESIGN_SYSTEM.md` §9 for the canonical pattern.
@@ -177,55 +135,10 @@ if current_user.school_id != school_id:
 
 ## 5. Authentication and Onboarding Flows
 
-### 5.1 Magic Link → Password Setup → Role-Specific Next Step
+> Full step-by-step flows (magic link, password setup, student onboarding, email/password login):
+> `brv query "Kaihle feature: auth (magic links, password setup, login, JWT scopes)"`
 
-```
-Step 1 — Invitation
-  Kaihle Admin creates school → invites School Admin via magic link
-  School Admin invites Teacher → magic link
-  School Admin invites Student → magic link
-
-Step 2 — Magic Link Click
-  GET /api/v1/auth/magic-link/verify?token=...
-  Backend: validates token (single-use, 10min TTL), marks used=TRUE
-  Issues SCOPED JWT { scope: "password_setup", sub: user_id, role, exp: 1hr }
-  Frontend: PasswordSetupRoute detects scope → /[app]/setup-password
-
-Step 3 — Password Setup
-  POST /api/v1/auth/set-password (requires scope: "password_setup")
-  Backend: hashes password, issues FULL-ACCESS JWT + refresh token
-  Redirect:
-    School Admin → /school-admin/dashboard
-    Teacher      → /teacher/dashboard
-    Student      → /student/onboarding/profile
-```
-
-### 5.2 Student Onboarding (after password setup)
-
-```
-Step 4 — Learning Profile Questionnaire
-  /student/onboarding/profile
-  POST /api/v1/onboarding/questionnaire/submit
-  Sets student_profiles.is_learning_profile_complete = TRUE
-
-Step 5 — Dashboard Access
-  OnboardingRoute clears → /student/dashboard
-  Class cards show independently: locked (diagnostic pending) or unlocked
-
-Step 6 — Per-Class Diagnostic (Tier 1)
-  Student clicks locked class card → takes Tier 1 assessment
-  Submit → calculate_gap_states → class_enrollments.onboarding_diagnostic_status = COMPLETED
-  That class unlocks independently of others
-```
-
-### 5.3 Email/Password Login (returning users)
-
-```
-POST /api/v1/auth/login → { email, password }
-  Verify bcrypt hash, check is_active=TRUE
-  Return { access_token (15min), refresh_token (7 days), user: { id, email, role, school_id } }
-  Role-based redirect per §6
-```
+**Summary:** Magic link → password setup (scoped JWT) → role-specific redirect. Student additionally completes learning profile questionnaire before dashboard access. Parents skip password setup in v1.
 
 ---
 
@@ -239,8 +152,6 @@ POST /api/v1/auth/login → { email, password }
 | PARENT | `apps/parent` | 3003 | `/parent/dashboard` | `/parent/dashboard` |
 | KAIHLE_ADMIN | `apps/kaihle-admin` | 3005 | `/kaihle-admin/dashboard` | `/kaihle-admin/dashboard` |
 
-Parents are not invited via magic link in v1 — no password setup step.
-
 ---
 
 ## 7. Multi-Tenancy Rules
@@ -251,103 +162,15 @@ Single database. `school_id` on every non-curriculum table. Enforced at the serv
 
 ## 8. LLM Provider Routing
 
-All LLM calls go through `backend/app/ai/providers/router.py` via LiteLLM. Switching providers requires only an environment variable change — no code changes.
+All LLM calls go through `backend/app/ai/providers/router.py` via LiteLLM. All models are fully env-var driven — no model names in code. pgvector embeddings not used in v1. MCQ scoring is deterministic string comparison (not LLM).
 
-| Task | Env var |
-|---|---|
-| `gap_classification` | `LLM_GAP_CLASSIFICATION_MODEL` |
-| `study_plan` | `LLM_STUDY_PLAN_MODEL` |
-| `lesson_plan` | `LLM_LESSON_PLAN_MODEL` |
-| `student_pack` | `LLM_STUDENT_PACK_MODEL` |
-
-**Note:** pgvector embeddings are not used in v1. `subtopic_content` table (structured SQL) replaces cosine similarity for all content curation. Do not add embedding calls without an ADR.
-
-**Note:** Question generation and answer scoring are NOT LLM tasks. Questions come from the pre-built `question_bank` table. MCQ scoring is deterministic string comparison.
-
----
-
-## 9. Environment Variables
-
-All config comes from environment variables via `app/core/config.py` (Rule 5). Required for every environment:
-
-```bash
-# Database
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/kaihle
-REDIS_URL=redis://localhost:6379/0
-
-# Auth
-JWT_SECRET_KEY=<random 64-char hex>
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=15
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# Email
-RESEND_API_KEY=<key>
-FROM_EMAIL=no-reply@kaihle.ai
-
-# LLM — provider API keys
-GOOGLE_API_KEY=<key>
-OPENAI_API_KEY=<key>
-OPENROUTER_API_KEY=<key>
-
-# LLM — model routing (all overridable, defaults shown)
-LLM_GAP_CLASSIFICATION_MODEL=gemini/gemini-2.5-flash
-LLM_GAP_CLASSIFICATION_API_BASE=
-LLM_STUDY_PLAN_MODEL=gpt-4.1-mini
-LLM_STUDY_PLAN_API_BASE=
-LLM_LESSON_PLAN_MODEL=openrouter/anthropic/claude-sonnet-4-6
-LLM_LESSON_PLAN_API_BASE=
-LLM_STUDENT_PACK_MODEL=gemini/gemini-2.5-pro
-LLM_STUDENT_PACK_API_BASE=
-
-# Storage
-AWS_ACCESS_KEY_ID=<key>
-AWS_SECRET_ACCESS_KEY=<key>
-AWS_S3_BUCKET=kaihle-assets
-AWS_REGION=ap-southeast-1
-
-# App
-ENVIRONMENT=development   # development | staging | production
-LOG_LEVEL=INFO
-```
-
-**To route a task to a self-hosted LLM server** (no code change needed):
-```bash
-LLM_LESSON_PLAN_MODEL=openai/kaihle-llm-v1
-LLM_LESSON_PLAN_API_BASE=http://your-llm-server:8000
-```
-
-
----
-
-## 10. Diagnostic Assessment
-
-Diagnostic assessments are teacher-created optional assessments that measure student readiness and generate personalized study plans.
-
-| | Diagnostic Assessment |
-|---|---|
-| Created by | Teacher via API (design_tier1_diagnostic) |
-| Purpose | Measure student readiness, unlock personalized study plans |
-| Content access | Does NOT block — students can access all class content immediately |
-| Study plans | Only generated after diagnostic is completed |
-
----
-
-## 11. Student Learning Profile
-
-Table: `student_learning_profiles` — one row per student, created on questionnaire submit.
-
-- `modality_scores` JSONB: `{ "visual": 0.8, "auditory": 0.3, "reading_writing": 0.6, "kinesthetic": 0.5 }`
-- `work_style` JSONB: `{ "prefers_solo": true, "short_sessions": false, "task_based": true }`
-- `interests` TEXT[]: `["football", "music", "gaming"]` — human-readable, used directly in prompts.
-
-Used by: content curator (resource ranking), quiz generator (interest contextualisation), lesson planner (class-level interest aggregation), teacher gap map panel (read-only display), AI Concept Guide (personalised explanations).
+> Task→env-var routing table and self-hosting instructions: `brv query "Kaihle LLM provider routing"`
 
 ---
 
 ## 12. Mastery Thresholds
 
-Use `getMasteryStyle(score)` from `packages/types/src/mastery.ts` — never inline mastery color logic. Full implementation in `docs/design/DESIGN_SYSTEM.md` §2.
+Use `getMasteryStyle(score)` from `packages/types/src/mastery.ts` — never inline mastery color logic.
 
 | Score | Label | Token |
 |---|---|---|
@@ -369,4 +192,8 @@ Boundary: `score = 0.7` → Developing. `score = 0.71` → Strong.
 | Design tokens, component patterns, role specs, accessibility | `docs/design/DESIGN_SYSTEM.md` |
 | Screen specs per role (page inventory, component specs, data map) | `docs/design/screens/TEACHER_SCREENS.md` etc. |
 | Architecture decisions | `docs/adr/ADR-*.md` |
-| Environment variables | §9 of this document |
+| Environment variables | `brv query "Kaihle environment variables"` |
+| Auth/onboarding flows | `brv query "Kaihle feature: auth"` |
+| Diagnostic assessment detail | `brv query "Kaihle feature: student onboarding"` |
+| Student learning profile schema | `brv query "Kaihle student learning profile"` |
+| Curriculum scope and subject bindings | `brv query "Kaihle curriculum scope"` |

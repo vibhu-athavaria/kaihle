@@ -498,6 +498,8 @@ async def refresh_video_candidates(
             "url": v.get("video_url", ""),
             "title": v.get("title", ""),
             "channel": v.get("video_provider", ""),
+            "thumbnail_url": v.get("video_thumbnail_url"),
+            "duration_seconds": v.get("video_duration_seconds"),
             "view_count": None,
             "status": "pending",
             "last_checked_at": None,
