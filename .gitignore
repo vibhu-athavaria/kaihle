@@ -24,7 +24,7 @@ node_modules/
 dist/
 src/**/*.js
 src/**/*.js.map
-/plans/*
+docs/plans/**
 .cache/
 .kilo/plans/**
 .kilocode/**
