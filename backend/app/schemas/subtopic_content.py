@@ -256,6 +256,72 @@ class QuizUpdateRequest(BaseModel):
 SubtopicContentReviewResponse = FullSubtopicContentReviewResponse
 
 
+# --- Teacher content status / generation / approval ---
+
+
+class ContentTypeStatus(BaseModel):
+    """Status of a single content type for a subtopic."""
+
+    status: str  # 'none' | 'pending' | 'approved' | 'rejected' | 'other_school_pending'
+    scope: str | None = None  # 'curriculum' | 'school' | None
+    school_id: uuid.UUID | None = None
+
+
+class SubtopicContentStatusResponse(BaseModel):
+    """Per-type content status for a subtopic — teacher-facing."""
+
+    subtopic_id: uuid.UUID
+    video: ContentTypeStatus
+    explanation: ContentTypeStatus
+    quiz: ContentTypeStatus
+
+
+class ContentGenerateRequest(BaseModel):
+    """Teacher requests generation of a specific content type."""
+
+    pass  # content_type is a path param; no body needed currently
+
+
+class TeacherApproveRequest(BaseModel):
+    """Teacher approves or rejects their school's pending content."""
+
+    action: str = Field(..., pattern="^(approve|reject)$")
+    rejection_reason: str | None = None
+
+
+# --- KaihleAdmin promotion queue ---
+
+
+class PromotionQueueItem(BaseModel):
+    """One item in the promotion queue — school-scoped approved content."""
+
+    subtopic_content_id: uuid.UUID
+    subtopic_id: uuid.UUID
+    subtopic_name: str
+    content_type: str
+    school_name: str
+    reviewed_by_name: str | None = None  # teacher who approved
+    subject_code: str
+    grade_level: int
+    review_status: str
+    reviewed_at: datetime | None = None
+    school_id: uuid.UUID
+
+
+class PromotionQueueResponse(BaseModel):
+    """Paginated promotion queue."""
+
+    items: list[PromotionQueueItem]
+    total: int
+
+
+class PromoteRequest(BaseModel):
+    """KaihleAdmin promotes or rejects promotion for a piece of content."""
+
+    action: str = Field(..., pattern="^(promote|reject_promotion)$")
+    rejection_reason: str | None = None
+
+
 # --- StudentLessonPack schemas ---
 
 
