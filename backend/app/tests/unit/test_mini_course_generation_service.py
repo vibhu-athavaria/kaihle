@@ -123,7 +123,9 @@ async def test_generate_quiz_when_no_existing_content_then_creates_staging_row()
     assert added_obj.review_status == "pending"
     assert added_obj.is_archived is False
     assert added_obj.quiz_questions_count == 1
+    assert added_obj.quiz_questions is not None
     assert len(added_obj.quiz_questions) == 1
+    assert "question_id" in added_obj.quiz_questions[0]
 
 
 @pytest.mark.asyncio
@@ -161,7 +163,9 @@ async def test_generate_quiz_when_existing_quiz_content_then_updates_staging_row
     assert existing.review_status == "pending"
     assert existing.is_archived is False
     assert existing.quiz_questions_count == 1
+    assert existing.quiz_questions is not None
     assert len(existing.quiz_questions) == 1
+    assert "question_id" in existing.quiz_questions[0]
 
 
 @pytest.mark.asyncio

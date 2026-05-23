@@ -358,9 +358,18 @@ class MiniCourseGenerationService:
 
         # Write to subtopic_content staging (not question_bank directly).
         # KaihleAdmin reviews and approves the batch, which then publishes to question_bank.
+        existing_result = await self.db.execute(
+            select(SubtopicContent).where(
+                SubtopicContent.subtopic_id == subtopic_id,
+                SubtopicContent.content_type == "quiz",
+                SubtopicContent.is_archived == False,  # noqa: E712
+            )
+        )
+        quiz_content = existing_result.scalars().first()
 
         normalized = [
             {
+                "question_id": str(uuid.uuid4()),
                 "question_text": q["question_text"],
                 "options": q["options"],
                 "correct_answer": q["correct_answer"],
