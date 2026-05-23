@@ -424,20 +424,37 @@ async def get_suggestions_queue(
         .offset(offset)
         .limit(page_size)
     )
-    rows_sg = enriched_result.all()
+    suggestions = result.scalars().all()
 
     items_sg: list[SuggestionQueueItem] = []
-    for row_sg in rows_sg:
-        sug = row_sg[0]
-        first = row_sg.teacher_first_name or ""
-        last = row_sg.teacher_last_name or ""
+    for sug in suggestions:
+        content_result = await db.execute(select(SubtopicContent).where(SubtopicContent.id == sug.subtopic_content_id))
+        content = content_result.scalar_one_or_none()
+
+        subtopic_name = ""
+        interest_cat_name: str | None = None
+        if content:
+            subtopic_result = await db.execute(select(Subtopic.name).where(Subtopic.id == content.subtopic_id))
+            subtopic_name = subtopic_result.scalar_one_or_none() or ""
+            if content.interest_category_id:
+                cat_result = await db.execute(
+                    select(InterestCategory.name).where(InterestCategory.id == content.interest_category_id)
+                )
+                interest_cat_name = cat_result.scalar_one_or_none()
+
+        teacher_name = ""
+        teacher_result = await db.execute(select(User.first_name, User.last_name).where(User.id == sug.suggested_by_id))
+        teacher_row = teacher_result.first()
+        if teacher_row:
+            teacher_name = f"{teacher_row.first_name} {teacher_row.last_name}".strip()
+
         items_sg.append(
             SuggestionQueueItem(
                 suggestion_id=sug.id,
                 subtopic_content_id=sug.subtopic_content_id,
-                subtopic_name=row_sg.subtopic_name or "",
-                interest_category_name=row_sg.interest_category_name,
-                teacher_name=f"{first} {last}".strip(),
+                subtopic_name=subtopic_name,
+                interest_category_name=interest_cat_name,
+                teacher_name=teacher_name,
                 original_text=sug.original_text,
                 suggested_text=sug.suggested_text,
                 status=sug.status,
