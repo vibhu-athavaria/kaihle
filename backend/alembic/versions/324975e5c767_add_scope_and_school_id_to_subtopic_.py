@@ -54,15 +54,30 @@ def upgrade() -> None:
         sa.Column("school_id", sa.UUID(), nullable=True),
     )
 
-    # Replace old (subtopic_id, content_type) unique constraint with partial indexes
+    # Replace old (subtopic_id, content_type) unique constraint with partial indexes.
     op.drop_constraint("uq_subtopic_content_type", "subtopic_content", type_="unique")
 
+    # Drop the per-category explanation index from dadba0b9d91d — its role is superseded
+    # by the two curriculum partial indexes below.
+    op.drop_index("uq_subtopic_content_explanation_per_category", table_name="subtopic_content")
+
+    # Curriculum generic rows (video, quiz, practice — interest_category_id IS NULL):
+    # one row per (subtopic_id, content_type).
     op.create_index(
-        "uq_subtopic_content_curriculum",
+        "uq_subtopic_content_curriculum_generic",
         "subtopic_content",
         ["subtopic_id", "content_type"],
         unique=True,
-        postgresql_where="scope = 'curriculum'",
+        postgresql_where="scope = 'curriculum' AND interest_category_id IS NULL",
+    )
+    # Curriculum personalised explanation rows (interest_category_id IS NOT NULL):
+    # one row per (subtopic_id, content_type, interest_category_id).
+    op.create_index(
+        "uq_subtopic_content_curriculum_personalised",
+        "subtopic_content",
+        ["subtopic_id", "content_type", "interest_category_id"],
+        unique=True,
+        postgresql_where="scope = 'curriculum' AND interest_category_id IS NOT NULL",
     )
     op.create_index(
         "uq_subtopic_content_school",
@@ -93,11 +108,21 @@ def downgrade() -> None:
     op.drop_index("ix_subtopic_content_school_id", table_name="subtopic_content")
     op.drop_index("ix_subtopic_content_scope", table_name="subtopic_content")
     op.drop_index("uq_subtopic_content_school", table_name="subtopic_content")
-    op.drop_index("uq_subtopic_content_curriculum", table_name="subtopic_content")
+    op.drop_index("uq_subtopic_content_curriculum_personalised", table_name="subtopic_content")
+    op.drop_index("uq_subtopic_content_curriculum_generic", table_name="subtopic_content")
+
+    # Restore the per-category explanation index that was active before this migration.
+    op.execute(
+        """
+        CREATE UNIQUE INDEX uq_subtopic_content_explanation_per_category
+        ON subtopic_content (subtopic_id, content_type, interest_category_id)
+        WHERE (content_type = 'explanation' AND is_active = true AND is_archived = false)
+        """
+    )
 
     op.create_unique_constraint("uq_subtopic_content_type", "subtopic_content", ["subtopic_id", "content_type"])
 
     op.drop_column("subtopic_content", "school_id")
     op.drop_column("subtopic_content", "scope")
 
-    op.execute("DROP TYPE subtopic_content_scope_enum")
+    op.execute("DROP TYPE IF EXISTS subtopic_content_scope_enum")

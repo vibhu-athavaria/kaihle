@@ -19,6 +19,10 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # Delete duplicate rows, keeping the most recently updated one per (subtopic_id, content_type).
+    # WARNING: if interest-category explanation variants exist (four rows per subtopic from
+    # mini_course_generation_service), three of them will be deleted per subtopic. This migration
+    # is safe on a fresh DB with no generated explanation content. Do not run on a DB that has
+    # already processed mini-course generation for any topic.
     op.execute(
         """
         DELETE FROM subtopic_content

@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import attributes as orm_attrs
@@ -36,15 +36,21 @@ from app.models.curriculum import QuestionBank
 from app.models.subtopic_content import SubtopicContent
 from app.models.user import UserRole
 from app.schemas.subtopic_content import (
+    ContentTypeStatus,
     ExplanationSection,
     ExplanationUpdateRequest,
     FullSubtopicContentReviewResponse,
     ManualVideoAddRequest,
+    PromoteRequest,
+    PromotionQueueItem,
+    PromotionQueueResponse,
     QuizQuestionEntry,
     QuizSection,
     QuizUpdateRequest,
     ReviewQueueItem,
     ReviewQueueResponse,
+    SubtopicContentStatusResponse,
+    TeacherApproveRequest,
     VideoEntry,
     VideoSection,
     VideoStatusUpdateRequest,
@@ -290,6 +296,94 @@ async def get_review_queue(
     items = items[offset : offset + page_size]
 
     return ReviewQueueResponse(items=items, total=total, pending_total=pending_total)
+
+
+# ---------------------------------------------------------------------------
+# KaihleAdmin promotion queue
+# Must be registered before GET /{subtopic_id} — FastAPI matches static paths
+# before dynamic ones only when they are registered first in the same router.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/promotion-queue", response_model=PromotionQueueResponse)
+async def get_promotion_queue(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> PromotionQueueResponse:
+    """Paginated list of school-scoped approved content awaiting promotion."""
+    from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic
+    from app.models.school import School
+    from app.models.user import User
+
+    offset = (page - 1) * page_size
+
+    count_result = await db.execute(
+        select(SubtopicContent.id).where(
+            SubtopicContent.scope == "school",
+            SubtopicContent.review_status == "approved",
+            SubtopicContent.is_archived.is_(False),
+        )
+    )
+    total = len(count_result.all())
+
+    result = await db.execute(
+        select(SubtopicContent)
+        .where(
+            SubtopicContent.scope == "school",
+            SubtopicContent.review_status == "approved",
+            SubtopicContent.is_archived.is_(False),
+        )
+        .order_by(SubtopicContent.reviewed_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    rows = result.scalars().all()
+
+    items: list[PromotionQueueItem] = []
+    for row in rows:
+        subtopic_result = await db.execute(
+            select(
+                Subtopic.name.label("subtopic_name"),
+                Subject.code.label("subject_code"),
+                Grade.level.label("grade_level"),
+            )
+            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .join(Subject, Subject.id == CurriculumTopic.subject_id)
+            .join(Grade, Grade.id == CurriculumTopic.grade_id)
+            .where(Subtopic.id == row.subtopic_id)
+            .limit(1)
+        )
+        meta = subtopic_result.first()
+
+        school_result = await db.execute(select(School.name).where(School.id == row.school_id))
+        school_name = school_result.scalar_one_or_none() or "Unknown School"
+
+        reviewer_name: str | None = None
+        if row.reviewed_by_id:
+            user_result = await db.execute(select(User.first_name, User.last_name).where(User.id == row.reviewed_by_id))
+            user_row = user_result.first()
+            if user_row:
+                reviewer_name = f"{user_row.first_name} {user_row.last_name}".strip()
+
+        items.append(
+            PromotionQueueItem(
+                subtopic_content_id=row.id,
+                subtopic_id=row.subtopic_id,
+                subtopic_name=meta.subtopic_name if meta else "",
+                content_type=row.content_type,
+                school_name=school_name,
+                reviewed_by_name=reviewer_name,
+                subject_code=meta.subject_code if meta else "",
+                grade_level=meta.grade_level if meta else 0,
+                review_status=row.review_status,
+                reviewed_at=row.reviewed_at,
+                school_id=row.school_id,
+            )
+        )
+
+    return PromotionQueueResponse(items=items, total=total)
 
 
 # ---------------------------------------------------------------------------
@@ -764,3 +858,257 @@ async def generate_quiz(
         reviewer_id=str(current_user.id),
     )
     return await get_subtopic_content(subtopic_id, current_user, db)
+
+
+# ---------------------------------------------------------------------------
+# Teacher endpoints: status, generate, approve
+# ---------------------------------------------------------------------------
+
+
+def _content_type_status(row: SubtopicContent | None, school_id: uuid.UUID | None) -> ContentTypeStatus:
+    """Compute status token for one content type row as seen by a teacher."""
+    if row is None:
+        return ContentTypeStatus(status="none")
+    if row.scope == "curriculum":
+        return ContentTypeStatus(status=row.review_status, scope="curriculum")
+    # school-scoped
+    if row.school_id == school_id:
+        return ContentTypeStatus(status=row.review_status, scope="school", school_id=row.school_id)
+    return ContentTypeStatus(status="other_school_pending", scope="school", school_id=row.school_id)
+
+
+async def _verify_teacher_subtopic_access(
+    subtopic_id: uuid.UUID,
+    school_id: uuid.UUID,
+    db: AsyncSession,
+) -> None:
+    """Raise 403 if the teacher's school has no class assigned to this subtopic."""
+    from app.models.curriculum import CurriculumTopic, Subtopic
+    from app.models.school import Class
+
+    # Class joins via (subject_id, grade_id, curriculum_id) matching CurriculumTopic
+    result = await db.execute(
+        select(Subtopic.id)
+        .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+        .join(
+            Class,
+            (Class.subject_id == CurriculumTopic.subject_id)
+            & (Class.grade_id == CurriculumTopic.grade_id)
+            & (Class.curriculum_id == CurriculumTopic.curriculum_id),
+        )
+        .where(
+            Subtopic.id == subtopic_id,
+            Class.school_id == school_id,
+            Class.is_active.is_(True),
+        )
+        .limit(1)
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Subtopic not in any class for your school",
+        )
+
+
+@router.get("/{subtopic_id}/status", response_model=SubtopicContentStatusResponse)
+async def get_subtopic_content_status(
+    subtopic_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> SubtopicContentStatusResponse:
+    """Return per-type content status for a subtopic — teacher-facing."""
+    assert current_user.school_id is not None
+    await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type.in_(["video", "explanation", "quiz"]),
+        )
+    )
+    rows = result.scalars().all()
+    by_type: dict[str, SubtopicContent | None] = {"video": None, "explanation": None, "quiz": None}
+    for row in rows:
+        ct = row.content_type
+        if ct in by_type:
+            existing = by_type[ct]
+            # Prefer own-school row over curriculum row for status display
+            if existing is None or (row.scope == "school" and row.school_id == current_user.school_id):
+                by_type[ct] = row
+
+    return SubtopicContentStatusResponse(
+        subtopic_id=subtopic_id,
+        video=_content_type_status(by_type["video"], current_user.school_id),
+        explanation=_content_type_status(by_type["explanation"], current_user.school_id),
+        quiz=_content_type_status(by_type["quiz"], current_user.school_id),
+    )
+
+
+@router.post("/{subtopic_id}/{content_type}/generate", status_code=status.HTTP_202_ACCEPTED)
+async def teacher_generate_content(
+    subtopic_id: uuid.UUID,
+    content_type: str = Path(..., pattern="^(video|explanation|quiz)$"),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Teacher requests LLM generation of a specific content type.
+
+    Returns 409 if ANY row (any scope/school) already exists for (subtopic_id, content_type).
+    Creates a school-scoped pending placeholder; Celery task enqueue wired in T6.
+    """
+    assert current_user.school_id is not None
+    await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    existing_result = await db.execute(
+        select(SubtopicContent.id).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == content_type,
+        )
+    )
+    if existing_result.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Content of type '{content_type}' already exists for this subtopic",
+        )
+
+    now = datetime.now(UTC)
+    placeholder = SubtopicContent(
+        subtopic_id=subtopic_id,
+        content_type=content_type,
+        scope="school",
+        school_id=current_user.school_id,
+        review_status="pending",
+        is_active=False,
+        is_stale=False,
+        is_archived=False,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(placeholder)
+    await db.commit()
+
+    logger.info(
+        "teacher_content_generation_requested",
+        subtopic_id=str(subtopic_id),
+        content_type=content_type,
+        school_id=str(current_user.school_id),
+        teacher_id=str(current_user.id),
+    )
+    return {"status": "accepted", "message": "Content generation queued"}
+
+
+@router.patch("/{subtopic_id}/{content_type}/approve")
+async def teacher_approve_content(
+    subtopic_id: uuid.UUID,
+    content_type: str = Path(..., pattern="^(video|explanation|quiz)$"),
+    body: TeacherApproveRequest = Body(...),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Teacher approves or rejects their school's pending school-scoped content."""
+    assert current_user.school_id is not None
+    await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == content_type,
+            SubtopicContent.scope == "school",
+            SubtopicContent.school_id == current_user.school_id,
+        )
+    )
+    content = result.scalar_one_or_none()
+    if content is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No school-scoped content found for this subtopic and content type",
+        )
+
+    now = datetime.now(UTC)
+    if body.action == "approve":
+        content.review_status = "approved"
+        content.is_active = True
+        content.rejection_reason = None
+    else:
+        content.review_status = "rejected"
+        content.rejection_reason = body.rejection_reason
+    content.reviewed_at = now
+    content.reviewed_by_id = current_user.id
+    content.updated_at = now
+
+    await db.commit()
+    logger.info(
+        "teacher_content_decision",
+        subtopic_id=str(subtopic_id),
+        content_type=content_type,
+        action=body.action,
+        school_id=str(current_user.school_id),
+        teacher_id=str(current_user.id),
+    )
+    return {"status": body.action}
+
+
+@router.patch("/{subtopic_id}/{content_type}/promote")
+async def promote_content(
+    subtopic_id: uuid.UUID,
+    content_type: str = Path(..., pattern="^(video|explanation|quiz)$"),
+    body: PromoteRequest = Body(...),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """KaihleAdmin promotes school-scoped approved content to curriculum scope, or rejects."""
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == content_type,
+            SubtopicContent.scope == "school",
+            SubtopicContent.review_status == "approved",
+        )
+    )
+    content = result.scalar_one_or_none()
+    if content is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No school-scoped approved content found",
+        )
+
+    now = datetime.now(UTC)
+    if body.action == "promote":
+        existing_curriculum = await db.execute(
+            select(SubtopicContent).where(
+                SubtopicContent.subtopic_id == subtopic_id,
+                SubtopicContent.content_type == content_type,
+                SubtopicContent.scope == "curriculum",
+            )
+        )
+        if existing_curriculum.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A curriculum-scoped row already exists for this subtopic and content type",
+            )
+        content.scope = "curriculum"
+        content.school_id = None
+        content.reviewed_at = now
+        content.reviewed_by_id = current_user.id
+        content.updated_at = now
+        logger.info(
+            "content_promoted_to_curriculum",
+            subtopic_id=str(subtopic_id),
+            content_type=content_type,
+            admin_id=str(current_user.id),
+        )
+    else:
+        content.review_status = "rejected"
+        content.rejection_reason = body.rejection_reason
+        content.reviewed_at = now
+        content.reviewed_by_id = current_user.id
+        content.updated_at = now
+        logger.info(
+            "content_promotion_rejected",
+            subtopic_id=str(subtopic_id),
+            content_type=content_type,
+            admin_id=str(current_user.id),
+        )
+
+    await db.commit()
+    return {"status": body.action}

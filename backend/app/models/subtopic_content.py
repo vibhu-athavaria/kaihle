@@ -155,16 +155,26 @@ class SubtopicContent(Base, UUIDMixin, TimestampMixin):
     subtopic = relationship("Subtopic", viewonly=True)
 
     __table_args__ = (
-        # Partial unique indexes enforce different uniqueness rules per scope:
-        # curriculum rows: one per (subtopic_id, content_type) globally
-        # school rows: one per (subtopic_id, content_type, school_id) per school
+        # Curriculum generic rows (video, quiz, practice — no interest category):
+        # one row per (subtopic_id, content_type).
         Index(
-            "uq_subtopic_content_curriculum",
+            "uq_subtopic_content_curriculum_generic",
             "subtopic_id",
             "content_type",
             unique=True,
-            postgresql_where="scope = 'curriculum'",
+            postgresql_where="scope = 'curriculum' AND interest_category_id IS NULL",
         ),
+        # Curriculum personalised explanation rows (one per interest category):
+        # one row per (subtopic_id, content_type, interest_category_id).
+        Index(
+            "uq_subtopic_content_curriculum_personalised",
+            "subtopic_id",
+            "content_type",
+            "interest_category_id",
+            unique=True,
+            postgresql_where="scope = 'curriculum' AND interest_category_id IS NOT NULL",
+        ),
+        # School-scoped rows: one per (subtopic_id, content_type, school_id).
         Index(
             "uq_subtopic_content_school",
             "subtopic_id",

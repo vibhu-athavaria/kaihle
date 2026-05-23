@@ -853,3 +853,340 @@ async def test_generate_quiz_when_teacher_then_403(
         headers=make_auth_header(teacher),
     )
     assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# T5 Integration Tests: teacher status, generate, approve; promotion queue
+# ---------------------------------------------------------------------------
+
+
+async def _setup_teacher_with_class(
+    db: AsyncSession,
+    subject: Subject,
+    grade: Grade,
+    curriculum: Curriculum,
+) -> tuple[School, User]:
+    """Create a school, teacher, and class linked to curriculum tree."""
+    from app.models.school import Class, School
+
+    school = School(
+        id=uuid.uuid4(),
+        name=f"School-{uuid.uuid4().hex[:6]}",
+        slug=f"school-{uuid.uuid4().hex[:8]}",
+        status="active",
+    )
+    db.add(school)
+    await db.flush()
+
+    teacher = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"teacher-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Jane",
+        last_name="Teacher",
+        role=UserRole.TEACHER,
+        is_active=True,
+    )
+    db.add(teacher)
+    await db.flush()
+
+    klass = Class(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        grade_id=grade.id,
+        subject_id=subject.id,
+        curriculum_id=curriculum.id,
+        teacher_id=teacher.id,
+        name="8A Mathematics",
+        academic_year="2025-2026",
+        is_active=True,
+    )
+    db.add(klass)
+    await db.flush()
+
+    return school, teacher
+
+
+@pytest.mark.asyncio
+async def test_get_status_when_no_content_then_all_none(client: AsyncClient, db_session: AsyncSession) -> None:
+    """GET /{subtopic_id}/status with no content rows returns status='none' for all types."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/subtopic-content/{st.id}/status",
+        headers=make_auth_header(teacher),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["video"]["status"] == "none"
+    assert data["explanation"]["status"] == "none"
+    assert data["quiz"]["status"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_get_status_when_school_scoped_own_school_then_shows_pending(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """GET /{subtopic_id}/status returns 'pending' for own school's pending content."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="video",
+        scope="school",
+        school_id=school.id,
+        review_status="pending",
+    )
+    db_session.add(content)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/subtopic-content/{st.id}/status",
+        headers=make_auth_header(teacher),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["video"]["status"] == "pending"
+    assert data["video"]["scope"] == "school"
+
+
+@pytest.mark.asyncio
+async def test_get_status_when_school_scoped_other_school_then_shows_other_school_pending(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """GET /{subtopic_id}/status shows 'other_school_pending' for another school's content."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+    other_school, _ = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="quiz",
+        scope="school",
+        school_id=other_school.id,
+        review_status="pending",
+    )
+    db_session.add(content)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/subtopic-content/{st.id}/status",
+        headers=make_auth_header(teacher),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["quiz"]["status"] == "other_school_pending"
+
+
+@pytest.mark.asyncio
+async def test_generate_when_content_exists_any_scope_then_409(client: AsyncClient, db_session: AsyncSession) -> None:
+    """POST /{subtopic_id}/quiz/generate returns 409 if any row exists for that (subtopic, type)."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    # Curriculum-scope row already exists (use video to avoid admin quiz/generate route)
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="video",
+        scope="curriculum",
+        review_status="pending",
+    )
+    db_session.add(content)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/subtopic-content/{st.id}/video/generate",
+        headers=make_auth_header(teacher),
+    )
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_generate_when_no_content_then_creates_school_scoped_pending_row(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """POST /{subtopic_id}/video/generate creates school-scoped pending row when none exists."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/subtopic-content/{st.id}/video/generate",
+        headers=make_auth_header(teacher),
+    )
+    assert response.status_code == 202
+
+    from sqlalchemy import select as sa_select
+
+    result = await db_session.execute(
+        sa_select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == st.id,
+            SubtopicContent.content_type == "video",
+        )
+    )
+    row = result.scalar_one_or_none()
+    assert row is not None
+    assert row.scope == "school"
+    assert row.school_id == school.id
+    assert row.review_status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_teacher_approve_when_own_school_content_then_sets_approved(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """PATCH /{subtopic_id}/video/approve sets review_status='approved' for own school's content."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="video",
+        scope="school",
+        school_id=school.id,
+        review_status="pending",
+    )
+    db_session.add(content)
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/video/approve",
+        headers=make_auth_header(teacher),
+        json={"action": "approve"},
+    )
+    assert response.status_code == 200
+
+    await db_session.refresh(content)
+    assert content.review_status == "approved"
+    assert content.is_active is True
+
+
+@pytest.mark.asyncio
+async def test_teacher_approve_when_other_school_content_then_404(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """PATCH /{subtopic_id}/video/approve returns 404 when the row belongs to another school."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+    other_school, _ = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="video",
+        scope="school",
+        school_id=other_school.id,
+        review_status="pending",
+    )
+    db_session.add(content)
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/video/approve",
+        headers=make_auth_header(teacher),
+        json={"action": "approve"},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_promotion_queue_when_kaihle_admin_then_returns_school_scoped_approved(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """GET /promotion-queue returns school-scoped approved rows."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="quiz",
+        scope="school",
+        school_id=school.id,
+        review_status="approved",
+    )
+    db_session.add(content)
+
+    admin = User(
+        id=uuid.uuid4(),
+        email=f"admin-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Admin",
+        last_name="User",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    response = await client.get(
+        "/api/v1/subtopic-content/promotion-queue",
+        headers=make_auth_header(admin),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total"] >= 1
+    ids = [item["subtopic_content_id"] for item in data["items"]]
+    assert str(content.id) in ids
+
+
+@pytest.mark.asyncio
+async def test_promote_when_kaihle_admin_then_scope_becomes_curriculum(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """PATCH /{subtopic_id}/quiz/promote updates scope to 'curriculum' and clears school_id."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="quiz",
+        scope="school",
+        school_id=school.id,
+        review_status="approved",
+    )
+    db_session.add(content)
+
+    admin = User(
+        id=uuid.uuid4(),
+        email=f"admin2-{uuid.uuid4().hex[:8]}@kaihle.ai",
+        first_name="Admin",
+        last_name="Two",
+        role=UserRole.KAIHLE_ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin)
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/quiz/promote",
+        headers=make_auth_header(admin),
+        json={"action": "promote"},
+    )
+    assert response.status_code == 200
+
+    await db_session.refresh(content)
+    assert content.scope == "curriculum"
+    assert content.school_id is None
+
+
+@pytest.mark.asyncio
+async def test_promote_when_teacher_then_403(client: AsyncClient, db_session: AsyncSession) -> None:
+    """PATCH /{subtopic_id}/quiz/promote returns 403 for teacher role."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/v1/subtopic-content/{st.id}/quiz/promote",
+        headers=make_auth_header(teacher),
+        json={"action": "promote"},
+    )
+    assert response.status_code == 403
