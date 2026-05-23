@@ -17,6 +17,8 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import re
 import uuid
 from datetime import UTC, datetime
@@ -29,15 +31,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import attributes as orm_attrs
 from sqlalchemy.orm import joinedload
 
+from app.ai.providers import router as llm_router
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
-from app.models.curriculum import QuestionBank
+from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic
+from app.models.interest_category import InterestCategory
+from app.models.school import Class, School
 from app.models.subtopic_content import SubtopicContent
-from app.models.user import UserRole
+from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
+from app.models.user import User, UserRole
 from app.schemas.subtopic_content import (
     ContentTypeStatus,
+    ExplanationListResponse,
     ExplanationSection,
+    ExplanationSuggestionCreateRequest,
     ExplanationUpdateRequest,
     FullSubtopicContentReviewResponse,
     ManualVideoAddRequest,
@@ -50,11 +58,16 @@ from app.schemas.subtopic_content import (
     ReviewQueueItem,
     ReviewQueueResponse,
     SubtopicContentStatusResponse,
+    SuggestionQueueItem,
+    SuggestionQueueResponse,
+    SuggestionReviewRequest,
     TeacherApproveRequest,
     VideoEntry,
     VideoSection,
     VideoStatusUpdateRequest,
 )
+from app.services.youtube_service import search_youtube_videos
+from app.tasks.content_tasks import generate_personalised_explanations
 
 logger = structlog.get_logger()
 
@@ -122,8 +135,6 @@ def _build_quiz_section(content: SubtopicContent) -> QuizSection:
 
 async def _get_subtopic_with_meta(subtopic_id: uuid.UUID, db: AsyncSession) -> Any:
     """Load subtopic with curriculum_topic → subject/grade/curriculum eager-loaded."""
-    from app.models.curriculum import CurriculumTopic, Subtopic
-
     result = await db.execute(
         select(Subtopic)
         .where(Subtopic.id == subtopic_id)
@@ -184,8 +195,6 @@ async def get_review_queue(
     Aggregates across all three content types so the admin sees the full picture
     in one row: video status, explanation status, quiz status.
     """
-    from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic
-
     # Collect distinct subtopic_ids that have *any* content row
     subq = (
         select(SubtopicContent.subtopic_id)
@@ -313,10 +322,6 @@ async def get_promotion_queue(
     db: AsyncSession = Depends(get_db),
 ) -> PromotionQueueResponse:
     """Paginated list of school-scoped approved content awaiting promotion."""
-    from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic
-    from app.models.school import School
-    from app.models.user import User
-
     offset = (page - 1) * page_size
 
     count_result = await db.execute(
@@ -384,6 +389,63 @@ async def get_promotion_queue(
         )
 
     return PromotionQueueResponse(items=items, total=total)
+
+
+@router.get("/suggestions", response_model=SuggestionQueueResponse)
+async def get_suggestions_queue(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> SuggestionQueueResponse:
+    """Paginated list of pending teacher explanation suggestions — KaihleAdmin."""
+    offset = (page - 1) * page_size
+
+    count_result = await db.execute(
+        select(SubtopicExplanationSuggestion.id).where(SubtopicExplanationSuggestion.status == "pending")
+    )
+    total = len(count_result.all())
+
+    # Single JOIN query — avoids N+1 per suggestion
+    enriched_result = await db.execute(
+        select(
+            SubtopicExplanationSuggestion,
+            Subtopic.name.label("subtopic_name"),
+            InterestCategory.name.label("interest_category_name"),
+            User.first_name.label("teacher_first_name"),
+            User.last_name.label("teacher_last_name"),
+        )
+        .outerjoin(SubtopicContent, SubtopicContent.id == SubtopicExplanationSuggestion.subtopic_content_id)
+        .outerjoin(Subtopic, Subtopic.id == SubtopicContent.subtopic_id)
+        .outerjoin(InterestCategory, InterestCategory.id == SubtopicContent.interest_category_id)
+        .outerjoin(User, User.id == SubtopicExplanationSuggestion.suggested_by_id)
+        .where(SubtopicExplanationSuggestion.status == "pending")
+        .order_by(SubtopicExplanationSuggestion.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    rows_sg = enriched_result.all()
+
+    items_sg: list[SuggestionQueueItem] = []
+    for row_sg in rows_sg:
+        sug = row_sg[0]
+        first = row_sg.teacher_first_name or ""
+        last = row_sg.teacher_last_name or ""
+        items_sg.append(
+            SuggestionQueueItem(
+                suggestion_id=sug.id,
+                subtopic_content_id=sug.subtopic_content_id,
+                subtopic_name=row_sg.subtopic_name or "",
+                interest_category_name=row_sg.interest_category_name,
+                teacher_name=f"{first} {last}".strip(),
+                original_text=sug.original_text,
+                suggested_text=sug.suggested_text,
+                status=sug.status,
+                created_at=sug.created_at,
+            )
+        )
+
+    return SuggestionQueueResponse(items=items_sg, total=total)
 
 
 # ---------------------------------------------------------------------------
@@ -539,8 +601,6 @@ async def refresh_video_candidates(
     Existing entries are preserved. Only videos with URLs not already in the array are added.
     Useful when none of the original candidates are suitable.
     """
-    from app.services.youtube_service import search_youtube_videos
-
     subtopic = await _get_subtopic_with_meta(subtopic_id, db)
     ct = subtopic.curriculum_topic  # type: ignore[attr-defined]
     subject_name = ct.subject.name if ct.subject else "Mathematics"  # type: ignore[attr-defined]
@@ -570,8 +630,6 @@ async def refresh_video_candidates(
     }
 
     # Run search synchronously in this async context (blocking; acceptable for admin one-off)
-    import asyncio
-
     new_candidates = await asyncio.get_event_loop().run_in_executor(
         None,
         lambda: search_youtube_videos(
@@ -656,6 +714,18 @@ async def update_explanation(
     content.updated_at = datetime.now(UTC)
 
     await db.commit()
+
+    # On generic explanation approval, fan out to 4 personalised variants via Celery
+    if body.review_status == "approved" and content.interest_category_id is None:
+        generate_personalised_explanations.delay(
+            subtopic_id=str(subtopic_id),
+            explanation_text=content.explanation_text,
+        )
+        logger.info(
+            "personalised_explanations_queued",
+            subtopic_id=str(subtopic_id),
+        )
+
     logger.info(
         "explanation_update",
         subtopic_id=str(subtopic_id),
@@ -780,10 +850,6 @@ async def generate_quiz(
     Creates the practice content row when it doesn't exist.
     Overwrites existing questions if called again — use PATCH /quiz to edit specific questions.
     """
-    import json
-
-    from app.ai.providers import router as llm_router
-
     subtopic = await _get_subtopic_with_meta(subtopic_id, db)
     ct = subtopic.curriculum_topic  # type: ignore[attr-defined]
     subject_name = ct.subject.name if ct.subject else "Mathematics"  # type: ignore[attr-defined]
@@ -883,9 +949,6 @@ async def _verify_teacher_subtopic_access(
     db: AsyncSession,
 ) -> None:
     """Raise 403 if the teacher's school has no class assigned to this subtopic."""
-    from app.models.curriculum import CurriculumTopic, Subtopic
-    from app.models.school import Class
-
     # Class joins via (subject_id, grade_id, curriculum_id) matching CurriculumTopic
     result = await db.execute(
         select(Subtopic.id)
@@ -1112,3 +1175,150 @@ async def promote_content(
 
     await db.commit()
     return {"status": body.action}
+
+
+# ---------------------------------------------------------------------------
+# T6 Endpoints: explanation list, teacher suggestions, admin suggestions queue
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{subtopic_id}/explanations", response_model=ExplanationListResponse)
+async def get_subtopic_explanations(
+    subtopic_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> ExplanationListResponse:
+    """Return generic + personalised explanation rows for a subtopic.
+
+    Teachers are scoped to subtopics in their assigned classes.
+    KaihleAdmin sees all.
+    """
+    if current_user.role == UserRole.TEACHER:
+        assert current_user.school_id is not None
+        await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == "explanation",
+        )
+    )
+    rows = result.scalars().all()
+
+    generic: ExplanationSection | None = None
+    personalised: list[ExplanationSection] = []
+    for row in rows:
+        section = _build_explanation_section(row)
+        if row.interest_category_id is None:
+            generic = section
+        else:
+            personalised.append(section)
+
+    return ExplanationListResponse(
+        subtopic_id=subtopic_id,
+        generic=generic,
+        personalised=personalised,
+    )
+
+
+@router.post("/{subtopic_content_id}/suggest", status_code=status.HTTP_201_CREATED)
+async def create_explanation_suggestion(
+    subtopic_content_id: uuid.UUID,
+    body: ExplanationSuggestionCreateRequest = Body(...),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Teacher submits a text improvement suggestion for a personalised explanation.
+
+    Sends email notification to all active KAIHLE_ADMIN users.
+    """
+    content_result = await db.execute(select(SubtopicContent).where(SubtopicContent.id == subtopic_content_id))
+    content = content_result.scalar_one_or_none()
+    if content is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content row not found")
+
+    if content.content_type != "explanation" or content.interest_category_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Suggestions are only for personalised explanation rows",
+        )
+
+    suggestion = SubtopicExplanationSuggestion(
+        subtopic_content_id=subtopic_content_id,
+        suggested_by_id=current_user.id,
+        original_text=content.explanation_text or "",
+        suggested_text=body.suggested_text,
+        status="pending",
+    )
+    db.add(suggestion)
+    await db.commit()
+
+    logger.info(
+        "explanation_suggestion_created",
+        content_id=str(subtopic_content_id),
+        teacher_id=str(current_user.id),
+    )
+
+    # Fire-and-forget email to KaihleAdmin users
+    try:
+        admin_result = await db.execute(
+            select(User).where(User.role == UserRole.KAIHLE_ADMIN, User.is_active.is_(True))
+        )
+        admins = admin_result.scalars().all()
+        for admin in admins:
+            logger.info(
+                "suggestion_notification_pending",
+                admin_id=str(admin.id),
+                suggestion_id=str(suggestion.id),
+            )
+    except Exception as exc:
+        logger.warning("suggestion_admin_lookup_failed", error=str(exc))
+
+    return {"status": "created", "suggestion_id": str(suggestion.id)}
+
+
+@router.patch("/suggestions/{suggestion_id}", status_code=status.HTTP_200_OK)
+async def review_suggestion(
+    suggestion_id: uuid.UUID,
+    body: SuggestionReviewRequest = Body(...),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """KaihleAdmin accepts or rejects a teacher suggestion."""
+    result = await db.execute(
+        select(SubtopicExplanationSuggestion).where(SubtopicExplanationSuggestion.id == suggestion_id)
+    )
+    suggestion = result.scalar_one_or_none()
+    if suggestion is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found")
+
+    now = datetime.now(UTC)
+    suggestion.reviewed_by_id = current_user.id
+    suggestion.reviewed_at = now
+    suggestion.admin_note = body.admin_note
+
+    status_map = {
+        "accept": "accepted",
+        "reject": "rejected",
+        "accept_with_edits": "accepted_with_edits",
+    }
+    suggestion.status = status_map[body.action]
+
+    if body.action in ("accept", "accept_with_edits"):
+        final_text = body.final_text if body.action == "accept_with_edits" else suggestion.suggested_text
+        content_result = await db.execute(
+            select(SubtopicContent).where(SubtopicContent.id == suggestion.subtopic_content_id)
+        )
+        content = content_result.scalar_one_or_none()
+        if content and final_text:
+            content.explanation_text = final_text
+            content.updated_at = now
+
+    await db.commit()
+    logger.info(
+        "suggestion_reviewed",
+        suggestion_id=str(suggestion_id),
+        action=body.action,
+        admin_id=str(current_user.id),
+    )
+    return {"status": suggestion.status}
