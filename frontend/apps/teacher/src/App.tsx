@@ -37,6 +37,7 @@ import { TeacherLessonPlansPage } from "./pages/lesson-plans/TeacherLessonPlansP
 import { ContentReviewPage } from "./pages/content-review/ContentReviewPage";
 import { CourseDetailPage } from "./pages/content-review/CourseDetailPage";
 import { ClassStudyPlanPage } from "./pages/classes/ClassStudyPlanPage";
+import { SubtopicContentBrowser } from "./pages/SubtopicContentBrowser";
 
 // Plain function — no state, no effects, no React APIs
 function getTeacherGreeting(firstName: string | undefined): {
@@ -97,6 +98,10 @@ function TeacherContentShell() {
       {
         path: "explanation-review",
         element: <ExplanationReviewPage />,
+      },
+      {
+        path: "subtopics/:subtopicId/content",
+        element: <SubtopicContentBrowser />,
       },
       { path: "*", element: <Navigate to="/teacher/dashboard" replace /> },
     ],
