@@ -21,6 +21,7 @@ from app.models.curriculum import (
     Curriculum,
     CurriculumTopic,
     Grade,
+    QuestionBank,
     Subject,
     Subtopic,
     Topic,
@@ -599,7 +600,7 @@ async def test_update_quiz_when_approved_then_questions_and_status_saved(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """PATCH /quiz updates questions and sets review_status to approved."""
+    """PATCH /quiz approves, saves to subtopic_content, and publishes to question_bank."""
     _, _, _, _, st = await _create_curriculum_tree(db_session)
     await _create_quiz_content(db_session, st.id)
     admin = await _make_admin(db_session)
@@ -623,6 +624,18 @@ async def test_update_quiz_when_approved_then_questions_and_status_saved(
     data = response.json()
     assert data["quiz"]["review_status"] == "approved"
     assert data["quiz"]["questions"][0]["question_text"] == "What value of x satisfies 2x = 8?"
+
+    # Approval must publish questions to question_bank so assessments and mini-courses can use them
+    from sqlalchemy import select as sa_select
+
+    qb_result = await db_session.execute(
+        sa_select(QuestionBank).where(QuestionBank.subtopic_id == st.id, QuestionBank.source == "llm")
+    )
+    qb_rows = qb_result.scalars().all()
+    assert len(qb_rows) == 1
+    assert qb_rows[0].question_text == "What value of x satisfies 2x = 8?"
+    assert qb_rows[0].correct_answer == "B: 4"
+    assert qb_rows[0].is_active is True
 
 
 @pytest.mark.asyncio

@@ -24,7 +24,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import attributes as orm_attrs
 from sqlalchemy.orm import joinedload
@@ -32,6 +32,7 @@ from sqlalchemy.orm import joinedload
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
+from app.models.curriculum import QuestionBank
 from app.models.subtopic_content import SubtopicContent
 from app.models.user import UserRole
 from app.schemas.subtopic_content import (
@@ -580,18 +581,53 @@ async def update_quiz(
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> FullSubtopicContentReviewResponse:
-    """Edit quiz questions and approve or reject the practice quiz content."""
+    """Edit quiz questions and approve or reject the practice quiz content.
+
+    On approval, replaces all LLM-sourced questions in question_bank for this subtopic
+    with the approved set — making them available to assessments and mini-courses.
+    """
     await _get_subtopic_with_meta(subtopic_id, db)  # 404 guard
     content = await _get_content_or_404(subtopic_id, "practice", db)
 
+    now = datetime.now(UTC)
     content.quiz_questions = list(body.questions)
     orm_attrs.flag_modified(content, "quiz_questions")
     content.quiz_questions_count = len(body.questions)
     content.review_status = body.review_status
     content.rejection_reason = body.rejection_reason
-    content.reviewed_at = datetime.now(UTC)
+    content.reviewed_at = now
     content.reviewed_by_id = current_user.id
-    content.updated_at = datetime.now(UTC)
+    content.updated_at = now
+
+    if body.review_status == "approved":
+        # Replace LLM-sourced questions in question_bank with the approved set.
+        await db.execute(
+            delete(QuestionBank).where(
+                QuestionBank.subtopic_id == subtopic_id,
+                QuestionBank.source == "llm",
+            )
+        )
+        for q in body.questions:
+            db.add(
+                QuestionBank(
+                    subtopic_id=subtopic_id,
+                    question_text=q.get("question_text", ""),
+                    question_type="MCQ",
+                    options=q.get("options", []),
+                    correct_answer=q.get("correct_answer", ""),
+                    explanation=q.get("explanation"),
+                    canonical_form=q.get("question_text", ""),
+                    source="llm",
+                    difficulty_level=q.get("difficulty_level"),
+                    is_active=True,
+                )
+            )
+        logger.info(
+            "quiz_published_to_question_bank",
+            subtopic_id=str(subtopic_id),
+            question_count=len(body.questions),
+            reviewer_id=str(current_user.id),
+        )
 
     await db.commit()
     logger.info(
@@ -694,10 +730,11 @@ async def generate_quiz(
             SubtopicContent.content_type == "practice",
         )
     )
-    content = result.scalar_one_or_none()
+    content = result.scalars().first()
 
     if content:
-        content.quiz_questions = questions
+        content.quiz_questions = list(questions)
+        orm_attrs.flag_modified(content, "quiz_questions")
         content.quiz_questions_count = len(questions)
         content.review_status = "pending"
         content.reviewed_at = None
