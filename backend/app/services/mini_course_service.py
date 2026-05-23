@@ -131,14 +131,17 @@ class MiniCourseService:
                 interest_matched=interest_matched,
             )
 
-        # 8. Assemble video schema
+        # 8. Assemble video schema — read from JSONB array, not legacy flat columns
         video_item: SubtopicVideoItem | None = None
         if video_content is not None:
-            video_item = SubtopicVideoItem(
-                video_url=video_content.video_url or "",
-                thumbnail_url=video_content.video_thumbnail_url,
-                duration_seconds=video_content.video_duration_seconds,
-            )
+            approved_entries = [v for v in (video_content.videos or []) if v.get("status") == "approved"]
+            if approved_entries:
+                first = approved_entries[0]
+                video_item = SubtopicVideoItem(
+                    video_url=first.get("url", ""),
+                    thumbnail_url=first.get("thumbnail_url"),
+                    duration_seconds=first.get("duration_seconds"),
+                )
 
         content_status: Literal["ready", "unavailable"] = "ready" if explanation_item is not None else "unavailable"
 

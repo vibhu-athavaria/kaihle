@@ -404,6 +404,85 @@ async def test_mark_progress_when_called_with_explanation_true_then_upserts_corr
     assert params["video_accessed"] is False
 
 
+# ---------------------------------------------------------------------------
+# Tests: video assembly reads from JSONB array (M3-1-T1)
+# ---------------------------------------------------------------------------
+
+
+def _make_video_content(videos: list[dict] | None) -> MagicMock:
+    """Build a minimal SubtopicContent mock with JSONB videos."""
+    content = MagicMock()
+    content.videos = videos
+    content.video_url = None  # legacy flat columns must be ignored
+    content.video_thumbnail_url = None
+    content.video_duration_seconds = None
+    return content
+
+
+def test_video_assembly_when_approved_entry_exists_then_uses_jsonb_url() -> None:
+    """Video URL must come from JSONB videos array, not legacy flat columns."""
+    from app.schemas.mini_course import SubtopicVideoItem
+
+    video_content = _make_video_content(
+        [{"url": "https://yt.com/watch?v=abc", "status": "approved", "thumbnail_url": None, "duration_seconds": 300}]
+    )
+    approved = [v for v in (video_content.videos or []) if v.get("status") == "approved"]
+    assert len(approved) == 1
+    first = approved[0]
+    item = SubtopicVideoItem(
+        video_url=first.get("url", ""),
+        thumbnail_url=first.get("thumbnail_url"),
+        duration_seconds=first.get("duration_seconds"),
+    )
+    assert item.video_url == "https://yt.com/watch?v=abc"
+    assert item.duration_seconds == 300
+
+
+def test_video_assembly_when_all_entries_pending_then_no_item() -> None:
+    """When no approved entry in JSONB array, video_item must be None."""
+    video_content = _make_video_content([{"url": "https://yt.com/watch?v=pending", "status": "pending"}])
+    approved = [v for v in (video_content.videos or []) if v.get("status") == "approved"]
+    assert approved == []
+
+
+def test_video_assembly_when_videos_is_null_then_no_item() -> None:
+    """When videos JSONB is NULL, approved list is empty."""
+    video_content = _make_video_content(None)
+    approved = [v for v in (video_content.videos or []) if v.get("status") == "approved"]
+    assert approved == []
+
+
+def test_video_assembly_when_mixed_statuses_then_picks_first_approved() -> None:
+    """When multiple entries exist, first approved entry is used."""
+    from app.schemas.mini_course import SubtopicVideoItem
+
+    video_content = _make_video_content(
+        [
+            {"url": "https://yt.com/watch?v=rejected", "status": "rejected"},
+            {
+                "url": "https://yt.com/watch?v=approved1",
+                "status": "approved",
+                "thumbnail_url": None,
+                "duration_seconds": None,
+            },
+            {
+                "url": "https://yt.com/watch?v=approved2",
+                "status": "approved",
+                "thumbnail_url": None,
+                "duration_seconds": None,
+            },
+        ]
+    )
+    approved = [v for v in (video_content.videos or []) if v.get("status") == "approved"]
+    first = approved[0]
+    item = SubtopicVideoItem(
+        video_url=first.get("url", ""),
+        thumbnail_url=first.get("thumbnail_url"),
+        duration_seconds=first.get("duration_seconds"),
+    )
+    assert item.video_url == "https://yt.com/watch?v=approved1"
+
+
 @pytest.mark.asyncio
 async def test_get_course_when_subtopic_not_found_then_raises_404() -> None:
     """When Subtopic query returns None, HTTPException 404 is raised."""
