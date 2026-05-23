@@ -21,6 +21,8 @@ import { AdminGrades } from "./pages/AdminGrades";
 import { AdminQuestionReview } from "./pages/AdminQuestionReview";
 import { ContentReviewQueue } from "./pages/content/VideoReviewQueue";
 import { ContentReviewDetail } from "./pages/content/VideoReviewDetail";
+import { PromotionQueuePage } from "./pages/content/PromotionQueue";
+import { SuggestionsQueuePage } from "./pages/content/SuggestionsQueue";
 import { ScriptsPage } from "./pages/scripts/ScriptsPage";
 import { ScriptDetailPage } from "./pages/scripts/ScriptDetailPage";
 import { SmokeTestPage } from "./pages/scripts/SmokeTestPage";
@@ -71,6 +73,14 @@ export default function App() {
                       <Route
                         path="content/review/:subtopicId"
                         element={<ContentReviewDetail />}
+                      />
+                      <Route
+                        path="content/promotion"
+                        element={<PromotionQueuePage />}
+                      />
+                      <Route
+                        path="content/suggestions"
+                        element={<SuggestionsQueuePage />}
                       />
                       {/* Legacy redirect */}
                       <Route
