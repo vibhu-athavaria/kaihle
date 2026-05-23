@@ -151,7 +151,9 @@ class TestSubtopicContent:
     def test_has_scope_column_with_curriculum_default(self) -> None:
         """subtopic_content.scope defaults to 'curriculum'."""
         col = SubtopicContent.__table__.c.scope
-        assert str(col.server_default.arg) == "curriculum"  # type: ignore[union-attr]
+        assert col.server_default is not None
+        arg = col.server_default.arg  # type: ignore[union-attr]
+        assert getattr(arg, "text", arg) == "curriculum"
 
     def test_has_subtopic_id_foreign_key(self) -> None:
         fk_cols = {c.name for c in SubtopicContent.__table__.columns if c.foreign_keys}

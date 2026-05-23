@@ -28,8 +28,8 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Add scope + school_id columns; replace old unique constraint with partial indexes."""
-    # Create enum type before adding column
-    op.execute("CREATE TYPE subtopic_content_scope_enum AS ENUM ('curriculum', 'school')")
+    # Create enum type before adding column — IF NOT EXISTS guards against re-runs
+    op.execute("CREATE TYPE IF NOT EXISTS subtopic_content_scope_enum AS ENUM ('curriculum', 'school')")
 
     op.add_column(
         "subtopic_content",
@@ -83,10 +83,8 @@ def downgrade() -> None:
     op.drop_constraint("fk_subtopic_content_school_id", "subtopic_content", type_="foreignkey")
     op.drop_index("ix_subtopic_content_school_id", table_name="subtopic_content")
     op.drop_index("ix_subtopic_content_scope", table_name="subtopic_content")
-    op.drop_index("uq_subtopic_content_school", table_name="subtopic_content", postgresql_where="scope = 'school'")
-    op.drop_index(
-        "uq_subtopic_content_curriculum", table_name="subtopic_content", postgresql_where="scope = 'curriculum'"
-    )
+    op.drop_index("uq_subtopic_content_school", table_name="subtopic_content")
+    op.drop_index("uq_subtopic_content_curriculum", table_name="subtopic_content")
 
     op.create_unique_constraint("uq_subtopic_content_type", "subtopic_content", ["subtopic_id", "content_type"])
 
