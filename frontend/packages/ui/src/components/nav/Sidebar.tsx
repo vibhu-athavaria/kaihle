@@ -16,6 +16,8 @@ import {
   GraduationCap,
   Terminal,
   CreditCard,
+  ArrowUpCircle,
+  MessageSquare,
 } from "lucide-react";
 import { hasPermission, Permission } from "@kaihle/types";
 import { NavItem } from "./NavItem";
@@ -134,6 +136,16 @@ const adminSections: NavSection[] = [
         label: "Content Review",
         href: "/kaihle-admin/content/review",
         icon: Video,
+      },
+      {
+        label: "Promotion Queue",
+        href: "/kaihle-admin/content/promotion",
+        icon: ArrowUpCircle,
+      },
+      {
+        label: "Suggestions",
+        href: "/kaihle-admin/content/suggestions",
+        icon: MessageSquare,
       },
     ],
   },

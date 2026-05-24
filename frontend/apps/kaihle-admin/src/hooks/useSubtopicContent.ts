@@ -74,6 +74,48 @@ export interface ReviewQueueResponse {
   pending_total: number;
 }
 
+export interface PromotionQueueItem {
+  subtopic_content_id: string;
+  subtopic_id: string;
+  subtopic_name: string;
+  content_type: string;
+  school_name: string;
+  reviewed_by_name: string | null;
+  subject_code: string;
+  grade_level: number;
+  review_status: string;
+  reviewed_at: string | null;
+  school_id: string;
+}
+
+export interface PromotionQueueResponse {
+  items: PromotionQueueItem[];
+  total: number;
+}
+
+export interface SuggestionQueueItem {
+  suggestion_id: string;
+  subtopic_content_id: string;
+  subtopic_name: string;
+  interest_category_name: string | null;
+  teacher_name: string;
+  original_text: string;
+  suggested_text: string;
+  status: string;
+  created_at: string;
+}
+
+export interface SuggestionQueueResponse {
+  items: SuggestionQueueItem[];
+  total: number;
+}
+
+export interface ExplanationListResponse {
+  subtopic_id: string;
+  generic: ExplanationSection | null;
+  personalised: ExplanationSection[];
+}
+
 export interface VideoStatusUpdateRequest {
   status: "approved" | "rejected";
 }
@@ -270,6 +312,150 @@ export function useUpdateQuiz() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(detailKey(data.subtopic_id), data);
+      queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
+    },
+  });
+}
+
+// ── Promotion queue ─────────────────────────────────────────────────────────
+
+const PROMOTION_KEY = ["subtopic-content", "promotion-queue"] as const;
+
+export function usePromotionQueue(params?: {
+  page?: number;
+  page_size?: number;
+}) {
+  const { page = 1, page_size = 20 } = params ?? {};
+  return useQuery({
+    queryKey: [...PROMOTION_KEY, { page, page_size }],
+    queryFn: async () => {
+      const response = await apiClient.get<PromotionQueueResponse>(
+        `/api/v1/subtopic-content/promotion-queue?page=${page}&page_size=${page_size}`,
+      );
+      return response.data;
+    },
+  });
+}
+
+export function usePromoteContent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      subtopicId,
+      contentType,
+      action,
+      rejectionReason,
+    }: {
+      subtopicId: string;
+      contentType: string;
+      action: "promote" | "reject_promotion";
+      rejectionReason?: string;
+    }) => {
+      const response = await apiClient.patch(
+        `/api/v1/subtopic-content/${subtopicId}/${contentType}/promote`,
+        { action, rejection_reason: rejectionReason ?? null },
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PROMOTION_KEY });
+    },
+  });
+}
+
+// ── Suggestions queue ───────────────────────────────────────────────────────
+
+const SUGGESTIONS_KEY = ["subtopic-content", "suggestions"] as const;
+
+export function useSuggestionsQueue(params?: {
+  page?: number;
+  page_size?: number;
+}) {
+  const { page = 1, page_size = 20 } = params ?? {};
+  return useQuery({
+    queryKey: [...SUGGESTIONS_KEY, { page, page_size }],
+    queryFn: async () => {
+      const qs = new URLSearchParams({
+        page: String(page),
+        page_size: String(page_size),
+      });
+      const response = await apiClient.get<SuggestionQueueResponse>(
+        `/api/v1/subtopic-content/suggestions?${qs}`,
+      );
+      return response.data;
+    },
+  });
+}
+
+export function useReviewSuggestion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      suggestionId,
+      action,
+      finalText,
+      adminNote,
+    }: {
+      suggestionId: string;
+      action: "accept" | "reject" | "accept_with_edits";
+      finalText?: string;
+      adminNote?: string;
+    }) => {
+      const response = await apiClient.patch(
+        `/api/v1/subtopic-content/suggestions/${suggestionId}`,
+        {
+          action,
+          final_text: finalText ?? null,
+          admin_note: adminNote ?? null,
+        },
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SUGGESTIONS_KEY });
+    },
+  });
+}
+
+// ── Personalised explanations ───────────────────────────────────────────────
+
+export function useSubtopicExplanations(subtopicId: string) {
+  return useQuery({
+    queryKey: ["subtopic-content", subtopicId, "explanations"],
+    queryFn: async () => {
+      const response = await apiClient.get<ExplanationListResponse>(
+        `/api/v1/subtopic-content/${subtopicId}/explanations`,
+      );
+      return response.data;
+    },
+    enabled: !!subtopicId,
+  });
+}
+
+export function useUpdatePersonalisedExplanation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      subtopicId,
+      payload,
+    }: {
+      subtopicId: string;
+      payload: {
+        explanation_text: string;
+        review_status: "approved" | "rejected";
+        rejection_reason?: string;
+      };
+    }) => {
+      const response = await apiClient.patch<FullSubtopicContentReviewResponse>(
+        `/api/v1/subtopic-content/${subtopicId}/explanation`,
+        payload,
+      );
+      return response.data;
+    },
+    onSuccess: (_data, { subtopicId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ["subtopic-content", subtopicId, "explanations"],
+      });
       queryClient.invalidateQueries({ queryKey: QUEUE_KEY });
     },
   });
