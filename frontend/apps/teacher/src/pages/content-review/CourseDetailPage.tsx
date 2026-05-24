@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useCourseDetail,
   useSetStudentOverride,
@@ -8,12 +9,15 @@ import {
   type StudentCourseAssignment,
   type InterestCategoryMeta,
 } from "../../hooks/useCourseDetail";
+import { useGenerateMiniCourse } from "../../hooks/useGenerateMiniCourse";
 import { EmptyState, SkeletonCard, Modal } from "@kaihle/ui";
 import {
   ArrowLeft,
   CheckCircle,
   AlertCircle,
   Clock,
+  Loader2,
+  Sparkles,
   UserCog,
   XCircle,
   Pencil,
@@ -361,11 +365,15 @@ export function CourseDetailPage() {
   const { topicId } = useParams<{ topicId: string }>();
   const [searchParams] = useSearchParams();
   const classId = searchParams.get("classId") ?? "";
+  const queryClient = useQueryClient();
 
   const { data, isLoading, isError } = useCourseDetail(
     classId || null,
     topicId ?? null,
   );
+
+  const generateMutation = useGenerateMiniCourse();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const [previewState, setPreviewState] = useState<{
     subtopicName: string;
@@ -374,6 +382,33 @@ export function CourseDetailPage() {
 
   const [overrideStudent, setOverrideStudent] =
     useState<StudentCourseAssignment | null>(null);
+
+  function handleFillMissing() {
+    if (!topicId || isGenerating) return;
+    setIsGenerating(true);
+    generateMutation.mutate(topicId, {
+      onSuccess: () => {
+        // Poll until variants appear — invalidate every 5s for up to 3 min
+        let attempts = 0;
+        const interval = setInterval(() => {
+          attempts++;
+          queryClient.invalidateQueries({
+            queryKey: ["course-detail", classId, topicId],
+          });
+          if (attempts >= 36) clearInterval(interval); // 3 min cap
+        }, 5000);
+        // Initial invalidation so the grid refreshes promptly on fast LLM responses
+        queryClient.invalidateQueries({
+          queryKey: ["course-detail", classId, topicId],
+        });
+      },
+      onError: () => setIsGenerating(false),
+      onSettled: () => {
+        // Reset generating state after first poll fires (30s is generous for LLM)
+        setTimeout(() => setIsGenerating(false), 30_000);
+      },
+    });
+  }
 
   if (isLoading) {
     return (
@@ -406,16 +441,23 @@ export function CourseDetailPage() {
 
   const categoryNames = data.interest_categories.map((c) => c.name);
 
+  // Count missing variants across all subtopics
+  const missingCount = data.subtopics.reduce((acc, sub) => {
+    return (
+      acc + categoryNames.filter((cat) => sub.variants[cat] == null).length
+    );
+  }, 0);
+
   return (
     <div className="p-6 space-y-8">
       {/* Header */}
       <div>
         <Link
-          to="/teacher/content-review"
+          to={`/teacher/classes/${classId}`}
           className="inline-flex items-center gap-1.5 text-sm text-brand-muted hover:text-brand-ink transition-colors mb-3"
         >
           <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          Content Review
+          Back to Course
         </Link>
         <h1 className="font-display font-bold text-2xl text-brand-ink">
           {data.topic_name}
@@ -426,6 +468,48 @@ export function CourseDetailPage() {
           student{data.students.length !== 1 ? "s" : ""} enrolled
         </p>
       </div>
+
+      {/* Missing variants banner */}
+      {missingCount > 0 && (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-brand-gold/30 bg-[#fffbeb] px-4 py-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {isGenerating ? (
+              <Sparkles
+                className="w-4 h-4 text-brand-gold flex-shrink-0 animate-pulse"
+                aria-hidden="true"
+              />
+            ) : (
+              <AlertCircle
+                className="w-4 h-4 text-brand-gold flex-shrink-0"
+                aria-hidden="true"
+              />
+            )}
+            <p className="text-sm text-brand-gold font-medium">
+              {isGenerating
+                ? "Generating missing variants… this may take a minute."
+                : `${missingCount} variant${missingCount !== 1 ? "s" : ""} not yet generated.`}
+            </p>
+          </div>
+          {!isGenerating && (
+            <button
+              type="button"
+              onClick={handleFillMissing}
+              disabled={generateMutation.isPending}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-brand-gold text-brand-gold hover:bg-brand-gold hover:text-white disabled:opacity-60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+            >
+              {generateMutation.isPending ? (
+                <Loader2
+                  className="w-3.5 h-3.5 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+              )}
+              Generate missing
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 4-variant content grid */}
       <section>
