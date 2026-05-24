@@ -48,23 +48,25 @@ def upgrade() -> None:
 
     # Curriculum generic rows (video, quiz, practice — interest_category_id IS NULL):
     # one row per (subtopic_id, content_type).
-    op.create_index(
-        "uq_subtopic_content_curriculum_generic",
-        "subtopic_content",
-        ["subtopic_id", "content_type"],
-        unique=True,
-        postgresql_where="scope = 'curriculum' AND interest_category_id IS NULL",
+    # IF NOT EXISTS — safe on a fresh DB where T5 already created this index correctly.
+    op.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_subtopic_content_curriculum_generic
+        ON subtopic_content (subtopic_id, content_type)
+        WHERE scope = 'curriculum' AND interest_category_id IS NULL
+        """
     )
 
     # Curriculum personalised explanation rows (interest_category_id IS NOT NULL):
     # one row per (subtopic_id, content_type, interest_category_id).
     # Allows all 4 interest-category variants to coexist per subtopic.
-    op.create_index(
-        "uq_subtopic_content_curriculum_personalised",
-        "subtopic_content",
-        ["subtopic_id", "content_type", "interest_category_id"],
-        unique=True,
-        postgresql_where="scope = 'curriculum' AND interest_category_id IS NOT NULL",
+    # IF NOT EXISTS — safe on a fresh DB where T5 already created this index correctly.
+    op.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_subtopic_content_curriculum_personalised
+        ON subtopic_content (subtopic_id, content_type, interest_category_id)
+        WHERE scope = 'curriculum' AND interest_category_id IS NOT NULL
+        """
     )
 
 
