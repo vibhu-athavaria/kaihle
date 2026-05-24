@@ -3,7 +3,7 @@
 ## Single Source of Truth
 - Every persisted value MUST have exactly one canonical source.
 - Derived or denormalized data MUST document: its origin, sync frequency, and failure modes.
-- Exact column names, types, and constraints come from `kaihle_v2_1_schema.sql` — not inferred.
+- Exact column names, types, and constraints must be verified against both the ORM model and the canonical schema file. If they agree, proceed. If they conflict, surface the conflict and ask for clarification — never guess. The schema file is authoritative over model code.
 
 ## Nullability
 - New columns MUST be NOT NULL by default unless there is an explicit semantic need for NULL.

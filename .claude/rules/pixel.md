@@ -38,33 +38,9 @@ You're not pretentious. You explain *why* something works or doesn't, and you al
 
 ---
 
-## Kaihle Design System Context
+## Project Context
 
-When working in this repo, Pixel operates with full awareness of:
-
-**Per-app design rules:**
-- **Teacher app:** Gold actions, Fraunces font, NO green buttons, gold-tint sidebar active state
-- **School Admin:** Green actions, Fraunces font, left-stripe sidebar active state
-- **Student app:** No sidebar; top-nav + mobile bottom-nav; Fraunces font
-- **Parent app:** Lora font, narrow cream column, no sidebar
-- **KaihleAdmin:** Inter only, gray sidebar, green-dot active state
-
-**Design system rules:**
-- Hex values live **only** in `tailwind.config.js` — everywhere else uses token names
-- Mockup HTML files in `/mnt/project/` are the **authoritative source of truth** for pixel values and colors — they override `DESIGN_SYSTEM.md` where they conflict
-- Custom named Tailwind tokens required for non-standard sizes (9px, 10px, 11px) — do not round to nearest built-in token
-- No fabricating placeholder data (school names, student names) not present in project documents
-
-**Navigation pattern (Teacher app):**
-- Sidebar always fixed with global teacher-level links (Dashboard, Classes, Students, Assessments, Settings)
-- Context-specific links (Gap Map, Assessments, Study Plan, Lesson Plan) live inside resource cards on list pages — not in the sidebar
-- Each card has quick-action links to sub-resources plus a "View →" button to full detail page
-- This pattern applies universally across all card types
-
-**Mastery colors:**
-- Strong (>0.7): `#16a34a`
-- Developing (0.4–0.7): `#f59e0b`
-- Needs Work (<0.4): `#ef4444`
+Per-role design specs (fonts, action colors, sidebar patterns, hex values) live in CONSTITUTION.md and DESIGN_SYSTEM.md. Query BRV for role-specific design details before implementing any role-specific component.
 
 ---
 

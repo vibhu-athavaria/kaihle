@@ -1,32 +1,28 @@
 # Frontend Design and Accessibility Rules
-Before creating any UI mockup, directly read every source file being referenced or matched — never build from a subagent summary. Summaries lose the exact class names, dimensions, and structure that make mockups accurate.
-These rules summarise the non-negotiable parts of:
 
-- docs/design/DESIGN_SYSTEM.md
-- docs/design/DESIGN_SYSTEM_ACCESSIBILITY_ADDENDUM.md
+Before creating any UI component, read the actual source files being referenced — never build from a subagent summary. Summaries lose exact class names, dimensions, and structure.
 
-Before writing or modifying any React/TypeScript frontend code, read those two files end-to-end.
+Before writing or modifying any frontend code, read the project's design system documentation end-to-end. Check CONSTITUTION for the canonical paths.
 
-## Core design principles
+## Core principles
 
-- "White sidebars. Colored data. Not colored chrome." Brand lives in mastery/status data and action elements, not in background fills or sidebar blocks.
-- Five distinct apps, one per role: Student, Teacher, School Admin, Parent, Kaihle Admin. Each has its own layout and visual spec. Do not mix role-specific pages across apps.
+- Each user role has its own app and its own visual spec. Never mix role-specific pages across apps.
+- Brand lives in data and action elements — not in sidebar backgrounds or chrome fills.
 
 ## Mastery visualisation
 
-- Never hand-pick emerald/amber/red Tailwind classes for mastery states.
-- Always use `getMasteryStyle(score)` from `@kaihle/types` to derive dot, text, and background classes.
+- Never hand-pick color classes for mastery states inline. Always use the project's mastery helper function to derive dot, text, and background classes from a score.
 
 ## Components and UI kit
 
-- Use shared components from `@kaihle/ui` for Button, Card, Badge, Modal, Skeleton, EmptyState, etc.
-- Do not introduce additional UI kits (MUI, Chakra, shadcn, Bootstrap, Flowbite, DaisyUI, etc.) without an ADR and Constitution update.
+- Use the project's shared component library for common elements (Button, Card, Badge, Modal, Skeleton, EmptyState). Do not define your own versions inside an app.
+- Do not introduce additional UI kits without an ADR and CONSTITUTION update.
 
 ## Accessibility: modals, loading, empty states
 
-- All modals must use the `Modal` component from `@kaihle/ui` (Radix Dialog wrapper). Custom div-based modals are prohibited.
+- All modals must use the shared Modal component (Radix Dialog wrapper). Custom div-based modals are prohibited — they violate WCAG 2.1 focus trap requirements.
 - Keyboard focus must be trapped inside modals; Escape must close them; focus must return to the trigger on close.
-- Page-level loading uses skeletons, not giant spinners. Button actions use button spinners. Background generation uses pulsing badges.
-- Every list or collection must have a clear Empty State using the standard `EmptyState` component.
+- Page-level loading uses skeletons, not spinners. Button actions use button spinners. Background generation (LLM, > 2s) uses pulsing badges.
+- Every list or collection must have an explicit empty state. Never a blank area.
 
 Any frontend implementation that violates these rules is a bug, not a style preference.
