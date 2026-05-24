@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AdminLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
-import { Check, X, Edit3 } from "lucide-react";
+import { AlertCircle, Check, X, Edit3 } from "lucide-react";
 import {
   useSuggestionsQueue,
   useReviewSuggestion,
@@ -17,12 +17,26 @@ interface DiffModalProps {
     note?: string,
   ) => void;
   loading: boolean;
+  error?: string | null;
 }
 
-function DiffModal({ item, onClose, onReview, loading }: DiffModalProps) {
+function DiffModal({
+  item,
+  onClose,
+  onReview,
+  loading,
+  error,
+}: DiffModalProps) {
   const [editMode, setEditMode] = useState(false);
   const [editedText, setEditedText] = useState(item.suggested_text);
   const [adminNote, setAdminNote] = useState("");
+
+  // Reset local state when the reviewed item changes (stale closure guard)
+  useEffect(() => {
+    setEditMode(false);
+    setEditedText(item.suggested_text);
+    setAdminNote("");
+  }, [item.suggestion_id, item.suggested_text]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -92,6 +106,16 @@ function DiffModal({ item, onClose, onReview, loading }: DiffModalProps) {
           />
         </div>
 
+        {error && (
+          <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2">
+            <AlertCircle
+              className="w-4 h-4 text-red-500 flex-shrink-0"
+              aria-hidden="true"
+            />
+            <p className="font-['Inter'] text-xs text-red-700">{error}</p>
+          </div>
+        )}
+
         <div className="flex gap-3">
           <button
             onClick={() =>
@@ -142,6 +166,8 @@ export function SuggestionsQueuePage() {
   const [page] = useState(1);
   const [active, setActive] = useState<SuggestionQueueItem | null>(null);
 
+  const [mutationError, setMutationError] = useState<string | null>(null);
+
   const { data, isLoading } = useSuggestionsQueue({ page, page_size: 20 });
   const reviewMutation = useReviewSuggestion();
 
@@ -151,9 +177,13 @@ export function SuggestionsQueuePage() {
     adminNote?: string,
   ) {
     if (!active) return;
+    setMutationError(null);
     reviewMutation.mutate(
       { suggestionId: active.suggestion_id, action, finalText, adminNote },
-      { onSuccess: () => setActive(null) },
+      {
+        onSuccess: () => setActive(null),
+        onError: () => setMutationError("Action failed. Please try again."),
+      },
     );
   }
 
@@ -247,9 +277,13 @@ export function SuggestionsQueuePage() {
       {active && (
         <DiffModal
           item={active}
-          onClose={() => setActive(null)}
+          onClose={() => {
+            setActive(null);
+            setMutationError(null);
+          }}
           onReview={handleReview}
           loading={reviewMutation.isPending}
+          error={mutationError}
         />
       )}
     </AdminLayout>

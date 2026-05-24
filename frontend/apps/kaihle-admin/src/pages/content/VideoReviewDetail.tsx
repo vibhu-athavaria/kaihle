@@ -492,99 +492,103 @@ export function ContentReviewDetail() {
         </SectionCard>
 
         {/* ── PERSONALISED EXPLANATIONS ── */}
-        {explanationsData && explanationsData.personalised.length > 0 && (
-          <SectionCard
-            icon={
-              <Sparkles
-                className="w-4 h-4 text-brand-primary"
-                aria-hidden="true"
-              />
-            }
-            title={
-              <span className="flex items-center gap-2">
-                Personalised Explanations
-                {explanationsData.personalised.filter(
-                  (e) => e.review_status === "pending",
-                ).length > 0 && (
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">
-                    {
-                      explanationsData.personalised.filter(
-                        (e) => e.review_status === "pending",
-                      ).length
-                    }{" "}
-                    pending
+        {explanationsData &&
+          explanationsData.personalised.length > 0 &&
+          (() => {
+            const pendingCount = explanationsData.personalised.filter(
+              (e) => e.review_status === "pending",
+            ).length;
+            return (
+              <SectionCard
+                icon={
+                  <Sparkles
+                    className="w-4 h-4 text-brand-primary"
+                    aria-hidden="true"
+                  />
+                }
+                title={
+                  <span className="flex items-center gap-2">
+                    Personalised Explanations
+                    {pendingCount > 0 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700">
+                        {pendingCount} pending
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-            }
-            status={null}
-          >
-            <div className="space-y-4">
-              {explanationsData.personalised.map((exp: ExplanationSection) => (
-                <div
-                  key={exp.content_id}
-                  className="border border-role-admin-border rounded-lg p-4 space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-['Inter'] text-xs font-semibold text-role-admin-ink capitalize">
-                      {exp.content_id}
-                    </span>
-                    <span
-                      className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                        exp.review_status === "approved"
-                          ? "bg-green-50 text-brand-primary border border-green-200"
-                          : exp.review_status === "rejected"
-                            ? "bg-red-50 text-red-700 border border-red-200"
-                            : "bg-amber-50 text-amber-700 border border-amber-200"
-                      }`}
-                    >
-                      {exp.review_status}
-                    </span>
-                  </div>
-                  <p className="font-['Inter'] text-xs text-role-admin-subtle leading-relaxed whitespace-pre-wrap">
-                    {exp.explanation_text ?? <em>No text yet.</em>}
-                  </p>
-                  {exp.review_status === "pending" && subtopicId && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() =>
-                          updatePersonalised.mutate({
-                            subtopicId,
-                            payload: {
-                              explanation_text: exp.explanation_text ?? "",
-                              review_status: "approved",
-                            },
-                          })
-                        }
-                        disabled={updatePersonalised.isPending}
-                        className="inline-flex items-center gap-1.5 bg-brand-primary text-white rounded-full px-3 py-1.5 text-xs font-['Inter'] font-semibold hover:opacity-90 disabled:opacity-50"
+                }
+                status={null}
+              >
+                <div className="space-y-4">
+                  {explanationsData.personalised.map(
+                    (exp: ExplanationSection) => (
+                      <div
+                        key={exp.content_id}
+                        className="border border-role-admin-border rounded-lg p-4 space-y-3"
                       >
-                        <Check className="w-3 h-3" aria-hidden="true" />
-                        Approve
-                      </button>
-                      <button
-                        onClick={() =>
-                          updatePersonalised.mutate({
-                            subtopicId,
-                            payload: {
-                              explanation_text: exp.explanation_text ?? "",
-                              review_status: "rejected",
-                            },
-                          })
-                        }
-                        disabled={updatePersonalised.isPending}
-                        className="inline-flex items-center gap-1.5 border border-red-300 text-red-600 rounded-full px-3 py-1.5 text-xs font-['Inter'] font-semibold hover:bg-red-50 disabled:opacity-50"
-                      >
-                        <X className="w-3 h-3" aria-hidden="true" />
-                        Reject
-                      </button>
-                    </div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-['Inter'] text-xs font-semibold text-role-admin-ink capitalize">
+                            {exp.content_id}
+                          </span>
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                              exp.review_status === "approved"
+                                ? "bg-green-50 text-brand-primary border border-green-200"
+                                : exp.review_status === "rejected"
+                                  ? "bg-red-50 text-red-700 border border-red-200"
+                                  : "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}
+                          >
+                            {exp.review_status}
+                          </span>
+                        </div>
+                        <p className="font-['Inter'] text-xs text-role-admin-subtle leading-relaxed whitespace-pre-wrap">
+                          {exp.explanation_text ?? <em>No text yet.</em>}
+                        </p>
+                        {exp.review_status === "pending" && subtopicId && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() =>
+                                updatePersonalised.mutate({
+                                  subtopicId,
+                                  payload: {
+                                    explanation_text:
+                                      exp.explanation_text ?? "",
+                                    review_status: "approved",
+                                  },
+                                })
+                              }
+                              disabled={updatePersonalised.isPending}
+                              className="inline-flex items-center gap-1.5 bg-brand-primary text-white rounded-full px-3 py-1.5 text-xs font-['Inter'] font-semibold hover:opacity-90 disabled:opacity-50"
+                            >
+                              <Check className="w-3 h-3" aria-hidden="true" />
+                              Approve
+                            </button>
+                            <button
+                              onClick={() =>
+                                updatePersonalised.mutate({
+                                  subtopicId,
+                                  payload: {
+                                    explanation_text:
+                                      exp.explanation_text ?? "",
+                                    review_status: "rejected",
+                                  },
+                                })
+                              }
+                              disabled={updatePersonalised.isPending}
+                              className="inline-flex items-center gap-1.5 border border-red-300 text-red-600 rounded-full px-3 py-1.5 text-xs font-['Inter'] font-semibold hover:bg-red-50 disabled:opacity-50"
+                            >
+                              <X className="w-3 h-3" aria-hidden="true" />
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ),
                   )}
                 </div>
-              ))}
-            </div>
-          </SectionCard>
-        )}
+              </SectionCard>
+            );
+          })()}
 
         {/* ── QUIZ SECTION ── */}
         <SectionCard

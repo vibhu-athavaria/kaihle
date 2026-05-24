@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { AlertCircle, ArrowUpCircle, XCircle, Eye } from "lucide-react";
 import { AdminLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
-import { ArrowUpCircle, XCircle, Eye } from "lucide-react";
 import {
   usePromotionQueue,
   usePromoteContent,
@@ -29,6 +29,7 @@ interface PreviewModalProps {
   onPromote: () => void;
   onReject: () => void;
   loading: boolean;
+  error?: string | null;
 }
 
 function PreviewModal({
@@ -37,6 +38,7 @@ function PreviewModal({
   onPromote,
   onReject,
   loading,
+  error,
 }: PreviewModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -65,6 +67,16 @@ function PreviewModal({
           Promoting will convert this content to curriculum-scope (global) and
           make it available to all schools.
         </p>
+
+        {error && (
+          <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2">
+            <AlertCircle
+              className="w-4 h-4 text-red-500 flex-shrink-0"
+              aria-hidden="true"
+            />
+            <p className="font-['Inter'] text-xs text-red-700">{error}</p>
+          </div>
+        )}
 
         <div className="flex gap-3 pt-2">
           <button
@@ -99,6 +111,7 @@ export function PromotionQueuePage() {
   const { logout } = useAuth();
   const [page] = useState(1);
   const [preview, setPreview] = useState<PromotionQueueItem | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
 
   const { data, isLoading } = usePromotionQueue({ page, page_size: 20 });
   const promote = usePromoteContent();
@@ -107,9 +120,13 @@ export function PromotionQueuePage() {
     item: PromotionQueueItem,
     action: "promote" | "reject_promotion",
   ) {
+    setMutationError(null);
     promote.mutate(
       { subtopicId: item.subtopic_id, contentType: item.content_type, action },
-      { onSuccess: () => setPreview(null) },
+      {
+        onSuccess: () => setPreview(null),
+        onError: () => setMutationError("Action failed. Please try again."),
+      },
     );
   }
 
@@ -213,10 +230,14 @@ export function PromotionQueuePage() {
       {preview && (
         <PreviewModal
           item={preview}
-          onClose={() => setPreview(null)}
+          onClose={() => {
+            setPreview(null);
+            setMutationError(null);
+          }}
           onPromote={() => handleAction(preview, "promote")}
           onReject={() => handleAction(preview, "reject_promotion")}
           loading={promote.isPending}
+          error={mutationError}
         />
       )}
     </AdminLayout>

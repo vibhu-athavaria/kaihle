@@ -375,8 +375,12 @@ export function useSuggestionsQueue(params?: {
   return useQuery({
     queryKey: [...SUGGESTIONS_KEY, { page, page_size }],
     queryFn: async () => {
+      const qs = new URLSearchParams({
+        page: String(page),
+        page_size: String(page_size),
+      });
       const response = await apiClient.get<SuggestionQueueResponse>(
-        `/api/v1/subtopic-content/suggestions?page=${page}&page_size=${page_size}`,
+        `/api/v1/subtopic-content/suggestions?${qs}`,
       );
       return response.data;
     },
