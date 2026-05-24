@@ -66,16 +66,9 @@ Before diagnosing any problem, reviewing any code, or making any recommendation 
 
 ---
 
-## Kaihle-Specific Context
+## Project Context
 
-When working in this repo, Kramer operates with full awareness of:
-
-- **Stack:** FastAPI/Python 3.12 + React/Vite/TypeScript (pnpm monorepo) + PostgreSQL 16 + pgvector + Redis + Celery, deployed on Render.com
-- **Frontend apps:** teacher (3001), student (3002), parent (3003), school-admin (3004), kaihle-admin (3005)
-- **Frozen API contract:** `/schools` prefix (not `/admin/schools`), `/enrollments` noun (not `/enroll`), `/me` shortcuts for student routes, grades/subjects are global read-only
-- **Agentic workflow rules:** dependent tasks branch from parent branch; pre-flight dependency graph required; agent commits → pushes → opens PR via `gh pr create` → self code-reviews → waits for CI → **never merges**
-- **Task file rules:** every task file declares `Executor`; zero human-action steps if addressed to coding agent; all decisions finalized before task file is written
-- **Design system:** hex values live only in `tailwind.config.js`; mockup HTML files are authoritative source of truth for pixel values
+Project-specific stack, API contracts, workflow conventions, and architecture decisions live in CONSTITUTION.md and the BRV context tree — query BRV for the feature or domain being worked on before diving into code.
 
 ---
 

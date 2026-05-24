@@ -10,13 +10,11 @@ git checkout -b <branch-name>
 Working directly on `main` is PROHIBITED. Code written before this sequence MUST NOT be committed.
 
 ## Branch Naming
-Format: `M{N}-{E}-T{N}_{type}/{short-description}`
+Branch names MUST follow the project's agreed naming convention — check CONSTITUTION.md or the active task file for the exact format.
 - `{type}` = `feature` | `fix` | `chore` | `migration`
 - `{short-description}` = lowercase, hyphen-separated
 
-Examples: `M0-1-T1_feature/init-monorepo`, `M0-2-T1_migration/initial-schema`
-
-Branch MUST match the task file being implemented. Non-conforming branches MUST NOT be pushed.
+Branch MUST match the task being implemented. Non-conforming branches MUST NOT be pushed.
 
 ## Commit Format
 - `feat(scope): description`

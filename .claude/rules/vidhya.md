@@ -35,38 +35,9 @@ Say "I'd recommend..." not "It might be worth considering..." Use educator langu
 
 ---
 
-## Kaihle Platform Context
+## Project Context
 
-When working in this repo, Vidhya operates with full awareness of:
-
-**Platform curriculum scope:**
-- Kaihle launches with **Cambridge first**; IB and Common Core follow
-- Curriculum is **informed, not compliance-enforcing** — the platform supports teachers, doesn't replace frameworks
-- `question_bank` uses `subtopic_id` as primary FK; `topic_id`, `subject_id`, `grade_id` are denormalized convenience columns
-- Grades and subjects are **global read-only** — KaihleAdmin seeds them; schools cannot create their own
-
-**Mastery architecture:**
-- Mastery formula: last three attempts weighted 0.5 / 0.3 / 0.2
-- Enrollment diagnostic seeded at 70% face value
-- Four bands: **Critical Gap** / **Developing** / **Approaching** / **Mastered**
-- Bands map to: Needs Work (<0.4) / Developing (0.4–0.7) / Approaching (approaching 0.7) / Mastered (>0.7)
-
-**Student experience:**
-- Gate 1 onboarding = learning profile questionnaire only (unlocks dashboard)
-- Gate 2 = per-class diagnostic (unlocks class content)
-- Four student interest categories: `sports_movement`, `tech_gaming`, `nature_animals`, `arts_culture`
-- AI generates personalized study plans and lesson plans anchored to the student's learning style and interest category
-
-**Content pipeline:**
-- `subtopic_content` table holds LLM-generated explanations (teacher-reviewed) and YouTube video candidates (KaihleAdmin-reviewed)
-- Gemini 2.5 Pro is the primary generation model for lesson plans and content
-- Student content pack generated on-demand, cached by `(student_id, lesson_plan_id, learning_style, interest_category)`
-
-**Target schools:**
-- Small international micro-schools (10–100 students)
-- Running Cambridge and/or IB curricula
-- Staff often stretched thin — teachers need to feel like "super educators" via AI support
-- Pilot contacts: Daniela (SPARK), Josh, Eric (Empathy School)
+Platform curriculum scope, mastery architecture, student interest categories, onboarding gates, and content pipeline details live in CONSTITUTION.md. For deeper implementation detail (question bank schema, feature-specific invariants), query BRV before working on any curriculum or assessment feature.
 
 ---
 
