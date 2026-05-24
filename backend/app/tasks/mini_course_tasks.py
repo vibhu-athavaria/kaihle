@@ -28,6 +28,7 @@ import structlog
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.models.interest_category import InterestCategory
 from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
@@ -128,26 +129,39 @@ async def _run_generation(task: celery.Task, topic_id: str, school_id: str, teac
         )
         subtopic_ids = [row[0] for row in subtopic_ids_result.all()]
 
-        content_exists = False
+        # Fast path: ALL interest-category variants exist for ALL subtopics.
+        # Checking "any content exists" was insufficient — it would skip generation even
+        # when only 1 of 4 variants had been created per subtopic (e.g. after schema drift).
+        all_variants_complete = False
         if subtopic_ids:
-            count_result = await db.execute(
-                select(SubtopicContent.id)
+            from sqlalchemy import func
+
+            cat_count_result = await db.execute(select(func.count()).select_from(InterestCategory))
+            expected_cat_count: int = cat_count_result.scalar_one()
+            expected_total = len(subtopic_ids) * expected_cat_count
+
+            actual_result = await db.execute(
+                select(func.count())
+                .select_from(SubtopicContent)
                 .where(
                     SubtopicContent.subtopic_id.in_(subtopic_ids),
                     SubtopicContent.content_type == "explanation",
+                    SubtopicContent.interest_category_id.is_not(None),
                     SubtopicContent.review_status != "rejected",
                     SubtopicContent.is_archived.is_(False),
                 )
-                .limit(1)
             )
-            content_exists = count_result.first() is not None
+            actual_count: int = actual_result.scalar_one()
+            all_variants_complete = actual_count >= expected_total
 
-        if content_exists:
-            # Fast path: content already exists — schedule delayed email, no LLM call
+        if all_variants_complete:
+            # Fast path: every interest-category variant exists — schedule delayed email only.
             logger.info(
                 "mini_course_content_already_exists_fast_path",
                 topic_id=topic_id,
                 topic_name=topic_name,
+                expected_total=expected_total,
+                actual_count=actual_count,
             )
             if topic and topic.mini_course_status != "ready":
                 topic.mini_course_status = "ready"
@@ -162,7 +176,7 @@ async def _run_generation(task: celery.Task, topic_id: str, school_id: str, teac
                         kwargs={"teacher_email": teacher.email, "topic_name": topic_name},
                         countdown=30,
                     )
-            return {"fast_path": True, "subtopics_found": len(subtopic_ids)}
+            return {"fast_path": True, "subtopics_found": len(subtopic_ids), "variants_complete": actual_count}
 
         # Slow path: actually generate
         if topic:

@@ -51,11 +51,8 @@ const teacherSections: NavSection[] = [
     section: "TOOLS",
     items: [
       { label: "Lesson Plans", href: "/teacher/lesson-plans", icon: BookOpen },
-      {
-        label: "Content Review",
-        href: "/teacher/content-review",
-        icon: FileText,
-      },
+      // Content Review temporarily hidden — re-enable when feature is ready
+      // { label: "Content Review", href: "/teacher/content-review", icon: FileText },
     ],
   },
   {
