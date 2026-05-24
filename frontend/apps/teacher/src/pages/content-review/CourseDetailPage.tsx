@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -374,6 +374,17 @@ export function CourseDetailPage() {
 
   const generateMutation = useGenerateMiniCourse();
   const [isGenerating, setIsGenerating] = useState(false);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear any running timers when the component unmounts to prevent memory leaks
+  // and state updates on an unmounted component.
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current);
+    };
+  }, []);
 
   const [previewState, setPreviewState] = useState<{
     subtopicName: string;
@@ -388,14 +399,18 @@ export function CourseDetailPage() {
     setIsGenerating(true);
     generateMutation.mutate(topicId, {
       onSuccess: () => {
-        // Poll until variants appear — invalidate every 5s for up to 3 min
+        // Poll until variants appear — invalidate every 5s for up to 3 min.
+        // Stored in a ref so the cleanup effect can cancel it on unmount.
         let attempts = 0;
-        const interval = setInterval(() => {
+        pollIntervalRef.current = setInterval(() => {
           attempts++;
           queryClient.invalidateQueries({
             queryKey: ["course-detail", classId, topicId],
           });
-          if (attempts >= 36) clearInterval(interval); // 3 min cap
+          if (attempts >= 36) {
+            clearInterval(pollIntervalRef.current!);
+            pollIntervalRef.current = null;
+          }
         }, 5000);
         // Initial invalidation so the grid refreshes promptly on fast LLM responses
         queryClient.invalidateQueries({
@@ -404,8 +419,11 @@ export function CourseDetailPage() {
       },
       onError: () => setIsGenerating(false),
       onSettled: () => {
-        // Reset generating state after first poll fires (30s is generous for LLM)
-        setTimeout(() => setIsGenerating(false), 30_000);
+        // Reset generating state after 30s — stored in ref for unmount cleanup.
+        resetTimeoutRef.current = setTimeout(
+          () => setIsGenerating(false),
+          30_000,
+        );
       },
     });
   }
