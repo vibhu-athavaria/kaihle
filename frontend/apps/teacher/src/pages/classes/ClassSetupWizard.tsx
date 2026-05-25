@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { Check, X } from "lucide-react";
+import { Check, X, ChevronDown, ChevronRight } from "lucide-react";
 import { Button, Modal } from "@kaihle/ui";
 import {
   useClassTopics,
@@ -12,6 +12,8 @@ import {
   type ClassTopicItem,
   type AvailableCurriculumTopic,
 } from "../../hooks/useClassTopics";
+import { useTopicSubtopics } from "../../hooks/useSubtopicContent";
+import { useClass } from "../../hooks/useClass";
 import { usePublishAssessment } from "../../hooks/useClassAssessments";
 import { useClassTopicsWithGrades } from "../../hooks/useClassTopicsWithGrades";
 import {
@@ -21,6 +23,95 @@ import {
 import { TopicGroupSection } from "../../components/wizard/TopicGroupSection";
 import { AssessmentConfigPanel } from "../../components/wizard/AssessmentConfigPanel";
 import type { TopicWithAvailability } from "../../components/wizard/TopicRow";
+
+// ── Picker topic row with lazy subtopic preview ───────────────────────────
+
+function PickerTopicRow({
+  topic,
+  mutating,
+  onAdd,
+  curriculumId,
+  gradeId,
+}: {
+  topic: AvailableCurriculumTopic & { topic_id?: string };
+  mutating: string | null;
+  onAdd: (t: AvailableCurriculumTopic) => void;
+  curriculumId?: string;
+  gradeId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const topicId =
+    (topic as AvailableCurriculumTopic & { topic_id?: string }).topic_id ??
+    null;
+  const { data: subtopics, isLoading } = useTopicSubtopics(
+    open ? topicId : null,
+    { curriculumId, gradeId },
+  );
+
+  return (
+    <div className="rounded-lg border border-transparent hover:border-[#e5e7eb] transition-colors">
+      <div className="flex items-center justify-between gap-2 px-2.5 py-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-1.5 min-w-0 text-left"
+          aria-expanded={open}
+          aria-label={`${open ? "Collapse" : "Expand"} ${topic.topic_name}`}
+        >
+          {open ? (
+            <ChevronDown
+              className="w-3.5 h-3.5 text-brand-muted flex-shrink-0"
+              aria-hidden="true"
+            />
+          ) : (
+            <ChevronRight
+              className="w-3.5 h-3.5 text-brand-muted flex-shrink-0"
+              aria-hidden="true"
+            />
+          )}
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-brand-ink truncate">
+              {topic.topic_name}
+            </p>
+            <p className="text-xs text-brand-muted">
+              {topic.subtopic_count} subtopic
+              {topic.subtopic_count !== 1 ? "s" : ""}
+            </p>
+          </div>
+        </button>
+        <button
+          type="button"
+          disabled={mutating === topic.curriculum_topic_id}
+          onClick={() => onAdd(topic)}
+          aria-label={`Add ${topic.topic_name}`}
+          className="flex-shrink-0 rounded-full bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white transition-all px-3 py-1 text-xs font-bold disabled:opacity-50"
+        >
+          + Add
+        </button>
+      </div>
+
+      {open && (
+        <div className="px-6 pb-2 space-y-0.5">
+          {isLoading ? (
+            <div className="space-y-1 animate-pulse py-1">
+              {Array.from({ length: topic.subtopic_count || 3 }).map((_, i) => (
+                <div key={i} className="h-3 bg-gray-100 rounded w-3/4" />
+              ))}
+            </div>
+          ) : !subtopics || subtopics.length === 0 ? (
+            <p className="text-xs text-brand-muted py-1">No subtopics found.</p>
+          ) : (
+            subtopics.map((s) => (
+              <p key={s.id} className="text-xs text-brand-body py-0.5 truncate">
+                · {s.name}
+              </p>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface ClassSetupWizardProps {
   classId: string;
@@ -49,6 +140,7 @@ function TopicListStep({
   onCancel,
   mode = "setup",
 }: Step1Props) {
+  const { data: cls } = useClass(classId);
   const { data: classTopics = [], isLoading: loadingTopics } =
     useClassTopics(classId);
   const { data: available = [], isLoading: loadingAvailable } =
@@ -299,29 +391,14 @@ function TopicListStep({
               </p>
             ) : (
               available.map((t: AvailableCurriculumTopic) => (
-                <div
+                <PickerTopicRow
                   key={t.curriculum_topic_id}
-                  className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-brand-ink truncate">
-                      {t.topic_name}
-                    </p>
-                    <p className="text-xs text-brand-muted">
-                      {t.subtopic_count} subtopic
-                      {t.subtopic_count !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={mutating === t.curriculum_topic_id}
-                    onClick={() => handleAdd(t)}
-                    aria-label={`Add ${t.topic_name}`}
-                    className="flex-shrink-0 rounded-full bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white transition-all px-3 py-1 text-xs font-bold disabled:opacity-50"
-                  >
-                    + Add
-                  </button>
-                </div>
+                  topic={t}
+                  mutating={mutating}
+                  onAdd={handleAdd}
+                  curriculumId={cls?.curriculum_id}
+                  gradeId={cls?.grade_id}
+                />
               ))
             )}
           </div>

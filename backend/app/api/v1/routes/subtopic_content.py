@@ -35,13 +35,14 @@ from app.ai.providers import router as llm_router
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
-from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic
+from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic, Topic
 from app.models.interest_category import InterestCategory
 from app.models.school import Class, School
 from app.models.subtopic_content import SubtopicContent
 from app.models.subtopic_explanation_suggestion import SubtopicExplanationSuggestion
 from app.models.user import User, UserRole
 from app.schemas.subtopic_content import (
+    ContentRowEditRequest,
     ContentTypeStatus,
     ExplanationListResponse,
     ExplanationSection,
@@ -351,10 +352,12 @@ async def get_promotion_queue(
         subtopic_result = await db.execute(
             select(
                 Subtopic.name.label("subtopic_name"),
+                Topic.name.label("topic_name"),
                 Subject.code.label("subject_code"),
                 Grade.level.label("grade_level"),
             )
             .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .join(Topic, Topic.id == CurriculumTopic.topic_id)
             .join(Subject, Subject.id == CurriculumTopic.subject_id)
             .join(Grade, Grade.id == CurriculumTopic.grade_id)
             .where(Subtopic.id == row.subtopic_id)
@@ -372,11 +375,19 @@ async def get_promotion_queue(
             if user_row:
                 reviewer_name = f"{user_row.first_name} {user_row.last_name}".strip()
 
+        interest_category_name: str | None = None
+        if row.interest_category_id:
+            ic_result = await db.execute(
+                select(InterestCategory.name).where(InterestCategory.id == row.interest_category_id)
+            )
+            interest_category_name = ic_result.scalar_one_or_none()
+
         items.append(
             PromotionQueueItem(
                 subtopic_content_id=row.id,
                 subtopic_id=row.subtopic_id,
                 subtopic_name=meta.subtopic_name if meta else "",
+                topic_name=meta.topic_name if meta else "",
                 content_type=row.content_type,
                 school_name=school_name,
                 reviewed_by_name=reviewer_name,
@@ -385,6 +396,9 @@ async def get_promotion_queue(
                 review_status=row.review_status,
                 reviewed_at=row.reviewed_at,
                 school_id=row.school_id,
+                explanation_text=row.explanation_text,
+                quiz_questions=row.quiz_questions,
+                interest_category_name=interest_category_name,
             )
         )
 
@@ -482,6 +496,39 @@ async def get_subtopic_content(
         explanation=explanation,
         quiz=quiz,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /{subtopic_id}/videos — approved video list for teachers
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{subtopic_id}/videos")
+async def get_subtopic_videos(
+    subtopic_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, object]]:
+    """Return approved video entries for a subtopic — teacher-facing.
+
+    Only returns videos with status='approved' so the teacher sees the curated
+    list, not raw candidates.
+    """
+    assert current_user.school_id is not None
+    await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == "video",
+        )
+    )
+    row = result.scalars().first()
+    if row is None or not row.videos:
+        return []
+
+    approved = [v for v in row.videos if v.get("status") == "approved"]
+    return approved
 
 
 # ---------------------------------------------------------------------------
@@ -1111,53 +1158,82 @@ async def teacher_approve_content(
     return {"status": body.action}
 
 
-@router.patch("/{subtopic_id}/{content_type}/promote")
-async def promote_content(
-    subtopic_id: uuid.UUID,
-    content_type: str = Path(..., pattern="^(video|explanation|quiz)$"),
+# ---------------------------------------------------------------------------
+# PATCH /rows/{content_id} — edit a specific content row by PK
+# PATCH /rows/{content_id}/promote — promote/reject a specific row by PK
+# These MUST be declared before /{subtopic_id}/... routes — FastAPI matches
+# path segments left-to-right and "rows" would otherwise be captured as a UUID.
+# ---------------------------------------------------------------------------
+
+
+@router.patch("/rows/{content_id}")
+async def edit_content_row(
+    content_id: uuid.UUID,
+    body: ContentRowEditRequest = Body(...),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """KaihleAdmin edits explanation text on a specific subtopic_content row by its PK.
+
+    Addresses the case where multiple rows exist for the same (subtopic_id, content_type)
+    — one per interest category — so we must target by the row's UUID, not by subtopic_id.
+    Does NOT change review_status or scope; those are handled by the promote endpoint.
+    """
+    result = await db.execute(select(SubtopicContent).where(SubtopicContent.id == content_id))
+    content = result.scalar_one_or_none()
+    if content is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content row not found")
+
+    content.explanation_text = body.explanation_text.strip()
+    content.updated_at = datetime.now(UTC)
+
+    await db.commit()
+    logger.info(
+        "content_row_edited_by_admin",
+        content_id=str(content_id),
+        admin_id=str(current_user.id),
+    )
+    return {"status": "ok"}
+
+
+@router.patch("/rows/{content_id}/promote")
+async def promote_content_row(
+    content_id: uuid.UUID,
     body: PromoteRequest = Body(...),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """KaihleAdmin promotes school-scoped approved content to curriculum scope, or rejects."""
-    result = await db.execute(
-        select(SubtopicContent).where(
-            SubtopicContent.subtopic_id == subtopic_id,
-            SubtopicContent.content_type == content_type,
-            SubtopicContent.scope == "school",
-            SubtopicContent.review_status == "approved",
-        )
-    )
+    """KaihleAdmin promotes or rejects a specific school-scoped content row by its PK.
+
+    Addresses the multi-row-per-subtopic case (interest-category fan-out) where
+    querying by (subtopic_id, content_type) would return multiple rows and raise
+    MultipleResultsFound.
+    """
+    result = await db.execute(select(SubtopicContent).where(SubtopicContent.id == content_id))
     content = result.scalar_one_or_none()
     if content is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No school-scoped approved content found",
+            detail="Content row not found",
+        )
+    if content.scope != "school" or content.review_status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only school-scoped approved rows can be promoted",
         )
 
     now = datetime.now(UTC)
     if body.action == "promote":
-        existing_curriculum = await db.execute(
-            select(SubtopicContent).where(
-                SubtopicContent.subtopic_id == subtopic_id,
-                SubtopicContent.content_type == content_type,
-                SubtopicContent.scope == "curriculum",
-            )
-        )
-        if existing_curriculum.scalar_one_or_none() is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A curriculum-scoped row already exists for this subtopic and content type",
-            )
         content.scope = "curriculum"
         content.school_id = None
         content.reviewed_at = now
         content.reviewed_by_id = current_user.id
         content.updated_at = now
         logger.info(
-            "content_promoted_to_curriculum",
-            subtopic_id=str(subtopic_id),
-            content_type=content_type,
+            "content_row_promoted_to_curriculum",
+            content_id=str(content_id),
+            subtopic_id=str(content.subtopic_id),
+            content_type=str(content.content_type),
             admin_id=str(current_user.id),
         )
     else:
@@ -1167,9 +1243,10 @@ async def promote_content(
         content.reviewed_by_id = current_user.id
         content.updated_at = now
         logger.info(
-            "content_promotion_rejected",
-            subtopic_id=str(subtopic_id),
-            content_type=content_type,
+            "content_row_promotion_rejected",
+            content_id=str(content_id),
+            subtopic_id=str(content.subtopic_id),
+            content_type=str(content.content_type),
             admin_id=str(current_user.id),
         )
 

@@ -11,6 +11,7 @@ import { useClass } from "../hooks/useClass";
 import {
   useSubtopicContentStatus,
   useSubtopicExplanations,
+  useSubtopicVideos,
   useTeacherApproveContent,
   useSubmitExplanationSuggestion,
   type PersonalisedExplanation,
@@ -372,6 +373,58 @@ function ExplanationTab({
 
 // ── Video tab ───────────────────────────────────────────────────────────────
 
+function getYouTubeId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1);
+    return u.searchParams.get("v");
+  } catch {
+    return null;
+  }
+}
+
+function VideoCard({
+  url,
+  title,
+  channel,
+}: {
+  url: string;
+  title: string;
+  channel: string;
+}) {
+  const videoId = getYouTubeId(url);
+  return (
+    <div className="bg-white border border-brand-border rounded-xl overflow-hidden shadow-sm">
+      {videoId ? (
+        <div className="aspect-video w-full">
+          <iframe
+            src={`https://www.youtube.com/embed/${videoId}`}
+            title={title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="w-full h-full"
+          />
+        </div>
+      ) : (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block p-4 text-brand-primary underline text-sm truncate"
+        >
+          {url}
+        </a>
+      )}
+      <div className="px-4 py-3">
+        <p className="text-sm font-semibold text-brand-ink leading-snug line-clamp-2">
+          {title}
+        </p>
+        <p className="text-xs text-brand-muted mt-0.5">{channel}</p>
+      </div>
+    </div>
+  );
+}
+
 function VideoTab({
   status,
   subtopicId,
@@ -380,6 +433,10 @@ function VideoTab({
   subtopicId: string;
 }) {
   const approveContent = useTeacherApproveContent();
+  // Only fetch the video list once approved — no point loading candidates
+  const { data: videos, isLoading: videosLoading } = useSubtopicVideos(
+    status === "approved" ? subtopicId : undefined,
+  );
 
   if (status === "none") {
     return (
@@ -392,64 +449,102 @@ function VideoTab({
   }
 
   return (
-    <div className="bg-white border border-brand-border rounded-xl p-5 shadow-sm space-y-4">
-      <div className="flex items-center justify-between">
-        <ContentStatusBadge status={status} />
-        {status === "own_school_pending" && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              className="gap-1"
-              onClick={() =>
-                approveContent.mutate(
-                  { subtopicId, contentType: "video", action: "approve" },
-                  {
-                    onSuccess: () => toast.success("Videos approved."),
-                    onError: () => toast.error("Approval failed."),
-                  },
-                )
-              }
-              disabled={approveContent.isPending}
-            >
-              {approveContent.isPending ? (
-                <Loader2
-                  className="w-3.5 h-3.5 animate-spin"
-                  aria-hidden="true"
-                />
-              ) : (
-                <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" />
-              )}
-              Approve
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                approveContent.mutate(
-                  { subtopicId, contentType: "video", action: "reject" },
-                  {
-                    onSuccess: () => toast.success("Videos rejected."),
-                    onError: () => toast.error("Rejection failed."),
-                  },
-                )
-              }
-              disabled={approveContent.isPending}
-            >
-              Reject
-            </Button>
-          </div>
+    <div className="space-y-4">
+      <div className="bg-white border border-brand-border rounded-xl p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <ContentStatusBadge status={status} />
+          {status === "own_school_pending" && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                className="gap-1"
+                onClick={() =>
+                  approveContent.mutate(
+                    { subtopicId, contentType: "video", action: "approve" },
+                    {
+                      onSuccess: () => toast.success("Videos approved."),
+                      onError: () => toast.error("Approval failed."),
+                    },
+                  )
+                }
+                disabled={approveContent.isPending}
+              >
+                {approveContent.isPending ? (
+                  <Loader2
+                    className="w-3.5 h-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                )}
+                Approve
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  approveContent.mutate(
+                    { subtopicId, contentType: "video", action: "reject" },
+                    {
+                      onSuccess: () => toast.success("Videos rejected."),
+                      onError: () => toast.error("Rejection failed."),
+                    },
+                  )
+                }
+                disabled={approveContent.isPending}
+              >
+                Reject
+              </Button>
+            </div>
+          )}
+        </div>
+        {status !== "approved" && (
+          <p className="text-sm text-brand-muted mt-3">
+            {status === "curriculum_pending" ||
+            status === "other_school_pending"
+              ? "Videos are being reviewed by the Kaihle platform team."
+              : status === "rejected"
+                ? "Videos were rejected. Generate new candidates from the class page."
+                : "Videos are pending your review."}
+          </p>
         )}
       </div>
-      <p className="text-sm text-brand-muted">
-        {status === "approved"
-          ? "Videos have been approved and are available to students."
-          : status === "curriculum_pending" || status === "other_school_pending"
-            ? "Videos are being reviewed by the Kaihle platform team."
-            : status === "rejected"
-              ? "Videos were rejected. Generate new candidates from the class page."
-              : "Videos are pending your review."}
-      </p>
+
+      {status === "approved" &&
+        (videosLoading ? (
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div
+                key={i}
+                className="animate-pulse rounded-xl overflow-hidden border border-brand-border"
+              >
+                <div className="aspect-video bg-gray-100" />
+                <div className="p-4 space-y-2">
+                  <div className="h-4 bg-gray-100 rounded w-3/4" />
+                  <div className="h-3 bg-gray-100 rounded w-1/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !videos || videos.length === 0 ? (
+          <EmptyState
+            emoji="🎬"
+            title="No approved videos"
+            description="No videos have been marked as approved yet."
+          />
+        ) : (
+          <div className="space-y-4">
+            {videos.map((v, i) => (
+              <VideoCard
+                key={i}
+                url={v.url}
+                title={v.title}
+                channel={v.channel}
+              />
+            ))}
+          </div>
+        ))}
     </div>
   );
 }

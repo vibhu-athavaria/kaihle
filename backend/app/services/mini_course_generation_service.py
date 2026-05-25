@@ -98,7 +98,9 @@ class MiniCourseGenerationService:
 
         Args:
             topic_id: UUID string of the Topic.
-            school_id: UUID string of the requesting school (logged only).
+            school_id: UUID string of the requesting school. Written to all
+                generated SubtopicContent rows as scope="school"/school_id so
+                they appear in the KaihleAdmin promotion queue after approval.
             dry_run: When True, generate LLM responses but do not write to DB.
                      Returns generated texts inline in the result dict.
 
@@ -195,6 +197,7 @@ class MiniCourseGenerationService:
                         subtopic_id=subtopic.id,
                         interest_category_id=category_id,
                         explanation_text=explanation,
+                        school_id=uuid.UUID(school_id),
                     )
                 subtopic_written += 1
 
@@ -211,6 +214,7 @@ class MiniCourseGenerationService:
                     topic_name=topic_name,
                     subject_name=subject_name,
                     grade_level=grade_level,
+                    school_id=uuid.UUID(school_id),
                     dry_run=dry_run,
                 )
                 questions_written += written
@@ -305,6 +309,7 @@ class MiniCourseGenerationService:
         topic_name: str,
         subject_name: str,
         grade_level: int,
+        school_id: uuid.UUID,
         dry_run: bool,
     ) -> int:
         """Generate and stage quiz questions for one subtopic. Returns count written.
@@ -384,6 +389,8 @@ class MiniCourseGenerationService:
             quiz_content.quiz_questions_count = len(normalized)
             quiz_content.review_status = "pending"
             quiz_content.is_archived = False
+            quiz_content.scope = "school"
+            quiz_content.school_id = school_id
             orm_attrs.flag_modified(quiz_content, "quiz_questions")
         else:
             quiz_content = SubtopicContent(
@@ -393,6 +400,8 @@ class MiniCourseGenerationService:
                 quiz_questions_count=len(normalized),
                 review_status="pending",
                 is_archived=False,
+                scope="school",
+                school_id=school_id,
             )
             self.db.add(quiz_content)
 
@@ -435,6 +444,7 @@ class MiniCourseGenerationService:
         subtopic_id: uuid.UUID,
         interest_category_id: uuid.UUID,
         explanation_text: str,
+        school_id: uuid.UUID,
     ) -> None:
         """Insert a new SubtopicContent row (or update a rejected one).
 
@@ -458,6 +468,8 @@ class MiniCourseGenerationService:
             existing_rejected.review_status = "pending"
             existing_rejected.rejection_reason = None
             existing_rejected.rejection_teacher_note = None
+            existing_rejected.scope = "school"
+            existing_rejected.school_id = school_id
             logger.info(
                 "mini_course_content_updated_rejected_row",
                 subtopic_id=str(subtopic_id),
@@ -470,6 +482,8 @@ class MiniCourseGenerationService:
                 explanation_text=explanation_text,
                 interest_category_id=interest_category_id,
                 review_status="pending",
+                scope="school",
+                school_id=school_id,
             )
             self.db.add(content)
             logger.info(

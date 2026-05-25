@@ -3,6 +3,13 @@ import { apiClient } from "@kaihle/auth";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+export interface ApprovedVideo {
+  url: string;
+  title: string;
+  channel: string;
+  view_count: number | null;
+}
+
 export type ContentStatus =
   | "none"
   | "own_school_pending"
@@ -146,5 +153,52 @@ export function useSubmitExplanationSuggestion() {
       });
       void variables;
     },
+  });
+}
+
+// ── Approved videos for a subtopic (teacher view) ──────────────────────────
+
+export function useSubtopicVideos(subtopicId: string | undefined) {
+  return useQuery<ApprovedVideo[]>({
+    queryKey: ["subtopic-videos", subtopicId],
+    queryFn: async () => {
+      const res = await apiClient.get(
+        `/api/v1/subtopic-content/${subtopicId}/videos`,
+      );
+      return res.data as ApprovedVideo[];
+    },
+    enabled: !!subtopicId,
+  });
+}
+
+// ── Subtopics for a topic (lazy expand) ────────────────────────────────────
+
+export interface SubtopicSimple {
+  id: string;
+  name: string;
+}
+
+export function useTopicSubtopics(
+  topicId: string | null,
+  filters?: { curriculumId?: string; gradeId?: string },
+) {
+  return useQuery<SubtopicSimple[]>({
+    queryKey: [
+      "topic-subtopics",
+      topicId,
+      filters?.curriculumId,
+      filters?.gradeId,
+    ],
+    queryFn: async () => {
+      const qs = new URLSearchParams();
+      if (filters?.curriculumId) qs.set("curriculum_id", filters.curriculumId);
+      if (filters?.gradeId) qs.set("grade_id", filters.gradeId);
+      const res = await apiClient.get(
+        `/api/v1/topics/${topicId}/subtopics?${qs.toString()}`,
+      );
+      return res.data as SubtopicSimple[];
+    },
+    enabled: !!topicId,
+    staleTime: 5 * 60 * 1000,
   });
 }

@@ -17,7 +17,7 @@ export interface CourseExplanation {
 }
 
 export interface CourseVideo {
-  url: string;
+  video_url: string;
   title: string;
 }
 
