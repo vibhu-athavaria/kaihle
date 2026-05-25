@@ -373,11 +373,19 @@ function ExplanationTab({
 
 // ── Video tab ───────────────────────────────────────────────────────────────
 
+// YouTube video IDs are strictly alphanumeric + hyphen + underscore (11 chars).
+// Validate after extraction to prevent an adversarial URL injecting content into
+// the embed src (e.g. a crafted v= param containing path traversal or JS).
+const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{1,20}$/;
+
 function getYouTubeId(url: string): string | null {
   try {
     const u = new URL(url);
-    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1);
-    return u.searchParams.get("v");
+    const id = u.hostname.includes("youtu.be")
+      ? u.pathname.slice(1).split("/")[0]
+      : u.searchParams.get("v");
+    if (id && YOUTUBE_ID_RE.test(id)) return id;
+    return null;
   } catch {
     return null;
   }

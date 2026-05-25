@@ -33,18 +33,15 @@ function PickerTopicRow({
   curriculumId,
   gradeId,
 }: {
-  topic: AvailableCurriculumTopic & { topic_id?: string };
+  topic: AvailableCurriculumTopic;
   mutating: string | null;
   onAdd: (t: AvailableCurriculumTopic) => void;
   curriculumId?: string;
   gradeId?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const topicId =
-    (topic as AvailableCurriculumTopic & { topic_id?: string }).topic_id ??
-    null;
   const { data: subtopics, isLoading } = useTopicSubtopics(
-    open ? topicId : null,
+    open ? topic.topic_id : null,
     { curriculumId, gradeId },
   );
 
@@ -124,6 +121,158 @@ interface ClassSetupWizardProps {
 }
 
 type Step = 1 | 2;
+
+// ── Already-added topic row (must be top-level — has hooks) ──────────────────
+
+interface ClassTopicRowProps {
+  topic: ClassTopicItem;
+  isCovered: boolean;
+  overallIndex: number;
+  totalCount: number;
+  curriculumId?: string;
+  gradeId?: string;
+  mutating: string | null;
+  reorderPending: boolean;
+  onMove: (index: number, direction: "up" | "down") => void;
+  onMarkCovered: (topic: ClassTopicItem) => void;
+  onRemove: (id: string) => void;
+}
+
+function ClassTopicRow({
+  topic,
+  isCovered,
+  overallIndex,
+  totalCount,
+  curriculumId,
+  gradeId,
+  mutating,
+  reorderPending,
+  onMove,
+  onMarkCovered,
+  onRemove,
+}: ClassTopicRowProps) {
+  const [open, setOpen] = useState(false);
+  const { data: subtopics, isLoading: subtopicsLoading } = useTopicSubtopics(
+    open ? topic.topic_id : null,
+    { curriculumId, gradeId },
+  );
+
+  return (
+    <div
+      className={[
+        "border-b border-[#f3f4f6] last:border-b-0",
+        isCovered ? "bg-[#fafffe]" : "bg-white",
+      ].join(" ")}
+    >
+      <div className="flex items-center gap-3 px-[14px] py-3">
+        {/* Up/down reorder arrows */}
+        <div className="flex flex-col gap-0.5 flex-shrink-0">
+          <button
+            type="button"
+            disabled={overallIndex === 0 || reorderPending}
+            onClick={() => onMove(overallIndex, "up")}
+            aria-label={`Move ${topic.topic_name} up`}
+            className="text-[#d1d5db] hover:text-[#c9932a] text-[10px] leading-none disabled:opacity-30 transition-colors"
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            disabled={overallIndex === totalCount - 1 || reorderPending}
+            onClick={() => onMove(overallIndex, "down")}
+            aria-label={`Move ${topic.topic_name} down`}
+            className="text-[#d1d5db] hover:text-[#c9932a] text-[10px] leading-none disabled:opacity-30 transition-colors"
+          >
+            ▼
+          </button>
+        </div>
+
+        {/* Expand toggle */}
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={`${open ? "Collapse" : "Expand"} ${topic.topic_name}`}
+          className="flex-shrink-0 text-brand-muted hover:text-brand-ink transition-colors"
+        >
+          {open ? (
+            <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+          )}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-[#374151] truncate">
+            {topic.topic_name}
+          </p>
+          <p className="text-xs text-brand-muted mt-px">
+            {topic.subtopic_count} subtopic
+            {topic.subtopic_count !== 1 ? "s" : ""} · Seq.{" "}
+            {topic.sequence_order + 1}
+          </p>
+        </div>
+
+        {isCovered ? (
+          <span className="flex-shrink-0 bg-[#f0fdf4] border border-[#d4e4d8] rounded-full px-[10px] py-[3px] text-xs font-bold text-[#1a5c38] whitespace-nowrap">
+            ✓ Covered
+          </span>
+        ) : (
+          <button
+            type="button"
+            disabled={mutating === topic.id}
+            onClick={() => onMarkCovered(topic)}
+            className="flex-shrink-0 bg-white border border-[#e5e7eb] rounded-full px-[10px] py-1 text-xs font-semibold text-[#6b7280] hover:border-brand-gold hover:text-brand-gold transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            Mark covered
+          </button>
+        )}
+
+        {isCovered && (
+          <button
+            type="button"
+            disabled={mutating === topic.id}
+            onClick={() => onMarkCovered(topic)}
+            className="flex-shrink-0 bg-white border border-[#e5e7eb] rounded-full px-[10px] py-1 text-xs font-semibold text-[#6b7280] hover:border-brand-gold hover:text-brand-gold transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            Unmark
+          </button>
+        )}
+
+        <button
+          type="button"
+          disabled={mutating === topic.id}
+          onClick={() => onRemove(topic.id)}
+          aria-label={`Remove ${topic.topic_name}`}
+          className="flex-shrink-0 w-7 h-7 rounded-[6px] bg-[#fee2e2] flex items-center justify-center text-[#dc2626] hover:bg-red-200 transition-colors disabled:opacity-50"
+        >
+          <X className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+      </div>
+
+      {/* Lazy subtopic list */}
+      {open && (
+        <div className="px-[42px] pb-2 space-y-0.5">
+          {subtopicsLoading ? (
+            <div className="space-y-1 animate-pulse py-1">
+              {Array.from({ length: topic.subtopic_count || 3 }).map((_, i) => (
+                <div key={i} className="h-3 bg-gray-100 rounded w-3/4" />
+              ))}
+            </div>
+          ) : !subtopics || subtopics.length === 0 ? (
+            <p className="text-xs text-brand-muted py-1">No subtopics found.</p>
+          ) : (
+            subtopics.map((s) => (
+              <p key={s.id} className="text-xs text-brand-body py-0.5 truncate">
+                · {s.name}
+              </p>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Step 1: Topic list ────────────────────────────────────────────────────────
 
@@ -210,96 +359,6 @@ function TopicListStep({
 
   const loading = loadingTopics || loadingAvailable;
 
-  function TopicRow({
-    topic,
-    isCovered,
-    overallIndex,
-  }: {
-    topic: ClassTopicItem;
-    isCovered: boolean;
-    overallIndex: number;
-  }) {
-    return (
-      <div
-        className={[
-          "flex items-center gap-3 px-[14px] py-3 border-b border-[#f3f4f6] last:border-b-0",
-          isCovered ? "bg-[#fafffe]" : "bg-white",
-        ].join(" ")}
-      >
-        {/* Drag-handle style up/down arrows (no library needed) */}
-        <div className="flex flex-col gap-0.5 flex-shrink-0">
-          <button
-            type="button"
-            disabled={overallIndex === 0 || reorderTopics.isPending}
-            onClick={() => handleMove(overallIndex, "up")}
-            aria-label={`Move ${topic.topic_name} up`}
-            className="text-[#d1d5db] hover:text-[#c9932a] text-[10px] leading-none disabled:opacity-30 transition-colors"
-          >
-            ▲
-          </button>
-          <button
-            type="button"
-            disabled={
-              overallIndex === sorted.length - 1 || reorderTopics.isPending
-            }
-            onClick={() => handleMove(overallIndex, "down")}
-            aria-label={`Move ${topic.topic_name} down`}
-            className="text-[#d1d5db] hover:text-[#c9932a] text-[10px] leading-none disabled:opacity-30 transition-colors"
-          >
-            ▼
-          </button>
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-[#374151] truncate">
-            {topic.topic_name}
-          </p>
-          <p className="text-xs text-brand-muted mt-px">
-            {topic.subtopic_count} subtopic
-            {topic.subtopic_count !== 1 ? "s" : ""} · Seq.{" "}
-            {topic.sequence_order + 1}
-          </p>
-        </div>
-
-        {isCovered ? (
-          <span className="flex-shrink-0 bg-[#f0fdf4] border border-[#d4e4d8] rounded-full px-[10px] py-[3px] text-xs font-bold text-[#1a5c38] whitespace-nowrap">
-            ✓ Covered
-          </span>
-        ) : (
-          <button
-            type="button"
-            disabled={mutating === topic.id}
-            onClick={() => handleMarkCovered(topic)}
-            className="flex-shrink-0 bg-white border border-[#e5e7eb] rounded-full px-[10px] py-1 text-xs font-semibold text-[#6b7280] hover:border-brand-gold hover:text-brand-gold transition-colors disabled:opacity-50 whitespace-nowrap"
-          >
-            Mark covered
-          </button>
-        )}
-
-        {isCovered && (
-          <button
-            type="button"
-            disabled={mutating === topic.id}
-            onClick={() => handleMarkCovered(topic)}
-            className="flex-shrink-0 bg-white border border-[#e5e7eb] rounded-full px-[10px] py-1 text-xs font-semibold text-[#6b7280] hover:border-brand-gold hover:text-brand-gold transition-colors disabled:opacity-50 whitespace-nowrap"
-          >
-            Unmark
-          </button>
-        )}
-
-        <button
-          type="button"
-          disabled={mutating === topic.id}
-          onClick={() => handleRemove(topic.id)}
-          aria-label={`Remove ${topic.topic_name}`}
-          className="flex-shrink-0 w-7 h-7 rounded-[6px] bg-[#fee2e2] flex items-center justify-center text-[#dc2626] hover:bg-red-200 transition-colors disabled:opacity-50"
-        >
-          <X className="w-3.5 h-3.5" aria-hidden="true" />
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-5">
       <div>
@@ -333,11 +392,19 @@ function TopicListStep({
                 Already covered ({covered.length})
               </div>
               {covered.map((t) => (
-                <TopicRow
+                <ClassTopicRow
                   key={t.id}
                   topic={t}
                   isCovered={true}
                   overallIndex={sorted.indexOf(t)}
+                  totalCount={sorted.length}
+                  curriculumId={cls?.curriculum_id}
+                  gradeId={cls?.grade_id}
+                  mutating={mutating}
+                  reorderPending={reorderTopics.isPending}
+                  onMove={handleMove}
+                  onMarkCovered={handleMarkCovered}
+                  onRemove={handleRemove}
                 />
               ))}
             </>
@@ -348,11 +415,19 @@ function TopicListStep({
                 To be taught ({upcoming.length})
               </div>
               {upcoming.map((t) => (
-                <TopicRow
+                <ClassTopicRow
                   key={t.id}
                   topic={t}
                   isCovered={false}
                   overallIndex={sorted.indexOf(t)}
+                  totalCount={sorted.length}
+                  curriculumId={cls?.curriculum_id}
+                  gradeId={cls?.grade_id}
+                  mutating={mutating}
+                  reorderPending={reorderTopics.isPending}
+                  onMove={handleMove}
+                  onMarkCovered={handleMarkCovered}
+                  onRemove={handleRemove}
                 />
               ))}
             </>
@@ -360,11 +435,16 @@ function TopicListStep({
         </div>
       )}
 
-      {/* Dashed add-topic button */}
+      {/* Add-topic button — filled gold when picker is closed, muted ghost when open */}
       <button
         type="button"
         onClick={() => setShowPicker((v) => !v)}
-        className="w-full border-2 border-dashed border-[#e5e7eb] rounded-lg py-[13px] text-xs text-brand-muted hover:border-brand-gold hover:text-brand-gold transition-colors"
+        className={[
+          "w-full rounded-lg py-[13px] text-xs font-bold transition-colors",
+          showPicker
+            ? "bg-brand-ink text-white hover:bg-brand-ink/90 shadow-sm"
+            : "bg-brand-gold text-white hover:bg-brand-gold/90 shadow-sm",
+        ].join(" ")}
       >
         {showPicker
           ? "↑ Hide curriculum topics"

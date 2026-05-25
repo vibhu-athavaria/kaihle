@@ -48,15 +48,20 @@ function QuizPreview({ questions }: { questions: Record<string, unknown>[] }) {
   return (
     <ol className="space-y-4">
       {questions.map((q, i) => {
-        const options = q.options as
-          | { key: string; text: string }[]
-          | undefined;
+        // Safely extract options — guard against API shape drift without silent failures
+        const rawOptions = Array.isArray(q.options) ? q.options : [];
+        const options = rawOptions.filter(
+          (o): o is { key: string; text: string } =>
+            typeof o === "object" && o !== null && "key" in o && "text" in o,
+        );
+        const questionId =
+          typeof q.question_id === "string" ? q.question_id : String(i);
         return (
-          <li key={i} className="space-y-1">
+          <li key={questionId} className="space-y-1">
             <p className="font-['Inter'] text-xs font-semibold text-role-admin-ink">
               {i + 1}. {String(q.question_text ?? "")}
             </p>
-            {options && (
+            {options.length > 0 && (
               <ul className="pl-4 space-y-0.5">
                 {options.map((opt) => (
                   <li

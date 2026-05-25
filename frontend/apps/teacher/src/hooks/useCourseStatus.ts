@@ -22,7 +22,11 @@ export function useCourseStatus(topicId: string | null) {
       return res.data as CourseStatusResponse;
     },
     enabled: !!topicId,
-    staleTime: 10_000,
+    // State only changes via explicit user action (invalidated manually) or
+    // during generation (polled via refetchInterval below). Window-focus
+    // refetch adds no value and fires constantly when devtools are open.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
     refetchInterval: (query) => {
       // Poll every 5s while generating, stop once settled
       const data = query.state.data;

@@ -265,6 +265,7 @@ class ClassTopicService:
         return [
             {
                 "curriculum_topic_id": row.CurriculumTopic.id,
+                "topic_id": row.CurriculumTopic.topic_id,
                 "topic_name": row.topic_name,
                 "subtopic_count": row.subtopic_count,
                 "sequence_order": row.CurriculumTopic.sequence_order,
