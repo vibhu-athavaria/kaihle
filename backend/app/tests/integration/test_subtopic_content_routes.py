@@ -1164,7 +1164,7 @@ async def test_promote_when_kaihle_admin_then_scope_becomes_curriculum(
     await db_session.commit()
 
     response = await client.patch(
-        f"/api/v1/subtopic-content/{st.id}/quiz/promote",
+        f"/api/v1/subtopic-content/rows/{content.id}/promote",
         headers=make_auth_header(admin),
         json={"action": "promote"},
     )
@@ -1177,13 +1177,23 @@ async def test_promote_when_kaihle_admin_then_scope_becomes_curriculum(
 
 @pytest.mark.asyncio
 async def test_promote_when_teacher_then_403(client: AsyncClient, db_session: AsyncSession) -> None:
-    """PATCH /{subtopic_id}/quiz/promote returns 403 for teacher role."""
+    """PATCH /rows/{content_id}/promote returns 403 for teacher role (KAIHLE_ADMIN only)."""
     subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
     school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="quiz",
+        scope="school",
+        school_id=school.id,
+        review_status="approved",
+    )
+    db_session.add(content)
     await db_session.commit()
 
     response = await client.patch(
-        f"/api/v1/subtopic-content/{st.id}/quiz/promote",
+        f"/api/v1/subtopic-content/rows/{content.id}/promote",
         headers=make_auth_header(teacher),
         json={"action": "promote"},
     )

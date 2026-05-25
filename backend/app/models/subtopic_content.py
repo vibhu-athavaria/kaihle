@@ -174,12 +174,15 @@ class SubtopicContent(Base, UUIDMixin, TimestampMixin):
             unique=True,
             postgresql_where="scope = 'curriculum' AND interest_category_id IS NOT NULL",
         ),
-        # School-scoped rows: one per (subtopic_id, content_type, school_id).
+        # School-scoped rows: one per (subtopic_id, content_type, school_id, interest_category_id).
+        # interest_category_id is included because teachers generate 4 interest-category
+        # variants per subtopic — each must be uniquely identifiable.
         Index(
             "uq_subtopic_content_school",
             "subtopic_id",
             "content_type",
             "school_id",
+            "interest_category_id",
             unique=True,
             postgresql_where="scope = 'school'",
         ),

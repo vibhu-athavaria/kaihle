@@ -135,6 +135,15 @@ async def review_topic_variant(
     sc.review_status = review_status
     sc.reviewed_at = datetime.now(UTC)
     sc.reviewed_by_id = current_user.id
+
+    # When a teacher approves, ensure the row is school-scoped with the correct
+    # school_id. This corrects rows generated before the scope fix (which defaulted
+    # to scope="curriculum") and is also correct semantically: teacher approval
+    # claims content for their school.
+    if current_user.role == UserRole.TEACHER and current_user.school_id is not None:
+        sc.scope = "school"
+        sc.school_id = current_user.school_id
+
     if body.get("teacher_note"):
         sc.rejection_teacher_note = body["teacher_note"]
     if body.get("edited_text"):

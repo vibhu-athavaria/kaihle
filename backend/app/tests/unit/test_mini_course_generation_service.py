@@ -101,12 +101,14 @@ async def test_generate_quiz_when_no_existing_content_then_creates_staging_row()
 
     with patch("app.services.mini_course_generation_service.llm_router") as mock_router:
         mock_router.complete = AsyncMock(return_value=json.dumps(_VALID_QUESTIONS))
+        school_id = uuid.uuid4()
         count = await service._generate_quiz_questions(
             subtopic_id=subtopic_id,
             subtopic_name="Linear Equations",
             topic_name="Algebra",
             subject_name="Mathematics",
             grade_level=8,
+            school_id=school_id,
             dry_run=False,
         )
 
@@ -122,6 +124,8 @@ async def test_generate_quiz_when_no_existing_content_then_creates_staging_row()
     assert added_obj.quiz_questions is not None
     assert len(added_obj.quiz_questions) == 1
     assert "question_id" in added_obj.quiz_questions[0]
+    assert added_obj.scope == "school"
+    assert added_obj.school_id == school_id
 
 
 @pytest.mark.asyncio
@@ -144,12 +148,14 @@ async def test_generate_quiz_when_existing_quiz_content_then_updates_staging_row
 
     with patch("app.services.mini_course_generation_service.llm_router") as mock_router:
         mock_router.complete = AsyncMock(return_value=json.dumps(_VALID_QUESTIONS))
+        school_id = uuid.uuid4()
         count = await service._generate_quiz_questions(
             subtopic_id=subtopic_id,
             subtopic_name="Linear Equations",
             topic_name="Algebra",
             subject_name="Mathematics",
             grade_level=8,
+            school_id=school_id,
             dry_run=False,
         )
 
@@ -162,6 +168,8 @@ async def test_generate_quiz_when_existing_quiz_content_then_updates_staging_row
     assert existing.quiz_questions is not None
     assert len(existing.quiz_questions) == 1
     assert "question_id" in existing.quiz_questions[0]
+    assert existing.scope == "school"
+    assert existing.school_id == school_id
 
 
 @pytest.mark.asyncio
@@ -179,6 +187,7 @@ async def test_generate_quiz_when_dry_run_then_does_not_write_to_db() -> None:
             topic_name="Algebra",
             subject_name="Mathematics",
             grade_level=8,
+            school_id=uuid.uuid4(),
             dry_run=True,
         )
 
@@ -202,12 +211,14 @@ async def test_generate_quiz_when_archived_row_exists_then_creates_new_row() -> 
 
     with patch("app.services.mini_course_generation_service.llm_router") as mock_router:
         mock_router.complete = AsyncMock(return_value=json.dumps(_VALID_QUESTIONS))
+        school_id = uuid.uuid4()
         count = await service._generate_quiz_questions(
             subtopic_id=subtopic_id,
             subtopic_name="Linear Equations",
             topic_name="Algebra",
             subject_name="Mathematics",
             grade_level=8,
+            school_id=school_id,
             dry_run=False,
         )
 
@@ -218,6 +229,8 @@ async def test_generate_quiz_when_archived_row_exists_then_creates_new_row() -> 
     assert isinstance(added_obj, SubtopicContent)
     assert added_obj.is_archived is False
     assert added_obj.quiz_questions_count == 1
+    assert added_obj.scope == "school"
+    assert added_obj.school_id == school_id
 
 
 @pytest.mark.asyncio
@@ -247,6 +260,7 @@ async def test_generate_quiz_when_row_already_at_target_then_skips_llm_and_retur
             topic_name="Algebra",
             subject_name="Mathematics",
             grade_level=8,
+            school_id=uuid.uuid4(),
             dry_run=False,
         )
         mock_router.complete.assert_not_called()

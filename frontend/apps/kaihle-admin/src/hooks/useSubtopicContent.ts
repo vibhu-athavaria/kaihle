@@ -78,6 +78,7 @@ export interface PromotionQueueItem {
   subtopic_content_id: string;
   subtopic_id: string;
   subtopic_name: string;
+  topic_name: string;
   content_type: string;
   school_name: string;
   reviewed_by_name: string | null;
@@ -86,6 +87,9 @@ export interface PromotionQueueItem {
   review_status: string;
   reviewed_at: string | null;
   school_id: string;
+  explanation_text: string | null;
+  quiz_questions: Record<string, unknown>[] | null;
+  interest_category_name: string | null;
 }
 
 export interface PromotionQueueResponse {
@@ -341,19 +345,39 @@ export function usePromoteContent() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
-      subtopicId,
-      contentType,
+      contentId,
       action,
       rejectionReason,
     }: {
-      subtopicId: string;
-      contentType: string;
+      contentId: string;
       action: "promote" | "reject_promotion";
       rejectionReason?: string;
     }) => {
       const response = await apiClient.patch(
-        `/api/v1/subtopic-content/${subtopicId}/${contentType}/promote`,
+        `/api/v1/subtopic-content/rows/${contentId}/promote`,
         { action, rejection_reason: rejectionReason ?? null },
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PROMOTION_KEY });
+    },
+  });
+}
+
+export function useEditContentRow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      contentId,
+      explanationText,
+    }: {
+      contentId: string;
+      explanationText: string;
+    }) => {
+      const response = await apiClient.patch(
+        `/api/v1/subtopic-content/rows/${contentId}`,
+        { explanation_text: explanationText },
       );
       return response.data;
     },

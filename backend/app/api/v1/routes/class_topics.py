@@ -167,6 +167,27 @@ async def add_class_topic(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
+# NOTE: /reorder MUST be declared before /{class_topic_id} — FastAPI matches routes
+# in declaration order, so "reorder" would otherwise be parsed as a UUID and fail.
+@router.put(
+    "/classes/{class_id}/topics/reorder",
+    response_model=list[ClassTopicResponse],
+)
+async def reorder_class_topics(
+    class_id: uuid.UUID,
+    body: ClassTopicReorder,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> list[ClassTopicResponse]:
+    """Bulk-update sequence_order after drag-and-drop reordering."""
+    await _verify_teacher_owns_class(class_id, current_user, db)
+    service = ClassTopicService(db)
+    try:
+        return await service.reorder_topics(class_id, body)
+    except ClassTopicNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
 @router.put(
     "/classes/{class_id}/topics/{class_topic_id}",
     response_model=ClassTopicResponse,
@@ -202,24 +223,5 @@ async def remove_class_topic(
     service = ClassTopicService(db)
     try:
         await service.remove_topic(class_id, class_topic_id)
-    except ClassTopicNotFoundError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-
-
-@router.put(
-    "/classes/{class_id}/topics/reorder",
-    response_model=list[ClassTopicResponse],
-)
-async def reorder_class_topics(
-    class_id: uuid.UUID,
-    body: ClassTopicReorder,
-    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
-    db: AsyncSession = Depends(get_db),
-) -> list[ClassTopicResponse]:
-    """Bulk-update sequence_order after drag-and-drop reordering."""
-    await _verify_teacher_owns_class(class_id, current_user, db)
-    service = ClassTopicService(db)
-    try:
-        return await service.reorder_topics(class_id, body)
     except ClassTopicNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

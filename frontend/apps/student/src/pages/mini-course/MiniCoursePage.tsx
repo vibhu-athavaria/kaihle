@@ -542,7 +542,7 @@ export function MiniCoursePage() {
               <>
                 {course.video ? (
                   <VideoSection
-                    url={course.video.url}
+                    url={course.video.video_url}
                     title={course.video.title}
                   />
                 ) : (

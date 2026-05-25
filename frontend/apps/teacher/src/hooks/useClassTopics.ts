@@ -17,6 +17,7 @@ export interface ClassTopicItem {
 
 export interface AvailableCurriculumTopic {
   curriculum_topic_id: string;
+  topic_id: string;
   topic_name: string;
   subtopic_count: number;
   sequence_order: number;

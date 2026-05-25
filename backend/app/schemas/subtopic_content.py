@@ -298,6 +298,7 @@ class PromotionQueueItem(BaseModel):
     subtopic_content_id: uuid.UUID
     subtopic_id: uuid.UUID
     subtopic_name: str
+    topic_name: str
     content_type: str
     school_name: str
     reviewed_by_name: str | None = None  # teacher who approved
@@ -306,6 +307,10 @@ class PromotionQueueItem(BaseModel):
     review_status: str
     reviewed_at: datetime | None = None
     school_id: uuid.UUID
+    # Content payload — shown in KaihleAdmin review modal
+    explanation_text: str | None = None
+    quiz_questions: list[dict[str, Any]] | None = None
+    interest_category_name: str | None = None
 
 
 class PromotionQueueResponse(BaseModel):
@@ -320,6 +325,17 @@ class PromoteRequest(BaseModel):
 
     action: str = Field(..., pattern="^(promote|reject_promotion)$")
     rejection_reason: str | None = None
+
+
+class ContentRowEditRequest(BaseModel):
+    """KaihleAdmin edits a specific subtopic_content row by its PK.
+
+    Used by the promotion queue modal where multiple rows exist for the same
+    (subtopic_id, content_type) — one per interest category — so we must
+    address by the row's own UUID, not by subtopic_id.
+    """
+
+    explanation_text: str = Field(..., min_length=1)
 
 
 # --- Explanation suggestion schemas ---

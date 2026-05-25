@@ -189,6 +189,17 @@ function PreviewModal({
               <div className="space-y-2 pt-1 border-t border-brand-border">
                 {showRejectInput ? (
                   <div className="space-y-2">
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                      <Pencil
+                        className="w-3.5 h-3.5 text-brand-gold mt-0.5 flex-shrink-0"
+                        aria-hidden="true"
+                      />
+                      <p className="text-xs text-brand-gold leading-relaxed">
+                        If there&apos;s a small mistake, use the{" "}
+                        <span className="font-semibold">Edit</span> button above
+                        to fix it directly — you won&apos;t need to reject.
+                      </p>
+                    </div>
                     <textarea
                       value={rejectNote}
                       onChange={(e) => setRejectNote(e.target.value)}

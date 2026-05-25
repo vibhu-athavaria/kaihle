@@ -4,7 +4,10 @@ import { getSubjectColor } from "@kaihle/types";
 import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { useClassEnrollments } from "../../hooks/useClassEnrollments";
 import { useClass } from "../../hooks/useClass";
-import { useClassTopics } from "../../hooks/useClassTopics";
+import {
+  useClassTopics,
+  type ClassTopicItem,
+} from "../../hooks/useClassTopics";
 import { statusBadge } from "../../utils/assessment";
 import {
   ArrowLeft,
@@ -13,13 +16,100 @@ import {
   BookMarked,
   CheckCircle2,
   Clock,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { ClassSetupWizard } from "./ClassSetupWizard";
 import { TopicMiniCourseButton } from "../../components/topics/TopicMiniCourseButton";
 import { ClassGapMapContent } from "../../components/gap-map/ClassGapMapContent";
 import { ClassLessonPlansContent } from "../../components/lesson-plans/ClassLessonPlansContent";
+import { SubtopicContentCard } from "../SubtopicContentCard";
+import { useTopicSubtopics } from "../../hooks/useSubtopicContent";
 
 type TabId = "gap-map" | "assessments" | "lesson-plans" | "topics" | "students";
+
+// ── Expandable topic row with lazy-loaded subtopics ───────────────────────
+
+function ExpandableTopicRow({
+  topic,
+  classId,
+  curriculumId,
+  gradeId,
+}: {
+  topic: ClassTopicItem;
+  classId: string;
+  curriculumId: string;
+  gradeId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  // topicId + curriculum/grade filters passed only once opened — lazy fetch
+  const { data: subtopics, isLoading } = useTopicSubtopics(
+    open ? topic.topic_id : null,
+    { curriculumId, gradeId },
+  );
+
+  return (
+    <li className="border-b border-brand-border last:border-b-0">
+      {/* Header row */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 gap-4 hover:bg-gray-50 transition-colors text-left"
+        aria-expanded={open}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {open ? (
+            <ChevronDown
+              className="w-4 h-4 text-brand-muted flex-shrink-0"
+              aria-hidden="true"
+            />
+          ) : (
+            <ChevronRight
+              className="w-4 h-4 text-brand-muted flex-shrink-0"
+              aria-hidden="true"
+            />
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-brand-ink truncate">
+              {topic.topic_name}
+            </p>
+            <p className="text-xs text-brand-muted">
+              {topic.subtopic_count} subtopic
+              {topic.subtopic_count !== 1 ? "s" : ""}
+            </p>
+          </div>
+        </div>
+        <div onClick={(e) => e.stopPropagation()}>
+          <TopicMiniCourseButton topicId={topic.topic_id} classId={classId} />
+        </div>
+      </button>
+
+      {/* Subtopics panel */}
+      {open && (
+        <div className="px-5 pb-4 pt-1 space-y-2 bg-gray-50 border-t border-brand-border">
+          {isLoading ? (
+            <div className="space-y-2 animate-pulse">
+              {Array.from({ length: topic.subtopic_count || 3 }).map((_, i) => (
+                <div key={i} className="h-14 bg-gray-100 rounded-lg" />
+              ))}
+            </div>
+          ) : !subtopics || subtopics.length === 0 ? (
+            <p className="text-xs text-brand-muted py-2">No subtopics found.</p>
+          ) : (
+            subtopics.map((s) => (
+              <SubtopicContentCard
+                key={s.id}
+                subtopicId={s.id}
+                classId={classId}
+                subtopicName={s.name}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "gap-map", label: "Gap Map" },
@@ -337,26 +427,15 @@ export function ClassDetailPage() {
                   Edit topics →
                 </button>
               </div>
-              <ul className="divide-y divide-brand-border">
+              <ul>
                 {classTopics.map((topic) => (
-                  <li
+                  <ExpandableTopicRow
                     key={topic.id}
-                    className="flex items-center justify-between px-5 py-3 gap-4"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-brand-ink truncate">
-                        {topic.topic_name}
-                      </p>
-                      <p className="text-xs text-brand-muted">
-                        {topic.subtopic_count} subtopic
-                        {topic.subtopic_count !== 1 ? "s" : ""}
-                      </p>
-                    </div>
-                    <TopicMiniCourseButton
-                      topicId={topic.topic_id}
-                      classId={classId!}
-                    />
-                  </li>
+                    topic={topic}
+                    classId={classId!}
+                    curriculumId={cls.curriculum_id}
+                    gradeId={cls.grade_id}
+                  />
                 ))}
               </ul>
             </div>
