@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import subprocess
 import tempfile
 from collections.abc import AsyncGenerator
@@ -57,12 +58,11 @@ def _pg_tool_cmd(tool: str) -> list[str]:
         # Tool not found locally — try docker exec fallback
         return ["docker", "exec", "-i", _PG_CONTAINER, tool]
 
-    # Check version matches server (major version must match)
-    local_ver_line = local_result.stdout.strip()  # e.g. "pg_dump (PostgreSQL) 14.2"
-    try:
-        local_major = int(local_ver_line.split("PostgreSQL")[1].strip().split(".")[0].split()[0])
-    except (IndexError, ValueError):
-        local_major = 0
+    # Check version matches server (major version must match).
+    # pg_dump --version output: "pg_dump (PostgreSQL) 16.2" — extract first integer.
+    local_ver_line = local_result.stdout.strip()
+    ver_match = re.search(r"(\d+)\.\d+", local_ver_line)
+    local_major = int(ver_match.group(1)) if ver_match else 0
 
     # Server major version from DATABASE_URL is 16 (pgvector/pgvector:pg16)
     # Check actual server version via a quick query
