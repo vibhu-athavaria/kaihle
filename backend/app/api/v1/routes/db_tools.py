@@ -36,41 +36,49 @@ router = APIRouter(prefix="/db-tools", tags=["db-tools"])
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _get_psql_url() -> str:
+def _get_psql_url(for_docker_exec: bool = False) -> str:
     """Return a plain postgresql:// URL suitable for psql/pg_dump.
 
     The app uses postgresql+asyncpg:// — strip the asyncpg driver prefix.
     Reads from pydantic settings (which loads .env) rather than os.environ
     directly, so it works whether DATABASE_URL is in the OS environment or
     only in the .env file.
+
+    When ``for_docker_exec=True`` the URL is rewritten so the host:port point
+    to localhost:5432 — the address postgres listens on *inside its own
+    container*.  This is needed when psql runs via ``docker exec`` into the
+    kaihle_postgres container: from inside that container, the host machine's
+    ``localhost:5433`` does not resolve.
     """
-    url = settings.database_url
-    return url.replace("postgresql+asyncpg://", "postgresql://")
+    url = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
+    if for_docker_exec:
+        # Replace whatever host:port the app uses with the container-internal
+        # address.  Pattern: postgresql://user:pass@HOST:PORT/db
+        url = re.sub(r"@[^/]+/", "@localhost:5432/", url)
+    return url
 
 
 _PG_CONTAINER = "kaihle_postgres"  # docker-compose container name
 
 
-def _pg_tool_cmd(tool: str) -> list[str]:
-    """Return the command prefix to run a pg tool.
+def _pg_tool_cmd(tool: str) -> tuple[list[str], bool]:
+    """Return (command_prefix, via_docker_exec) for a pg tool.
 
-    When running inside Docker (production), the pg client tools from
-    postgresql-client-16 are installed directly — use them as-is.
+    ``via_docker_exec=True`` means the command will run inside the
+    kaihle_postgres container — callers must use the container-internal DB URL
+    (localhost:5432) rather than the host-facing URL.
 
-    When running locally outside Docker, the host pg_dump version may not
-    match the server version (e.g. Homebrew pg14 vs Docker pg16).  In that
-    case, delegate to the postgres container where the matching version lives:
-        docker exec kaihle_postgres pg_dump ...
+    Precedence:
+    1. Local tool present and version matches server → use it directly.
+    2. Local tool missing or version mismatches → docker exec fallback.
     """
     try:
         local_result = subprocess.run([tool, "--version"], capture_output=True, text=True)
     except FileNotFoundError:
-        # Tool not installed on this machine — try docker exec fallback
-        return ["docker", "exec", "-i", _PG_CONTAINER, tool]
+        return ["docker", "exec", "-i", _PG_CONTAINER, tool], True
 
     if local_result.returncode != 0:
-        # Tool not found locally — try docker exec fallback
-        return ["docker", "exec", "-i", _PG_CONTAINER, tool]
+        return ["docker", "exec", "-i", _PG_CONTAINER, tool], True
 
     # Check version matches server (major version must match).
     # pg_dump --version output: "pg_dump (PostgreSQL) 16.2" — extract first integer.
@@ -78,8 +86,6 @@ def _pg_tool_cmd(tool: str) -> list[str]:
     ver_match = re.search(r"(\d+)\.\d+", local_ver_line)
     local_major = int(ver_match.group(1)) if ver_match else 0
 
-    # Server major version from DATABASE_URL is 16 (pgvector/pgvector:pg16)
-    # Check actual server version via a quick query
     db_url = _get_psql_url()
     ver_result = subprocess.run(
         ["psql", db_url, "--tuples-only", "--no-align", "--command", "SHOW server_version_num;"],
@@ -93,10 +99,9 @@ def _pg_tool_cmd(tool: str) -> list[str]:
         server_major = 0
 
     if local_major != server_major and server_major > 0:
-        # Version mismatch — use pg tool from inside the postgres container
-        return ["docker", "exec", "-i", _PG_CONTAINER, tool]
+        return ["docker", "exec", "-i", _PG_CONTAINER, tool], True
 
-    return [tool]
+    return [tool], False
 
 
 def _check_pg_tools_available() -> None:
@@ -109,7 +114,8 @@ def _check_pg_tools_available() -> None:
         )
 
     # Verify we can actually reach pg_dump (local or via docker)
-    cmd = _pg_tool_cmd("pg_dump") + ["--version"]
+    cmd, _ = _pg_tool_cmd("pg_dump")
+    cmd = cmd + ["--version"]
     try:
         result = subprocess.run(cmd, capture_output=True, timeout=10)
     except FileNotFoundError:
@@ -277,13 +283,6 @@ async def import_database(
 
     _check_pg_tools_available()
 
-    db_url = _get_psql_url()
-    if not db_url:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="DATABASE_URL is not configured in settings.",
-        )
-
     if not file.filename or not file.filename.endswith(".sql"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -304,9 +303,15 @@ async def import_database(
         # psql runs locally or inside a Docker container via docker exec -i.
         # (docker exec -i reads from the subprocess's stdin, so piping works;
         #  --file with a host path would fail inside the container.)
-        psql_cmd = _pg_tool_cmd("psql") + [
+        #
+        # When using docker exec into kaihle_postgres, rewrite the URL to
+        # localhost:5432 — the host-facing port (5433) does not resolve from
+        # inside the container.
+        psql_prefix, via_docker = _pg_tool_cmd("psql")
+        psql_url = _get_psql_url(for_docker_exec=via_docker)
+        psql_cmd = psql_prefix + [
             "--set=ON_ERROR_STOP=off",  # continue on individual statement errors
-            db_url,
+            psql_url,
         ]
 
         with open(tmp_path, "rb") as sql_file:
