@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import subprocess
 import tempfile
 from collections.abc import AsyncGenerator
+from datetime import date, datetime, time
+from decimal import Decimal
 from typing import Annotated, Any
+from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import MetaData as SAMetaData
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +62,12 @@ def _pg_tool_cmd(tool: str) -> list[str]:
     case, delegate to the postgres container where the matching version lives:
         docker exec kaihle_postgres pg_dump ...
     """
-    local_result = subprocess.run([tool, "--version"], capture_output=True, text=True)
+    try:
+        local_result = subprocess.run([tool, "--version"], capture_output=True, text=True)
+    except FileNotFoundError:
+        # Tool not installed on this machine — try docker exec fallback
+        return ["docker", "exec", "-i", _PG_CONTAINER, tool]
+
     if local_result.returncode != 0:
         # Tool not found locally — try docker exec fallback
         return ["docker", "exec", "-i", _PG_CONTAINER, tool]
@@ -100,16 +110,59 @@ def _check_pg_tools_available() -> None:
 
     # Verify we can actually reach pg_dump (local or via docker)
     cmd = _pg_tool_cmd("pg_dump") + ["--version"]
-    result = subprocess.run(cmd, capture_output=True, timeout=10)
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=10)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "pg_dump not available. "
+                "On Render: ensure postgresql-client-16 is in the build command. "
+                "In Docker: ensure postgresql-client-16 is installed. "
+                "Locally: ensure Docker is running with the kaihle_postgres container."
+            ),
+        )
     if result.returncode != 0:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
                 "pg_dump not available. "
+                "On Render: ensure postgresql-client-16 is in the build command. "
                 "In Docker: ensure postgresql-client-16 is installed. "
                 "Locally: ensure Docker is running with the kaihle_postgres container."
             ),
         )
+
+
+# Tables to skip in export — internal bookkeeping, not useful in dev
+_EXPORT_EXCLUDED_PREFIXES = ("celery", "alembic_version")
+
+
+def _pg_literal(value: Any) -> str:
+    """Format a Python value as a PostgreSQL literal for INSERT statements.
+
+    Handles all common Python types returned by SQLAlchemy row results.
+    Single quotes inside strings are escaped as '' (standard SQL escaping).
+    """
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        # bool must come before int — bool is a subclass of int in Python
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, int | float | Decimal):
+        return str(value)
+    if isinstance(value, UUID):
+        return f"'{value}'"
+    if isinstance(value, datetime | date | time):
+        return f"'{value.isoformat()}'"
+    if isinstance(value, dict | list):
+        escaped = json.dumps(value).replace("'", "''")
+        return f"'{escaped}'"
+    if isinstance(value, bytes):
+        return f"'\\x{value.hex()}'"
+    # str and any other type — stringify and escape single quotes
+    escaped = str(value).replace("'", "''")
+    return f"'{escaped}'"
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -128,92 +181,71 @@ class ImportResultResponse(BaseModel):
 @router.post("/export")
 async def export_database(
     _: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
-    """Run pg_dump against the current DATABASE_URL and stream the SQL file.
+    """Export all table data as SQL INSERT statements using SQLAlchemy reflection.
 
-    Returns a plain-SQL dump with DROP statements so the file is safe to
-    re-import multiple times without conflicts.
+    Does NOT require pg_dump — works on any environment including Render's
+    native Python runtime.  The output is a data-only dump (no DDL); schema
+    is managed by Alembic so run ``alembic upgrade head`` after importing if
+    the source DB is ahead of the target's migrations.
+
+    Export format:
+      1. TRUNCATE all tables (CASCADE handles FK order automatically).
+      2. INSERT all rows in FK-dependency order (parents before children).
     """
-    _check_pg_tools_available()
+    logger.info("db_export_started", method="python_reflection")
 
-    db_url = _get_psql_url()
-    if not db_url:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="DATABASE_URL is not configured in settings.",
-        )
+    async def _generate() -> AsyncGenerator[bytes, None]:
+        yield b"-- Kaihle data export (data-only; schema managed by Alembic)\n"
+        yield b"-- After importing, run: docker compose exec backend alembic upgrade head\n\n"
 
-    cmd = _pg_tool_cmd("pg_dump") + [
-        "--format=plain",
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-acl",
-        "--no-privileges",
-        # Skip celery internal tables — not useful in dev
-        "--exclude-table=celery*",
-        db_url,
-    ]
+        # Reflect the live schema to discover tables and FK relationships.
+        # run_sync wraps the synchronous MetaData.reflect() call so it executes
+        # on the thread pool without blocking the event loop.
+        meta = SAMetaData()
+        conn = await db.connection()
+        await conn.run_sync(meta.reflect)
 
-    logger.info("db_export_started")
+        tables = [
+            t
+            for t in meta.sorted_tables  # parents before children (FK order)
+            if not any(t.name.startswith(p) for p in _EXPORT_EXCLUDED_PREFIXES)
+        ]
 
-    # Write to a temp file first so we can detect pg_dump failures before
-    # sending response headers. Streaming directly from stdout means an error
-    # produces an empty HTTP 200 with no way to surface the cause.
-    with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
-        dump_path = tmp.name
+        if not tables:
+            yield b"-- No tables found.\n"
+            return
 
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout_bytes, stderr_bytes = await proc.communicate()
+        # TRUNCATE in reverse dependency order (children first) so FK
+        # constraints are not violated.  CASCADE handles any remaining deps.
+        reversed_names = ", ".join(f'"{t.name}"' for t in reversed(tables))
+        yield f"TRUNCATE TABLE {reversed_names} CASCADE;\n\n".encode()
 
-        if proc.returncode != 0:
-            os.unlink(dump_path)
-            logger.error("db_export_failed", returncode=proc.returncode, stderr=stderr_bytes.decode())
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"pg_dump failed (exit {proc.returncode}): {stderr_bytes.decode()[:500]}",
-            )
+        total_rows = 0
+        for table in tables:
+            rows_result = await db.execute(table.select())
+            rows = rows_result.fetchall()
 
-        with open(dump_path, "wb") as f:
-            f.write(stdout_bytes)
+            if not rows:
+                continue
 
-        dump_size = len(stdout_bytes)
-        logger.info("db_export_complete", size_bytes=dump_size)
+            cols = [c.name for c in table.columns]
+            col_list = ", ".join(f'"{c}"' for c in cols)
 
-    except HTTPException:
-        raise
-    except Exception as exc:
-        if os.path.exists(dump_path):
-            os.unlink(dump_path)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
+            yield f"-- {table.name} ({len(rows)} rows)\n".encode()
+            for row in rows:
+                values = ", ".join(_pg_literal(v) for v in row)
+                yield f'INSERT INTO "{table.name}" ({col_list}) VALUES ({values});\n'.encode()
+            yield b"\n"
+            total_rows += len(rows)
 
-    async def _stream_file() -> AsyncGenerator[bytes, None]:
-        try:
-            with open(dump_path, "rb") as f:
-                while True:
-                    chunk = f.read(65536)
-                    if not chunk:
-                        break
-                    yield chunk
-        finally:
-            if os.path.exists(dump_path):
-                os.unlink(dump_path)
+        logger.info("db_export_complete", method="python_reflection", total_rows=total_rows)
 
     return StreamingResponse(
-        _stream_file(),
+        _generate(),
         media_type="application/sql",
-        headers={
-            "Content-Disposition": 'attachment; filename="kaihle_export.sql"',
-            "Content-Length": str(dump_size),
-        },
+        headers={"Content-Disposition": 'attachment; filename="kaihle_export.sql"'},
     )
 
 
