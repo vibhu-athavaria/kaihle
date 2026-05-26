@@ -8,14 +8,18 @@ import re
 import subprocess
 import tempfile
 from collections.abc import AsyncGenerator
-from typing import Annotated
+from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.core.security import hash_password
 from app.models.user import UserRole
@@ -221,6 +225,7 @@ async def import_database(
     file: UploadFile,
     override_password: Annotated[str, "Password to set for all users after import"] = "test1234!",
     _: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
 ) -> ImportResultResponse:
     """Import a plain-SQL dump into the current database.
 
@@ -294,27 +299,16 @@ async def import_database(
 
         logger.info("db_import_psql_done", returncode=proc.returncode)
 
-        # ── Reset passwords ────────────────────────────────────────────────
+        # ── Reset passwords via SQLAlchemy (parameterised — no injection risk) ──
+        # Never interpolate the hash into a SQL string; bcrypt hashes contain
+        # $ and other characters that are unsafe in shell-interpolated psql --command.
         hashed_pw = hash_password(override_password)
-        reset_cmd = _pg_tool_cmd("psql") + [
-            "--tuples-only",
-            "--no-align",
-            "--command",
-            f"UPDATE users SET hashed_password = '{hashed_pw}' WHERE hashed_password IS NOT NULL; "
-            f"SELECT COUNT(*) FROM users WHERE hashed_password IS NOT NULL;",
-            db_url,
-        ]
-        reset_proc = await asyncio.create_subprocess_exec(
-            *reset_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        cursor: CursorResult[Any] = await db.execute(  # type: ignore[assignment]
+            text("UPDATE users SET hashed_password = :pw WHERE hashed_password IS NOT NULL"),
+            {"pw": hashed_pw},
         )
-        pw_stdout, pw_stderr = await reset_proc.communicate()
-        users_updated_str = pw_stdout.decode(errors="replace").strip().split("\n")[-1]
-        try:
-            users_updated = int(users_updated_str)
-        except ValueError:
-            users_updated = 0
+        await db.commit()
+        users_updated = cursor.rowcount
 
         logger.info("db_import_passwords_reset", users_updated=users_updated)
 
