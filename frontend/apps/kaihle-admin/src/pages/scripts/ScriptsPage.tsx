@@ -9,6 +9,8 @@ import {
   FileText,
   XCircle,
   FlaskConical,
+  Download,
+  Upload,
 } from "lucide-react";
 
 const AI_SMOKE_TESTS = [
@@ -150,6 +152,67 @@ export function ScriptsPage() {
               </div>
             ))}
 
+            {/* ── Database Tools ── */}
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest text-role-admin-muted mb-3">
+                Database Tools
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Link
+                  to="/kaihle-admin/scripts/db/export"
+                  className="block p-4 rounded-xl border border-role-admin-border hover:border-brand-primary/50 bg-white hover:bg-brand-primary/5 transition-all"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-brand-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Download
+                        className="w-5 h-5 text-brand-primary"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-role-admin-ink">
+                        Export Database
+                      </h3>
+                      <p className="text-xs text-role-admin-subtle mt-1">
+                        Dump the production DB as a .sql file. Run this from the
+                        prod Kaihle Admin.
+                      </p>
+                      <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-role-admin-subtle">
+                        database
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+
+                <Link
+                  to="/kaihle-admin/scripts/db/import"
+                  className="block p-4 rounded-xl border border-role-admin-border hover:border-brand-primary/50 bg-white hover:bg-brand-primary/5 transition-all"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-brand-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Upload
+                        className="w-5 h-5 text-brand-primary"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-role-admin-ink">
+                        Import Database
+                      </h3>
+                      <p className="text-xs text-role-admin-subtle mt-1">
+                        Upload a prod .sql dump and restore it into the dev DB.
+                        Set a custom override password for all users.
+                      </p>
+                      <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">
+                        destructive
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              </div>
+            </div>
+
+            {/* ── AI Smoke Tests ── */}
             <div>
               <h2 className="text-xs font-bold uppercase tracking-widest text-role-admin-muted mb-3">
                 AI Smoke Tests

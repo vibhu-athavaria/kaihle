@@ -26,6 +26,8 @@ import { SuggestionsQueuePage } from "./pages/content/SuggestionsQueue";
 import { ScriptsPage } from "./pages/scripts/ScriptsPage";
 import { ScriptDetailPage } from "./pages/scripts/ScriptDetailPage";
 import { SmokeTestPage } from "./pages/scripts/SmokeTestPage";
+import { DatabaseExportPage } from "./pages/scripts/DatabaseExportPage";
+import { DatabaseImportPage } from "./pages/scripts/DatabaseImportPage";
 
 export default function App() {
   return (
@@ -92,13 +94,22 @@ export default function App() {
                         element={<ContentReviewDetail />}
                       />
                       <Route path="scripts" element={<ScriptsPage />} />
+                      {/* Static db tool routes must come before :scriptName */}
                       <Route
-                        path="scripts/:scriptName"
-                        element={<ScriptDetailPage />}
+                        path="scripts/db/export"
+                        element={<DatabaseExportPage />}
+                      />
+                      <Route
+                        path="scripts/db/import"
+                        element={<DatabaseImportPage />}
                       />
                       <Route
                         path="scripts/smoke-tests/:testName"
                         element={<SmokeTestPage />}
+                      />
+                      <Route
+                        path="scripts/:scriptName"
+                        element={<ScriptDetailPage />}
                       />
                       <Route
                         index
