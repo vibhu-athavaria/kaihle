@@ -222,7 +222,7 @@ async def test_import_when_kaihle_admin_and_psql_succeeds_then_returns_completed
                 "app.api.v1.routes.db_tools._get_psql_url",
                 return_value="postgresql://kaihle:kaihle@localhost:5433/kaihle",
             ),
-            patch("app.api.v1.routes.db_tools._pg_tool_cmd", return_value=["psql"]),
+            patch("app.api.v1.routes.db_tools._pg_tool_cmd", return_value=(["psql"], False)),
             patch(
                 "asyncio.create_subprocess_exec",
                 return_value=_make_process(stdout=b"DROP TABLE\nCREATE TABLE\n", stderr=b""),
@@ -320,7 +320,7 @@ async def test_import_when_psql_fails_then_returns_failed_status() -> None:
                 "app.api.v1.routes.db_tools._get_psql_url",
                 return_value="postgresql://kaihle:kaihle@localhost:5433/kaihle",
             ),
-            patch("app.api.v1.routes.db_tools._pg_tool_cmd", return_value=["psql"]),
+            patch("app.api.v1.routes.db_tools._pg_tool_cmd", return_value=(["psql"], False)),
             patch(
                 "asyncio.create_subprocess_exec",
                 return_value=_make_process(
@@ -369,14 +369,12 @@ async def test_import_when_not_kaihle_admin_then_returns_403() -> None:
 
 
 def test_pg_tool_cmd_when_local_version_matches_server_then_returns_local_tool() -> None:
-    """_pg_tool_cmd returns the bare tool name when local and server versions match."""
+    """_pg_tool_cmd returns (bare_tool, via_docker=False) when local and server versions match."""
     with (
         patch(
             "subprocess.run",
             side_effect=[
-                # pg_dump --version → v16
                 MagicMock(returncode=0, stdout="pg_dump (PostgreSQL) 16.2"),
-                # psql SHOW server_version_num → 160013
                 MagicMock(returncode=0, stdout="160013"),
             ],
         ),
@@ -387,20 +385,19 @@ def test_pg_tool_cmd_when_local_version_matches_server_then_returns_local_tool()
     ):
         from app.api.v1.routes.db_tools import _pg_tool_cmd
 
-        result = _pg_tool_cmd("pg_dump")
+        cmd, via_docker = _pg_tool_cmd("pg_dump")
 
-    assert result == ["pg_dump"]
+    assert cmd == ["pg_dump"]
+    assert via_docker is False
 
 
 def test_pg_tool_cmd_when_local_version_mismatches_server_then_returns_docker_exec() -> None:
-    """_pg_tool_cmd falls back to docker exec when local pg_dump version mismatches server."""
+    """_pg_tool_cmd returns (docker_exec_cmd, via_docker=True) on version mismatch."""
     with (
         patch(
             "subprocess.run",
             side_effect=[
-                # pg_dump --version → v14 (mismatch)
                 MagicMock(returncode=0, stdout="pg_dump (PostgreSQL) 14.5"),
-                # psql SHOW server_version_num → 160013
                 MagicMock(returncode=0, stdout="160013"),
             ],
         ),
@@ -411,35 +408,38 @@ def test_pg_tool_cmd_when_local_version_mismatches_server_then_returns_docker_ex
     ):
         from app.api.v1.routes.db_tools import _pg_tool_cmd
 
-        result = _pg_tool_cmd("pg_dump")
+        cmd, via_docker = _pg_tool_cmd("pg_dump")
 
-    assert result == ["docker", "exec", "-i", "kaihle_postgres", "pg_dump"]
+    assert cmd == ["docker", "exec", "-i", "kaihle_postgres", "pg_dump"]
+    assert via_docker is True
 
 
 def test_pg_tool_cmd_when_tool_not_found_locally_then_returns_docker_exec() -> None:
-    """_pg_tool_cmd falls back to docker exec when tool exits non-zero."""
+    """_pg_tool_cmd returns docker exec fallback when tool exits non-zero."""
     with patch(
         "subprocess.run",
         return_value=MagicMock(returncode=1, stdout=""),
     ):
         from app.api.v1.routes.db_tools import _pg_tool_cmd
 
-        result = _pg_tool_cmd("pg_dump")
+        cmd, via_docker = _pg_tool_cmd("pg_dump")
 
-    assert result == ["docker", "exec", "-i", "kaihle_postgres", "pg_dump"]
+    assert cmd == ["docker", "exec", "-i", "kaihle_postgres", "pg_dump"]
+    assert via_docker is True
 
 
 def test_pg_tool_cmd_when_tool_raises_file_not_found_then_returns_docker_exec() -> None:
-    """_pg_tool_cmd falls back to docker exec when the binary is not installed (FileNotFoundError)."""
+    """_pg_tool_cmd returns docker exec fallback when binary is not installed (FileNotFoundError)."""
     with patch(
         "subprocess.run",
         side_effect=FileNotFoundError("pg_dump: No such file or directory"),
     ):
         from app.api.v1.routes.db_tools import _pg_tool_cmd
 
-        result = _pg_tool_cmd("pg_dump")
+        cmd, via_docker = _pg_tool_cmd("pg_dump")
 
-    assert result == ["docker", "exec", "-i", "kaihle_postgres", "pg_dump"]
+    assert cmd == ["docker", "exec", "-i", "kaihle_postgres", "pg_dump"]
+    assert via_docker is True
 
 
 def test_check_pg_tools_available_when_binary_missing_raises_503() -> None:
@@ -447,7 +447,7 @@ def test_check_pg_tools_available_when_binary_missing_raises_503() -> None:
     with (
         patch(
             "app.api.v1.routes.db_tools._pg_tool_cmd",
-            return_value=["pg_dump"],
+            return_value=(["pg_dump"], False),
         ),
         patch(
             "app.api.v1.routes.db_tools._get_psql_url",
@@ -465,3 +465,16 @@ def test_check_pg_tools_available_when_binary_missing_raises_503() -> None:
 
     assert exc_info.value.status_code == 503
     assert "pg_dump not available" in exc_info.value.detail
+
+
+def test_get_psql_url_when_for_docker_exec_then_rewrites_host_to_localhost() -> None:
+    """_get_psql_url rewrites host:port to localhost:5432 when for_docker_exec=True."""
+    with patch("app.api.v1.routes.db_tools.settings") as mock_settings:
+        mock_settings.database_url = "postgresql+asyncpg://kaihle:secret@localhost:5433/kaihle"
+        from app.api.v1.routes.db_tools import _get_psql_url
+
+        normal = _get_psql_url(for_docker_exec=False)
+        docker = _get_psql_url(for_docker_exec=True)
+
+    assert normal == "postgresql://kaihle:secret@localhost:5433/kaihle"
+    assert docker == "postgresql://kaihle:secret@localhost:5432/kaihle"
