@@ -44,13 +44,17 @@ FAKE_SCHOOL_ADMIN = SimpleNamespace(
 SAMPLE_SQL_DUMP = b"-- PostgreSQL dump\nDROP TABLE IF EXISTS users;\nCREATE TABLE users (id uuid);\n"
 
 
-def _make_mock_db(rowcount: int = 0) -> AsyncMock:
+def _make_mock_db(rowcount: int = 0, execute_return: MagicMock | None = None) -> AsyncMock:
     """Return a mock AsyncSession whose execute() returns a cursor with rowcount."""
     mock_cursor = MagicMock()
     mock_cursor.rowcount = rowcount
     mock_db = AsyncMock()
-    mock_db.execute = AsyncMock(return_value=mock_cursor)
+    mock_db.execute = AsyncMock(return_value=execute_return if execute_return is not None else mock_cursor)
     mock_db.commit = AsyncMock()
+    # connection() returns an AsyncConnection mock that supports run_sync(meta.reflect)
+    mock_conn = AsyncMock()
+    mock_conn.run_sync = AsyncMock()
+    mock_db.connection = AsyncMock(return_value=mock_conn)
     return mock_db
 
 
@@ -80,68 +84,78 @@ def _make_process(stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0)
 
 
 # ── Export tests ──────────────────────────────────────────────────────────────
+#
+# The export endpoint uses SQLAlchemy reflection (no pg_dump subprocess).
+# We mock:
+#   - SAMetaData so reflection returns a controlled set of tables
+#   - db.execute() to return fake rows for each table
+#   - db.connection() / conn.run_sync() to skip the actual DB reflection call
+
+
+def _make_mock_table(name: str, columns: list[str]) -> MagicMock:
+    """Return a mock SQLAlchemy Table with the given name and column names."""
+    table = MagicMock()
+    table.name = name
+    table.columns = [MagicMock(name=c) for c in columns]
+    table.select = MagicMock(return_value=MagicMock())  # returns a selectable
+    return table
 
 
 @pytest.mark.asyncio
-async def test_export_when_kaihle_admin_and_pg_dump_succeeds_then_returns_sql_file() -> None:
-    """POST /db-tools/export returns a downloadable SQL file on success."""
-    _override_as_kaihle_admin()
+async def test_export_when_kaihle_admin_and_tables_have_rows_then_returns_sql_file() -> None:
+    """POST /db-tools/export returns a SQL file containing TRUNCATE and INSERT statements."""
+    mock_db = _make_mock_db()
+    _override_as_kaihle_admin(mock_db=mock_db)
+
+    fake_table = _make_mock_table("users", ["id", "email"])
+    fake_rows = MagicMock()
+    fake_rows.fetchall = MagicMock(return_value=[("abc123", "user@test.com")])
+    mock_db.execute = AsyncMock(return_value=fake_rows)
+
     try:
-        with (
-            patch(
-                "app.api.v1.routes.db_tools._check_pg_tools_available",
-            ),
-            patch(
-                "app.api.v1.routes.db_tools._get_psql_url",
-                return_value="postgresql://kaihle:kaihle@localhost:5433/kaihle",
-            ),
-            patch(
-                "app.api.v1.routes.db_tools._pg_tool_cmd",
-                return_value=["pg_dump"],
-            ),
-            patch(
-                "asyncio.create_subprocess_exec",
-                return_value=_make_process(stdout=SAMPLE_SQL_DUMP),
-            ),
-        ):
+        with patch("app.api.v1.routes.db_tools.SAMetaData") as mock_meta_cls:
+            mock_meta = MagicMock()
+            mock_meta.sorted_tables = [fake_table]
+            mock_meta_cls.return_value = mock_meta
+
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post("/api/v1/db-tools/export")
 
         assert response.status_code == 200
         assert response.headers["content-disposition"] == 'attachment; filename="kaihle_export.sql"'
-        assert response.content == SAMPLE_SQL_DUMP
-        assert response.headers["content-length"] == str(len(SAMPLE_SQL_DUMP))
+        body = response.text
+        assert "TRUNCATE TABLE" in body
+        assert 'INSERT INTO "users"' in body
+        assert "abc123" in body
+        assert "user@test.com" in body
     finally:
         _clear_overrides()
 
 
 @pytest.mark.asyncio
-async def test_export_when_pg_dump_fails_then_returns_500_with_detail() -> None:
-    """POST /db-tools/export returns 500 when pg_dump exits non-zero."""
-    _override_as_kaihle_admin()
+async def test_export_when_tables_are_empty_then_returns_truncate_only() -> None:
+    """POST /db-tools/export emits TRUNCATE but no INSERT when all tables are empty."""
+    mock_db = _make_mock_db()
+    _override_as_kaihle_admin(mock_db=mock_db)
+
+    fake_table = _make_mock_table("users", ["id"])
+    fake_rows = MagicMock()
+    fake_rows.fetchall = MagicMock(return_value=[])
+    mock_db.execute = AsyncMock(return_value=fake_rows)
+
     try:
-        with (
-            patch("app.api.v1.routes.db_tools._check_pg_tools_available"),
-            patch(
-                "app.api.v1.routes.db_tools._get_psql_url",
-                return_value="postgresql://kaihle:kaihle@localhost:5433/kaihle",
-            ),
-            patch("app.api.v1.routes.db_tools._pg_tool_cmd", return_value=["pg_dump"]),
-            patch(
-                "asyncio.create_subprocess_exec",
-                return_value=_make_process(
-                    stdout=b"",
-                    stderr=b"pg_dump: error: server version mismatch",
-                    returncode=1,
-                ),
-            ),
-        ):
+        with patch("app.api.v1.routes.db_tools.SAMetaData") as mock_meta_cls:
+            mock_meta = MagicMock()
+            mock_meta.sorted_tables = [fake_table]
+            mock_meta_cls.return_value = mock_meta
+
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post("/api/v1/db-tools/export")
 
-        assert response.status_code == 500
-        assert "pg_dump failed" in response.json()["detail"]
-        assert "server version mismatch" in response.json()["detail"]
+        assert response.status_code == 200
+        body = response.text
+        assert "TRUNCATE TABLE" in body
+        assert "INSERT" not in body
     finally:
         _clear_overrides()
 
@@ -160,18 +174,32 @@ async def test_export_when_not_kaihle_admin_then_returns_403() -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_when_pg_tools_unavailable_then_returns_503() -> None:
-    """POST /db-tools/export returns 503 when pg_dump is not installed."""
-    _override_as_kaihle_admin()
+async def test_export_excludes_celery_and_alembic_tables() -> None:
+    """POST /db-tools/export skips celery_* and alembic_version tables."""
+    mock_db = _make_mock_db()
+    _override_as_kaihle_admin(mock_db=mock_db)
+
+    users_table = _make_mock_table("users", ["id"])
+    celery_table = _make_mock_table("celery_taskmeta", ["id"])
+    alembic_table = _make_mock_table("alembic_version", ["version_num"])
+
+    fake_rows = MagicMock()
+    fake_rows.fetchall = MagicMock(return_value=[("row1",)])
+    mock_db.execute = AsyncMock(return_value=fake_rows)
+
     try:
-        with patch(
-            "app.api.v1.routes.db_tools._check_pg_tools_available",
-            side_effect=HTTPException(status_code=503, detail="pg_dump not found"),
-        ):
+        with patch("app.api.v1.routes.db_tools.SAMetaData") as mock_meta_cls:
+            mock_meta = MagicMock()
+            mock_meta.sorted_tables = [users_table, celery_table, alembic_table]
+            mock_meta_cls.return_value = mock_meta
+
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post("/api/v1/db-tools/export")
 
-        assert response.status_code == 503
+        body = response.text
+        assert "celery_taskmeta" not in body
+        assert "alembic_version" not in body
+        assert "users" in body
     finally:
         _clear_overrides()
 
@@ -389,7 +417,7 @@ def test_pg_tool_cmd_when_local_version_mismatches_server_then_returns_docker_ex
 
 
 def test_pg_tool_cmd_when_tool_not_found_locally_then_returns_docker_exec() -> None:
-    """_pg_tool_cmd falls back to docker exec when tool is not installed locally."""
+    """_pg_tool_cmd falls back to docker exec when tool exits non-zero."""
     with patch(
         "subprocess.run",
         return_value=MagicMock(returncode=1, stdout=""),
@@ -399,3 +427,41 @@ def test_pg_tool_cmd_when_tool_not_found_locally_then_returns_docker_exec() -> N
         result = _pg_tool_cmd("pg_dump")
 
     assert result == ["docker", "exec", "-i", "kaihle_postgres", "pg_dump"]
+
+
+def test_pg_tool_cmd_when_tool_raises_file_not_found_then_returns_docker_exec() -> None:
+    """_pg_tool_cmd falls back to docker exec when the binary is not installed (FileNotFoundError)."""
+    with patch(
+        "subprocess.run",
+        side_effect=FileNotFoundError("pg_dump: No such file or directory"),
+    ):
+        from app.api.v1.routes.db_tools import _pg_tool_cmd
+
+        result = _pg_tool_cmd("pg_dump")
+
+    assert result == ["docker", "exec", "-i", "kaihle_postgres", "pg_dump"]
+
+
+def test_check_pg_tools_available_when_binary_missing_raises_503() -> None:
+    """_check_pg_tools_available raises HTTP 503 when pg_dump binary is not found (e.g. on Render)."""
+    with (
+        patch(
+            "app.api.v1.routes.db_tools._pg_tool_cmd",
+            return_value=["pg_dump"],
+        ),
+        patch(
+            "app.api.v1.routes.db_tools._get_psql_url",
+            return_value="postgresql://localhost/kaihle",
+        ),
+        patch(
+            "subprocess.run",
+            side_effect=FileNotFoundError("pg_dump: No such file or directory"),
+        ),
+    ):
+        from app.api.v1.routes.db_tools import _check_pg_tools_available
+
+        with pytest.raises(HTTPException) as exc_info:
+            _check_pg_tools_available()
+
+    assert exc_info.value.status_code == 503
+    assert "pg_dump not available" in exc_info.value.detail
