@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuthStore } from "@kaihle/auth";
 
 /**
  * Response type for GET /api/v1/students/me/info
@@ -31,8 +31,10 @@ export interface StudentInfo {
  * Includes name, grade, curriculum, and school ID.
  */
 export function useStudentInfo() {
+  // Include userId so different students on the same browser never share a cache entry.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   return useQuery<StudentInfo>({
-    queryKey: ["student", "info"],
+    queryKey: ["student", "info", userId],
     queryFn: async () => {
       const response = await apiClient.get<StudentInfo>(
         "/api/v1/students/me/info",

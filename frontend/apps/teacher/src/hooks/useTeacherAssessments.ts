@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuthStore } from "@kaihle/auth";
 
 export type AssessmentStatus = "DRAFT" | "ACTIVE" | "CLOSED";
 
@@ -62,8 +62,10 @@ async function fetchTeacherAssessments(
 }
 
 export function useTeacherAssessments(status?: AssessmentStatus) {
+  // Include userId so teachers in the same school never share a cache entry.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   return useQuery({
-    queryKey: ["teacher", "assessments", status],
+    queryKey: ["teacher", "assessments", status, userId],
     queryFn: () => fetchTeacherAssessments(status),
     staleTime: 30 * 1000,
   });

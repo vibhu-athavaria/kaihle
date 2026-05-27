@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuthStore } from "@kaihle/auth";
 
 export interface StudyPlanResource {
   resource_id: string;
@@ -38,8 +38,10 @@ interface StudyPlansPage {
 }
 
 export function useMyStudyPlans(statusFilter?: string) {
+  // Include userId so different students on the same browser never share a cache entry.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   return useQuery<StudyPlansPage>({
-    queryKey: ["student", "study-plans", statusFilter],
+    queryKey: ["student", "study-plans", statusFilter, userId],
     queryFn: async () => {
       const params: Record<string, string> = { page: "1", page_size: "20" };
       if (statusFilter) params.status = statusFilter;

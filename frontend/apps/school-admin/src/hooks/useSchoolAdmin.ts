@@ -205,7 +205,7 @@ export function useSchoolStudents(showInactive: boolean = false) {
   return useQuery({
     queryKey: ["school", "students-list", schoolId, showInactive],
     queryFn: async () => {
-      const params = new URLSearchParams({ role: "STUDENT" });
+      const params = new URLSearchParams({ role: "STUDENT", page_size: "500" });
       if (showInactive) params.set("is_active", "false");
       const res = await apiClient.get(
         `/api/v1/schools/${schoolId}/users?${params}`,
@@ -228,7 +228,7 @@ export function useSchoolUsers(
   return useQuery({
     queryKey: ["school", "users", role, schoolId, showInactive],
     queryFn: async () => {
-      const params = new URLSearchParams({ role });
+      const params = new URLSearchParams({ role, page_size: "500" });
       if (showInactive) params.set("is_active", "false");
       const res = await apiClient.get(
         `/api/v1/schools/${schoolId}/users?${params}`,

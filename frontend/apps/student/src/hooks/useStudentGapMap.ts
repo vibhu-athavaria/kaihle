@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuthStore } from "@kaihle/auth";
 
 export interface StudentSubtopicScore {
   subtopic_id: string;
@@ -17,9 +17,12 @@ export interface StudentGapMap {
   scores: StudentSubtopicScore[];
 }
 
-export const useStudentGapMap = (subjectId: string | undefined) =>
-  useQuery<StudentGapMap>({
-    queryKey: ["student", "gap-map", subjectId] as const,
+export function useStudentGapMap(subjectId: string | undefined) {
+  // Include userId so different students on the same browser never share a cache entry.
+  // subjectId is a global curriculum ID shared across all students — it alone is not sufficient.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  return useQuery<StudentGapMap>({
+    queryKey: ["student", "gap-map", subjectId, userId] as const,
     queryFn: async () => {
       const response = await apiClient.get(`/api/v1/students/me/gap-map`, {
         params: { subject_id: subjectId },
@@ -29,3 +32,4 @@ export const useStudentGapMap = (subjectId: string | undefined) =>
     enabled: !!subjectId,
     staleTime: 5 * 60 * 1000,
   });
+}

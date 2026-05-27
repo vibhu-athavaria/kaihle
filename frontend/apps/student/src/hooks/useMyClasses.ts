@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuthStore } from "@kaihle/auth";
 
 /**
  * Response type for GET /api/v1/students/me/classes
@@ -23,8 +23,10 @@ export interface StudentClassResponse {
  * Includes teacher name and diagnostic status for each class.
  */
 export function useMyClasses() {
+  // Include userId so different students on the same browser never share a cache entry.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   return useQuery<StudentClassResponse[]>({
-    queryKey: ["student", "classes"],
+    queryKey: ["student", "classes", userId],
     queryFn: async () => {
       const response = await apiClient.get<StudentClassResponse[]>(
         "/api/v1/students/me/classes",
