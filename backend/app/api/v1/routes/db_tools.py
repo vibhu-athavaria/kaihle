@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import subprocess
-import tempfile
 from collections.abc import AsyncGenerator
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -18,6 +16,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import ARRAY as SAArray
 from sqlalchemy import MetaData as SAMetaData
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
@@ -144,11 +143,15 @@ def _check_pg_tools_available() -> None:
 _EXPORT_EXCLUDED_PREFIXES = ("celery", "alembic_version")
 
 
-def _pg_literal(value: Any) -> str:
+def _pg_literal(value: Any, col: Any = None) -> str:
     """Format a Python value as a PostgreSQL literal for INSERT statements.
 
     Handles all common Python types returned by SQLAlchemy row results.
     Single quotes inside strings are escaped as '' (standard SQL escaping).
+
+    ``col`` is the SQLAlchemy Column object — required to distinguish
+    PostgreSQL array columns (text[], uuid[], etc.) from JSONB columns,
+    since both come back from the driver as Python lists.
     """
     if value is None:
         return "NULL"
@@ -161,7 +164,28 @@ def _pg_literal(value: Any) -> str:
         return f"'{value}'"
     if isinstance(value, datetime | date | time):
         return f"'{value.isoformat()}'"
-    if isinstance(value, dict | list):
+    if isinstance(value, list):
+        # PostgreSQL text[] / uuid[] / etc. → array literal '{val1,val2}'
+        # JSONB columns that hold arrays → JSON string '["val1","val2"]'
+        # SQLAlchemy reflects both as Python list, so we need the column type.
+        if col is not None and isinstance(col.type, SAArray):
+            # Build a PostgreSQL array literal.  Double-quote each element
+            # and escape any embedded double-quotes and backslashes.
+            def _pg_array_elem(v: Any) -> str:
+                if v is None:
+                    return "NULL"
+                s = str(v).replace("\\", "\\\\").replace('"', '\\"')
+                return f'"{s}"'
+
+            items = ",".join(_pg_array_elem(v) for v in value)
+            escaped_array = "{" + items + "}"
+            # Wrap in SQL single-quoted string; escape any single quotes inside
+            escaped_array = escaped_array.replace("'", "''")
+            return f"'{escaped_array}'"
+        # JSONB or unknown list — fall through to JSON encoding
+        escaped = json.dumps(value).replace("'", "''")
+        return f"'{escaped}'"
+    if isinstance(value, dict):
         escaped = json.dumps(value).replace("'", "''")
         return f"'{escaped}'"
     if isinstance(value, bytes):
@@ -236,12 +260,12 @@ async def export_database(
             if not rows:
                 continue
 
-            cols = [c.name for c in table.columns]
-            col_list = ", ".join(f'"{c}"' for c in cols)
+            columns = list(table.columns)
+            col_list = ", ".join(f'"{c.name}"' for c in columns)
 
             yield f"-- {table.name} ({len(rows)} rows)\n".encode()
             for row in rows:
-                values = ", ".join(_pg_literal(v) for v in row)
+                values = ", ".join(_pg_literal(v, col) for v, col in zip(row, columns))
                 yield f'INSERT INTO "{table.name}" ({col_list}) VALUES ({values});\n'.encode()
             yield b"\n"
             total_rows += len(rows)
@@ -291,71 +315,91 @@ async def import_database(
 
     logger.info("db_import_started", filename=file.filename)
 
-    # ── Write upload to temp file ──────────────────────────────────────────
-    with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
-        tmp_path = tmp.name
-        content = await file.read()
-        tmp.write(content)
+    # ── Read upload into memory ────────────────────────────────────────────
+    # We keep the content in memory and feed it via PIPE stdin so that
+    # communicate(input=...) closes stdin explicitly after writing — this
+    # guarantees EOF reaches psql whether it runs locally or via docker exec.
+    # Passing a file-descriptor as stdin to docker exec -i leaves the pipe
+    # open and causes psql to hang waiting for more input.
+    content = await file.read()
+    logger.info("db_import_file_read", size_bytes=len(content))
+
+    # ── Resolve psql command ──────────────────────────────────────────────
+    psql_prefix, via_docker = _pg_tool_cmd("psql")
+    psql_url = _get_psql_url(for_docker_exec=via_docker)
+    psql_cmd = psql_prefix + [
+        "--set=ON_ERROR_STOP=off",  # continue on individual statement errors
+        psql_url,
+    ]
+    logger.info("db_import_psql_cmd", cmd=psql_cmd[0], via_docker=via_docker)
+
+    # ── Run psql ──────────────────────────────────────────────────────────
+    # communicate(input=content) writes all bytes to stdin then closes the
+    # pipe, signalling EOF to psql.  A 10-minute hard timeout guards against
+    # a hung process blocking the request indefinitely.
+    _IMPORT_TIMEOUT_SECONDS = 600
+
+    proc = await asyncio.create_subprocess_exec(
+        *psql_cmd,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    logger.info("db_import_psql_running", pid=proc.pid)
 
     try:
-        # ── Run psql ──────────────────────────────────────────────────────
-        # Always pipe via stdin so the approach works identically whether
-        # psql runs locally or inside a Docker container via docker exec -i.
-        # (docker exec -i reads from the subprocess's stdin, so piping works;
-        #  --file with a host path would fail inside the container.)
-        #
-        # When using docker exec into kaihle_postgres, rewrite the URL to
-        # localhost:5432 — the host-facing port (5433) does not resolve from
-        # inside the container.
-        psql_prefix, via_docker = _pg_tool_cmd("psql")
-        psql_url = _get_psql_url(for_docker_exec=via_docker)
-        psql_cmd = psql_prefix + [
-            "--set=ON_ERROR_STOP=off",  # continue on individual statement errors
-            psql_url,
-        ]
-
-        with open(tmp_path, "rb") as sql_file:
-            proc = await asyncio.create_subprocess_exec(
-                *psql_cmd,
-                stdin=sql_file,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-        stdout_bytes, stderr_bytes = await proc.communicate()
-        stdout_str = stdout_bytes.decode(errors="replace").strip()
-        stderr_str = stderr_bytes.decode(errors="replace").strip()
-
-        if proc.returncode not in (0, 3):  # 3 = psql warnings-only exit
-            logger.error("db_import_failed", returncode=proc.returncode, stderr=stderr_str)
-            return ImportResultResponse(
-                status="failed",
-                output=stdout_str or None,
-                error=stderr_str or None,
-                users_updated=0,
-            )
-
-        logger.info("db_import_psql_done", returncode=proc.returncode)
-
-        # ── Reset passwords via SQLAlchemy (parameterised — no injection risk) ──
-        # Never interpolate the hash into a SQL string; bcrypt hashes contain
-        # $ and other characters that are unsafe in shell-interpolated psql --command.
-        hashed_pw = hash_password(override_password)
-        cursor: CursorResult[Any] = await db.execute(  # type: ignore[assignment]
-            text("UPDATE users SET hashed_password = :pw WHERE hashed_password IS NOT NULL"),
-            {"pw": hashed_pw},
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            proc.communicate(input=content),
+            timeout=_IMPORT_TIMEOUT_SECONDS,
         )
-        await db.commit()
-        users_updated = cursor.rowcount
-
-        logger.info("db_import_passwords_reset", users_updated=users_updated)
-
-        combined = "\n".join(s for s in [stdout_str, stderr_str] if s).strip() or None
-
+    except TimeoutError:
+        proc.kill()
+        await proc.communicate()
+        logger.error("db_import_psql_timeout", timeout=_IMPORT_TIMEOUT_SECONDS)
         return ImportResultResponse(
-            status="completed",
-            output=combined,
-            users_updated=users_updated,
+            status="failed",
+            error=f"psql timed out after {_IMPORT_TIMEOUT_SECONDS}s",
+            users_updated=0,
         )
 
-    finally:
-        os.unlink(tmp_path)
+    stdout_str = stdout_bytes.decode(errors="replace").strip()
+    stderr_str = stderr_bytes.decode(errors="replace").strip()
+    logger.info(
+        "db_import_psql_finished",
+        returncode=proc.returncode,
+        stdout_lines=stdout_str.count("\n"),
+        stderr_lines=stderr_str.count("\n"),
+    )
+
+    if proc.returncode not in (0, 3):  # 3 = psql warnings-only exit
+        logger.error("db_import_failed", returncode=proc.returncode, stderr=stderr_str[:500])
+        return ImportResultResponse(
+            status="failed",
+            output=stdout_str or None,
+            error=stderr_str or None,
+            users_updated=0,
+        )
+
+    logger.info("db_import_psql_done", returncode=proc.returncode)
+
+    # ── Reset passwords via SQLAlchemy (parameterised — no injection risk) ──
+    # Never interpolate the hash into a SQL string; bcrypt hashes contain
+    # $ and other characters that are unsafe in shell-interpolated psql --command.
+    logger.info("db_import_resetting_passwords")
+    hashed_pw = hash_password(override_password)
+    cursor: CursorResult[Any] = await db.execute(  # type: ignore[assignment]
+        text("UPDATE users SET hashed_password = :pw WHERE hashed_password IS NOT NULL"),
+        {"pw": hashed_pw},
+    )
+    await db.commit()
+    users_updated = cursor.rowcount
+
+    logger.info("db_import_passwords_reset", users_updated=users_updated)
+
+    combined = "\n".join(s for s in [stdout_str, stderr_str] if s).strip() or None
+
+    return ImportResultResponse(
+        status="completed",
+        output=combined,
+        users_updated=users_updated,
+    )

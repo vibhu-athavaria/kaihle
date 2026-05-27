@@ -92,11 +92,29 @@ def _make_process(stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0)
 #   - db.connection() / conn.run_sync() to skip the actual DB reflection call
 
 
-def _make_mock_table(name: str, columns: list[str]) -> MagicMock:
-    """Return a mock SQLAlchemy Table with the given name and column names."""
+def _make_mock_table(name: str, columns: list[str], array_cols: set[str] | None = None) -> MagicMock:
+    """Return a mock SQLAlchemy Table with the given name and column names.
+
+    ``array_cols`` is an optional set of column names that should be typed as
+    SAArray (text[], uuid[], etc.) so _pg_literal emits array literals.
+    """
+    from sqlalchemy import ARRAY as SAArray
+    from sqlalchemy import Text
+
     table = MagicMock()
     table.name = name
-    table.columns = [MagicMock(name=c) for c in columns]
+
+    mock_cols = []
+    for c in columns:
+        col = MagicMock(name=c)
+        col.name = c
+        if array_cols and c in array_cols:
+            col.type = SAArray(Text())
+        else:
+            col.type = Text()
+        mock_cols.append(col)
+
+    table.columns = mock_cols
     table.select = MagicMock(return_value=MagicMock())  # returns a selectable
     return table
 
@@ -465,6 +483,35 @@ def test_check_pg_tools_available_when_binary_missing_raises_503() -> None:
 
     assert exc_info.value.status_code == 503
     assert "pg_dump not available" in exc_info.value.detail
+
+
+def test_pg_literal_when_list_and_array_column_then_emits_pg_array_literal() -> None:
+    """_pg_literal formats Python list as PostgreSQL array literal '{val1,val2}' for ARRAY columns."""
+    from sqlalchemy import ARRAY as SAArray
+    from sqlalchemy import Text
+
+    from app.api.v1.routes.db_tools import _pg_literal
+
+    col = MagicMock()
+    col.type = SAArray(Text())
+
+    result = _pg_literal(["MCQ", "TRUE_FALSE"], col)
+
+    assert result == '\'{"MCQ","TRUE_FALSE"}\''
+
+
+def test_pg_literal_when_list_and_non_array_column_then_emits_json_string() -> None:
+    """_pg_literal formats Python list as JSON string for JSONB columns."""
+    from sqlalchemy import JSON
+
+    from app.api.v1.routes.db_tools import _pg_literal
+
+    col = MagicMock()
+    col.type = JSON()
+
+    result = _pg_literal(["a", "b"], col)
+
+    assert result == '\'["a", "b"]\''
 
 
 def test_get_psql_url_when_for_docker_exec_then_rewrites_host_to_localhost() -> None:
