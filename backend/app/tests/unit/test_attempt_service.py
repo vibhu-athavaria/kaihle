@@ -956,6 +956,7 @@ class TestSubmitAttemptTimedOut:
         attempt_r.scalar_one_or_none.return_value = sample_attempt
         assessment_r = MagicMock()
         assessment_r.scalar_one_or_none.return_value = sample_assessment
+        assessment_r.scalar_one.return_value = sample_assessment
 
         # existing_responses — empty: the student's answer comes in this bulk submit call
         existing_r = MagicMock()
@@ -1039,6 +1040,7 @@ class TestSubmitAttemptTimedOut:
         attempt_r.scalar_one_or_none.return_value = sample_attempt
         assessment_r = MagicMock()
         assessment_r.scalar_one_or_none.return_value = sample_assessment
+        assessment_r.scalar_one.return_value = sample_assessment
 
         existing_r = MagicMock()
         existing_r.all.return_value = []  # nothing answered from bulk submit

@@ -533,20 +533,34 @@ class AttemptService:
 
         await self.db.flush()
 
-        # When the client timer expired, mark every unanswered question as wrong.
-        # This ensures the score denominator covers all questions, not just answered ones.
+        # When the client timer expired, mark unanswered questions as wrong —
+        # but ONLY the questions that were actually shown to this student.
+        # The pool in AssessmentSelectedQuestion may be larger than question_count;
+        # marking the full pool would corrupt the score denominator and gap_states
+        # with questions the student never saw.
         if timed_out:
             answered_result = await self.db.execute(
                 select(StudentResponse.question_id).where(StudentResponse.attempt_id == attempt_id)
             )
             answered_ids: set[uuid.UUID] = {row[0] for row in answered_result.all()}
 
+            # Reconstruct this student's assigned question subset using the same
+            # seeded RNG as get_class_diagnostic — same seed → same subset.
             all_question_ids_result = await self.db.execute(
-                select(AssessmentSelectedQuestion.question_id).where(
-                    AssessmentSelectedQuestion.assessment_id == attempt.assessment_id
-                )
+                select(AssessmentSelectedQuestion.question_id)
+                .where(AssessmentSelectedQuestion.assessment_id == attempt.assessment_id)
+                .order_by(AssessmentSelectedQuestion.order_index)
             )
-            unanswered_rows = [q_id for (q_id,) in all_question_ids_result.all() if q_id not in answered_ids]
+            all_pool_ids: list[uuid.UUID] = [q_id for (q_id,) in all_question_ids_result.all()]
+
+            max_per_attempt = assessment.question_count
+            if max_per_attempt and len(all_pool_ids) > max_per_attempt:
+                rng = _random.Random(str(student_id))
+                assigned_ids: list[uuid.UUID] = rng.sample(all_pool_ids, max_per_attempt)
+            else:
+                assigned_ids = all_pool_ids
+
+            unanswered_rows = [q_id for q_id in assigned_ids if q_id not in answered_ids]
             for q_id in unanswered_rows:
                 self.db.add(
                     StudentResponse(
@@ -565,6 +579,7 @@ class AttemptService:
             logger.info(
                 "timed_out_unanswered_marked_wrong",
                 attempt_id=str(attempt_id),
+                assigned_count=len(assigned_ids),
                 unanswered_count=len(unanswered_rows),
             )
 
@@ -586,10 +601,21 @@ class AttemptService:
 
         await self.db.flush()
 
-        # Fire Celery task — non-blocking
-        from app.tasks.gap_tasks import calculate_gap_states  # noqa: PLC0415
+        # Fire Celery task — non-blocking.
+        # Skip if the student submitted with zero real answers (e.g. blank timed-out
+        # submit). The gap service filters empty-string responses but firing the task
+        # for a fully blank attempt just wastes a worker and logs a misleading skip.
+        real_answer_count = sum(1 for r in all_responses if r.answer_given and r.answer_given.strip())
+        if real_answer_count == 0:
+            logger.warning(
+                "attempt_submitted_all_blank_gap_calculation_skipped",
+                attempt_id=str(attempt_id),
+                student_id=str(student_id),
+            )
+        else:
+            from app.tasks.gap_tasks import calculate_gap_states  # noqa: PLC0415
 
-        calculate_gap_states.delay(str(attempt_id))
+            calculate_gap_states.delay(str(attempt_id))
 
         logger.info(
             "attempt_submitted",

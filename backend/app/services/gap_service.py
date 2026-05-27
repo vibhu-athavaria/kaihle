@@ -192,9 +192,15 @@ class GapService:
 
         is_diagnostic: bool = assessment.assessment_type == AssessmentType.DIAGNOSTIC
 
-        # Step 3: Load responses
+        # Step 3: Load responses — exclude empty-string answers created by the
+        # timed-out auto-fill path in attempt_service.submit_attempt().
+        # An empty answer_given means the student never responded; treating it as
+        # "wrong" would create misleading gap_states with mastery_score=0.0.
         responses_result = await self.db.execute(
-            select(StudentResponse).where(StudentResponse.attempt_id == attempt_id)
+            select(StudentResponse).where(
+                StudentResponse.attempt_id == attempt_id,
+                StudentResponse.answer_given != "",
+            )
         )
         responses: list[StudentResponse] = list(responses_result.scalars().all())
 
