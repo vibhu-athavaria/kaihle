@@ -27,7 +27,7 @@ function subjectBadgeClass(subject: string) {
 export function TeacherDetailPage() {
   const { teacherId } = useParams<{ teacherId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [editPanelOpen, setEditPanelOpen] = useState(false);
 
   const {
@@ -40,6 +40,7 @@ export function TeacherDetailPage() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Teacher"
         permissions={user?.permissions}
       >
@@ -66,6 +67,7 @@ export function TeacherDetailPage() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Teacher"
         permissions={user?.permissions}
       >
@@ -80,7 +82,12 @@ export function TeacherDetailPage() {
   const fullName = `${teacher.first_name} ${teacher.last_name}`;
 
   return (
-    <DashboardLayout variant="school-admin" pageTitle={fullName}>
+    <DashboardLayout
+      variant="school-admin"
+      pageTitle={fullName}
+      onLogout={logout}
+      permissions={user?.permissions}
+    >
       {/* Breadcrumb */}
       <nav
         className="flex items-center gap-1.5 text-xs text-brand-muted mb-5"

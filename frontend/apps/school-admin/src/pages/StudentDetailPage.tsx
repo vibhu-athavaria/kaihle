@@ -47,7 +47,7 @@ function initials(first: string, last: string) {
 export function StudentDetailPage() {
   const { studentId } = useParams<{ studentId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [editPanelOpen, setEditPanelOpen] = useState(false);
 
   const {
@@ -106,6 +106,7 @@ export function StudentDetailPage() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Student Detail"
         permissions={user?.permissions}
       >
@@ -118,6 +119,7 @@ export function StudentDetailPage() {
   return (
     <DashboardLayout
       variant="school-admin"
+      onLogout={logout}
       pageTitle="Student Detail"
       permissions={user?.permissions}
     >

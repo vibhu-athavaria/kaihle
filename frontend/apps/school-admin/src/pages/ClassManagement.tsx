@@ -8,7 +8,7 @@ import { CreateClassModal } from "./CreateClassModal";
 
 export function ClassManagement() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [showActive, setShowActive] = useState(true);
   const {
     data: classes = [],
@@ -51,6 +51,7 @@ export function ClassManagement() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Classes"
         permissions={user?.permissions}
       >
@@ -66,6 +67,7 @@ export function ClassManagement() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Classes"
         permissions={user?.permissions}
       >
@@ -78,6 +80,7 @@ export function ClassManagement() {
   return (
     <DashboardLayout
       variant="school-admin"
+      onLogout={logout}
       pageTitle="Classes"
       permissions={user?.permissions}
     >

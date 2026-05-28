@@ -139,7 +139,7 @@ function diagnosticStatus(s: StudentListItem): "Completed" | "Pending" | null {
 
 export function UsersPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const canManageUsers = hasPermission(
     user?.permissions,
     Permission.USER_MANAGEMENT,
@@ -302,6 +302,7 @@ export function UsersPage() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Users"
         permissions={user?.permissions}
       >
@@ -314,6 +315,7 @@ export function UsersPage() {
   return (
     <DashboardLayout
       variant="school-admin"
+      onLogout={logout}
       pageTitle="Users"
       permissions={user?.permissions}
     >

@@ -399,7 +399,7 @@ type TabKey = (typeof TABS)[number]["key"];
 export function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [editPanelOpen, setEditPanelOpen] = useState(false);
@@ -425,6 +425,7 @@ export function ClassDetailPage() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Class"
         permissions={user?.permissions}
       >
@@ -441,6 +442,7 @@ export function ClassDetailPage() {
   return (
     <DashboardLayout
       variant="school-admin"
+      onLogout={logout}
       pageTitle={classDetail?.name ?? "Class"}
     >
       {/* Breadcrumb */}

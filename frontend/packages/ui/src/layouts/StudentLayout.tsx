@@ -2,7 +2,15 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 // MVP: BarChart2 removed (was used by My Progress nav item — add back when re-enabling)
-import { Home, ClipboardList, Settings, LogOut } from "lucide-react";
+import {
+  Home,
+  ClipboardList,
+  Settings,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
+import { useSidebarCollapsed } from "../hooks/useSidebarCollapsed";
 
 export type StudentNavItem = "home" | "progress" | "assessments";
 
@@ -65,6 +73,7 @@ export function StudentLayout({
   assessmentBadge,
 }: StudentLayoutProps) {
   const navigate = useNavigate();
+  const { collapsed, toggle } = useSidebarCollapsed();
 
   const initials = studentName
     .split(" ")
@@ -77,8 +86,9 @@ export function StudentLayout({
 
   const navItemClass = (isActive: boolean) =>
     [
-      "relative flex items-center gap-2 mx-2 px-3 py-2 rounded-lg",
+      "relative flex items-center gap-2 rounded-lg",
       "text-sm font-medium transition-colors",
+      collapsed ? "justify-center mx-1 px-2 py-2" : "mx-2 px-3 py-2",
       isActive
         ? "bg-role-student-nav-active text-brand-primary font-semibold"
         : "text-brand-body hover:bg-gray-50 hover:text-brand-ink",
@@ -88,17 +98,27 @@ export function StudentLayout({
     <div className="flex h-screen overflow-hidden bg-role-student-bg">
       {/* ── SIDEBAR ──────────────────────────────────────────── */}
       <aside
-        className="w-56 flex-shrink-0 bg-white border-r border-role-student-border flex flex-col"
+        className={[
+          "flex-shrink-0 bg-white border-r border-role-student-border flex flex-col transition-all duration-200",
+          collapsed ? "w-14" : "w-56",
+        ].join(" ")}
         aria-label="Sidebar"
       >
         {/* Logo row */}
-        <div className="h-14 flex items-center px-4 border-b border-role-student-border flex-shrink-0">
-          <span className="bg-brand-primary italic font-display font-bold text-lg text-white px-2 py-1 rounded-lg">
+        <div
+          className={[
+            "h-14 flex items-center border-b border-role-student-border flex-shrink-0",
+            collapsed ? "justify-center px-0" : "px-4",
+          ].join(" ")}
+        >
+          <span className="bg-brand-primary italic font-display font-bold text-lg text-white px-2 py-1 rounded-lg flex-shrink-0">
             K
           </span>
-          <span className="ml-2 font-display font-bold text-sm text-brand-ink">
-            Kaihle
-          </span>
+          {!collapsed && (
+            <span className="ml-2 font-display font-bold text-sm text-brand-ink whitespace-nowrap">
+              Kaihle
+            </span>
+          )}
         </div>
 
         {/* Nav */}
@@ -107,9 +127,12 @@ export function StudentLayout({
           aria-label="Main navigation"
         >
           {/* HOME section */}
-          <p className="px-3 pt-3 pb-1 text-xs font-bold uppercase tracking-[0.8px] text-brand-muted">
-            Home
-          </p>
+          {!collapsed && (
+            <p className="px-3 pt-3 pb-1 text-xs font-bold uppercase tracking-[0.8px] text-brand-muted">
+              Home
+            </p>
+          )}
+          {collapsed && <div className="pt-3" />}
 
           {[
             { key: "home" as StudentNavItem, label: "Dashboard", Icon: Home },
@@ -122,9 +145,10 @@ export function StudentLayout({
                 key={key}
                 to={NAV_ROUTES[key]}
                 aria-current={isActive ? "page" : undefined}
+                title={collapsed ? label : undefined}
                 className={navItemClass(isActive)}
               >
-                {isActive ? (
+                {isActive && !collapsed ? (
                   <span
                     className="w-1.5 h-1.5 rounded-full bg-brand-primary flex-shrink-0"
                     aria-hidden="true"
@@ -132,7 +156,7 @@ export function StudentLayout({
                 ) : (
                   <Icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
                 )}
-                {label}
+                {!collapsed && label}
               </Link>
             );
           })}
@@ -140,21 +164,30 @@ export function StudentLayout({
           {/* MY CLASSES section */}
           {classes.length > 0 && (
             <>
-              <p className="px-3 pt-4 pb-1 text-xs font-bold uppercase tracking-[0.8px] text-brand-muted">
-                My Classes
-              </p>
+              {!collapsed && (
+                <p className="px-3 pt-4 pb-1 text-xs font-bold uppercase tracking-[0.8px] text-brand-muted">
+                  My Classes
+                </p>
+              )}
+              {collapsed && <div className="pt-3" />}
               {classes.map((cls) => (
                 <Link
                   key={cls.id}
                   to={`/student/classes/${cls.id}`}
                   aria-label={cls.name}
-                  className="flex items-center gap-2 mx-2 px-3 py-2 rounded-lg text-sm font-medium text-brand-body hover:bg-gray-50 hover:text-brand-ink transition-colors"
+                  title={collapsed ? cls.name : undefined}
+                  className={[
+                    "flex items-center rounded-lg text-sm font-medium text-brand-body hover:bg-gray-50 hover:text-brand-ink transition-colors",
+                    collapsed
+                      ? "justify-center mx-1 px-2 py-2"
+                      : "gap-2 mx-2 px-3 py-2",
+                  ].join(" ")}
                 >
                   <span
                     className={`w-2 h-2 rounded-full flex-shrink-0 ${getSubjectDotColor(cls.subjectName)}`}
                     aria-hidden="true"
                   />
-                  {cls.name}
+                  {!collapsed && cls.name}
                 </Link>
               ))}
             </>
@@ -171,9 +204,10 @@ export function StudentLayout({
               <Link
                 to={NAV_ROUTES["assessments"]}
                 aria-current={isActive ? "page" : undefined}
+                title={collapsed ? "Assessments" : undefined}
                 className={navItemClass(isActive)}
               >
-                {isActive ? (
+                {isActive && !collapsed ? (
                   <span
                     className="w-1.5 h-1.5 rounded-full bg-brand-primary flex-shrink-0"
                     aria-hidden="true"
@@ -184,9 +218,14 @@ export function StudentLayout({
                     aria-hidden="true"
                   />
                 )}
-                Assessments
+                {!collapsed && "Assessments"}
                 {showBadge && (
-                  <span className="ml-auto bg-brand-primary text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full leading-none flex-shrink-0">
+                  <span
+                    className={[
+                      "bg-brand-primary text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full leading-none flex-shrink-0",
+                      collapsed ? "" : "ml-auto",
+                    ].join(" ")}
+                  >
                     {assessmentBadge > 9 ? "9+" : assessmentBadge}
                   </span>
                 )}
@@ -200,35 +239,56 @@ export function StudentLayout({
           <button
             type="button"
             onClick={() => navigate("/student/settings")}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors"
+            title={collapsed ? "Settings" : undefined}
+            className={[
+              "w-full flex items-center gap-2 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors",
+              collapsed ? "justify-center px-2" : "px-3",
+            ].join(" ")}
             aria-label="Settings"
           >
             <Settings className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-            Settings
+            {!collapsed && "Settings"}
           </button>
           <button
             type="button"
             onClick={onLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors"
+            title={collapsed ? "Log out" : undefined}
+            className={[
+              "w-full flex items-center gap-2 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors",
+              collapsed ? "justify-center px-2" : "px-3",
+            ].join(" ")}
             aria-label="Log out"
           >
             <LogOut className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-            Log out
+            {!collapsed && "Log out"}
           </button>
-          {/* Profile card — name and grade */}
-          <div className="flex items-center gap-2 px-3 py-2 mt-1 border-t border-brand-border-soft pt-3">
-            <div className="w-7 h-7 rounded-full bg-role-student-nav-active flex items-center justify-center font-sans font-bold text-xs text-brand-primary flex-shrink-0">
-              {initials}
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-semibold text-brand-ink truncate">
-                {studentName}
-              </div>
-              <div className="text-xs text-brand-muted truncate">
-                {gradeName}
-              </div>
-            </div>
-          </div>
+
+          {/* Collapse toggle */}
+          <button
+            type="button"
+            onClick={toggle}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={[
+              "w-full flex items-center gap-2 py-2 text-sm font-medium text-brand-muted hover:text-brand-ink hover:bg-gray-50 rounded-lg transition-colors",
+              collapsed ? "justify-center px-2" : "px-3",
+            ].join(" ")}
+          >
+            {collapsed ? (
+              <PanelLeftOpen
+                className="w-4 h-4 flex-shrink-0"
+                aria-hidden="true"
+              />
+            ) : (
+              <>
+                <PanelLeftClose
+                  className="w-4 h-4 flex-shrink-0"
+                  aria-hidden="true"
+                />
+                <span>Collapse</span>
+              </>
+            )}
+          </button>
         </div>
       </aside>
 

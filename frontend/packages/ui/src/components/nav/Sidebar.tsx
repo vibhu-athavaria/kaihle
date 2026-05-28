@@ -18,14 +18,18 @@ import {
   CreditCard,
   ArrowUpCircle,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { hasPermission, Permission } from "@kaihle/types";
 import { NavItem } from "./NavItem";
+import { useSidebarCollapsed } from "../../hooks/useSidebarCollapsed";
 
 interface SidebarProps {
   variant: "teacher" | "school-admin" | "admin";
   onLogout?: () => void;
   permissions?: Record<string, boolean> | null;
+  settingsHref?: string;
 }
 
 interface NavSection {
@@ -55,10 +59,6 @@ const teacherSections: NavSection[] = [
       // { label: "Content Review", href: "/teacher/content-review", icon: FileText },
     ],
   },
-  {
-    section: "ACCOUNT",
-    items: [{ label: "Settings", href: "/teacher/settings", icon: Settings }],
-  },
 ];
 
 function buildSchoolAdminSections(
@@ -66,7 +66,6 @@ function buildSchoolAdminSections(
 ): NavSection[] {
   const adminItems: { label: string; href: string; icon: LucideIcon }[] = [
     { label: "Analytics", href: "/school-admin/analytics", icon: BarChart3 },
-    { label: "Settings", href: "/school-admin/settings", icon: Settings },
   ];
 
   if (hasPermission(permissions, Permission.BILLING)) {
@@ -163,7 +162,14 @@ function getCurrentPath(): string {
   return "";
 }
 
-export function Sidebar({ variant, onLogout, permissions }: SidebarProps) {
+export function Sidebar({
+  variant,
+  onLogout,
+  permissions,
+  settingsHref,
+}: SidebarProps) {
+  const { collapsed, toggle } = useSidebarCollapsed();
+
   const sections =
     variant === "teacher"
       ? teacherSections
@@ -185,25 +191,39 @@ export function Sidebar({ variant, onLogout, permissions }: SidebarProps) {
 
   return (
     <aside
-      className={`w-56 flex-shrink-0 bg-white border-r ${borderClass} flex flex-col`}
+      className={[
+        "flex-shrink-0 bg-white border-r flex flex-col transition-all duration-200",
+        borderClass,
+        collapsed ? "w-14" : "w-56",
+      ].join(" ")}
+      aria-label="Sidebar"
     >
-      <div className={`h-14 flex items-center px-4 border-b ${borderClass}`}>
+      {/* Logo row */}
+      <div
+        className={`h-14 flex items-center border-b flex-shrink-0 ${borderClass} ${collapsed ? "justify-center px-0" : "px-4"}`}
+      >
         <span
-          className={`${logoMarkBg} italic font-display font-bold text-lg text-white px-2 py-1 rounded-lg`}
+          className={`${logoMarkBg} italic font-display font-bold text-lg text-white px-2 py-1 rounded-lg flex-shrink-0`}
         >
           K
         </span>
-        <span className="ml-2 font-display font-bold text-sm text-brand-ink">
-          Kaihle
-        </span>
+        {!collapsed && (
+          <span className="ml-2 font-display font-bold text-sm text-brand-ink whitespace-nowrap">
+            Kaihle
+          </span>
+        )}
       </div>
 
+      {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4" aria-label="Main navigation">
         {sections.map((section) => (
           <div key={section.section}>
-            <div className="px-3 pt-4 pb-1 text-topnav-sub font-bold uppercase tracking-widest text-brand-muted">
-              {section.section}
-            </div>
+            {!collapsed && (
+              <div className="px-3 pt-4 pb-1 text-topnav-sub font-bold uppercase tracking-widest text-brand-muted">
+                {section.section}
+              </div>
+            )}
+            {collapsed && <div className="pt-3" />}
             {section.items.map((item) => {
               const isActive =
                 item.href === currentPath ||
@@ -218,6 +238,7 @@ export function Sidebar({ variant, onLogout, permissions }: SidebarProps) {
                   icon={item.icon}
                   isActive={isActive}
                   variant={variant}
+                  collapsed={collapsed}
                 />
               );
             })}
@@ -225,17 +246,59 @@ export function Sidebar({ variant, onLogout, permissions }: SidebarProps) {
         ))}
       </nav>
 
-      {onLogout && (
-        <div className="border-t border-brand-border p-3">
+      {/* Bottom: settings + logout + collapse */}
+      <div className="border-t border-brand-border p-3 space-y-1">
+        {settingsHref && (
+          <a
+            href={settingsHref}
+            title={collapsed ? "Settings" : undefined}
+            className={[
+              "w-full flex items-center gap-2 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-brand-surface rounded-lg transition-colors",
+              collapsed ? "justify-center px-2" : "px-3",
+            ].join(" ")}
+          >
+            <Settings className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            {!collapsed && "Settings"}
+          </a>
+        )}
+        {onLogout && (
           <button
             onClick={onLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-brand-surface rounded-lg transition-colors"
+            title={collapsed ? "Log out" : undefined}
+            className={[
+              "w-full flex items-center gap-2 py-2 text-sm font-medium text-brand-body hover:text-brand-ink hover:bg-brand-surface rounded-lg transition-colors",
+              collapsed ? "justify-center px-2" : "px-3",
+            ].join(" ")}
           >
-            <LogOut className="w-4 h-4" />
-            Log out
+            <LogOut className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            {!collapsed && "Log out"}
           </button>
-        </div>
-      )}
+        )}
+        <button
+          onClick={toggle}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={[
+            "w-full flex items-center gap-2 py-2 text-sm font-medium text-brand-muted hover:text-brand-ink hover:bg-brand-surface rounded-lg transition-colors",
+            collapsed ? "justify-center px-2" : "px-3",
+          ].join(" ")}
+        >
+          {collapsed ? (
+            <PanelLeftOpen
+              className="w-4 h-4 flex-shrink-0"
+              aria-hidden="true"
+            />
+          ) : (
+            <>
+              <PanelLeftClose
+                className="w-4 h-4 flex-shrink-0"
+                aria-hidden="true"
+              />
+              <span>Collapse</span>
+            </>
+          )}
+        </button>
+      </div>
     </aside>
   );
 }

@@ -6,6 +6,7 @@ interface NavItemProps {
   icon?: LucideIcon;
   isActive: boolean;
   variant: "teacher" | "school-admin" | "admin";
+  collapsed?: boolean;
 }
 
 const activeClasses: Record<NavItemProps["variant"], string> = {
@@ -30,6 +31,7 @@ export function NavItem({
   icon: Icon,
   isActive,
   variant,
+  collapsed = false,
 }: NavItemProps) {
   const activeClass = activeClasses[variant];
   const inactiveClass = inactiveClasses[variant];
@@ -37,17 +39,19 @@ export function NavItem({
   return (
     <a
       href={href}
+      title={collapsed ? label : undefined}
       className={[
-        "flex items-center gap-2 px-3 py-2.5 mx-2 text-sm font-semibold transition-colors",
+        "flex items-center gap-2 py-2.5 text-sm font-semibold transition-colors",
+        collapsed ? "justify-center px-2 mx-1" : "px-3 mx-2",
         isActive ? activeClass : inactiveClass,
       ].join(" ")}
       aria-current={isActive ? "page" : undefined}
     >
-      {variant === "admin" && isActive && (
+      {variant === "admin" && isActive && !collapsed && (
         <span className="w-1.5 h-1.5 rounded-full bg-brand-primary flex-shrink-0" />
       )}
       {Icon && <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />}
-      <span>{label}</span>
+      {!collapsed && <span>{label}</span>}
     </a>
   );
 }

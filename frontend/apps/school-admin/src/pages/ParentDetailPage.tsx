@@ -11,7 +11,7 @@ function initials(first: string, last: string) {
 export function ParentDetailPage() {
   const { parentId } = useParams<{ parentId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const { data: parent, isLoading, isError } = useParentDetail(parentId ?? "");
 
@@ -19,6 +19,7 @@ export function ParentDetailPage() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Parent"
         permissions={user?.permissions}
       >
@@ -45,6 +46,7 @@ export function ParentDetailPage() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Parent"
         permissions={user?.permissions}
       >
@@ -59,7 +61,12 @@ export function ParentDetailPage() {
   const fullName = `${parent.first_name} ${parent.last_name}`;
 
   return (
-    <DashboardLayout variant="school-admin" pageTitle={fullName}>
+    <DashboardLayout
+      variant="school-admin"
+      pageTitle={fullName}
+      onLogout={logout}
+      permissions={user?.permissions}
+    >
       {/* Breadcrumb */}
       <nav
         className="flex items-center gap-1.5 text-xs text-brand-muted mb-5"
