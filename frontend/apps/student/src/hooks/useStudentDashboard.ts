@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuthStore } from "@kaihle/auth";
 
 // ── Types matching backend DashboardResponse ──────────────────────────────────
 
@@ -47,8 +47,10 @@ export interface DashboardData {
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useStudentDashboard() {
+  // Include userId so different students on the same browser never share a cache entry.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   return useQuery({
-    queryKey: ["student", "dashboard"] as const,
+    queryKey: ["student", "dashboard", userId] as const,
     queryFn: async (): Promise<DashboardData> => {
       const res = await apiClient.get<DashboardData>(
         "/api/v1/students/me/dashboard",

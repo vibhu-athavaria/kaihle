@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuthStore } from "@kaihle/auth";
 
 export interface TeacherStudent {
   id: string;
@@ -16,8 +16,10 @@ interface TeacherStudentsResponse {
 }
 
 export function useTeacherStudents(schoolId: string | null) {
+  // Include userId so teachers in the same school never share a cache entry.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   return useQuery({
-    queryKey: ["teacher", "students", schoolId] as const,
+    queryKey: ["teacher", "students", schoolId, userId] as const,
     queryFn: async (): Promise<TeacherStudent[]> => {
       const res = await apiClient.get<TeacherStudentsResponse>(
         "/api/v1/teachers/me/students",

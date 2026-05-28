@@ -205,7 +205,7 @@ export function TakeAssessmentPage() {
   }, [attempt]);
 
   // ── Derived values ───────────────────────────────────────────
-  const questions = attempt?.questions ?? [];
+  const questions = (attempt?.questions ?? []).slice(0, attempt?.num_questions);
   const currentQuestion = questions[currentIndex];
   const totalQuestions = attempt?.num_questions ?? questions.length;
   const answeredCount = Object.keys(answers).length;

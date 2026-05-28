@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuthStore } from "@kaihle/auth";
 
 export type AttemptStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -24,8 +24,10 @@ export interface MyAssessmentItem {
  * this across every page that mounts it (Assessments page + sidebar badge).
  */
 export function useMyAssessments() {
+  // Include userId so different students on the same browser never share a cache entry.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   return useQuery<MyAssessmentItem[]>({
-    queryKey: ["student", "assessments"],
+    queryKey: ["student", "assessments", userId],
     queryFn: async () => {
       const res = await apiClient.get<MyAssessmentItem[]>(
         "/api/v1/students/me/assessments",

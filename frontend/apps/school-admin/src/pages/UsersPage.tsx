@@ -1,9 +1,16 @@
-import { useState, type KeyboardEvent } from "react";
+import { useState, useEffect, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@kaihle/ui";
 import { getMasteryStyle, hasPermission, Permission } from "@kaihle/types";
 import { useAuth } from "@kaihle/auth";
-import { Plus } from "lucide-react";
+import {
+  ChevronsUpDown,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+} from "lucide-react";
 import {
   useSchoolStudents,
   useSchoolUsers,
@@ -16,6 +23,87 @@ import CreateParentModal from "./CreateParentModal";
 type Tab = "students" | "teachers" | "parents";
 type StudentFilter = "all" | "attention" | "pending" | "not_logged_in";
 type GradeFilter = string | null;
+type StudentSortCol = "name" | "grade" | "classes" | "mastery" | "last_active";
+type TeacherSortCol = "name" | "email" | "status";
+type SortDir = "asc" | "desc";
+
+const PAGE_SIZE = 20;
+
+function PaginationBar({
+  page,
+  totalItems,
+  onPage,
+}: {
+  page: number;
+  totalItems: number;
+  onPage: (p: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  if (totalPages <= 1) return null;
+  const start = (page - 1) * PAGE_SIZE + 1;
+  const end = Math.min(page * PAGE_SIZE, totalItems);
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t border-role-school-border bg-[#fafcfa]">
+      <span className="text-xs text-brand-muted">
+        {start}–{end} of {totalItems}
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPage(page - 1)}
+          disabled={page === 1}
+          aria-label="Previous page"
+          className="w-7 h-7 flex items-center justify-center rounded-md border border-role-school-border bg-white text-brand-body hover:bg-[#f0f5ee] disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1"
+        >
+          <ChevronLeft className="w-4 h-4" aria-hidden="true" />
+        </button>
+        {Array.from({ length: totalPages }, (_, i) => i + 1)
+          .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+          .reduce<(number | "…")[]>((acc, p, idx, arr) => {
+            if (
+              idx > 0 &&
+              typeof arr[idx - 1] === "number" &&
+              (p as number) - (arr[idx - 1] as number) > 1
+            ) {
+              acc.push("…");
+            }
+            acc.push(p);
+            return acc;
+          }, [])
+          .map((p, i) =>
+            p === "…" ? (
+              <span
+                key={`ellipsis-${i}`}
+                className="w-7 text-center text-xs text-brand-muted"
+              >
+                …
+              </span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => onPage(p as number)}
+                aria-current={page === p ? "page" : undefined}
+                className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1 ${
+                  page === p
+                    ? "bg-brand-primary text-white"
+                    : "border border-role-school-border bg-white text-brand-body hover:bg-[#f0f5ee]"
+                }`}
+              >
+                {p}
+              </button>
+            ),
+          )}
+        <button
+          onClick={() => onPage(page + 1)}
+          disabled={page === totalPages}
+          aria-label="Next page"
+          className="w-7 h-7 flex items-center justify-center rounded-md border border-role-school-border bg-white text-brand-body hover:bg-[#f0f5ee] disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-1"
+        >
+          <ChevronRight className="w-4 h-4" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function statusBadge(status: "ACTIVE" | "INVITED" | "INACTIVE") {
   if (status === "ACTIVE")
@@ -65,6 +153,12 @@ export function UsersPage() {
   const [teacherModalOpen, setTeacherModalOpen] = useState(false);
   const [parentModalOpen, setParentModalOpen] = useState(false);
   const [showActive, setShowActive] = useState(true);
+  const [studentSort, setStudentSort] = useState<StudentSortCol>("mastery");
+  const [studentSortDir, setStudentSortDir] = useState<SortDir>("asc");
+  const [teacherSort, setTeacherSort] = useState<TeacherSortCol>("name");
+  const [teacherSortDir, setTeacherSortDir] = useState<SortDir>("asc");
+  const [studentPage, setStudentPage] = useState(1);
+  const [teacherPage, setTeacherPage] = useState(1);
 
   const {
     data: students = [],
@@ -96,6 +190,39 @@ export function UsersPage() {
     ),
   ].sort();
 
+  function toggleStudentSort(col: StudentSortCol) {
+    if (studentSort === col) {
+      setStudentSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setStudentSort(col);
+      setStudentSortDir("asc");
+    }
+  }
+
+  function toggleTeacherSort(col: TeacherSortCol) {
+    if (teacherSort === col) {
+      setTeacherSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setTeacherSort(col);
+      setTeacherSortDir("asc");
+    }
+  }
+
+  // Reset to page 1 whenever filters or sort change
+  useEffect(() => {
+    setStudentPage(1);
+  }, [
+    filter,
+    gradeFilter,
+    searchQuery,
+    studentSort,
+    studentSortDir,
+    showActive,
+  ]);
+  useEffect(() => {
+    setTeacherPage(1);
+  }, [teacherSearchQuery, teacherSort, teacherSortDir, showActive]);
+
   const filtered = students
     .filter((s) => {
       if (filter === "attention")
@@ -114,11 +241,62 @@ export function UsersPage() {
           .includes(searchQuery.toLowerCase()),
     )
     .sort((a, b) => {
+      const dir = studentSortDir === "asc" ? 1 : -1;
+      if (studentSort === "name") {
+        const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
+        const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
+        return nameA < nameB ? -dir : nameA > nameB ? dir : 0;
+      }
+      if (studentSort === "grade") {
+        const ga = a.grade_level ?? 999;
+        const gb = b.grade_level ?? 999;
+        return (ga - gb) * dir;
+      }
+      if (studentSort === "classes") {
+        return (a.class_count - b.class_count) * dir;
+      }
+      if (studentSort === "last_active") {
+        const ta = a.last_login_at ? new Date(a.last_login_at).getTime() : 0;
+        const tb = b.last_login_at ? new Date(b.last_login_at).getTime() : 0;
+        return (ta - tb) * dir;
+      }
+      // mastery (default) — nulls last regardless of direction
       if (a.worst_mastery === null && b.worst_mastery === null) return 0;
       if (a.worst_mastery === null) return 1;
       if (b.worst_mastery === null) return -1;
-      return a.worst_mastery - b.worst_mastery;
+      return (a.worst_mastery - b.worst_mastery) * dir;
     });
+
+  const studentPageSlice = filtered.slice(
+    (studentPage - 1) * PAGE_SIZE,
+    studentPage * PAGE_SIZE,
+  );
+
+  const filteredTeachers = teachers
+    .filter(
+      (t) =>
+        !teacherSearchQuery ||
+        `${t.first_name} ${t.last_name}`
+          .toLowerCase()
+          .includes(teacherSearchQuery.toLowerCase()),
+    )
+    .sort((a, b) => {
+      const dir = teacherSortDir === "asc" ? 1 : -1;
+      if (teacherSort === "email") {
+        return a.email < b.email ? -dir : a.email > b.email ? dir : 0;
+      }
+      if (teacherSort === "status") {
+        return a.status < b.status ? -dir : a.status > b.status ? dir : 0;
+      }
+      const na = `${a.first_name} ${a.last_name}`.toLowerCase();
+      const nb = `${b.first_name} ${b.last_name}`.toLowerCase();
+      return na < nb ? -dir : na > nb ? dir : 0;
+    });
+
+  const teacherPageSlice = filteredTeachers.slice(
+    (teacherPage - 1) * PAGE_SIZE,
+    teacherPage * PAGE_SIZE,
+  );
 
   if (studentsError)
     return (
@@ -317,26 +495,65 @@ export function UsersPage() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-[#fafcfa] border-b border-role-school-border">
-                    {[
-                      "Student",
-                      "Grade",
-                      "Classes",
-                      "Lowest mastery",
-                      "Diagnostic",
-                      "Last active",
-                      "",
-                    ].map((h) => (
-                      <th
-                        key={h}
-                        className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
-                      >
-                        {h}
-                      </th>
-                    ))}
+                    {(
+                      [
+                        { label: "Student", col: "name" },
+                        { label: "Grade", col: "grade" },
+                        { label: "Classes", col: "classes" },
+                        { label: "Lowest mastery", col: "mastery" },
+                        { label: "Diagnostic", col: null },
+                        { label: "Last active", col: "last_active" },
+                        { label: "", col: null },
+                      ] as { label: string; col: StudentSortCol | null }[]
+                    ).map(({ label, col }) =>
+                      col ? (
+                        <th
+                          key={label}
+                          onClick={() => toggleStudentSort(col)}
+                          className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted cursor-pointer select-none hover:text-brand-ink group"
+                          aria-sort={
+                            studentSort === col
+                              ? studentSortDir === "asc"
+                                ? "ascending"
+                                : "descending"
+                              : "none"
+                          }
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {label}
+                            {studentSort === col ? (
+                              studentSortDir === "asc" ? (
+                                <ChevronUp
+                                  className="w-3 h-3 text-brand-primary"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <ChevronDown
+                                  className="w-3 h-3 text-brand-primary"
+                                  aria-hidden="true"
+                                />
+                              )
+                            ) : (
+                              <ChevronsUpDown
+                                className="w-3 h-3 opacity-0 group-hover:opacity-40 transition-opacity"
+                                aria-hidden="true"
+                              />
+                            )}
+                          </span>
+                        </th>
+                      ) : (
+                        <th
+                          key={label}
+                          className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
+                        >
+                          {label}
+                        </th>
+                      ),
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((s) => {
+                  {studentPageSlice.map((s) => {
                     const { dotClass, label } = getMasteryStyle(
                       s.worst_mastery,
                     );
@@ -450,6 +667,11 @@ export function UsersPage() {
                   No students match this filter.
                 </div>
               )}
+              <PaginationBar
+                page={studentPage}
+                totalItems={filtered.length}
+                onPage={setStudentPage}
+              />
             </div>
           )}
         </>
@@ -493,83 +715,111 @@ export function UsersPage() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-[#fafcfa] border-b border-role-school-border">
-                    {["Teacher", "Email", "Status", ""].map((h) => (
-                      <th
-                        key={h}
-                        className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted"
-                      >
-                        {h}
-                      </th>
-                    ))}
+                    {(
+                      [
+                        { label: "Teacher", col: "name" },
+                        { label: "Email", col: "email" },
+                        { label: "Status", col: "status" },
+                        { label: "", col: null },
+                      ] as { label: string; col: TeacherSortCol | null }[]
+                    ).map(({ label, col }) =>
+                      col ? (
+                        <th
+                          key={label}
+                          onClick={() => toggleTeacherSort(col)}
+                          className="px-4 py-[10px] text-left text-xs font-black uppercase tracking-[0.7px] text-role-school-muted cursor-pointer select-none hover:text-brand-ink group"
+                          aria-sort={
+                            teacherSort === col
+                              ? teacherSortDir === "asc"
+                                ? "ascending"
+                                : "descending"
+                              : "none"
+                          }
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {label}
+                            {teacherSort === col ? (
+                              teacherSortDir === "asc" ? (
+                                <ChevronUp
+                                  className="w-3 h-3 text-brand-primary"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <ChevronDown
+                                  className="w-3 h-3 text-brand-primary"
+                                  aria-hidden="true"
+                                />
+                              )
+                            ) : (
+                              <ChevronsUpDown
+                                className="w-3 h-3 opacity-0 group-hover:opacity-40 transition-opacity"
+                                aria-hidden="true"
+                              />
+                            )}
+                          </span>
+                        </th>
+                      ) : (
+                        <th key={label} className="px-4 py-[10px]" />
+                      ),
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {teachers
-                    .filter(
-                      (t) =>
-                        !teacherSearchQuery ||
-                        `${t.first_name} ${t.last_name}`
-                          .toLowerCase()
-                          .includes(teacherSearchQuery.toLowerCase()),
-                    )
-                    .map((t) => {
-                      const isActive = t.status === "ACTIVE";
-                      const handleNavigate = () =>
-                        navigate(`/school-admin/users/teachers/${t.id}`);
-                      return (
-                        <tr
-                          key={t.id}
-                          onClick={handleNavigate}
-                          onKeyDown={(
-                            e: KeyboardEvent<HTMLTableRowElement>,
-                          ) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              handleNavigate();
-                            }
-                          }}
-                          tabIndex={0}
-                          role="button"
-                          aria-label={`View details for ${t.first_name} ${t.last_name}`}
-                          className="border-b border-[#f0f5ee] last:border-0 cursor-pointer hover:bg-[#fafcfa] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-inset"
-                        >
-                          <td className="px-4 py-[10px]">
-                            <div className="flex items-center gap-2.5">
-                              <div
-                                className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0 ${isActive ? "bg-brand-primary" : "bg-gray-300"}`}
-                              >
-                                {initials(t.first_name, t.last_name)}
-                              </div>
-                              <span className="text-sm font-bold text-brand-ink">
-                                {t.first_name} {t.last_name}
-                              </span>
+                  {teacherPageSlice.map((t) => {
+                    const isActive = t.status === "ACTIVE";
+                    const handleNavigate = () =>
+                      navigate(`/school-admin/users/teachers/${t.id}`);
+                    return (
+                      <tr
+                        key={t.id}
+                        onClick={handleNavigate}
+                        onKeyDown={(e: KeyboardEvent<HTMLTableRowElement>) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleNavigate();
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`View details for ${t.first_name} ${t.last_name}`}
+                        className="border-b border-[#f0f5ee] last:border-0 cursor-pointer hover:bg-[#fafcfa] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-inset"
+                      >
+                        <td className="px-4 py-[10px]">
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0 ${isActive ? "bg-brand-primary" : "bg-gray-300"}`}
+                            >
+                              {initials(t.first_name, t.last_name)}
                             </div>
-                          </td>
-                          <td className="px-4 py-[10px] text-xs text-brand-body">
-                            {t.email}
-                          </td>
-                          <td className="px-4 py-[10px]">
-                            {statusBadge(t.status)}
-                          </td>
-                          <td className="px-4 py-[10px] text-brand-muted text-base">
-                            ›
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            <span className="text-sm font-bold text-brand-ink">
+                              {t.first_name} {t.last_name}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-[10px] text-xs text-brand-body">
+                          {t.email}
+                        </td>
+                        <td className="px-4 py-[10px]">
+                          {statusBadge(t.status)}
+                        </td>
+                        <td className="px-4 py-[10px] text-brand-muted text-base">
+                          ›
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
-              {teachers.filter(
-                (t) =>
-                  !teacherSearchQuery ||
-                  `${t.first_name} ${t.last_name}`
-                    .toLowerCase()
-                    .includes(teacherSearchQuery.toLowerCase()),
-              ).length === 0 && (
+              {filteredTeachers.length === 0 && (
                 <div className="py-12 text-center text-brand-muted text-sm">
                   No teachers yet.
                 </div>
               )}
+              <PaginationBar
+                page={teacherPage}
+                totalItems={filteredTeachers.length}
+                onPage={setTeacherPage}
+              />
             </div>
           )}
         </>

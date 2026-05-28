@@ -135,7 +135,7 @@ async def list_users(
     school_id: uuid.UUID,
     role: UserRole | None = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=500),
     is_active: bool | None = Query(None, description="Filter by active status. None defaults to active users only."),
     # require_full_access guards against password_setup-scoped tokens (security gap fix).
     # require_role enforces that only SCHOOL_ADMIN or KAIHLE_ADMIN may list users.

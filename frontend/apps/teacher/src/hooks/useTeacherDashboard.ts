@@ -1,5 +1,5 @@
 import { useQuery, useQueries } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuthStore } from "@kaihle/auth";
 import { PendingAction } from "../pages/dashboard/PendingActionBanner";
 
 export interface TeacherClass {
@@ -74,11 +74,15 @@ export function useSubjects() {
 }
 
 export function useTeacherDashboard(schoolId: string | null) {
+  // Include userId in all query keys so teachers in the same school
+  // never share a cache entry. (schoolId alone is not unique per user.)
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+
   const gradesQuery = useGrades();
   const subjectsQuery = useSubjects();
 
   const classesQuery = useQuery<ClassResponse[]>({
-    queryKey: ["teacher", "classes", schoolId],
+    queryKey: ["teacher", "classes", schoolId, userId],
     queryFn: () =>
       apiClient
         .get(`/api/v1/schools/${schoolId}/classes`)
@@ -102,7 +106,7 @@ export function useTeacherDashboard(schoolId: string | null) {
   // Parallel summary calls — one per class
   const summaryQueries = useQueries({
     queries: classes.map((c) => ({
-      queryKey: ["teacher", "class-summary", c.id],
+      queryKey: ["teacher", "class-summary", c.id, userId],
       queryFn: () =>
         apiClient
           .get(`/api/v1/classes/${c.id}/summary`)

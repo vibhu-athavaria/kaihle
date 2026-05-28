@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@kaihle/auth";
+import { apiClient, useAuthStore } from "@kaihle/auth";
 
 export interface TeacherClassSummary {
   id: string;
@@ -57,8 +57,10 @@ export function useTeacherClasses(
   schoolId: string | null,
   includeSummary: boolean | false,
 ) {
+  // Include userId so teachers in the same school never share a cache entry.
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   return useQuery({
-    queryKey: ["teacher", "classes-summary", schoolId],
+    queryKey: ["teacher", "classes-summary", schoolId, userId],
     queryFn: () => fetchTeacherClasses(schoolId!, includeSummary),
     enabled: !!schoolId,
     staleTime: 5 * 60 * 1000,
