@@ -27,7 +27,7 @@ from app.core.database import CeleryAsyncSessionLocal
 from app.models.curriculum import Grade, Subject, Subtopic
 from app.models.lesson_plan import LessonPlan, LessonPlanFailureCode, LessonPlanStatus
 from app.models.onboarding import StudentLearningProfile
-from app.models.school import Class, ClassEnrollment
+from app.models.school import Class, ClassEnrollment, School
 from app.models.user import User
 from app.schemas.lesson_plan_content import LessonPlanContent
 from app.tasks.celery_app import celery_app
@@ -185,8 +185,13 @@ async def _generate(
 
     grade = await db.get(Grade, cls.grade_id) if cls.grade_id else None
     subject = await db.get(Subject, cls.subject_id) if cls.subject_id else None
+    school = await db.get(School, cls.school_id)
     grade_name = grade.name if grade else "Unknown Grade"
     subject_name = subject.name if subject else "Unknown Subject"
+    school_location = {
+        "city": school.city if school else None,
+        "country": school.country if school else None,
+    }
 
     # ── Learning profiles (StudentLearningProfile only — no GapState) ─────────
     enrolled_result = await db.execute(
@@ -226,6 +231,7 @@ async def _generate(
         subtopics=subtopics_for_prompt,
         modality_distribution=class_context["modality_distribution"],
         top_interests=class_context["top_interests"],
+        school_location=school_location,
     )
 
     # ── LLM call (streaming for reliability on long outputs) ──────────────────

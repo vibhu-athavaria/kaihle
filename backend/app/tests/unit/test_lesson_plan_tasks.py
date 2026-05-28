@@ -47,13 +47,25 @@ def _make_valid_content() -> dict:
     }
 
 
-def _build_mock_db(plan: MagicMock, class_id: uuid.UUID | None = None) -> AsyncMock:
+def _make_school(city: str | None = "Bangkok", country: str | None = "Thailand") -> MagicMock:
+    school = MagicMock()
+    school.city = city
+    school.country = country
+    return school
+
+
+def _build_mock_db(
+    plan: MagicMock,
+    class_id: uuid.UUID | None = None,
+    school: MagicMock | None = None,
+) -> AsyncMock:
     """Build a mock DB session with standard execute side effects."""
     mock_class = MagicMock()
     mock_class.id = class_id or uuid.uuid4()
     mock_class.name = "7A Science"
     mock_class.grade_id = uuid.uuid4()
     mock_class.subject_id = uuid.uuid4()
+    mock_class.school_id = uuid.uuid4()
 
     grade = MagicMock()
     grade.name = "Grade 7"
@@ -91,7 +103,7 @@ def _build_mock_db(plan: MagicMock, class_id: uuid.UUID | None = None) -> AsyncM
             subtopics_result,
         ]
     )
-    mock_db.get = AsyncMock(side_effect=[grade, subject])
+    mock_db.get = AsyncMock(side_effect=[grade, subject, school or _make_school()])
     mock_db.commit = AsyncMock()
     return mock_db
 
@@ -324,3 +336,151 @@ async def test_generate_when_rate_limit_error_then_reraises_for_celery_retry() -
     # Plan must remain in GENERATING — Celery will retry
     assert plan.status == "GENERATING"
     mock_db.commit.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# School location in prompt
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_generate_when_school_has_city_and_country_then_prompt_includes_location() -> None:
+    """School city + country are injected into the rendered prompt sent to the LLM."""
+    from app.tasks.lesson_plan_tasks import _generate
+
+    plan = _make_plan()
+    school = _make_school(city="Kuala Lumpur", country="Malaysia")
+    mock_db = _build_mock_db(plan, school=school)
+    valid_text = json.dumps(_make_valid_content())
+
+    captured_calls: list = []
+
+    async def _capture_complete(**kwargs: object) -> str:
+        captured_calls.append(kwargs)
+        return valid_text
+
+    with (
+        patch("app.tasks.lesson_plan_tasks.send_lesson_plan_ready_email"),
+        patch("app.ai.providers.router.complete", new=_capture_complete),
+        patch("app.tasks.lesson_plan_tasks._fetch_teacher_email", new=AsyncMock(return_value="t@test.com")),
+    ):
+        await _generate(
+            lesson_plan_id=str(plan.id),
+            class_id=str(uuid.uuid4()),
+            focus_subtopic_ids=[],
+            duration_minutes=60,
+            teacher_id=str(uuid.uuid4()),
+            db=mock_db,
+        )
+
+    assert captured_calls, "LLM was never called"
+    prompt_text = captured_calls[0]["messages"][0]["content"]
+    assert "Kuala Lumpur" in prompt_text
+    assert "Malaysia" in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_generate_when_school_has_no_location_then_prompt_omits_location_section() -> None:
+    """When school city and country are both None, no location block appears in the prompt."""
+    from app.tasks.lesson_plan_tasks import _generate
+
+    plan = _make_plan()
+    school = _make_school(city=None, country=None)
+    mock_db = _build_mock_db(plan, school=school)
+    valid_text = json.dumps(_make_valid_content())
+
+    captured_calls: list = []
+
+    async def _capture_complete(**kwargs: object) -> str:
+        captured_calls.append(kwargs)
+        return valid_text
+
+    with (
+        patch("app.tasks.lesson_plan_tasks.send_lesson_plan_ready_email"),
+        patch("app.ai.providers.router.complete", new=_capture_complete),
+        patch("app.tasks.lesson_plan_tasks._fetch_teacher_email", new=AsyncMock(return_value="t@test.com")),
+    ):
+        await _generate(
+            lesson_plan_id=str(plan.id),
+            class_id=str(uuid.uuid4()),
+            focus_subtopic_ids=[],
+            duration_minutes=60,
+            teacher_id=str(uuid.uuid4()),
+            db=mock_db,
+        )
+
+    assert captured_calls, "LLM was never called"
+    prompt_text = captured_calls[0]["messages"][0]["content"]
+    assert "School location" not in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_generate_when_school_has_country_only_then_prompt_includes_country_without_none() -> None:
+    """When only country is set (city is None), prompt shows country and never the word 'None'."""
+    from app.tasks.lesson_plan_tasks import _generate
+
+    plan = _make_plan()
+    school = _make_school(city=None, country="Singapore")
+    mock_db = _build_mock_db(plan, school=school)
+    valid_text = json.dumps(_make_valid_content())
+
+    captured_calls: list = []
+
+    async def _capture_complete(**kwargs: object) -> str:
+        captured_calls.append(kwargs)
+        return valid_text
+
+    with (
+        patch("app.tasks.lesson_plan_tasks.send_lesson_plan_ready_email"),
+        patch("app.ai.providers.router.complete", new=_capture_complete),
+        patch("app.tasks.lesson_plan_tasks._fetch_teacher_email", new=AsyncMock(return_value="t@test.com")),
+    ):
+        await _generate(
+            lesson_plan_id=str(plan.id),
+            class_id=str(uuid.uuid4()),
+            focus_subtopic_ids=[],
+            duration_minutes=60,
+            teacher_id=str(uuid.uuid4()),
+            db=mock_db,
+        )
+
+    assert captured_calls, "LLM was never called"
+    prompt_text = captured_calls[0]["messages"][0]["content"]
+    assert "Singapore" in prompt_text
+    assert "None" not in prompt_text
+
+
+@pytest.mark.asyncio
+async def test_generate_when_school_has_city_only_then_prompt_includes_city_without_none() -> None:
+    """When only city is set (country is None), prompt shows city and never the word 'None'."""
+    from app.tasks.lesson_plan_tasks import _generate
+
+    plan = _make_plan()
+    school = _make_school(city="Jakarta", country=None)
+    mock_db = _build_mock_db(plan, school=school)
+    valid_text = json.dumps(_make_valid_content())
+
+    captured_calls: list = []
+
+    async def _capture_complete(**kwargs: object) -> str:
+        captured_calls.append(kwargs)
+        return valid_text
+
+    with (
+        patch("app.tasks.lesson_plan_tasks.send_lesson_plan_ready_email"),
+        patch("app.ai.providers.router.complete", new=_capture_complete),
+        patch("app.tasks.lesson_plan_tasks._fetch_teacher_email", new=AsyncMock(return_value="t@test.com")),
+    ):
+        await _generate(
+            lesson_plan_id=str(plan.id),
+            class_id=str(uuid.uuid4()),
+            focus_subtopic_ids=[],
+            duration_minutes=60,
+            teacher_id=str(uuid.uuid4()),
+            db=mock_db,
+        )
+
+    assert captured_calls, "LLM was never called"
+    prompt_text = captured_calls[0]["messages"][0]["content"]
+    assert "Jakarta" in prompt_text
+    assert "None" not in prompt_text
