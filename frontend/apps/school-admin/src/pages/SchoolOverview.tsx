@@ -39,7 +39,7 @@ function subjectShortLabel(subject: string): string {
 
 export function SchoolOverview() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { data: analytics, isLoading, isError } = useSchoolAnalytics();
   const { data: classes = [] } = useSchoolClasses();
 
@@ -65,6 +65,7 @@ export function SchoolOverview() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Overview"
         permissions={user?.permissions}
       >
@@ -91,6 +92,7 @@ export function SchoolOverview() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Overview"
         permissions={user?.permissions}
       >
@@ -103,6 +105,7 @@ export function SchoolOverview() {
   return (
     <DashboardLayout
       variant="school-admin"
+      onLogout={logout}
       pageTitle="Overview"
       permissions={user?.permissions}
     >

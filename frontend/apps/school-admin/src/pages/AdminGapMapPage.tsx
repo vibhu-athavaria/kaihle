@@ -17,7 +17,7 @@ interface GapMapData {
 export function AdminGapMapPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["class-gap-map", classId],
@@ -37,6 +37,7 @@ export function AdminGapMapPage() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Gap Map"
         permissions={user?.permissions}
       >
@@ -49,6 +50,7 @@ export function AdminGapMapPage() {
   return (
     <DashboardLayout
       variant="school-admin"
+      onLogout={logout}
       pageTitle="Gap Map"
       permissions={user?.permissions}
     >

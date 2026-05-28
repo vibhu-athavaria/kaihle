@@ -10,6 +10,7 @@ interface DashboardLayoutProps {
   topNavAction?: React.ReactNode;
   onLogout?: () => void;
   permissions?: Record<string, boolean> | null;
+  settingsHref?: string;
 }
 
 export function DashboardLayout({
@@ -20,9 +21,13 @@ export function DashboardLayout({
   topNavAction,
   onLogout,
   permissions,
+  settingsHref,
 }: DashboardLayoutProps) {
   const bgClass =
     variant === "teacher" ? "bg-role-teacher-bg" : "bg-role-school-bg";
+
+  const defaultSettingsHref =
+    variant === "teacher" ? "/teacher/settings" : "/school-admin/settings";
 
   return (
     <div className={`flex h-screen overflow-hidden ${bgClass}`}>
@@ -30,6 +35,7 @@ export function DashboardLayout({
         variant={variant}
         onLogout={onLogout}
         permissions={permissions}
+        settingsHref={settingsHref ?? defaultSettingsHref}
       />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <TopNav

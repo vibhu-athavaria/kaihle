@@ -32,6 +32,7 @@ export { OnboardingLayout } from "./layouts/OnboardingLayout";
 
 export { NavItem, Sidebar, TopNav, BottomNav } from "./components/nav";
 
+export { useSidebarCollapsed } from "./hooks/useSidebarCollapsed";
 export { ErrorBoundary } from "./components/ErrorBoundary";
 export { toast } from "./toast";
 export { Toaster } from "sonner";

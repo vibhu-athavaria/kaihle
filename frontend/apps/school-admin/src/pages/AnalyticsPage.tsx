@@ -18,7 +18,7 @@ function periodDates(p: Period): { from: string; to: string } {
 
 export function AnalyticsPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [period, setPeriod] = useState<Period>("month");
   const { from, to } = periodDates(period);
   const { data, isLoading, isError } = useSchoolAnalytics(from, to);
@@ -65,6 +65,7 @@ export function AnalyticsPage() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Analytics"
         permissions={user?.permissions}
       >
@@ -82,6 +83,7 @@ export function AnalyticsPage() {
     return (
       <DashboardLayout
         variant="school-admin"
+        onLogout={logout}
         pageTitle="Analytics"
         permissions={user?.permissions}
       >
@@ -94,6 +96,7 @@ export function AnalyticsPage() {
   return (
     <DashboardLayout
       variant="school-admin"
+      onLogout={logout}
       pageTitle="Analytics"
       permissions={user?.permissions}
     >
