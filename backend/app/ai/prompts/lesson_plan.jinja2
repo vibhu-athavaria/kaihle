@@ -15,6 +15,12 @@ You are an expert lesson planning assistant. Design a practical, immediately-usa
 - (No specific subtopics selected — design a general lesson for the class)
 {% endif %}
 
+{% if school_location and (school_location.city or school_location.country) %}
+## School location
+This school is located in {{ [school_location.city, school_location.country] | select | join(", ") }}.
+Where it naturally fits — real-world examples, word problems, cultural references, local landmarks — ground activities and examples in this local context. Do NOT force it: only use local references when they genuinely make the lesson more relatable or concrete. Never sacrifice pedagogical clarity for localization.
+{% endif %}
+
 ## Class learning profile
 {% if modality_distribution %}
 Learning modality breakdown (use the dominant modality to shape HOW you teach):
@@ -44,7 +50,7 @@ The class will split into three groups during the main activity. Design differen
 - Plenary: {{ (duration_minutes * 0.15) | round | int }} min
 
 ## Field-by-field instructions
-- `lesson_hook`: One compelling, surprising sentence that makes students curious — connects to their interests. DO NOT start with "Today we will learn".
+- `lesson_hook`: One compelling, surprising sentence that makes students curious — connects to their interests. If the school location is known, ground the hook in something local and familiar to students. DO NOT start with "Today we will learn".
 - `learning_objectives`: "I can..." statements for the board. 2–3 objectives only.
 - `key_concepts`: 2–4 concepts in teaching sequence. Each must have:
   - `teacher_does`: Specific, named teacher actions — what to write/draw/ask/demonstrate.
