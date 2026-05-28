@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     llm_mini_course_model: str = "openrouter/google/gemini-2.0-flash-001"
     llm_mini_course_api_base: str | None = None
 
+    llm_transfer_question_model: str = "openrouter/google/gemini-2.0-flash-001"
+    llm_transfer_question_api_base: str | None = None
+
+    llm_grade_open_answer_model: str = "openrouter/google/gemini-2.0-flash-001"
+    llm_grade_open_answer_api_base: str | None = None
+
     # Notification recipients
     kaihle_admin_email: str = ""
 

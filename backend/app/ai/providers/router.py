@@ -49,6 +49,8 @@ TASK_MODEL_MAP: dict[str, str] = {
     "explain_this": settings.llm_explain_this_model,
     "mini_course_explanation": settings.llm_mini_course_model,
     "content_seed": settings.llm_content_seed_model,
+    "transfer_question": settings.llm_transfer_question_model,
+    "grade_open_answer": settings.llm_grade_open_answer_model,
 }
 
 TASK_API_BASE_MAP: dict[str, str | None] = {
@@ -62,6 +64,8 @@ TASK_API_BASE_MAP: dict[str, str | None] = {
     "explain_this": settings.llm_explain_this_api_base,
     "mini_course_explanation": settings.llm_mini_course_api_base,
     "content_seed": settings.llm_content_seed_api_base,
+    "transfer_question": settings.llm_transfer_question_api_base,
+    "grade_open_answer": settings.llm_grade_open_answer_api_base,
 }
 
 

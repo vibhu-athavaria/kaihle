@@ -29,7 +29,13 @@ from app.models.curriculum import (
 from app.models.gap import GapState
 from app.models.interest_category import InterestCategory
 from app.models.lesson_plan import LessonPlan
-from app.models.mini_course import MiniCourseStudentOverride, SubtopicContentFeedback, SubtopicCourseProgress
+from app.models.mini_course import (
+    MiniCourseChatMessage,
+    MiniCourseQuizResponse,
+    MiniCourseStudentOverride,
+    SubtopicContentFeedback,
+    SubtopicCourseProgress,
+)
 from app.models.onboarding import StudentLearningProfile
 from app.models.parent import ParentReportSnapshot
 from app.models.school import Class, ClassEnrollment, School, SchoolCurriculum
@@ -89,4 +95,6 @@ __all__ = [
     "SubtopicCourseProgress",
     "SubtopicContentFeedback",
     "MiniCourseStudentOverride",
+    "MiniCourseChatMessage",
+    "MiniCourseQuizResponse",
 ]

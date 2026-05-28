@@ -10,10 +10,16 @@ Routes:
 - POST /api/v1/students/me/subtopics/{subtopic_id}/course/progress  - Mark mini-course progress
 - POST /api/v1/students/me/subtopics/{subtopic_id}/course/quiz      - Submit quiz answers and record score
 - POST /api/v1/students/me/subtopics/{subtopic_id}/explain - SSE streaming explanation
+- GET  /api/v1/students/me/subtopics/{subtopic_id}/chat   - Chat history for a subtopic
+- POST /api/v1/students/me/subtopics/{subtopic_id}/chat   - Send a chat message
+- POST /api/v1/students/me/subtopics/{subtopic_id}/transfer-question - Generate AI transfer question
+- POST /api/v1/students/me/subtopics/{subtopic_id}/grade-answer      - Grade open-ended answer
 - POST /api/v1/students/me/subtopic-content/{content_id}/feedback - Submit thumbs up/down feedback
 - GET  /api/v1/students/{student_id}       - Full student detail (school admin)
 """
 
+import json
+from collections.abc import AsyncGenerator
 from uuid import UUID
 
 import structlog
@@ -27,13 +33,18 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, get_current_user, require_role
 from app.models.user import User, UserRole
 from app.schemas.mini_course import (
+    ChatHistoryResponse,
+    ChatRequest,
     FeedbackRequest,
     FeedbackResponse,
+    GradeAnswerRequest,
+    GradeAnswerResponse,
     MarkProgressRequest,
     QuizSubmitRequest,
     QuizSubmitResponse,
     StudentCourseProgressResponse,
     SubtopicCourseResponse,
+    TransferQuestionResponse,
 )
 from app.schemas.student_dashboard import DashboardResponse
 from app.schemas.students import (
@@ -47,7 +58,7 @@ from app.schemas.students import (
     StudentInfoResponse,
 )
 from app.schemas.user_detail import StudentDetailResponse
-from app.services.concept_guide_service import explain_subtopic_question
+from app.services.concept_guide_service import explain_subtopic_question, stream_chat_reply
 from app.services.mini_course_service import MiniCourseService
 from app.services.student_dashboard_service import StudentDashboardService
 from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
@@ -394,6 +405,187 @@ async def explain_subtopic(
         generator,
         media_type="text/event-stream",
         headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
+
+
+@router.get("/me/subtopics/{subtopic_id}/chat", response_model=ChatHistoryResponse)
+async def get_subtopic_chat_history(
+    subtopic_id: UUID = Path(..., description="Subtopic ID"),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChatHistoryResponse:
+    """Return up to 50 chat messages for this student+subtopic, oldest first.
+
+    Auth: STUDENT role only.
+
+    Raises:
+        403: If user is not a student or has no school.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    return await MiniCourseService(db).get_chat_history(
+        student_id=current_user.id,
+        subtopic_id=subtopic_id,
+        school_id=current_user.school_id,
+    )
+
+
+@router.post("/me/subtopics/{subtopic_id}/chat", status_code=status.HTTP_200_OK)
+async def send_subtopic_chat_message(
+    subtopic_id: UUID = Path(..., description="Subtopic ID"),
+    body: ChatRequest = Body(...),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Stream the AI tutor reply and persist both the student and AI messages.
+
+    Returns an SSE stream with two event types:
+    - {"type": "chunk", "delta": "<text>"} — incremental AI reply text
+    - {"type": "done", "messages": [...]}  — terminal event with full persisted history
+
+    The student message is saved before streaming starts. The AI reply is saved
+    after the stream exhausts, then the terminal event is emitted.
+
+    Auth: STUDENT role only.
+
+    Raises:
+        403: If user is not a student or has no school.
+        404: If subtopic not found.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    service = MiniCourseService(db)
+    student_id = current_user.id
+    school_id = current_user.school_id
+
+    # Save student message before streaming
+    await service.save_chat_message(
+        student_id=student_id,
+        subtopic_id=subtopic_id,
+        school_id=school_id,
+        role="student",
+        content=body.question,
+    )
+
+    # Load last 10 messages (5 exchanges) for multi-turn context
+    history = await service.get_chat_history(student_id=student_id, subtopic_id=subtopic_id, school_id=school_id)
+    # Exclude the student message we just saved (last item) — it's the current question
+    prior_turns = [
+        {"role": "user" if m.role == "student" else "assistant", "content": m.content}
+        for m in history.messages[-11:-1]  # up to 10 prior messages, skip just-saved one
+    ]
+
+    async def event_stream() -> AsyncGenerator[str, None]:
+        chunks: list[str] = []
+        async for sse_line in stream_chat_reply(
+            subtopic_id=subtopic_id,
+            student_id=student_id,
+            school_id=school_id,
+            question=body.question,
+            prior_messages=prior_turns,
+            db=db,
+        ):
+            # stream_sse yields "data: <text>\n\n" or "data: [DONE]\n\n"
+            if sse_line == "data: [DONE]\n\n":
+                break
+            raw = sse_line.removeprefix("data: ").rstrip("\n")
+            if raw:
+                chunks.append(raw)
+                yield f"data: {json.dumps({'type': 'chunk', 'delta': raw})}\n\n"
+
+        # Persist the complete AI reply
+        full_reply = "".join(chunks)
+        if full_reply:
+            await service.save_chat_message(
+                student_id=student_id,
+                subtopic_id=subtopic_id,
+                school_id=school_id,
+                role="ai",
+                content=full_reply,
+            )
+
+        # Emit terminal event with full updated history
+        updated = await service.get_chat_history(student_id=student_id, subtopic_id=subtopic_id, school_id=school_id)
+        payload = {
+            "type": "done",
+            "messages": [
+                {"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()} for m in updated.messages
+            ],
+        }
+        yield f"data: {json.dumps(payload)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.post(
+    "/me/subtopics/{subtopic_id}/transfer-question",
+    response_model=TransferQuestionResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def generate_transfer_question(
+    subtopic_id: UUID = Path(..., description="Subtopic ID"),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TransferQuestionResponse:
+    """Generate a personalised AI transfer question for this subtopic.
+
+    Auth: STUDENT role only.
+
+    Raises:
+        403: If user is not a student or has no school.
+        404: If subtopic not found.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    return await MiniCourseService(db).generate_transfer_question(
+        subtopic_id=subtopic_id,
+        student_id=current_user.id,
+    )
+
+
+@router.post(
+    "/me/subtopics/{subtopic_id}/grade-answer",
+    response_model=GradeAnswerResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def grade_open_answer(
+    subtopic_id: UUID = Path(..., description="Subtopic ID"),
+    body: GradeAnswerRequest = Body(...),
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GradeAnswerResponse:
+    """Grade a student's open-ended answer using AI.
+
+    Persists the result, recomputes the aggregate course score, and returns
+    the grade (correct/partial/incorrect), feedback, score, and updated course score.
+
+    Auth: STUDENT role only.
+
+    Raises:
+        403: If user is not a student or has no school.
+        404: If subtopic not found.
+        422: If question or answer exceeds character limits.
+    """
+    if current_user.role != UserRole.STUDENT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only students can access this endpoint")
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student has no school")
+
+    return await MiniCourseService(db).grade_open_answer(
+        subtopic_id=subtopic_id,
+        student_id=current_user.id,
+        school_id=current_user.school_id,
+        question_text=body.question_text,
+        student_answer=body.student_answer,
     )
 
 

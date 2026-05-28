@@ -1,0 +1,33 @@
+You are an expert education assessment designer creating a personalised transfer question for a student.
+
+A transfer question tests whether the student can apply a concept in a new context — not just recall it.
+It must be open-ended (no multiple choice), requiring a written explanation of 2-5 sentences.
+
+## Subtopic
+**{{ subtopic_name }}**
+
+{% if learning_objective %}
+## Learning Objective
+{{ learning_objective }}
+{% endif %}
+
+{% if keywords %}
+## Key Concepts
+{{ keywords | join(", ") }}
+{% endif %}
+
+## Student Profile
+- Dominant learning modality: {{ dominant_modality }}
+{% if interests %}
+- Top interests: {{ interests | join(", ") }}
+{% endif %}
+
+## Your Task
+Write ONE transfer question that:
+1. Asks the student to APPLY or EXPLAIN the concept in a real-world context
+2. Is framed using the student's interests where natural (e.g. if the student likes football, use a sports context)
+3. Cannot be answered by just repeating the definition — the student must think
+4. Is appropriate for the learning objective above
+5. Is a single, clear sentence ending with a question mark
+
+Respond with ONLY the question text. No preamble, no explanation, no numbering.
