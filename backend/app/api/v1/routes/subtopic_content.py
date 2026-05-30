@@ -10,7 +10,7 @@ Endpoints:
 3. PATCH /{subtopic_id}/videos/{video_index}  — approve/reject a video candidate
 4. POST  /{subtopic_id}/videos                — add a manual video entry
 5. POST  /{subtopic_id}/videos/refresh        — re-run YouTube search, append new candidates
-6. POST  /{subtopic_id}/quiz/generate         — LLM-generate quiz when none exists (or regenerate)
+6. POST  /{subtopic_id}/quiz/admin-generate    — LLM-generate quiz when none exists (or regenerate) — KaihleAdmin only
 7. PATCH /{subtopic_id}/explanation           — edit explanation text + approve/reject
 8. PATCH /{subtopic_id}/quiz                  — edit quiz questions + approve/reject
 """
@@ -69,6 +69,7 @@ from app.schemas.subtopic_content import (
 )
 from app.services.youtube_service import search_youtube_videos
 from app.tasks.content_tasks import generate_personalised_explanations
+from app.tasks.teacher_content_tasks import generate_teacher_requested_content
 
 logger = structlog.get_logger()
 
@@ -854,7 +855,7 @@ async def update_quiz(
 
 
 # ---------------------------------------------------------------------------
-# POST /{subtopic_id}/quiz/generate
+# POST /{subtopic_id}/quiz/admin-generate
 # ---------------------------------------------------------------------------
 
 _QUIZ_GENERATE_PROMPT = """Generate 5 multiple-choice quiz questions for the following subtopic.
@@ -886,16 +887,18 @@ Respond with ONLY a valid JSON object, no markdown, no extra keys:
 """
 
 
-@router.post("/{subtopic_id}/quiz/generate", response_model=FullSubtopicContentReviewResponse)
+@router.post("/{subtopic_id}/quiz/admin-generate", response_model=FullSubtopicContentReviewResponse)
 async def generate_quiz(
     subtopic_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> FullSubtopicContentReviewResponse:
-    """LLM-generate (or regenerate) quiz questions for a subtopic.
+    """LLM-generate (or regenerate) curriculum-scope quiz questions for a subtopic — KaihleAdmin only.
 
     Creates the practice content row when it doesn't exist.
     Overwrites existing questions if called again — use PATCH /quiz to edit specific questions.
+    Renamed from /quiz/generate to avoid routing conflict with the teacher
+    POST /{subtopic_id}/{content_type}/generate endpoint.
     """
     subtopic = await _get_subtopic_with_meta(subtopic_id, db)
     ct = subtopic.curriculum_topic  # type: ignore[attr-defined]
@@ -979,13 +982,28 @@ async def generate_quiz(
 
 
 def _content_type_status(row: SubtopicContent | None, school_id: uuid.UUID | None) -> ContentTypeStatus:
-    """Compute status token for one content type row as seen by a teacher."""
+    """Compute semantic status token for one content type row as seen by a teacher.
+
+    Maps (scope, school_id, review_status) to a single token the frontend understands:
+      curriculum + pending   → "curriculum_pending"
+      curriculum + approved  → "approved"
+      curriculum + rejected  → "rejected"
+      own school + pending   → "own_school_pending"
+      own school + approved  → "approved"
+      own school + rejected  → "rejected"
+      other school           → "other_school_pending"
+      no row                 → "none"
+    """
     if row is None:
         return ContentTypeStatus(status="none")
     if row.scope == "curriculum":
+        if row.review_status == "pending":
+            return ContentTypeStatus(status="curriculum_pending", scope="curriculum")
         return ContentTypeStatus(status=row.review_status, scope="curriculum")
     # school-scoped
     if row.school_id == school_id:
+        if row.review_status == "pending":
+            return ContentTypeStatus(status="own_school_pending", scope="school", school_id=row.school_id)
         return ContentTypeStatus(status=row.review_status, scope="school", school_id=row.school_id)
     return ContentTypeStatus(status="other_school_pending", scope="school", school_id=row.school_id)
 
@@ -1097,6 +1115,12 @@ async def teacher_generate_content(
     db.add(placeholder)
     await db.commit()
 
+    generate_teacher_requested_content.delay(
+        subtopic_id=str(subtopic_id),
+        content_type=content_type,
+        school_id=str(current_user.school_id),
+    )
+
     logger.info(
         "teacher_content_generation_requested",
         subtopic_id=str(subtopic_id),
@@ -1105,6 +1129,89 @@ async def teacher_generate_content(
         teacher_id=str(current_user.id),
     )
     return {"status": "accepted", "message": "Content generation queued"}
+
+
+@router.get("/{subtopic_id}/video/candidates")
+async def get_teacher_video_candidates(
+    subtopic_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, object]]:
+    """Return all video candidates from the teacher's school-scoped row for review.
+
+    Unlike GET /{subtopic_id}/videos (which returns only KaihleAdmin-approved entries),
+    this returns all candidates — including pending ones — so the teacher can review
+    what was generated before deciding to approve or reject the content row.
+    Falls back to the curriculum row when no school-scoped row exists.
+    """
+    assert current_user.school_id is not None
+    await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == "video",
+        )
+    )
+    rows = result.scalars().all()
+
+    own_row: SubtopicContent | None = None
+    curriculum_row: SubtopicContent | None = None
+    for row in rows:
+        if row.scope == "school" and row.school_id == current_user.school_id:
+            own_row = row
+        elif row.scope == "curriculum":
+            curriculum_row = row
+
+    content = own_row or curriculum_row
+    if content is None or not content.videos:
+        return []
+
+    return list(content.videos)
+
+
+@router.get("/{subtopic_id}/quiz/questions")
+async def get_teacher_quiz_questions(
+    subtopic_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, object]:
+    """Return the school-scoped quiz questions for teacher review.
+
+    Returns the pending school-scoped row so the teacher can read the questions
+    before deciding to approve or reject. Falls back to the curriculum row if
+    no school-scoped row exists.
+    """
+    assert current_user.school_id is not None
+    await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == "quiz",
+        )
+    )
+    rows = result.scalars().all()
+
+    # Prefer own-school row; fall back to curriculum row
+    own_row: SubtopicContent | None = None
+    curriculum_row: SubtopicContent | None = None
+    for row in rows:
+        if row.scope == "school" and row.school_id == current_user.school_id:
+            own_row = row
+        elif row.scope == "curriculum":
+            curriculum_row = row
+
+    content = own_row or curriculum_row
+    if content is None:
+        return {"questions": [], "quiz_questions_count": 0}
+
+    return {
+        "questions": content.quiz_questions or [],
+        "quiz_questions_count": content.quiz_questions_count or 0,
+        "review_status": content.review_status,
+        "scope": content.scope,
+    }
 
 
 @router.patch("/{subtopic_id}/{content_type}/approve")

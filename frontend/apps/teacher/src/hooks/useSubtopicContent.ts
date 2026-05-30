@@ -156,7 +156,36 @@ export function useSubmitExplanationSuggestion() {
   });
 }
 
-// ── Approved videos for a subtopic (teacher view) ──────────────────────────
+export interface QuizQuestion {
+  question_id: string;
+  question_text: string;
+  options: string[];
+  correct_answer: string;
+  explanation: string;
+  difficulty_level: number | null;
+}
+
+export interface TeacherQuizQuestionsResponse {
+  questions: QuizQuestion[];
+  quiz_questions_count: number;
+  review_status: string;
+  scope: string;
+}
+
+export function useTeacherQuizQuestions(subtopicId: string | undefined) {
+  return useQuery<TeacherQuizQuestionsResponse>({
+    queryKey: ["teacher", "quiz-questions", subtopicId],
+    queryFn: async () => {
+      const res = await apiClient.get(
+        `/api/v1/subtopic-content/${subtopicId}/quiz/questions`,
+      );
+      return res.data as TeacherQuizQuestionsResponse;
+    },
+    enabled: !!subtopicId,
+  });
+}
+
+// ── Approved videos for a subtopic (student/teacher approved view) ─────────
 
 export function useSubtopicVideos(subtopicId: string | undefined) {
   return useQuery<ApprovedVideo[]>({
@@ -166,6 +195,31 @@ export function useSubtopicVideos(subtopicId: string | undefined) {
         `/api/v1/subtopic-content/${subtopicId}/videos`,
       );
       return res.data as ApprovedVideo[];
+    },
+    enabled: !!subtopicId,
+  });
+}
+
+// ── All video candidates for teacher review (includes pending) ──────────────
+
+export interface VideoCandidateEntry {
+  url: string;
+  title: string;
+  channel: string;
+  status: string;
+  thumbnail_url?: string | null;
+  duration_seconds?: number | null;
+  view_count?: number | null;
+}
+
+export function useSubtopicVideoCandidates(subtopicId: string | undefined) {
+  return useQuery<VideoCandidateEntry[]>({
+    queryKey: ["subtopic-video-candidates", subtopicId],
+    queryFn: async () => {
+      const res = await apiClient.get(
+        `/api/v1/subtopic-content/${subtopicId}/video/candidates`,
+      );
+      return res.data as VideoCandidateEntry[];
     },
     enabled: !!subtopicId,
   });

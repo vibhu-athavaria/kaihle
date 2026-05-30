@@ -12,10 +12,13 @@ import {
   useSubtopicContentStatus,
   useSubtopicExplanations,
   useSubtopicVideos,
+  useSubtopicVideoCandidates,
   useTeacherApproveContent,
+  useTeacherQuizQuestions,
   useSubmitExplanationSuggestion,
   type PersonalisedExplanation,
   type ContentStatus,
+  type QuizQuestion,
 } from "../hooks/useSubtopicContent";
 import { Badge, Button, EmptyState, Skeleton, toast } from "@kaihle/ui";
 
@@ -433,6 +436,18 @@ function VideoCard({
   );
 }
 
+function GeneratingPlaceholder({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 bg-brand-gold/10 border border-amber-200 rounded-lg w-fit">
+      <Loader2
+        className="w-3.5 h-3.5 animate-spin text-brand-gold"
+        aria-hidden="true"
+      />
+      <span className="text-xs font-medium text-brand-gold-dark">{label}</span>
+    </div>
+  );
+}
+
 function VideoTab({
   status,
   subtopicId,
@@ -441,10 +456,17 @@ function VideoTab({
   subtopicId: string;
 }) {
   const approveContent = useTeacherApproveContent();
-  // Only fetch the video list once approved — no point loading candidates
-  const { data: videos, isLoading: videosLoading } = useSubtopicVideos(
-    status === "approved" ? subtopicId : undefined,
-  );
+
+  // For own-school pending rows, fetch all candidates (including pending) for review.
+  // For approved rows, fetch only the KaihleAdmin-approved entries.
+  const isOwnPending = status === "own_school_pending";
+  const { data: candidates, isLoading: candidatesLoading } =
+    useSubtopicVideoCandidates(isOwnPending ? subtopicId : undefined);
+  const { data: approvedVideos, isLoading: approvedLoading } =
+    useSubtopicVideos(status === "approved" ? subtopicId : undefined);
+
+  const videosLoading = isOwnPending ? candidatesLoading : approvedLoading;
+  const videoList = isOwnPending ? candidates : approvedVideos;
 
   if (status === "none") {
     return (
@@ -514,50 +536,80 @@ function VideoTab({
               ? "Videos are being reviewed by the Kaihle platform team."
               : status === "rejected"
                 ? "Videos were rejected. Generate new candidates from the class page."
-                : "Videos are pending your review."}
+                : "Review the candidates below, then approve or reject."}
           </p>
         )}
       </div>
 
-      {status === "approved" &&
-        (videosLoading ? (
-          <div className="space-y-3">
-            {[1, 2].map((i) => (
-              <div
-                key={i}
-                className="animate-pulse rounded-xl overflow-hidden border border-brand-border"
-              >
-                <div className="aspect-video bg-gray-100" />
-                <div className="p-4 space-y-2">
-                  <div className="h-4 bg-gray-100 rounded w-3/4" />
-                  <div className="h-3 bg-gray-100 rounded w-1/4" />
-                </div>
+      {videosLoading ? (
+        <div className="space-y-3">
+          {[1, 2].map((i) => (
+            <div
+              key={i}
+              className="animate-pulse rounded-xl overflow-hidden border border-brand-border"
+            >
+              <div className="aspect-video bg-gray-100" />
+              <div className="p-4 space-y-2">
+                <div className="h-4 bg-gray-100 rounded w-3/4" />
+                <div className="h-3 bg-gray-100 rounded w-1/4" />
               </div>
-            ))}
-          </div>
-        ) : !videos || videos.length === 0 ? (
-          <EmptyState
-            emoji="🎬"
-            title="No approved videos"
-            description="No videos have been marked as approved yet."
-          />
-        ) : (
-          <div className="space-y-4">
-            {videos.map((v, i) => (
-              <VideoCard
-                key={i}
-                url={v.url}
-                title={v.title}
-                channel={v.channel}
-              />
-            ))}
-          </div>
-        ))}
+            </div>
+          ))}
+        </div>
+      ) : !videoList || videoList.length === 0 ? (
+        status === "own_school_pending" ? (
+          <GeneratingPlaceholder label="Searching for video candidates…" />
+        ) : null
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {videoList.map((v, i) => (
+            <VideoCard
+              key={i}
+              url={v.url}
+              title={v.title}
+              channel={v.channel}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Quiz tab ────────────────────────────────────────────────────────────────
+
+function QuizQuestionCard({ q, index }: { q: QuizQuestion; index: number }) {
+  return (
+    <div className="bg-white border border-brand-border rounded-xl p-4 shadow-sm space-y-3">
+      <div className="flex items-start gap-2">
+        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-brand-gold/15 text-brand-gold-dark text-xs font-bold flex items-center justify-center mt-0.5">
+          {index + 1}
+        </span>
+        <p className="text-sm font-medium text-brand-ink leading-snug">
+          {q.question_text}
+        </p>
+      </div>
+      <ul className="space-y-1.5 pl-7">
+        {q.options.map((opt) => (
+          <li
+            key={opt}
+            className={[
+              "text-sm px-2.5 py-1.5 rounded-lg",
+              opt.startsWith(q.correct_answer)
+                ? "bg-brand-green-light text-brand-green font-semibold"
+                : "text-brand-body",
+            ].join(" ")}
+          >
+            {opt}
+          </li>
+        ))}
+      </ul>
+      {q.explanation && (
+        <p className="pl-7 text-xs text-brand-muted italic">{q.explanation}</p>
+      )}
+    </div>
+  );
+}
 
 function QuizTab({
   status,
@@ -567,6 +619,9 @@ function QuizTab({
   subtopicId: string;
 }) {
   const approveContent = useTeacherApproveContent();
+  const { data: quizData, isLoading: quizLoading } = useTeacherQuizQuestions(
+    status !== "none" ? subtopicId : undefined,
+  );
 
   if (status === "none") {
     return (
@@ -579,64 +634,84 @@ function QuizTab({
   }
 
   return (
-    <div className="bg-white border border-brand-border rounded-xl p-5 shadow-sm space-y-4">
-      <div className="flex items-center justify-between">
-        <ContentStatusBadge status={status} />
-        {status === "own_school_pending" && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              className="gap-1"
-              onClick={() =>
-                approveContent.mutate(
-                  { subtopicId, contentType: "quiz", action: "approve" },
-                  {
-                    onSuccess: () => toast.success("Quiz approved."),
-                    onError: () => toast.error("Approval failed."),
-                  },
-                )
-              }
-              disabled={approveContent.isPending}
-            >
-              {approveContent.isPending ? (
-                <Loader2
-                  className="w-3.5 h-3.5 animate-spin"
-                  aria-hidden="true"
-                />
-              ) : (
-                <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" />
-              )}
-              Approve
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                approveContent.mutate(
-                  { subtopicId, contentType: "quiz", action: "reject" },
-                  {
-                    onSuccess: () => toast.success("Quiz rejected."),
-                    onError: () => toast.error("Rejection failed."),
-                  },
-                )
-              }
-              disabled={approveContent.isPending}
-            >
-              Reject
-            </Button>
-          </div>
-        )}
+    <div className="space-y-4">
+      <div className="bg-white border border-brand-border rounded-xl p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <ContentStatusBadge status={status} />
+          {status === "own_school_pending" && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                className="gap-1"
+                onClick={() =>
+                  approveContent.mutate(
+                    { subtopicId, contentType: "quiz", action: "approve" },
+                    {
+                      onSuccess: () => toast.success("Quiz approved."),
+                      onError: () => toast.error("Approval failed."),
+                    },
+                  )
+                }
+                disabled={approveContent.isPending}
+              >
+                {approveContent.isPending ? (
+                  <Loader2
+                    className="w-3.5 h-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                )}
+                Approve
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  approveContent.mutate(
+                    { subtopicId, contentType: "quiz", action: "reject" },
+                    {
+                      onSuccess: () => toast.success("Quiz rejected."),
+                      onError: () => toast.error("Rejection failed."),
+                    },
+                  )
+                }
+                disabled={approveContent.isPending}
+              >
+                Reject
+              </Button>
+            </div>
+          )}
+        </div>
+        <p className="text-sm text-brand-muted mt-2">
+          {status === "approved"
+            ? "Quiz has been approved and is available to students."
+            : status === "curriculum_pending" ||
+                status === "other_school_pending"
+              ? "Quiz is being reviewed by the Kaihle platform team."
+              : status === "rejected"
+                ? "Quiz was rejected. Generate a new one from the class page."
+                : "Review the questions below, then approve or reject."}
+        </p>
       </div>
-      <p className="text-sm text-brand-muted">
-        {status === "approved"
-          ? "Quiz has been approved and is available to students."
-          : status === "curriculum_pending" || status === "other_school_pending"
-            ? "Quiz is being reviewed by the Kaihle platform team."
-            : status === "rejected"
-              ? "Quiz was rejected. Generate a new one from the class page."
-              : "Quiz is pending your review."}
-      </p>
+
+      {/* Questions list */}
+      {quizLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+      ) : quizData && quizData.questions.length > 0 ? (
+        <div className="space-y-3">
+          {quizData.questions.map((q, i) => (
+            <QuizQuestionCard key={q.question_id || i} q={q} index={i} />
+          ))}
+        </div>
+      ) : status === "own_school_pending" ? (
+        <GeneratingPlaceholder label="Generating quiz questions…" />
+      ) : null}
     </div>
   );
 }
