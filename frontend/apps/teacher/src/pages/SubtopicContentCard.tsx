@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Loader2, Video, BookOpen, HelpCircle } from "lucide-react";
+import { Loader2, Video, BookOpen, HelpCircle, Lock } from "lucide-react";
 import {
   useSubtopicContentStatus,
   type ContentStatus,
@@ -63,6 +63,7 @@ function ContentTypeColumn({
   label,
   icon: Icon,
   status,
+  scope,
   subtopicId,
   classId,
   isGenerating,
@@ -72,18 +73,26 @@ function ContentTypeColumn({
   label: string;
   icon: React.ElementType;
   status: ContentStatus;
+  scope: "curriculum" | "school" | null;
   subtopicId: string;
   classId: string;
   isGenerating: boolean;
   onGenerate: (type: ContentTypeKey) => void;
 }) {
   const browseUrl = `/teacher/classes/${classId}/subtopics/${subtopicId}/content?tab=${typeKey}`;
+  const isLocked = scope === "curriculum";
 
   return (
     <div className="flex flex-col items-start gap-1.5 min-w-0">
       <div className="flex items-center gap-1 text-xs font-bold text-brand-muted uppercase tracking-wide">
         <Icon className="w-3 h-3" aria-hidden="true" />
         {label}
+        {isLocked && (
+          <Lock
+            className="w-3 h-3 text-brand-muted"
+            aria-label="Platform managed"
+          />
+        )}
       </div>
 
       {status === "none" ? (
@@ -184,6 +193,7 @@ export function SubtopicContentCard({
             label={label}
             icon={icon}
             status={data[key].status}
+            scope={data[key].scope}
             subtopicId={subtopicId}
             classId={classId}
             isGenerating={

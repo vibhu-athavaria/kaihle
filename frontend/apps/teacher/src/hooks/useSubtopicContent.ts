@@ -225,6 +225,49 @@ export function useSubtopicVideoCandidates(subtopicId: string | undefined) {
   });
 }
 
+export function useSelectVideo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      subtopicId,
+      videoIndex,
+    }: {
+      subtopicId: string;
+      videoIndex: number;
+    }) => {
+      await apiClient.patch(
+        `/api/v1/subtopic-content/${subtopicId}/video/select`,
+        { video_index: videoIndex },
+      );
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: statusKey(variables.subtopicId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["subtopic-video-candidates", variables.subtopicId],
+      });
+    },
+  });
+}
+
+export function useSuggestVideo() {
+  return useMutation({
+    mutationFn: async ({
+      subtopicId,
+      message,
+    }: {
+      subtopicId: string;
+      message: string;
+    }) => {
+      await apiClient.post(
+        `/api/v1/subtopic-content/${subtopicId}/video/suggest`,
+        { message },
+      );
+    },
+  });
+}
+
 // ── Subtopics for a topic (lazy expand) ────────────────────────────────────
 
 export interface SubtopicSimple {

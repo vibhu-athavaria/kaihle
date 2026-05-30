@@ -6,6 +6,7 @@ import {
   Loader2,
   CheckCircle,
   XCircle,
+  Lock,
 } from "lucide-react";
 import { useClass } from "../hooks/useClass";
 import {
@@ -15,10 +16,13 @@ import {
   useSubtopicVideoCandidates,
   useTeacherApproveContent,
   useTeacherQuizQuestions,
+  useSelectVideo,
+  useSuggestVideo,
   useSubmitExplanationSuggestion,
   type PersonalisedExplanation,
   type ContentStatus,
   type QuizQuestion,
+  type VideoCandidateEntry,
 } from "../hooks/useSubtopicContent";
 import { Badge, Button, EmptyState, Skeleton, toast } from "@kaihle/ui";
 
@@ -448,25 +452,165 @@ function GeneratingPlaceholder({ label }: { label: string }) {
   );
 }
 
+// ── Selectable video candidate card (own-school view) ───────────────────────
+
+function VideoCandidateCard({
+  video,
+  index,
+  isSelected,
+  onSelect,
+  isSelecting,
+}: {
+  video: VideoCandidateEntry;
+  index: number;
+  isSelected: boolean;
+  onSelect: (index: number) => void;
+  isSelecting: boolean;
+}) {
+  const videoId = getYouTubeId(video.url);
+  return (
+    <div
+      className={[
+        "rounded-xl overflow-hidden border-2 shadow-sm transition-colors",
+        isSelected
+          ? "border-brand-gold"
+          : "border-brand-border hover:border-brand-gold/40",
+      ].join(" ")}
+    >
+      {videoId ? (
+        <div className="aspect-video w-full">
+          <iframe
+            src={`https://www.youtube.com/embed/${videoId}`}
+            title={video.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="w-full h-full"
+          />
+        </div>
+      ) : (
+        <a
+          href={video.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block p-4 text-brand-primary underline text-sm truncate"
+        >
+          {video.url}
+        </a>
+      )}
+      <div className="px-4 py-3 bg-white flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-brand-ink leading-snug line-clamp-2">
+            {video.title}
+          </p>
+          <p className="text-xs text-brand-muted mt-0.5">{video.channel}</p>
+        </div>
+        <button
+          type="button"
+          disabled={isSelecting}
+          onClick={() => onSelect(index)}
+          className={[
+            "flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors disabled:opacity-50",
+            isSelected
+              ? "bg-brand-gold text-white"
+              : "border border-brand-gold text-brand-gold hover:bg-brand-gold hover:text-white",
+          ].join(" ")}
+          aria-pressed={isSelected}
+        >
+          {isSelecting && !isSelected ? (
+            <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+          ) : (
+            <CheckCircle className="w-3 h-3" aria-hidden="true" />
+          )}
+          {isSelected ? "Selected" : "Select"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Suggest video panel (other-school teachers) ─────────────────────────────
+
+function SuggestVideoPanel({
+  subtopicId,
+  onClose,
+}: {
+  subtopicId: string;
+  onClose: () => void;
+}) {
+  const [message, setMessage] = useState("");
+  const suggest = useSuggestVideo();
+
+  return (
+    <div className="bg-white border border-brand-border rounded-xl p-5 shadow-sm space-y-3">
+      <p className="text-sm font-semibold text-brand-ink">
+        Suggest a different video
+      </p>
+      <p className="text-xs text-brand-muted">
+        Describe what you&apos;d like changed — Kaihle admins will review your
+        request.
+      </p>
+      <textarea
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        rows={4}
+        placeholder="e.g. The current video is too advanced for Grade 8. Could you find one that covers the basics first?"
+        className="w-full border border-brand-border rounded-lg px-3 py-2.5 text-sm text-brand-ink focus:outline-none focus:ring-2 focus:ring-brand-gold/30 resize-y"
+      />
+      <div className="flex items-center gap-2">
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={message.trim().length < 10 || suggest.isPending}
+          onClick={() =>
+            suggest.mutate(
+              { subtopicId, message: message.trim() },
+              {
+                onSuccess: () => {
+                  toast.success("Suggestion submitted to Kaihle admins.");
+                  onClose();
+                },
+                onError: () => toast.error("Failed to submit suggestion."),
+              },
+            )
+          }
+        >
+          {suggest.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+          ) : null}
+          Submit suggestion
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function VideoTab({
   status,
+  scope,
   subtopicId,
 }: {
   status: ContentStatus;
+  scope: "curriculum" | "school" | null;
   subtopicId: string;
 }) {
   const approveContent = useTeacherApproveContent();
+  const selectVideo = useSelectVideo();
+  const [showSuggest, setShowSuggest] = useState(false);
 
-  // For own-school pending rows, fetch all candidates (including pending) for review.
-  // For approved rows, fetch only the KaihleAdmin-approved entries.
-  const isOwnPending = status === "own_school_pending";
+  // scope="school" means this teacher's school generated the content — they see
+  // all 3 candidates and can switch selection freely until KaihleAdmin promotes.
+  // Any other scope means they see only the approved video + a suggest CTA.
+  const isOwnSchool = scope === "school";
+
   const { data: candidates, isLoading: candidatesLoading } =
-    useSubtopicVideoCandidates(isOwnPending ? subtopicId : undefined);
+    useSubtopicVideoCandidates(isOwnSchool ? subtopicId : undefined);
   const { data: approvedVideos, isLoading: approvedLoading } =
-    useSubtopicVideos(status === "approved" ? subtopicId : undefined);
-
-  const videosLoading = isOwnPending ? candidatesLoading : approvedLoading;
-  const videoList = isOwnPending ? candidates : approvedVideos;
+    useSubtopicVideos(
+      !isOwnSchool && status !== "none" ? subtopicId : undefined,
+    );
 
   if (status === "none") {
     return (
@@ -478,100 +622,159 @@ function VideoTab({
     );
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="bg-white border border-brand-border rounded-xl p-5 shadow-sm">
-        <div className="flex items-center justify-between">
-          <ContentStatusBadge status={status} />
-          {status === "own_school_pending" && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="primary"
-                size="sm"
-                className="gap-1"
-                onClick={() =>
-                  approveContent.mutate(
-                    { subtopicId, contentType: "video", action: "approve" },
-                    {
-                      onSuccess: () => toast.success("Videos approved."),
-                      onError: () => toast.error("Approval failed."),
-                    },
-                  )
-                }
-                disabled={approveContent.isPending}
-              >
-                {approveContent.isPending ? (
-                  <Loader2
-                    className="w-3.5 h-3.5 animate-spin"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <CheckCircle className="w-3.5 h-3.5" aria-hidden="true" />
-                )}
-                Approve
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  approveContent.mutate(
-                    { subtopicId, contentType: "video", action: "reject" },
-                    {
-                      onSuccess: () => toast.success("Videos rejected."),
-                      onError: () => toast.error("Rejection failed."),
-                    },
-                  )
-                }
-                disabled={approveContent.isPending}
-              >
-                Reject
-              </Button>
-            </div>
-          )}
+  // ── Own-school view: all 3 candidates with radio-select ─────────────────
+  if (isOwnSchool) {
+    const hasCandidates = candidates && candidates.length > 0;
+    return (
+      <div className="space-y-4">
+        <div className="bg-white border border-brand-border rounded-xl p-4 shadow-sm flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-brand-ink">
+              {candidates?.some((v) => v.status === "approved")
+                ? "Video selected — students see the highlighted one."
+                : "Select a video for students."}
+            </p>
+            <p className="text-xs text-brand-muted mt-0.5">
+              You can switch your selection any time before the platform
+              promotes it globally.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              approveContent.mutate(
+                { subtopicId, contentType: "video", action: "reject" },
+                {
+                  onSuccess: () =>
+                    toast.success(
+                      "Videos rejected. You can generate new ones.",
+                    ),
+                  onError: () => toast.error("Failed to reject."),
+                },
+              )
+            }
+            disabled={approveContent.isPending}
+          >
+            <XCircle className="w-3.5 h-3.5 mr-1" aria-hidden="true" />
+            Reject all
+          </Button>
         </div>
-        {status !== "approved" && (
-          <p className="text-sm text-brand-muted mt-3">
-            {status === "curriculum_pending" ||
-            status === "other_school_pending"
-              ? "Videos are being reviewed by the Kaihle platform team."
-              : status === "rejected"
-                ? "Videos were rejected. Generate new candidates from the class page."
-                : "Review the candidates below, then approve or reject."}
-          </p>
+
+        {candidatesLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="animate-pulse rounded-xl overflow-hidden border border-brand-border"
+              >
+                <div className="aspect-video bg-gray-100" />
+                <div className="p-4 space-y-2">
+                  <div className="h-4 bg-gray-100 rounded w-3/4" />
+                  <div className="h-3 bg-gray-100 rounded w-1/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !hasCandidates ? (
+          <GeneratingPlaceholder label="Searching for video candidates…" />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {candidates.map((v, i) => (
+              <VideoCandidateCard
+                key={i}
+                video={v}
+                index={i}
+                isSelected={v.status === "approved"}
+                isSelecting={selectVideo.isPending}
+                onSelect={(idx) =>
+                  selectVideo.mutate(
+                    { subtopicId, videoIndex: idx },
+                    {
+                      onSuccess: () => toast.success("Video selected."),
+                      onError: () => toast.error("Selection failed."),
+                    },
+                  )
+                }
+              />
+            ))}
+          </div>
         )}
       </div>
+    );
+  }
 
-      {videosLoading ? (
-        <div className="space-y-3">
-          {[1, 2].map((i) => (
-            <div
-              key={i}
-              className="animate-pulse rounded-xl overflow-hidden border border-brand-border"
-            >
-              <div className="aspect-video bg-gray-100" />
-              <div className="p-4 space-y-2">
-                <div className="h-4 bg-gray-100 rounded w-3/4" />
-                <div className="h-3 bg-gray-100 rounded w-1/4" />
-              </div>
-            </div>
-          ))}
+  // ── Other-school / curriculum view: approved video + lock banner ────────
+  const isCurriculumLocked = scope === "curriculum";
+
+  return (
+    <div className="space-y-4">
+      {isCurriculumLocked ? (
+        <div className="flex items-start gap-3 px-4 py-3 bg-brand-border/30 border border-brand-border rounded-xl">
+          <Lock
+            className="w-4 h-4 text-brand-muted flex-shrink-0 mt-0.5"
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-brand-ink">
+              Managed by the Kaihle platform
+            </p>
+            <p className="text-xs text-brand-muted mt-0.5">
+              This video has been approved globally and can no longer be
+              switched by teachers. Use the suggestion form below if you&apos;d
+              like a change.
+            </p>
+          </div>
         </div>
-      ) : !videoList || videoList.length === 0 ? (
-        status === "own_school_pending" ? (
-          <GeneratingPlaceholder label="Searching for video candidates…" />
-        ) : null
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {videoList.map((v, i) => (
-            <VideoCard
-              key={i}
-              url={v.url}
-              title={v.title}
-              channel={v.channel}
-            />
-          ))}
+        <div className="bg-white border border-brand-border rounded-xl p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <ContentStatusBadge status={status} />
+          </div>
+          {status !== "approved" && (
+            <p className="text-sm text-brand-muted">
+              {status === "curriculum_pending"
+                ? "Video is being reviewed by the Kaihle platform team."
+                : status === "rejected"
+                  ? "Video was rejected."
+                  : "Video is pending review."}
+            </p>
+          )}
         </div>
       )}
+
+      {!showSuggest && (
+        <button
+          type="button"
+          onClick={() => setShowSuggest(true)}
+          className="text-xs font-semibold text-brand-gold hover:text-brand-gold-dark transition-colors"
+        >
+          Suggest a different video
+        </button>
+      )}
+
+      {showSuggest && (
+        <SuggestVideoPanel
+          subtopicId={subtopicId}
+          onClose={() => setShowSuggest(false)}
+        />
+      )}
+
+      {approvedLoading ? (
+        <div className="animate-pulse rounded-xl overflow-hidden border border-brand-border">
+          <div className="aspect-video bg-gray-100" />
+          <div className="p-4 space-y-2">
+            <div className="h-4 bg-gray-100 rounded w-3/4" />
+            <div className="h-3 bg-gray-100 rounded w-1/4" />
+          </div>
+        </div>
+      ) : approvedVideos && approvedVideos.length > 0 ? (
+        <VideoCard
+          url={approvedVideos[0].url}
+          title={approvedVideos[0].title}
+          channel={approvedVideos[0].channel}
+        />
+      ) : null}
     </div>
   );
 }
@@ -825,6 +1028,7 @@ export function SubtopicContentBrowser() {
           {activeTab === "video" && (
             <VideoTab
               status={statusData.video.status}
+              scope={statusData.video.scope}
               subtopicId={subtopicId}
             />
           )}

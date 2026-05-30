@@ -289,6 +289,18 @@ class TeacherApproveRequest(BaseModel):
     rejection_reason: str | None = None
 
 
+class VideoSelectRequest(BaseModel):
+    """Select exactly one video candidate as the approved entry."""
+
+    video_index: int = Field(..., ge=0)
+
+
+class VideoSuggestionRequest(BaseModel):
+    """Another school's teacher suggests a video change to KaihleAdmin."""
+
+    message: str = Field(..., min_length=10, max_length=1000)
+
+
 # --- KaihleAdmin promotion queue ---
 
 
