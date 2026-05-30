@@ -889,33 +889,34 @@ class MiniCourseService:
         )
         agg_score: float | None = agg_result.scalar_one_or_none()
 
-        # Upsert progress with GREATEST() to never regress
-        if agg_score is not None:
-            await self.db.execute(
-                text(
-                    """
-                    INSERT INTO subtopic_course_progress
-                        (student_id, subtopic_id, school_id,
-                         explanation_accessed, video_accessed,
-                         check_questions_score, last_visited_at)
-                    VALUES
-                        (:student_id, :subtopic_id, :school_id,
-                         false, false, :score, now())
-                    ON CONFLICT (student_id, subtopic_id) DO UPDATE SET
-                        check_questions_score = GREATEST(
-                            subtopic_course_progress.check_questions_score,
-                            EXCLUDED.check_questions_score
-                        ),
-                        last_visited_at = now()
-                    """
-                ),
-                {
-                    "student_id": student_id,
-                    "subtopic_id": subtopic_id,
-                    "school_id": school_id,
-                    "score": agg_score,
-                },
-            )
+        # Always upsert progress to record engagement. When agg_score is None
+        # (edge case: flush didn't persist yet), GREATEST(existing, NULL) in
+        # Postgres returns the existing value, so the score never regresses.
+        await self.db.execute(
+            text(
+                """
+                INSERT INTO subtopic_course_progress
+                    (student_id, subtopic_id, school_id,
+                     explanation_accessed, video_accessed,
+                     check_questions_score, last_visited_at)
+                VALUES
+                    (:student_id, :subtopic_id, :school_id,
+                     false, false, :score, now())
+                ON CONFLICT (student_id, subtopic_id) DO UPDATE SET
+                    check_questions_score = GREATEST(
+                        subtopic_course_progress.check_questions_score,
+                        EXCLUDED.check_questions_score
+                    ),
+                    last_visited_at = now()
+                """
+            ),
+            {
+                "student_id": student_id,
+                "subtopic_id": subtopic_id,
+                "school_id": school_id,
+                "score": agg_score,
+            },
+        )
 
         await self.db.commit()
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, useAuthStore } from "@kaihle/auth";
 import type {
@@ -97,6 +97,15 @@ export function useStreamChatMessage(subtopicId: string) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
 
+  // Keep token ref in sync so long-running streams always use the latest token
+  // even if it refreshes mid-stream.
+  const tokenRef = useRef(useAuthStore.getState().accessToken);
+  useEffect(() => {
+    return useAuthStore.subscribe((state) => {
+      tokenRef.current = state.accessToken;
+    });
+  }, []);
+
   const stream = useCallback(
     async (
       question: string,
@@ -107,7 +116,7 @@ export function useStreamChatMessage(subtopicId: string) {
       setIsStreaming(true);
       setStreamingContent("");
 
-      const token = useAuthStore.getState().accessToken;
+      const token = tokenRef.current;
       const baseUrl = (import.meta.env.VITE_API_BASE_URL as string) ?? "";
 
       try {

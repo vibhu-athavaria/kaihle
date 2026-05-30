@@ -50,6 +50,14 @@ def _extract_json_block(text: str) -> tuple[int, int] | None:
     return None
 
 
+_MODALITY_LABEL_MAP: dict[str, str] = {
+    "visual": "visual",
+    "auditory": "auditory",
+    "reading_writing": "reading/writing",
+    "kinesthetic": "kinesthetic",
+}
+
+
 def _get_dominant_modality(modality_scores: dict[str, float]) -> str:
     """Return the label for the highest-scoring modality.
 
@@ -57,16 +65,17 @@ def _get_dominant_modality(modality_scores: dict[str, float]) -> str:
     """
     if not modality_scores:
         return "visual"
-    label_map = {
-        "visual": "visual",
-        "auditory": "auditory",
-        "reading_writing": "reading/writing",
-        "kinesthetic": "kinesthetic",
-    }
     # Sort by score descending, then by key ascending for deterministic tie-breaking
     sorted_modalities = sorted(modality_scores.keys(), key=lambda k: (-modality_scores.get(k, 0.0), k))
     best = sorted_modalities[0]
-    return label_map.get(best, best.replace("_", " "))
+    return _MODALITY_LABEL_MAP.get(best, best.replace("_", " "))
+
+
+def _modality_key_to_label(key: str | None) -> str:
+    """Map a single known modality key to its display label. Falls back to 'visual'."""
+    if not key:
+        return "visual"
+    return _MODALITY_LABEL_MAP.get(key, key.replace("_", " "))
 
 
 def _parse_mcq(raw: str) -> tuple[str, dict[str, object] | None]:
@@ -444,9 +453,8 @@ async def stream_chat_reply(
                 dominant_modality_key = max(scores, key=lambda k: scores.get(k, 0.0)) if scores else None
             except (ValueError, TypeError):
                 pass
-    modality_scores: dict[str, float] = {dominant_modality_key: 1.0} if dominant_modality_key else {}
     interests: list[str] = (profile.interests or []) if profile else []
-    dominant_modality = _get_dominant_modality(modality_scores)
+    dominant_modality = _modality_key_to_label(dominant_modality_key)
     first_interest_key = interests[0] if interests else None
     interest_category = (
         INTEREST_KEY_TO_CATEGORY.get(first_interest_key, "general topics") if first_interest_key else "general topics"

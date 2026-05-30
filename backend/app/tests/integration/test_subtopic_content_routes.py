@@ -929,7 +929,7 @@ async def test_get_status_when_no_content_then_all_none(client: AsyncClient, db_
 async def test_get_status_when_school_scoped_own_school_then_shows_pending(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """GET /{subtopic_id}/status returns 'pending' for own school's pending content."""
+    """GET /{subtopic_id}/status returns 'own_school_pending' for own school's pending content."""
     subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
     school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
 
@@ -950,7 +950,7 @@ async def test_get_status_when_school_scoped_own_school_then_shows_pending(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["video"]["status"] == "pending"
+    assert data["video"]["status"] == "own_school_pending"
     assert data["video"]["scope"] == "school"
 
 

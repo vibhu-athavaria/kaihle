@@ -1,4 +1,5 @@
-export interface LearningProfile {
+// Mirrors LearningProfileItem in backend/app/schemas/mini_course.py — keep in sync.
+export interface LearningProfileItem {
   dominant_modality: string | null;
   interest: string | null;
   work_style_label: string | null;
@@ -84,7 +85,7 @@ export interface SubtopicCourse {
   check_questions: CourseQuestion[];
   progress: CourseProgress;
   next_subtopic: NextSubtopic | null;
-  learning_profile: LearningProfile | null;
+  learning_profile: LearningProfileItem | null;
   latest_open_answer: LatestOpenAnswer | null;
 }
 
