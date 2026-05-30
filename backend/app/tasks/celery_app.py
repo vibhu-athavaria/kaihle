@@ -25,6 +25,8 @@ celery_app = Celery(
         "app.tasks.parent_tasks",
         "app.tasks.content_maintenance_tasks",
         "app.tasks.study_plan_tasks",
+        "app.tasks.content_tasks",
+        "app.tasks.teacher_content_tasks",
     ],
 )
 

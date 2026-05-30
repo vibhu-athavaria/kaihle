@@ -1,32 +1,48 @@
 """Mini-course service.
 
 Handles student mini-course delivery: interest-matched explanation,
-approved video, check questions, progress tracking, teacher course-detail
-view, and teacher interest-category overrides per student.
+approved video, check questions, progress tracking, chat history,
+AI-graded transfer questions, teacher course-detail view, and teacher
+interest-category overrides per student.
 
 All business logic lives here — route handlers are thin wrappers.
 """
 
+import json
 import uuid
-from typing import Any, Literal
+from pathlib import Path
+from typing import Any, Literal, cast
 
 import structlog
 from fastapi import HTTPException, status
+from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import case, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.providers import router as llm_router
 from app.core.questionnaire_config import INTEREST_KEY_TO_CATEGORY
 from app.models.class_topic import ClassTopic
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subtopic, Topic
 from app.models.interest_category import InterestCategory
-from app.models.mini_course import MiniCourseStudentOverride, SubtopicContentFeedback, SubtopicCourseProgress
+from app.models.mini_course import (
+    MiniCourseChatMessage,
+    MiniCourseQuizResponse,
+    MiniCourseStudentOverride,
+    SubtopicContentFeedback,
+    SubtopicCourseProgress,
+)
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import Class
 from app.models.subtopic_content import SubtopicContent
 from app.schemas.mini_course import (
+    ChatHistoryResponse,
+    ChatMessageItem,
     CheckQuestion,
     CheckQuestionOption,
     CourseProgressItem,
+    GradeAnswerResponse,
+    LatestOpenAnswerItem,
+    LearningProfileItem,
     MarkProgressRequest,
     NextSubtopicItem,
     QuizSubmitRequest,
@@ -36,6 +52,30 @@ from app.schemas.mini_course import (
     SubtopicExplanationItem,
     SubtopicProgressItem,
     SubtopicVideoItem,
+    TransferQuestionResponse,
+)
+
+_PROMPTS_DIR = Path(__file__).parent.parent / "ai" / "prompts"
+_jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)), autoescape=False)
+
+# Human-readable labels for learning profile fields surfaced in the UI
+_MODALITY_LABELS: dict[str, str] = {
+    "visual": "Visual learner",
+    "auditory": "Auditory learner",
+    "reading_writing": "Reading/writing",
+    "kinesthetic": "Hands-on learner",
+}
+_WORK_STYLE_LABELS: dict[str, str] = {
+    "prefers_solo": "Solo learner",
+    "short_sessions": "Quick sessions",
+    "task_based": "Task-based",
+    "group_learning": "Group learner",
+    "concept_first": "Concept-first",
+}
+
+# Fallback question when LLM generation fails
+_TRANSFER_QUESTION_FALLBACK = (
+    "Can you explain this concept in your own words and give one real-life example of where you might see it?"
 )
 
 logger = structlog.get_logger()
@@ -96,8 +136,8 @@ class MiniCourseService:
             subtopic_id=str(subtopic_id),
         )
 
-        # 2. Load student's interest category id
-        interest_category_id: uuid.UUID | None = await self._resolve_student_interest_category_id(student_id=student_id)
+        # 2. Load full learning profile (interest category + profile labels)
+        interest_category_id, learning_profile_item = await self._resolve_learning_profile(student_id=student_id)
 
         # 3. Fetch best approved explanation
         explanation_content = await self._fetch_best_explanation(
@@ -110,6 +150,9 @@ class MiniCourseService:
 
         # 5. Fetch check questions (random sample)
         check_questions = await self._fetch_check_questions(subtopic_id=subtopic_id)
+
+        # 5b. Fetch latest open-ended answer for re-entry display
+        latest_open_answer = await self._fetch_latest_open_answer(student_id=student_id, subtopic_id=subtopic_id)
 
         # 6. Upsert progress row (last_visited_at = now)
         progress = await self._upsert_visit(
@@ -175,6 +218,8 @@ class MiniCourseService:
             check_questions=check_questions,
             progress=progress,
             next_subtopic=next_subtopic_item,
+            learning_profile=learning_profile_item,
+            latest_open_answer=latest_open_answer,
         )
 
     async def mark_progress(
@@ -235,25 +280,50 @@ class MiniCourseService:
         school_id: uuid.UUID,
         request: QuizSubmitRequest,
     ) -> QuizSubmitResponse:
-        """Score the student's quiz answers and persist the result.
+        """Score the student's MCQ answers, persist per-response rows, update aggregate score.
 
-        Fetches the correct answers from the question bank, derives the score,
-        then upserts check_questions_score using GREATEST() so the recorded score
-        never decreases on re-submission.
+        Writes one MiniCourseQuizResponse row per answer, then recomputes
+        check_questions_score as AVG(score) across all MCQ responses for this
+        student+subtopic. GREATEST() ensures the recorded score never regresses.
         """
         # Fetch correct answers for submitted question IDs
         question_ids = [a.question_id for a in request.answers]
-        rows = await self.db.execute(
-            select(QuestionBank.id, QuestionBank.correct_answer).where(QuestionBank.id.in_(question_ids))
+        bank_rows = await self.db.execute(
+            select(QuestionBank.id, QuestionBank.question_text, QuestionBank.correct_answer).where(
+                QuestionBank.id.in_(question_ids)
+            )
         )
-        correct_map: dict[str, str] = {str(row.id): row.correct_answer for row in rows}
+        bank_map: dict[str, tuple[str, str]] = {
+            str(row.id): (row.question_text, row.correct_answer) for row in bank_rows
+        }
 
         answer_map: dict[str, str] = {str(a.question_id): a.selected_key for a in request.answers}
-        total = len(correct_map)
-        correct_count = sum(1 for qid, key in answer_map.items() if correct_map.get(qid) == key)
+        total = len(bank_map)
+        correct_count = 0
+
+        # Write one response row per submitted answer
+        for qid, selected_key in answer_map.items():
+            question_text, correct_answer = bank_map.get(qid, ("", ""))
+            is_correct = selected_key == correct_answer
+            if is_correct:
+                correct_count += 1
+            self.db.add(
+                MiniCourseQuizResponse(
+                    student_id=student_id,
+                    subtopic_id=subtopic_id,
+                    school_id=school_id,
+                    question_type="mcq",
+                    question_text=question_text,
+                    student_answer=selected_key,
+                    ai_grade="correct" if is_correct else "incorrect",
+                    ai_feedback=None,
+                    score=1.0 if is_correct else 0.0,
+                )
+            )
+
         score = correct_count / total if total > 0 else 0.0
 
-        # Upsert — GREATEST() ensures score never regresses on re-submission
+        # Upsert progress — GREATEST() ensures score never regresses on re-submission
         await self.db.execute(
             text(
                 """
@@ -389,23 +459,75 @@ class MiniCourseService:
     # Private helpers
     # ------------------------------------------------------------------
 
-    async def _resolve_student_interest_category_id(self, student_id: uuid.UUID) -> uuid.UUID | None:
-        """Return the interest_category_id for the student's first interest, or None."""
+    async def _resolve_learning_profile(
+        self, student_id: uuid.UUID
+    ) -> tuple[uuid.UUID | None, LearningProfileItem | None]:
+        """Return (interest_category_id, LearningProfileItem) for the student.
+
+        interest_category_id is used for content matching.
+        LearningProfileItem carries human-readable labels for the UI header.
+        Both are None if the student has no completed learning profile.
+        """
         profile_result = await self.db.execute(
-            select(StudentLearningProfile.interests).where(StudentLearningProfile.student_id == student_id)
+            select(StudentLearningProfile).where(
+                StudentLearningProfile.student_id == student_id,
+                StudentLearningProfile.completed_at.is_not(None),
+            )
         )
-        profile_row = profile_result.one_or_none()
-        if profile_row is None or not profile_row.interests:
-            return None
+        profile = profile_result.scalar_one_or_none()
+        if profile is None:
+            return None, None
 
-        first_interest: str = profile_row.interests[0]
-        category_name = INTEREST_KEY_TO_CATEGORY.get(first_interest.lower())
-        if category_name is None:
-            return None
+        # Dominant modality — handle both schema versions:
+        #   v2 (current): {"visual": 0.7, "auditory": 0.5, ...}  — float scores per modality
+        #   v1 (legacy):  {"dominant": "reading_writing", ...}    — string modality names as values
+        raw_modality = profile.modality_scores
+        dominant_key: str | None = None
+        if isinstance(raw_modality, dict):
+            first_val = next(iter(raw_modality.values()), None)
+            if isinstance(first_val, str):
+                # v1 legacy format — "dominant" key holds the modality name directly
+                dominant_key = raw_modality.get("dominant")
+            else:
+                try:
+                    modality_scores: dict[str, float] = {
+                        k: float(v) for k, v in raw_modality.items() if v is not None and isinstance(k, str)
+                    }
+                    dominant_key = max(modality_scores, key=lambda k: modality_scores[k]) if modality_scores else None
+                except (ValueError, TypeError):
+                    dominant_key = None
+        dominant_label = _MODALITY_LABELS.get(dominant_key, None) if dominant_key else None
 
-        cat_result = await self.db.execute(select(InterestCategory.id).where(InterestCategory.name == category_name))
-        cat_row = cat_result.one_or_none()
-        return cat_row.id if cat_row is not None else None
+        # Top interest
+        interests: list[str] = profile.interests or []
+        first_interest = interests[0] if interests else None
+
+        # Top work style flag
+        work_style: dict[str, object] = profile.work_style or {}
+        work_style_label: str | None = None
+        for key, label in _WORK_STYLE_LABELS.items():
+            if work_style.get(key):
+                work_style_label = label
+                break
+
+        profile_item = LearningProfileItem(
+            dominant_modality=dominant_label,
+            interest=first_interest,
+            work_style_label=work_style_label,
+        )
+
+        # Resolve interest category ID
+        interest_category_id: uuid.UUID | None = None
+        if first_interest:
+            category_name = INTEREST_KEY_TO_CATEGORY.get(first_interest.lower())
+            if category_name:
+                cat_result = await self.db.execute(
+                    select(InterestCategory.id).where(InterestCategory.name == category_name)
+                )
+                cat_row = cat_result.one_or_none()
+                interest_category_id = cat_row.id if cat_row else None
+
+        return interest_category_id, profile_item
 
     async def _fetch_best_explanation(
         self,
@@ -448,6 +570,31 @@ class MiniCourseService:
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def _fetch_latest_open_answer(
+        self, student_id: uuid.UUID, subtopic_id: uuid.UUID
+    ) -> LatestOpenAnswerItem | None:
+        """Return the most recent open_ended response for this student+subtopic, or None."""
+        result = await self.db.execute(
+            select(MiniCourseQuizResponse)
+            .where(
+                MiniCourseQuizResponse.student_id == student_id,
+                MiniCourseQuizResponse.subtopic_id == subtopic_id,
+                MiniCourseQuizResponse.question_type == "open_ended",
+            )
+            .order_by(MiniCourseQuizResponse.created_at.desc())
+            .limit(1)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        return LatestOpenAnswerItem(
+            question_text=row.question_text,
+            student_answer=row.student_answer,
+            ai_grade=row.ai_grade,
+            ai_feedback=row.ai_feedback,
+            score=row.score,
+        )
 
     async def _fetch_check_questions(self, subtopic_id: uuid.UUID) -> list[CheckQuestion]:
         """Return up to 3 random active questions from question_bank for subtopic."""
@@ -524,6 +671,268 @@ class MiniCourseService:
             video_accessed=row.video_accessed,
             check_questions_score=row.check_questions_score,
             last_visited_at=row.last_visited_at,
+        )
+
+    # ------------------------------------------------------------------
+    # Chat history
+    # ------------------------------------------------------------------
+
+    async def get_chat_history(
+        self,
+        student_id: uuid.UUID,
+        subtopic_id: uuid.UUID,
+        school_id: uuid.UUID,
+    ) -> ChatHistoryResponse:
+        """Return up to 50 chat messages for this student+subtopic, oldest first."""
+        result = await self.db.execute(
+            select(MiniCourseChatMessage)
+            .where(
+                MiniCourseChatMessage.student_id == student_id,
+                MiniCourseChatMessage.subtopic_id == subtopic_id,
+                MiniCourseChatMessage.school_id == school_id,
+            )
+            .order_by(MiniCourseChatMessage.created_at.asc())
+            .limit(50)
+        )
+        rows = result.scalars().all()
+        return ChatHistoryResponse(
+            messages=[ChatMessageItem(role=row.role, content=row.content, created_at=row.created_at) for row in rows]
+        )
+
+    async def save_chat_message(
+        self,
+        student_id: uuid.UUID,
+        subtopic_id: uuid.UUID,
+        school_id: uuid.UUID,
+        role: Literal["student", "ai"],
+        content: str,
+    ) -> MiniCourseChatMessage:
+        """Persist one chat message and return the saved row."""
+        msg = MiniCourseChatMessage(
+            student_id=student_id,
+            subtopic_id=subtopic_id,
+            school_id=school_id,
+            role=role,
+            content=content,
+        )
+        self.db.add(msg)
+        await self.db.commit()
+        await self.db.refresh(msg)
+        return msg
+
+    # ------------------------------------------------------------------
+    # Transfer question generation + AI grading
+    # ------------------------------------------------------------------
+
+    async def generate_transfer_question(
+        self,
+        subtopic_id: uuid.UUID,
+        student_id: uuid.UUID,
+    ) -> TransferQuestionResponse:
+        """Generate a personalised open-ended transfer question via LLM.
+
+        Uses the subtopic's learning_objective + keywords and the student's
+        dominant modality + top interests. Falls back to a generic question
+        if the LLM call fails or returns unparseable output.
+        """
+        # Load subtopic fields
+        subtopic_result = await self.db.execute(
+            select(
+                Subtopic.name,
+                Subtopic.learning_objective,
+                Subtopic.keywords,
+            ).where(Subtopic.id == subtopic_id, Subtopic.is_active.is_(True))
+        )
+        subtopic_row = subtopic_result.one_or_none()
+        if subtopic_row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Subtopic {subtopic_id} not found")
+
+        # Load student profile for personalisation
+        profile_result = await self.db.execute(
+            select(StudentLearningProfile).where(
+                StudentLearningProfile.student_id == student_id,
+                StudentLearningProfile.completed_at.is_not(None),
+            )
+        )
+        profile = profile_result.scalar_one_or_none()
+
+        interests: list[str] = ((profile.interests or []) if profile else [])[:2]
+
+        raw_modality = (profile.modality_scores if profile else None) or {}
+        dominant_key: str = "visual"
+        if isinstance(raw_modality, dict) and raw_modality:
+            first_val = next(iter(raw_modality.values()), None)
+            if isinstance(first_val, str):
+                dominant_key = raw_modality.get("dominant", "visual")
+            else:
+                try:
+                    scores = {k: float(v) for k, v in raw_modality.items() if v is not None and isinstance(k, str)}
+                    dominant_key = max(scores, key=lambda k: scores.get(k, 0.0)) if scores else "visual"
+                except (ValueError, TypeError):
+                    pass
+        dominant_modality = _MODALITY_LABELS.get(dominant_key, dominant_key)
+
+        keywords: list[str] = subtopic_row.keywords or [] if subtopic_row.keywords else []
+
+        template = _jinja_env.get_template("transfer_question.jinja2")
+        prompt = template.render(
+            subtopic_name=subtopic_row.name,
+            learning_objective=subtopic_row.learning_objective,
+            keywords=keywords,
+            dominant_modality=dominant_modality,
+            interests=interests,
+        )
+
+        try:
+            raw = await llm_router.complete(
+                task="transfer_question",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=150,
+            )
+            question_text = raw.strip().strip('"').strip()
+            if not question_text or len(question_text) < 10:
+                question_text = _TRANSFER_QUESTION_FALLBACK
+        except Exception:
+            logger.warning(
+                "transfer_question_generation_failed",
+                subtopic_id=str(subtopic_id),
+                student_id=str(student_id),
+            )
+            question_text = _TRANSFER_QUESTION_FALLBACK
+
+        logger.info(
+            "transfer_question_generated",
+            subtopic_id=str(subtopic_id),
+            student_id=str(student_id),
+        )
+        return TransferQuestionResponse(question_text=question_text)
+
+    async def grade_open_answer(
+        self,
+        subtopic_id: uuid.UUID,
+        student_id: uuid.UUID,
+        school_id: uuid.UUID,
+        question_text: str,
+        student_answer: str,
+    ) -> GradeAnswerResponse:
+        """Grade a student's open-ended answer via LLM, persist the result, update course score.
+
+        Returns grade ('correct'|'partial'|'incorrect'), feedback, score, and the
+        updated check_questions_score aggregate for the course progress row.
+        """
+        # Load subtopic for context
+        subtopic_result = await self.db.execute(
+            select(Subtopic.name, Subtopic.learning_objective).where(
+                Subtopic.id == subtopic_id, Subtopic.is_active.is_(True)
+            )
+        )
+        subtopic_row = subtopic_result.one_or_none()
+        if subtopic_row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Subtopic {subtopic_id} not found")
+
+        template = _jinja_env.get_template("grade_open_answer.jinja2")
+        prompt = template.render(
+            subtopic_name=subtopic_row.name,
+            learning_objective=subtopic_row.learning_objective,
+            question_text=question_text,
+            student_answer=student_answer,
+        )
+
+        grade: Literal["correct", "partial", "incorrect"] = "incorrect"
+        feedback = "We couldn't evaluate your answer. Please try again."
+
+        try:
+            raw = await llm_router.complete(
+                task="grade_open_answer",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=200,
+            )
+            parsed = json.loads(raw.strip())
+            raw_grade = str(parsed.get("grade", "incorrect")).lower()
+            if raw_grade in ("correct", "partial", "incorrect"):
+                grade = cast(Literal["correct", "partial", "incorrect"], raw_grade)
+            feedback = str(parsed.get("feedback", feedback))
+        except Exception:
+            logger.warning(
+                "grade_open_answer_parse_failed",
+                subtopic_id=str(subtopic_id),
+                student_id=str(student_id),
+            )
+
+        score_map = {"correct": 1.0, "partial": 0.5, "incorrect": 0.0}
+        score = score_map[grade]
+
+        # Persist the response row
+        self.db.add(
+            MiniCourseQuizResponse(
+                student_id=student_id,
+                subtopic_id=subtopic_id,
+                school_id=school_id,
+                question_type="open_ended",
+                question_text=question_text,
+                student_answer=student_answer,
+                ai_grade=grade,
+                ai_feedback=feedback,
+                score=score,
+            )
+        )
+
+        # Recompute aggregate course score (MCQ + open_ended combined)
+        await self.db.flush()
+        agg_result = await self.db.execute(
+            select(func.avg(MiniCourseQuizResponse.score)).where(
+                MiniCourseQuizResponse.student_id == student_id,
+                MiniCourseQuizResponse.subtopic_id == subtopic_id,
+            )
+        )
+        agg_score: float | None = agg_result.scalar_one_or_none()
+
+        # Always upsert progress to record engagement. When agg_score is None
+        # (edge case: flush didn't persist yet), GREATEST(existing, NULL) in
+        # Postgres returns the existing value, so the score never regresses.
+        await self.db.execute(
+            text(
+                """
+                INSERT INTO subtopic_course_progress
+                    (student_id, subtopic_id, school_id,
+                     explanation_accessed, video_accessed,
+                     check_questions_score, last_visited_at)
+                VALUES
+                    (:student_id, :subtopic_id, :school_id,
+                     false, false, :score, now())
+                ON CONFLICT (student_id, subtopic_id) DO UPDATE SET
+                    check_questions_score = GREATEST(
+                        subtopic_course_progress.check_questions_score,
+                        EXCLUDED.check_questions_score
+                    ),
+                    last_visited_at = now()
+                """
+            ),
+            {
+                "student_id": student_id,
+                "subtopic_id": subtopic_id,
+                "school_id": school_id,
+                "score": agg_score,
+            },
+        )
+
+        await self.db.commit()
+
+        logger.info(
+            "open_answer_graded",
+            student_id=str(student_id),
+            subtopic_id=str(subtopic_id),
+            grade=grade,
+            score=score,
+        )
+
+        return GradeAnswerResponse(
+            grade=grade,
+            feedback=feedback,
+            score=score,
+            updated_course_score=agg_score,
         )
 
     async def get_student_course_progress(

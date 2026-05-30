@@ -730,7 +730,7 @@ async def test_update_quiz_when_teacher_then_403(
 
 
 # ---------------------------------------------------------------------------
-# Tests: POST /subtopic-content/{subtopic_id}/quiz/generate
+# Tests: POST /subtopic-content/{subtopic_id}/quiz/admin-generate
 # ---------------------------------------------------------------------------
 
 
@@ -739,7 +739,7 @@ async def test_generate_quiz_when_llm_succeeds_then_creates_practice_row(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """POST /quiz/generate creates a practice row with LLM-generated questions."""
+    """POST /quiz/admin-generate creates a practice row with LLM-generated questions."""
     _, _, _, _, st = await _create_curriculum_tree(db_session)
     admin = await _make_admin(db_session)
 
@@ -761,7 +761,7 @@ async def test_generate_quiz_when_llm_succeeds_then_creates_practice_row(
     with patch("app.ai.providers.router.complete", new_callable=AsyncMock) as mock_complete:
         mock_complete.return_value = mock_llm_response
         response = await client.post(
-            f"/api/v1/subtopic-content/{st.id}/quiz/generate",
+            f"/api/v1/subtopic-content/{st.id}/quiz/admin-generate",
             headers=make_auth_header(admin),
         )
 
@@ -778,7 +778,7 @@ async def test_generate_quiz_when_quiz_exists_then_overwrites_questions(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """POST /quiz/generate overwrites existing quiz questions with new LLM output."""
+    """POST /quiz/admin-generate overwrites existing quiz questions with new LLM output."""
     _, _, _, _, st = await _create_curriculum_tree(db_session)
     await _create_quiz_content(db_session, st.id)
     admin = await _make_admin(db_session)
@@ -802,7 +802,7 @@ async def test_generate_quiz_when_quiz_exists_then_overwrites_questions(
     with patch("app.ai.providers.router.complete", new_callable=AsyncMock) as mock_complete:
         mock_complete.return_value = mock_llm_response
         response = await client.post(
-            f"/api/v1/subtopic-content/{st.id}/quiz/generate",
+            f"/api/v1/subtopic-content/{st.id}/quiz/admin-generate",
             headers=make_auth_header(admin),
         )
 
@@ -817,14 +817,14 @@ async def test_generate_quiz_when_llm_fails_then_502(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
-    """POST /quiz/generate returns 502 when LLM call raises an exception."""
+    """POST /quiz/admin-generate returns 502 when LLM call raises an exception."""
     _, _, _, _, st = await _create_curriculum_tree(db_session)
     admin = await _make_admin(db_session)
 
     with patch("app.ai.providers.router.complete", new_callable=AsyncMock) as mock_complete:
         mock_complete.side_effect = Exception("LLM timeout")
         response = await client.post(
-            f"/api/v1/subtopic-content/{st.id}/quiz/generate",
+            f"/api/v1/subtopic-content/{st.id}/quiz/admin-generate",
             headers=make_auth_header(admin),
         )
 
@@ -837,7 +837,7 @@ async def test_generate_quiz_when_teacher_then_403(
     db_session: AsyncSession,
     school: School,
 ) -> None:
-    """POST /quiz/generate returns 403 for non-KAIHLE_ADMIN roles."""
+    """POST /quiz/admin-generate returns 403 for non-KAIHLE_ADMIN roles."""
     teacher = User(
         id=uuid.uuid4(),
         school_id=school.id,
@@ -851,7 +851,7 @@ async def test_generate_quiz_when_teacher_then_403(
     await db_session.commit()
 
     response = await client.post(
-        f"/api/v1/subtopic-content/{uuid.uuid4()}/quiz/generate",
+        f"/api/v1/subtopic-content/{uuid.uuid4()}/quiz/admin-generate",
         headers=make_auth_header(teacher),
     )
     assert response.status_code == 403
@@ -929,7 +929,7 @@ async def test_get_status_when_no_content_then_all_none(client: AsyncClient, db_
 async def test_get_status_when_school_scoped_own_school_then_shows_pending(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """GET /{subtopic_id}/status returns 'pending' for own school's pending content."""
+    """GET /{subtopic_id}/status returns 'own_school_pending' for own school's pending content."""
     subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
     school, teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
 
@@ -950,7 +950,7 @@ async def test_get_status_when_school_scoped_own_school_then_shows_pending(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["video"]["status"] == "pending"
+    assert data["video"]["status"] == "own_school_pending"
     assert data["video"]["scope"] == "school"
 
 

@@ -50,6 +50,14 @@ def _extract_json_block(text: str) -> tuple[int, int] | None:
     return None
 
 
+_MODALITY_LABEL_MAP: dict[str, str] = {
+    "visual": "visual",
+    "auditory": "auditory",
+    "reading_writing": "reading/writing",
+    "kinesthetic": "kinesthetic",
+}
+
+
 def _get_dominant_modality(modality_scores: dict[str, float]) -> str:
     """Return the label for the highest-scoring modality.
 
@@ -57,16 +65,17 @@ def _get_dominant_modality(modality_scores: dict[str, float]) -> str:
     """
     if not modality_scores:
         return "visual"
-    label_map = {
-        "visual": "visual",
-        "auditory": "auditory",
-        "reading_writing": "reading/writing",
-        "kinesthetic": "kinesthetic",
-    }
     # Sort by score descending, then by key ascending for deterministic tie-breaking
     sorted_modalities = sorted(modality_scores.keys(), key=lambda k: (-modality_scores.get(k, 0.0), k))
     best = sorted_modalities[0]
-    return label_map.get(best, best.replace("_", " "))
+    return _MODALITY_LABEL_MAP.get(best, best.replace("_", " "))
+
+
+def _modality_key_to_label(key: str | None) -> str:
+    """Map a single known modality key to its display label. Falls back to 'visual'."""
+    if not key:
+        return "visual"
+    return _MODALITY_LABEL_MAP.get(key, key.replace("_", " "))
 
 
 def _parse_mcq(raw: str) -> tuple[str, dict[str, object] | None]:
@@ -377,6 +386,99 @@ async def _stream_explain_this(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": question},
         ],
+        temperature=0.6,
+        max_tokens=400,
+    ):
+        yield chunk
+
+
+async def stream_chat_reply(
+    *,
+    subtopic_id: UUID,
+    student_id: UUID,
+    school_id: UUID,
+    question: str,
+    prior_messages: list[dict[str, str]],
+    db: AsyncSession,
+) -> AsyncGenerator[str, None]:
+    """Stream AI reply chunks for the persistent chat thread.
+
+    Resolves subtopic context and learning profile, injects up to the last 10
+    prior chat turns for multi-turn coherence, then streams via llm_router.stream_sse.
+    Yields raw SSE strings ("data: ...\n\n"). The caller is responsible for saving
+    the accumulated reply and emitting the terminal [DONE] event.
+
+    Args:
+        subtopic_id: Subtopic the student is studying.
+        student_id: Authenticated student's ID.
+        school_id: Student's school for multi-tenancy.
+        question: The student's current message.
+        prior_messages: Last N chat turns as [{"role": "user"|"assistant", "content": "..."}].
+        db: Active async DB session.
+    """
+    row = await db.execute(
+        select(
+            Subtopic.name.label("subtopic_name"),
+            Topic.name.label("topic_name"),
+            Subject.name.label("subject_name"),
+            Grade.level.label("grade_level"),
+        )
+        .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+        .join(Topic, Topic.id == CurriculumTopic.topic_id)
+        .join(Subject, Subject.id == CurriculumTopic.subject_id)
+        .join(Grade, Grade.id == CurriculumTopic.grade_id)
+        .where(Subtopic.id == subtopic_id, Subtopic.is_active.is_(True))
+    )
+    subtopic_data = row.one_or_none()
+    if subtopic_data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Subtopic {subtopic_id} not found")
+
+    profile_result = await db.execute(
+        select(StudentLearningProfile).where(
+            StudentLearningProfile.student_id == student_id,
+            StudentLearningProfile.completed_at.is_not(None),
+        )
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    raw_scores = (profile.modality_scores if profile else None) or {}
+    dominant_modality_key: str | None = None
+    if isinstance(raw_scores, dict) and raw_scores:
+        first_val = next(iter(raw_scores.values()), None)
+        if isinstance(first_val, str):
+            dominant_modality_key = raw_scores.get("dominant")
+        else:
+            try:
+                scores = {k: float(v) for k, v in raw_scores.items() if v is not None and isinstance(k, str)}
+                dominant_modality_key = max(scores, key=lambda k: scores.get(k, 0.0)) if scores else None
+            except (ValueError, TypeError):
+                pass
+    interests: list[str] = (profile.interests or []) if profile else []
+    dominant_modality = _modality_key_to_label(dominant_modality_key)
+    first_interest_key = interests[0] if interests else None
+    interest_category = (
+        INTEREST_KEY_TO_CATEGORY.get(first_interest_key, "general topics") if first_interest_key else "general topics"
+    )
+
+    template = _jinja_env.get_template("explain_this.jinja2")
+    system_prompt = template.render(
+        subtopic_name=subtopic_data.subtopic_name,
+        topic_name=subtopic_data.topic_name,
+        subject_name=subtopic_data.subject_name,
+        grade_level=subtopic_data.grade_level,
+        dominant_modality=dominant_modality,
+        interest_category=interest_category,
+    )
+
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_prompt},
+        *prior_messages,
+        {"role": "user", "content": question},
+    ]
+
+    async for chunk in llm_router.stream_sse(
+        task="explain_this",
+        messages=messages,
         temperature=0.6,
         max_tokens=400,
     ):

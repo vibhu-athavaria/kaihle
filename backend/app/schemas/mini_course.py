@@ -1,6 +1,7 @@
 """Schemas for mini-course endpoints.
 
-Covers: SubtopicCourseResponse, MarkProgressRequest and nested types.
+Covers: SubtopicCourseResponse, MarkProgressRequest, chat, transfer question,
+        and AI grading nested types.
 """
 
 from datetime import datetime
@@ -8,6 +9,12 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+
+class LearningProfileItem(BaseModel):
+    dominant_modality: str | None  # e.g. "Visual learner"
+    interest: str | None  # e.g. "football"
+    work_style_label: str | None  # e.g. "Task-based"
 
 
 class SubtopicExplanationItem(BaseModel):
@@ -46,16 +53,26 @@ class NextSubtopicItem(BaseModel):
     name: str
 
 
+class LatestOpenAnswerItem(BaseModel):
+    question_text: str
+    student_answer: str
+    ai_grade: str | None
+    ai_feedback: str | None
+    score: float
+
+
 class SubtopicCourseResponse(BaseModel):
     subtopic_id: UUID
     subtopic_name: str
     topic_name: str
     explanation: SubtopicExplanationItem | None
-    content_status: Literal["ready", "generating", "unavailable"]
+    content_status: Literal["ready", "unavailable"]
     video: SubtopicVideoItem | None
     check_questions: list[CheckQuestion]
     progress: CourseProgressItem
     next_subtopic: NextSubtopicItem | None = None
+    learning_profile: LearningProfileItem | None = None
+    latest_open_answer: LatestOpenAnswerItem | None = None
 
 
 class MarkProgressRequest(BaseModel):
@@ -104,3 +121,39 @@ class FeedbackResponse(BaseModel):
     feedback_type: str
     comment: str | None
     created_at: datetime
+
+
+# ── Chat history ──────────────────────────────────────────────────────────────
+
+
+class ChatMessageItem(BaseModel):
+    role: Literal["student", "ai"]
+    content: str
+    created_at: datetime
+
+
+class ChatHistoryResponse(BaseModel):
+    messages: list[ChatMessageItem]
+
+
+class ChatRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=500)
+
+
+# ── Transfer question + AI grading ───────────────────────────────────────────
+
+
+class TransferQuestionResponse(BaseModel):
+    question_text: str
+
+
+class GradeAnswerRequest(BaseModel):
+    question_text: str = Field(..., min_length=1, max_length=2000)
+    student_answer: str = Field(..., min_length=1, max_length=1000)
+
+
+class GradeAnswerResponse(BaseModel):
+    grade: Literal["correct", "partial", "incorrect"]
+    feedback: str
+    score: float
+    updated_course_score: float | None

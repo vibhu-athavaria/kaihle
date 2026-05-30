@@ -1,6 +1,7 @@
-"""Mini-course progress, feedback, and teacher override SQLAlchemy models.
+"""Mini-course progress, feedback, teacher override, chat, and quiz response models.
 
-Covers: subtopic_course_progress, subtopic_content_feedback, mini_course_student_overrides
+Covers: subtopic_course_progress, subtopic_content_feedback, mini_course_student_overrides,
+        mini_course_chat_messages, mini_course_quiz_responses
 """
 
 import uuid
@@ -165,4 +166,126 @@ class MiniCourseStudentOverride(Base, UUIDMixin, TimestampMixin):
             name="uq_mini_course_override_school_topic_student",
         ),
         Index("idx_mini_course_overrides_school_topic", "school_id", "topic_id"),
+    )
+
+
+class MiniCourseChatMessage(Base, UUIDMixin):
+    """Persistent chat history between a student and the AI tutor for a subtopic.
+
+    One row per message turn. role='student' for student messages, role='ai' for
+    AI responses. Ordered by created_at ASC for display. Capped at 50 rows returned
+    per request — old messages are retained in DB but not surfaced.
+    """
+
+    __tablename__ = "mini_course_chat_messages"
+
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    subtopic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subtopics.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    school_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("schools.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    role: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default="now()",
+    )
+
+    __table_args__ = (
+        CheckConstraint("role IN ('student', 'ai')", name="chk_chat_message_role"),
+        Index(
+            "idx_mini_course_chat_school_student_subtopic",
+            "school_id",
+            "student_id",
+            "subtopic_id",
+        ),
+    )
+
+
+class MiniCourseQuizResponse(Base, UUIDMixin):
+    """One row per question answered in a mini-course quiz session.
+
+    Covers both MCQ (question_type='mcq', graded by deterministic string comparison)
+    and open-ended transfer questions (question_type='open_ended', graded by AI).
+
+    score is always in [0.0, 1.0]:
+      - MCQ: 1.0 if correct, 0.0 if incorrect
+      - Open-ended: 1.0 correct / 0.5 partial / 0.0 incorrect
+
+    check_questions_score on SubtopicCourseProgress is computed as AVG(score)
+    over this table for the (student_id, subtopic_id) pair, taking the best
+    score per question_type bucket (GREATEST logic preserved).
+
+    question_text is stored here because open-ended questions are LLM-generated
+    at runtime and have no permanent ID in the question bank.
+    """
+
+    __tablename__ = "mini_course_quiz_responses"
+
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    subtopic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subtopics.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    school_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("schools.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    question_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    student_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    ai_grade: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+    ai_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=False,
+        server_default="now()",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "question_type IN ('mcq', 'open_ended')",
+            name="chk_quiz_response_question_type",
+        ),
+        CheckConstraint(
+            "ai_grade IS NULL OR ai_grade IN ('correct', 'partial', 'incorrect')",
+            name="chk_quiz_response_ai_grade",
+        ),
+        CheckConstraint(
+            "score >= 0.0 AND score <= 1.0",
+            name="chk_quiz_response_score_range",
+        ),
+        Index(
+            "idx_mini_course_quiz_responses_school_student_subtopic",
+            "school_id",
+            "student_id",
+            "subtopic_id",
+        ),
     )

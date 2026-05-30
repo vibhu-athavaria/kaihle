@@ -286,7 +286,7 @@ export function useGenerateQuiz() {
   return useMutation({
     mutationFn: async (subtopicId: string) => {
       const response = await apiClient.post<FullSubtopicContentReviewResponse>(
-        `/api/v1/subtopic-content/${subtopicId}/quiz/generate`,
+        `/api/v1/subtopic-content/${subtopicId}/quiz/admin-generate`,
       );
       return response.data;
     },

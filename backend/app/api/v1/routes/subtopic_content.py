@@ -10,7 +10,7 @@ Endpoints:
 3. PATCH /{subtopic_id}/videos/{video_index}  — approve/reject a video candidate
 4. POST  /{subtopic_id}/videos                — add a manual video entry
 5. POST  /{subtopic_id}/videos/refresh        — re-run YouTube search, append new candidates
-6. POST  /{subtopic_id}/quiz/generate         — LLM-generate quiz when none exists (or regenerate)
+6. POST  /{subtopic_id}/quiz/admin-generate    — LLM-generate quiz when none exists (or regenerate) — KaihleAdmin only
 7. PATCH /{subtopic_id}/explanation           — edit explanation text + approve/reject
 8. PATCH /{subtopic_id}/quiz                  — edit quiz questions + approve/reject
 """
@@ -65,10 +65,13 @@ from app.schemas.subtopic_content import (
     TeacherApproveRequest,
     VideoEntry,
     VideoSection,
+    VideoSelectRequest,
     VideoStatusUpdateRequest,
+    VideoSuggestionRequest,
 )
 from app.services.youtube_service import search_youtube_videos
 from app.tasks.content_tasks import generate_personalised_explanations
+from app.tasks.teacher_content_tasks import generate_teacher_requested_content
 
 logger = structlog.get_logger()
 
@@ -854,7 +857,7 @@ async def update_quiz(
 
 
 # ---------------------------------------------------------------------------
-# POST /{subtopic_id}/quiz/generate
+# POST /{subtopic_id}/quiz/admin-generate
 # ---------------------------------------------------------------------------
 
 _QUIZ_GENERATE_PROMPT = """Generate 5 multiple-choice quiz questions for the following subtopic.
@@ -886,16 +889,18 @@ Respond with ONLY a valid JSON object, no markdown, no extra keys:
 """
 
 
-@router.post("/{subtopic_id}/quiz/generate", response_model=FullSubtopicContentReviewResponse)
+@router.post("/{subtopic_id}/quiz/admin-generate", response_model=FullSubtopicContentReviewResponse)
 async def generate_quiz(
     subtopic_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> FullSubtopicContentReviewResponse:
-    """LLM-generate (or regenerate) quiz questions for a subtopic.
+    """LLM-generate (or regenerate) curriculum-scope quiz questions for a subtopic — KaihleAdmin only.
 
     Creates the practice content row when it doesn't exist.
     Overwrites existing questions if called again — use PATCH /quiz to edit specific questions.
+    Renamed from /quiz/generate to avoid routing conflict with the teacher
+    POST /{subtopic_id}/{content_type}/generate endpoint.
     """
     subtopic = await _get_subtopic_with_meta(subtopic_id, db)
     ct = subtopic.curriculum_topic  # type: ignore[attr-defined]
@@ -979,13 +984,28 @@ async def generate_quiz(
 
 
 def _content_type_status(row: SubtopicContent | None, school_id: uuid.UUID | None) -> ContentTypeStatus:
-    """Compute status token for one content type row as seen by a teacher."""
+    """Compute semantic status token for one content type row as seen by a teacher.
+
+    Maps (scope, school_id, review_status) to a single token the frontend understands:
+      curriculum + pending   → "curriculum_pending"
+      curriculum + approved  → "approved"
+      curriculum + rejected  → "rejected"
+      own school + pending   → "own_school_pending"
+      own school + approved  → "approved"
+      own school + rejected  → "rejected"
+      other school           → "other_school_pending"
+      no row                 → "none"
+    """
     if row is None:
         return ContentTypeStatus(status="none")
     if row.scope == "curriculum":
+        if row.review_status == "pending":
+            return ContentTypeStatus(status="curriculum_pending", scope="curriculum")
         return ContentTypeStatus(status=row.review_status, scope="curriculum")
     # school-scoped
     if row.school_id == school_id:
+        if row.review_status == "pending":
+            return ContentTypeStatus(status="own_school_pending", scope="school", school_id=row.school_id)
         return ContentTypeStatus(status=row.review_status, scope="school", school_id=row.school_id)
     return ContentTypeStatus(status="other_school_pending", scope="school", school_id=row.school_id)
 
@@ -1063,23 +1083,44 @@ async def teacher_generate_content(
 ) -> dict[str, str]:
     """Teacher requests LLM generation of a specific content type.
 
-    Returns 409 if ANY row (any scope/school) already exists for (subtopic_id, content_type).
-    Creates a school-scoped pending placeholder; Celery task enqueue wired in T6.
+    If a curriculum-scope or active school-scope row already exists → 409.
+    If a stuck inactive placeholder exists for this school (Celery task was lost),
+    re-enqueues the task without creating a new row.
+    Otherwise creates a new school-scoped placeholder and enqueues the task.
     """
     assert current_user.school_id is not None
     await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
 
     existing_result = await db.execute(
-        select(SubtopicContent.id).where(
+        select(SubtopicContent).where(
             SubtopicContent.subtopic_id == subtopic_id,
             SubtopicContent.content_type == content_type,
         )
     )
-    if existing_result.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Content of type '{content_type}' already exists for this subtopic",
-        )
+    existing_rows = existing_result.scalars().all()
+
+    for row in existing_rows:
+        # Curriculum-scoped content or active school content → block generation
+        if row.scope == "curriculum" or row.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Content of type '{content_type}' already exists for this subtopic",
+            )
+        # Stuck inactive placeholder for this school → re-enqueue the task
+        if row.scope == "school" and row.school_id == current_user.school_id and not row.is_active:
+            generate_teacher_requested_content.delay(
+                subtopic_id=str(subtopic_id),
+                content_type=content_type,
+                school_id=str(current_user.school_id),
+            )
+            logger.info(
+                "teacher_content_generation_re_enqueued",
+                subtopic_id=str(subtopic_id),
+                content_type=content_type,
+                school_id=str(current_user.school_id),
+                teacher_id=str(current_user.id),
+            )
+            return {"status": "accepted", "message": "Content generation re-queued"}
 
     now = datetime.now(UTC)
     placeholder = SubtopicContent(
@@ -1097,6 +1138,12 @@ async def teacher_generate_content(
     db.add(placeholder)
     await db.commit()
 
+    generate_teacher_requested_content.delay(
+        subtopic_id=str(subtopic_id),
+        content_type=content_type,
+        school_id=str(current_user.school_id),
+    )
+
     logger.info(
         "teacher_content_generation_requested",
         subtopic_id=str(subtopic_id),
@@ -1105,6 +1152,227 @@ async def teacher_generate_content(
         teacher_id=str(current_user.id),
     )
     return {"status": "accepted", "message": "Content generation queued"}
+
+
+@router.get("/{subtopic_id}/video/candidates")
+async def get_teacher_video_candidates(
+    subtopic_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, object]]:
+    """Return all video candidates from the teacher's school-scoped row for review.
+
+    Unlike GET /{subtopic_id}/videos (which returns only KaihleAdmin-approved entries),
+    this returns all candidates — including pending ones — so the teacher can review
+    what was generated before deciding to approve or reject the content row.
+    Falls back to the curriculum row when no school-scoped row exists.
+    """
+    assert current_user.school_id is not None
+    await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == "video",
+        )
+    )
+    rows = result.scalars().all()
+
+    own_row: SubtopicContent | None = None
+    curriculum_row: SubtopicContent | None = None
+    for row in rows:
+        if row.scope == "school" and row.school_id == current_user.school_id:
+            own_row = row
+        elif row.scope == "curriculum":
+            curriculum_row = row
+
+    # Own-school teachers see all candidates (including pending) to enable selection.
+    # Other teachers see only the single approved entry — same as students.
+    if own_row is not None:
+        return list(own_row.videos or [])
+
+    if curriculum_row is not None:
+        approved = [v for v in (curriculum_row.videos or []) if v.get("status") == "approved"]
+        return approved
+
+    return []
+
+
+@router.patch("/{subtopic_id}/video/select")
+async def select_video(
+    subtopic_id: uuid.UUID,
+    body: VideoSelectRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Select exactly one video candidate as the approved entry.
+
+    Enforces the invariant: at most one entry in the JSONB array has status='approved'.
+    Selecting a new index de-selects the previous one automatically.
+
+    Authorization:
+    - TEACHER: allowed only while the row is school-scoped and belongs to their school.
+      After KaihleAdmin promotes to curriculum scope, teachers can no longer switch.
+    - KAIHLE_ADMIN: always allowed regardless of scope.
+    """
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == "video",
+        )
+    )
+    content = result.scalar_one_or_none()
+    if content is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No video content found for this subtopic")
+
+    if current_user.role == UserRole.TEACHER:
+        if content.scope != "school" or content.school_id != current_user.school_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Video has been set globally by the platform — only Kaihle admins can change the selection.",
+            )
+
+    videos = list(content.videos or [])
+    if body.video_index >= len(videos):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video index {body.video_index} out of range (0–{len(videos) - 1})",
+        )
+
+    # Exactly one approved: approve selected, reset all others to pending
+    for i, v in enumerate(videos):
+        videos[i] = {**v, "status": "approved" if i == body.video_index else "pending"}
+
+    now = datetime.now(UTC)
+    content.videos = videos
+    orm_attrs.flag_modified(content, "videos")
+    content.review_status = "approved"
+    content.is_active = True
+    content.reviewed_at = now
+    content.reviewed_by_id = current_user.id
+    content.updated_at = now
+
+    await db.commit()
+    logger.info(
+        "video_selected",
+        subtopic_id=str(subtopic_id),
+        video_index=body.video_index,
+        scope=content.scope,
+        user_id=str(current_user.id),
+        role=str(current_user.role),
+    )
+    return {"status": "ok", "selected_index": str(body.video_index)}
+
+
+@router.post("/{subtopic_id}/video/suggest")
+async def suggest_video_change(
+    subtopic_id: uuid.UUID,
+    body: VideoSuggestionRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Teacher from another school suggests a video change to KaihleAdmin.
+
+    Used when a teacher cannot switch the video because they don't own the content row.
+    Logs the request and notifies all active KaihleAdmin users.
+    """
+    assert current_user.school_id is not None
+    await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    # Verify this teacher does NOT own the content (they should use /video/select instead)
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == "video",
+        )
+    )
+    content = result.scalar_one_or_none()
+    if content is not None and content.scope == "school" and content.school_id == current_user.school_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You own this video content — use the select endpoint to switch videos directly.",
+        )
+
+    admin_result = await db.execute(select(User).where(User.role == UserRole.KAIHLE_ADMIN, User.is_active.is_(True)))
+    admins = admin_result.scalars().all()
+
+    logger.info(
+        "video_suggestion_submitted",
+        subtopic_id=str(subtopic_id),
+        teacher_id=str(current_user.id),
+        school_id=str(current_user.school_id),
+        message=body.message,
+        admin_count=len(admins),
+    )
+
+    # Fire-and-forget email notifications — non-fatal
+    try:
+        import resend  # type: ignore[import-untyped]
+
+        resend.api_key = settings.resend_api_key
+        for admin in admins:
+            resend.Emails.send(
+                {
+                    "from": settings.from_email,
+                    "to": [admin.email],
+                    "subject": "Teacher video suggestion",
+                    "html": (
+                        f"<p>Hi {admin.first_name},</p>"
+                        f"<p>A teacher from school <code>{current_user.school_id}</code> has suggested "
+                        f"a video change for subtopic <code>{subtopic_id}</code>:</p>"
+                        f"<blockquote>{body.message}</blockquote>"
+                        f"<p>Please review and update the video selection in the admin portal.</p>"
+                    ),
+                }
+            )
+    except Exception as exc:
+        logger.warning("video_suggestion_email_failed", error=str(exc))
+
+    return {"status": "submitted"}
+
+
+@router.get("/{subtopic_id}/quiz/questions")
+async def get_teacher_quiz_questions(
+    subtopic_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, object]:
+    """Return the school-scoped quiz questions for teacher review.
+
+    Returns the pending school-scoped row so the teacher can read the questions
+    before deciding to approve or reject. Falls back to the curriculum row if
+    no school-scoped row exists.
+    """
+    assert current_user.school_id is not None
+    await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+
+    result = await db.execute(
+        select(SubtopicContent).where(
+            SubtopicContent.subtopic_id == subtopic_id,
+            SubtopicContent.content_type == "quiz",
+        )
+    )
+    rows = result.scalars().all()
+
+    # Prefer own-school row; fall back to curriculum row
+    own_row: SubtopicContent | None = None
+    curriculum_row: SubtopicContent | None = None
+    for row in rows:
+        if row.scope == "school" and row.school_id == current_user.school_id:
+            own_row = row
+        elif row.scope == "curriculum":
+            curriculum_row = row
+
+    content = own_row or curriculum_row
+    if content is None:
+        return {"questions": [], "quiz_questions_count": 0}
+
+    return {
+        "questions": content.quiz_questions or [],
+        "quiz_questions_count": content.quiz_questions_count or 0,
+        "review_status": content.review_status,
+        "scope": content.scope,
+    }
 
 
 @router.patch("/{subtopic_id}/{content_type}/approve")
@@ -1139,6 +1407,47 @@ async def teacher_approve_content(
         content.review_status = "approved"
         content.is_active = True
         content.rejection_reason = None
+
+        # Quiz: publish questions to QuestionBank so the mini-course service
+        # can serve them. Options are stored as "A: text" strings in the JSONB;
+        # QuestionBank expects [{"key": "A", "text": "..."}] dicts.
+        if content_type == "quiz" and content.quiz_questions:
+            await db.execute(
+                delete(QuestionBank).where(
+                    QuestionBank.subtopic_id == subtopic_id,
+                    QuestionBank.source == "llm",
+                )
+            )
+            for q in content.quiz_questions:
+                raw_opts: list[Any] = q.get("options", [])
+                parsed_opts: list[dict[str, str]] = []
+                for opt in raw_opts:
+                    if isinstance(opt, str) and ": " in opt:
+                        key, _, text_part = opt.partition(": ")
+                        parsed_opts.append({"key": key.strip(), "text": text_part.strip()})
+                    elif isinstance(opt, dict):
+                        parsed_opts.append(opt)
+                db.add(
+                    QuestionBank(
+                        subtopic_id=subtopic_id,
+                        question_text=q.get("question_text", ""),
+                        question_type="MCQ",
+                        options=parsed_opts,
+                        correct_answer=q.get("correct_answer", ""),
+                        explanation=q.get("explanation"),
+                        canonical_form=q.get("question_text", ""),
+                        problem_signature={},
+                        source="llm",
+                        difficulty_level=q.get("difficulty_level"),
+                        is_active=True,
+                    )
+                )
+            logger.info(
+                "teacher_quiz_published_to_question_bank",
+                subtopic_id=str(subtopic_id),
+                question_count=len(content.quiz_questions),
+                teacher_id=str(current_user.id),
+            )
     else:
         content.review_status = "rejected"
         content.rejection_reason = body.rejection_reason

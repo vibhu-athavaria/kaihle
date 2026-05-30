@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
 import {
   ArrowLeft,
   ArrowRight,
@@ -10,6 +11,9 @@ import {
   ThumbsDown,
   MessageCircle,
   AlertCircle,
+  Brain,
+  Sparkles,
+  Zap,
 } from "lucide-react";
 import { StudentLayout, toast } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
@@ -19,8 +23,14 @@ import {
   useMarkCourseProgress,
   useSubmitFeedback,
   useSubmitQuiz,
+  useGenerateTransferQuestion,
+  useGradeAnswer,
 } from "../../hooks/useSubtopicCourse";
-import type { CourseQuestion, CourseOption } from "../../types/miniCourse";
+import type {
+  CourseQuestion,
+  CourseOption,
+  GradeAnswerResult,
+} from "../../types/miniCourse";
 import { ExplainThisDrawer } from "../../components/mini-course/ExplainThisDrawer";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -38,26 +48,151 @@ function extractYouTubeId(url: string): string | null {
   return null;
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+/** Fire callback once when element is ≥50% visible in the viewport. */
+function useIntersectionOnce(
+  ref: React.RefObject<HTMLElement | null>,
+  callback: () => void,
+  enabled: boolean = true,
+) {
+  const firedRef = useRef(false);
+
+  useEffect(() => {
+    if (!enabled || !ref.current || firedRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && !firedRef.current) {
+          firedRef.current = true;
+          observer.disconnect();
+          callback();
+        }
+      },
+      { threshold: 0.5 },
+    );
+
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [ref, callback, enabled]);
+}
+
+// ─── Learning profile pills ───────────────────────────────────────────────────
+
+interface ProfilePill {
+  icon: React.ReactNode;
+  label: string;
+}
+
+function ProfilePills({
+  dominant_modality,
+  interest,
+  work_style_label,
+}: {
+  dominant_modality: string | null;
+  interest: string | null;
+  work_style_label: string | null;
+}) {
+  const pills: ProfilePill[] = [];
+  if (dominant_modality)
+    pills.push({
+      icon: <Brain className="w-3.5 h-3.5" aria-hidden="true" />,
+      label: dominant_modality,
+    });
+  if (interest)
+    pills.push({
+      icon: <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />,
+      label: interest,
+    });
+  if (work_style_label)
+    pills.push({
+      icon: <Zap className="w-3.5 h-3.5" aria-hidden="true" />,
+      label: work_style_label,
+    });
+
+  if (pills.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2 mt-3">
+      {pills.map((p) => (
+        <span
+          key={p.label}
+          className="inline-flex items-center gap-1.5 bg-brand-primary/8 text-brand-primary text-xs font-sans font-semibold px-3 py-1 rounded-full"
+        >
+          {p.icon}
+          {p.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ─── Video section ────────────────────────────────────────────────────────────
+
+interface VideoSectionProps {
+  url: string;
+  onVisible: () => void;
+  alreadyTracked: boolean;
+}
+
+function VideoSection({ url, onVisible, alreadyTracked }: VideoSectionProps) {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  useIntersectionOnce(sectionRef, onVisible, !alreadyTracked);
+
+  const videoId = extractYouTubeId(url);
+
+  return (
+    <div
+      ref={sectionRef}
+      id="section-video"
+      className="bg-white rounded-2xl border border-brand-border p-6 space-y-4"
+    >
+      <div className="flex items-center gap-2">
+        <Play className="w-5 h-5 text-brand-primary" aria-hidden="true" />
+        <h2 className="font-display font-bold text-xl text-brand-ink">Video</h2>
+      </div>
+      {videoId ? (
+        <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
+          <iframe
+            src={`https://www.youtube.com/embed/${videoId}`}
+            title="Subtopic video"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="absolute inset-0 w-full h-full rounded-xl border-0"
+          />
+        </div>
+      ) : (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-sans text-sm text-brand-primary underline hover:text-brand-dark focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+        >
+          Watch video
+        </a>
+      )}
+    </div>
+  );
+}
+
+// ─── Explanation card ─────────────────────────────────────────────────────────
 
 interface ExplanationCardProps {
   explanationText: string;
-  interestCategory: string | null;
+  interestMatched: boolean;
   contentId: string;
-  onMount?: () => void;
+  onVisible: () => void;
+  alreadyTracked: boolean;
 }
 
 function ExplanationCard({
   explanationText,
-  interestCategory,
+  interestMatched,
   contentId,
-  onMount,
+  onVisible,
+  alreadyTracked,
 }: ExplanationCardProps) {
-  useEffect(() => {
-    onMount?.();
-    // Run once on mount — intentionally no deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const sectionRef = useRef<HTMLDivElement>(null);
+  useIntersectionOnce(sectionRef, onVisible, !alreadyTracked);
+
   const [feedbackGiven, setFeedbackGiven] = useState<
     "thumbs_up" | "thumbs_down" | null
   >(null);
@@ -80,7 +215,11 @@ function ExplanationCard({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-brand-border p-6 space-y-4">
+    <div
+      ref={sectionRef}
+      id="section-explanation"
+      className="bg-white rounded-2xl border border-brand-border p-6 space-y-4"
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BookOpen className="w-5 h-5 text-brand-primary" aria-hidden="true" />
@@ -88,15 +227,15 @@ function ExplanationCard({
             Explanation
           </h2>
         </div>
-        {interestCategory && (
+        {interestMatched && (
           <span className="inline-flex items-center gap-1 bg-brand-primary/10 text-brand-primary text-xs font-sans font-semibold px-3 py-1 rounded-full">
-            {interestCategory}
+            Personalised for you
           </span>
         )}
       </div>
 
-      <div className="font-sans text-sm text-brand-body leading-relaxed whitespace-pre-wrap">
-        {explanationText}
+      <div className="font-sans text-sm text-brand-body leading-relaxed prose prose-sm prose-p:text-brand-body prose-strong:text-brand-ink prose-headings:font-display max-w-none">
+        <ReactMarkdown>{explanationText}</ReactMarkdown>
       </div>
 
       <div className="flex items-center gap-3 pt-2 border-t border-brand-border">
@@ -138,54 +277,7 @@ function ExplanationCard({
   );
 }
 
-interface VideoSectionProps {
-  url: string;
-  title: string;
-}
-
-function VideoSection({ url, title }: VideoSectionProps) {
-  const videoId = extractYouTubeId(url);
-
-  if (!videoId) {
-    return (
-      <div className="bg-white rounded-2xl border border-brand-border p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Play className="w-5 h-5 text-brand-primary" aria-hidden="true" />
-          <h2 className="font-display font-bold text-xl text-brand-ink">
-            Video
-          </h2>
-        </div>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-sans text-sm text-brand-primary underline hover:text-brand-dark focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-        >
-          {title}
-        </a>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white rounded-2xl border border-brand-border p-6 space-y-4">
-      <div className="flex items-center gap-2">
-        <Play className="w-5 h-5 text-brand-primary" aria-hidden="true" />
-        <h2 className="font-display font-bold text-xl text-brand-ink">Video</h2>
-      </div>
-      <p className="font-sans text-sm text-brand-body">{title}</p>
-      <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
-        <iframe
-          src={`https://www.youtube.com/embed/${videoId}`}
-          title={title}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          className="absolute inset-0 w-full h-full rounded-xl border-0"
-        />
-      </div>
-    </div>
-  );
-}
+// ─── Check questions (MCQ) ────────────────────────────────────────────────────
 
 const TRUE_FALSE_OPTIONS: CourseOption[] = [
   { key: "True", text: "True" },
@@ -194,7 +286,6 @@ const TRUE_FALSE_OPTIONS: CourseOption[] = [
 
 function resolveOptions(q: CourseQuestion): CourseOption[] {
   if (q.options.length > 0) return q.options;
-  // True/False questions may have empty options in the question bank
   const answer = q.correct_answer.toLowerCase();
   if (answer === "true" || answer === "false") return TRUE_FALSE_OPTIONS;
   return q.options;
@@ -204,36 +295,31 @@ interface CheckQuestionsProps {
   questions: CourseQuestion[];
   subtopicId: string;
   subtopicName: string;
+  onAskTutor: (prefilledQuestion: string) => void;
 }
 
 function CheckQuestions({
   questions: initialQuestions,
   subtopicId,
   subtopicName,
+  onAskTutor,
 }: CheckQuestionsProps) {
-  // Freeze questions on mount — invalidated refetches re-randomize the backend
-  // order, which would reset answers state and hide the AI tutor button.
   const [questions] = useState(initialQuestions);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [explainOpen, setExplainOpen] = useState(false);
-  const [explainQuestion, setExplainQuestion] = useState("");
   const submitQuiz = useSubmitQuiz(subtopicId);
 
   const answeredCount = Object.keys(answers).length;
   const allAnswered = answeredCount === questions.length;
-
   const correctCount = questions.filter(
     (q) => answers[q.question_id] === q.correct_answer,
   ).length;
-
   const score = allAnswered ? correctCount / questions.length : null;
   const mastery = getMasteryStyle(score);
 
   const handleSelect = (questionId: string, key: string) => {
-    if (answers[questionId]) return; // locked after answering
+    if (answers[questionId]) return;
     const next = { ...answers, [questionId]: key };
     setAnswers(next);
-    // Submit when this answer completes the quiz
     if (Object.keys(next).length === questions.length) {
       submitQuiz.mutate({
         answers: Object.entries(next).map(([question_id, selected_key]) => ({
@@ -245,116 +331,324 @@ function CheckQuestions({
   };
 
   const handleAskTutor = (q: CourseQuestion) => {
-    setExplainQuestion(
+    onAskTutor(
       `I got this question wrong. Can you explain why the correct answer is "${q.correct_answer}"?\n\nQuestion: ${q.question_text}`,
     );
-    setExplainOpen(true);
   };
 
   return (
-    <>
-      <div className="bg-white rounded-2xl border border-brand-border p-6 space-y-6">
-        <div className="flex items-center gap-2">
-          <CheckCircle
-            className="w-5 h-5 text-brand-primary"
-            aria-hidden="true"
-          />
-          <h2 className="font-display font-bold text-xl text-brand-ink">
-            Check Your Understanding
-          </h2>
-        </div>
-
-        <ol className="space-y-0">
-          {questions.map((q, idx) => {
-            const chosen = answers[q.question_id];
-            const isCorrect = chosen === q.correct_answer;
-            const opts = resolveOptions(q);
-
-            return (
-              <li
-                key={q.question_id}
-                className={`space-y-3 py-5 ${idx > 0 ? "border-t border-brand-border" : ""}`}
-              >
-                <p className="font-sans font-semibold text-sm text-brand-ink">
-                  {idx + 1}. {q.question_text}
-                </p>
-                <ul className="space-y-2 list-none">
-                  {opts.map((opt) => {
-                    const isChosen = chosen === opt.key;
-                    const isCorrectOpt = opt.key === q.correct_answer;
-                    let optClass =
-                      "w-full text-left px-4 py-3 rounded-xl border font-sans text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 flex items-center gap-2";
-
-                    if (!chosen) {
-                      optClass +=
-                        " border-brand-border text-brand-body hover:border-brand-primary hover:bg-brand-primary/5";
-                    } else if (isCorrectOpt) {
-                      optClass +=
-                        " border-brand-green bg-brand-green-light text-brand-green-dark font-semibold";
-                    } else if (isChosen && !isCorrect) {
-                      optClass +=
-                        " border-brand-red bg-brand-red-light text-brand-red-dark";
-                    } else {
-                      optClass += " border-brand-border text-brand-muted";
-                    }
-
-                    return (
-                      <li key={opt.key}>
-                        <button
-                          onClick={() => handleSelect(q.question_id, opt.key)}
-                          disabled={!!chosen}
-                          className={optClass}
-                        >
-                          <span className="w-5 h-5 rounded-full border border-current flex-shrink-0 flex items-center justify-center text-xs font-bold">
-                            {opt.key.length === 1 ? opt.key : opt.key[0]}
-                          </span>
-                          {opt.text}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                {chosen && !isCorrect && (
-                  <button
-                    onClick={() => handleAskTutor(q)}
-                    className="flex items-center gap-1.5 text-xs font-sans font-semibold text-brand-primary hover:text-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
-                    Ask AI tutor to explain this
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-
-        {allAnswered && (
-          <div
-            className={`rounded-xl p-4 flex items-center gap-3 ${mastery.bgClass}`}
-          >
-            <span
-              className={`w-3 h-3 rounded-full flex-shrink-0 ${mastery.dotClass}`}
-              aria-label={mastery.label}
-              role="img"
-            />
-            <p
-              className={`font-sans font-semibold text-sm ${mastery.textClass}`}
-            >
-              {correctCount}/{questions.length} correct — {mastery.label}
-            </p>
-          </div>
-        )}
+    <div
+      id="section-quiz"
+      className="bg-white rounded-2xl border border-brand-border p-6 space-y-6"
+    >
+      <div className="flex items-center gap-2">
+        <CheckCircle
+          className="w-5 h-5 text-brand-primary"
+          aria-hidden="true"
+        />
+        <h2 className="font-display font-bold text-xl text-brand-ink">
+          Check Your Understanding
+        </h2>
       </div>
 
-      <ExplainThisDrawer
-        open={explainOpen}
-        onClose={() => setExplainOpen(false)}
-        subtopicId={subtopicId}
-        subtopicName={subtopicName}
-        initialQuestion={explainQuestion}
-      />
-    </>
+      <ol className="space-y-0">
+        {questions.map((q, idx) => {
+          const chosen = answers[q.question_id];
+          const isCorrect = chosen === q.correct_answer;
+          const opts = resolveOptions(q);
+
+          return (
+            <li
+              key={q.question_id}
+              className={`space-y-3 py-5 ${idx > 0 ? "border-t border-brand-border" : ""}`}
+            >
+              <p className="font-sans font-semibold text-sm text-brand-ink">
+                {idx + 1}. {q.question_text}
+              </p>
+              <ul className="space-y-2 list-none">
+                {opts.map((opt) => {
+                  const isChosen = chosen === opt.key;
+                  const isCorrectOpt = opt.key === q.correct_answer;
+                  let optClass =
+                    "w-full text-left px-4 py-3 rounded-xl border font-sans text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 flex items-center gap-2";
+
+                  if (!chosen) {
+                    optClass +=
+                      " border-brand-border text-brand-body hover:border-brand-primary hover:bg-brand-primary/5";
+                  } else if (isCorrectOpt) {
+                    optClass +=
+                      " border-brand-green bg-brand-green-light text-brand-green-dark font-semibold";
+                  } else if (isChosen && !isCorrect) {
+                    optClass +=
+                      " border-brand-red bg-brand-red-light text-brand-red-dark";
+                  } else {
+                    optClass += " border-brand-border text-brand-muted";
+                  }
+
+                  return (
+                    <li key={opt.key}>
+                      <button
+                        onClick={() => handleSelect(q.question_id, opt.key)}
+                        disabled={!!chosen}
+                        className={optClass}
+                      >
+                        <span className="w-5 h-5 rounded-full border border-current flex-shrink-0 flex items-center justify-center text-xs font-bold">
+                          {opt.key.length === 1 ? opt.key : opt.key[0]}
+                        </span>
+                        {opt.text}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {chosen && !isCorrect && (
+                <button
+                  onClick={() => handleAskTutor(q)}
+                  className="flex items-center gap-1.5 text-xs font-sans font-semibold text-brand-primary hover:text-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                  Ask AI tutor to explain this
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+
+      {allAnswered && (
+        <div
+          className={`rounded-xl p-4 flex items-center gap-3 ${mastery.bgClass}`}
+        >
+          <span
+            className={`w-3 h-3 rounded-full flex-shrink-0 ${mastery.dotClass}`}
+            aria-label={mastery.label}
+            role="img"
+          />
+          <p className={`font-sans font-semibold text-sm ${mastery.textClass}`}>
+            {correctCount}/{questions.length} correct — {mastery.label}
+          </p>
+        </div>
+      )}
+
+      <p className="font-sans text-xs text-brand-muted">
+        {subtopicName} · Multiple choice questions
+      </p>
+    </div>
+  );
+}
+
+// ─── Transfer question component ──────────────────────────────────────────────
+
+interface TransferQuestionProps {
+  subtopicId: string;
+  initialAnswer?: {
+    question_text: string;
+    student_answer: string;
+    ai_grade: string | null;
+    ai_feedback: string | null;
+    score: number;
+  } | null;
+}
+
+const GRADE_STYLES: Record<
+  "correct" | "partial" | "incorrect",
+  { bg: string; text: string; label: string }
+> = {
+  correct: {
+    bg: "bg-brand-green-light border-brand-green",
+    text: "text-brand-green-dark",
+    label: "Correct",
+  },
+  partial: {
+    bg: "bg-brand-amber-light border-brand-amber",
+    text: "text-brand-amber-dark",
+    label: "Partially correct",
+  },
+  incorrect: {
+    bg: "bg-brand-red-light border-brand-red",
+    text: "text-brand-red-dark",
+    label: "Needs more work",
+  },
+};
+
+function TransferQuestionSection({
+  subtopicId,
+  initialAnswer,
+}: TransferQuestionProps) {
+  const [questionText, setQuestionText] = useState<string | null>(
+    initialAnswer?.question_text ?? null,
+  );
+  const [answerText, setAnswerText] = useState(
+    initialAnswer?.student_answer ?? "",
+  );
+  const [result, setResult] = useState<GradeAnswerResult | null>(null);
+  const [hasRestored] = useState(!!initialAnswer?.ai_grade);
+
+  const generateQuestion = useGenerateTransferQuestion(subtopicId);
+  const gradeAnswer = useGradeAnswer(subtopicId);
+
+  const handleGenerate = () => {
+    generateQuestion.mutate(undefined, {
+      onSuccess: (data) => setQuestionText(data.question_text),
+      onError: () => toast.error("Couldn't generate a question. Try again."),
+    });
+  };
+
+  const handleSubmit = () => {
+    if (!questionText || !answerText.trim()) return;
+    gradeAnswer.mutate(
+      { question_text: questionText, student_answer: answerText.trim() },
+      {
+        onSuccess: (data) => setResult(data),
+        onError: () => toast.error("Couldn't grade your answer. Try again."),
+      },
+    );
+  };
+
+  const handleRetry = () => {
+    setAnswerText("");
+    setResult(null);
+    setQuestionText(null);
+  };
+
+  const gradeStyle =
+    result?.grade && result.grade in GRADE_STYLES
+      ? GRADE_STYLES[result.grade as keyof typeof GRADE_STYLES]
+      : null;
+
+  return (
+    <div
+      id="section-transfer"
+      className="bg-white rounded-2xl border border-brand-border p-6 space-y-5"
+    >
+      <div className="flex items-center gap-2">
+        <Sparkles className="w-5 h-5 text-brand-primary" aria-hidden="true" />
+        <h2 className="font-display font-bold text-xl text-brand-ink">
+          Challenge Question
+        </h2>
+      </div>
+      <p className="font-sans text-sm text-brand-body">
+        Apply what you've learnt to a new scenario. There's no multiple choice
+        here — explain your thinking in your own words.
+      </p>
+
+      {/* Restored previous answer */}
+      {hasRestored && initialAnswer?.ai_grade && (
+        <div className="rounded-xl border bg-gray-50 p-4 space-y-2">
+          <p className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted">
+            Your previous answer
+          </p>
+          <p className="font-sans text-sm text-brand-ink font-semibold">
+            {initialAnswer.question_text}
+          </p>
+          <p className="font-sans text-sm text-brand-body">
+            {initialAnswer.student_answer}
+          </p>
+          <div
+            className={`rounded-lg border p-3 mt-2 ${GRADE_STYLES[initialAnswer.ai_grade as keyof typeof GRADE_STYLES]?.bg ?? ""}`}
+          >
+            <p
+              className={`font-sans text-xs font-bold uppercase mb-1 ${GRADE_STYLES[initialAnswer.ai_grade as keyof typeof GRADE_STYLES]?.text ?? ""}`}
+            >
+              {GRADE_STYLES[initialAnswer.ai_grade as keyof typeof GRADE_STYLES]
+                ?.label ?? initialAnswer.ai_grade}
+            </p>
+            <p className="font-sans text-sm text-brand-ink">
+              {initialAnswer.ai_feedback}
+            </p>
+          </div>
+          <button
+            onClick={handleRetry}
+            className="font-sans text-xs font-semibold text-brand-primary hover:text-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded mt-1"
+          >
+            Try a new question →
+          </button>
+        </div>
+      )}
+
+      {!hasRestored && !questionText && (
+        <button
+          onClick={handleGenerate}
+          disabled={generateQuestion.isPending}
+          className="flex items-center gap-2 px-5 py-2.5 bg-brand-primary text-white rounded-full font-sans font-semibold text-sm hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 disabled:opacity-50"
+        >
+          <Sparkles className="w-4 h-4" aria-hidden="true" />
+          {generateQuestion.isPending
+            ? "Generating..."
+            : "Get a challenge question"}
+        </button>
+      )}
+
+      {!hasRestored && questionText && !result && (
+        <div className="space-y-4">
+          <div className="rounded-xl bg-brand-primary/5 border border-brand-primary/20 p-4">
+            <p className="font-sans text-sm text-brand-ink font-semibold">
+              {questionText}
+            </p>
+          </div>
+          <div>
+            <label
+              htmlFor="transfer-answer"
+              className="font-sans text-sm font-semibold text-brand-ink mb-1.5 block"
+            >
+              Your answer
+            </label>
+            <textarea
+              id="transfer-answer"
+              value={answerText}
+              onChange={(e) => setAnswerText(e.target.value)}
+              maxLength={1000}
+              rows={5}
+              placeholder="Explain your thinking in 2–5 sentences..."
+              className="w-full rounded-xl border border-brand-border p-3 font-sans text-sm text-brand-ink placeholder-brand-muted resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+            />
+            <p className="font-sans text-xs text-brand-muted text-right mt-1">
+              {answerText.length} / 1000
+            </p>
+          </div>
+          <button
+            onClick={handleSubmit}
+            disabled={!answerText.trim() || gradeAnswer.isPending}
+            className="flex items-center gap-2 px-5 py-2.5 bg-brand-primary text-white rounded-full font-sans font-semibold text-sm hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 disabled:opacity-50"
+          >
+            {gradeAnswer.isPending ? "Grading..." : "Submit answer"}
+          </button>
+        </div>
+      )}
+
+      {!hasRestored && result && gradeStyle && (
+        <div className="space-y-4">
+          <div className="rounded-xl bg-brand-primary/5 border border-brand-primary/20 p-4">
+            <p className="font-sans text-sm text-brand-ink font-semibold">
+              {questionText}
+            </p>
+          </div>
+          <div className="rounded-xl border p-4 bg-gray-50">
+            <p className="font-sans text-xs text-brand-muted mb-1">
+              Your answer
+            </p>
+            <p className="font-sans text-sm text-brand-body">{answerText}</p>
+          </div>
+          <div className={`rounded-xl border p-4 ${gradeStyle.bg}`}>
+            <p
+              className={`font-sans text-xs font-bold uppercase tracking-widest mb-1.5 ${gradeStyle.text}`}
+            >
+              {gradeStyle.label}
+            </p>
+            <p className="font-sans text-sm text-brand-ink">
+              {result.feedback}
+            </p>
+          </div>
+          <button
+            onClick={handleRetry}
+            className="font-sans text-sm font-semibold text-brand-primary hover:text-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded"
+          >
+            Try another question →
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -364,61 +658,10 @@ function MiniCourseSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
       <div className="h-6 w-2/3 bg-brand-border rounded-full" />
+      <div className="h-32 bg-brand-border rounded-2xl" />
       <div className="h-52 bg-brand-border rounded-2xl" />
       <div className="h-72 bg-brand-border rounded-2xl" />
       <div className="h-64 bg-brand-border rounded-2xl" />
-    </div>
-  );
-}
-
-// ─── Stepper indicator ────────────────────────────────────────────────────────
-
-const STEP_LABELS = ["Watch", "Read", "Quiz"] as const;
-
-interface StepperProps {
-  currentStep: number;
-}
-
-function StepperIndicator({ currentStep }: StepperProps) {
-  return (
-    <div
-      className="flex items-center gap-0"
-      role="list"
-      aria-label="Course steps"
-    >
-      {STEP_LABELS.map((label, i) => {
-        const isDone = i < currentStep;
-        const isActive = i === currentStep;
-        return (
-          <div key={label} className="flex items-center" role="listitem">
-            <div className="flex flex-col items-center gap-1">
-              <div
-                className={[
-                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-sans font-bold transition-colors",
-                  isDone
-                    ? "bg-brand-primary text-white"
-                    : isActive
-                      ? "bg-brand-primary/10 text-brand-primary border-2 border-brand-primary"
-                      : "bg-brand-border text-brand-muted",
-                ].join(" ")}
-                aria-current={isActive ? "step" : undefined}
-              >
-                {isDone ? "✓" : i + 1}
-              </div>
-              <span
-                className={`text-xs font-sans ${isActive ? "text-brand-primary font-semibold" : "text-brand-muted"}`}
-              >
-                {label}
-              </span>
-            </div>
-            {i < STEP_LABELS.length - 1 && (
-              <div
-                className={`h-0.5 w-12 mx-1 mb-4 rounded-full transition-colors ${i < currentStep ? "bg-brand-primary" : "bg-brand-border"}`}
-              />
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -430,34 +673,23 @@ export function MiniCoursePage() {
   const navigate = useNavigate();
   const layout = useStudentLayoutProps();
   const [explainOpen, setExplainOpen] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
+  const [explainPrefill, setExplainPrefill] = useState("");
 
   const { data: course, isPending, isError } = useSubtopicCourse(subtopicId!);
   const { mutate: markProgress } = useMarkCourseProgress(subtopicId!);
 
-  // Re-entry: if quiz already completed, jump straight to quiz step
-  const hasCompletedQuiz =
-    course?.progress?.check_questions_score !== null &&
-    course?.progress?.check_questions_score !== undefined;
+  const handleVideoVisible = useCallback(() => {
+    markProgress({ video_accessed: true });
+  }, [markProgress]);
 
-  useEffect(() => {
-    if (hasCompletedQuiz) setCurrentStep(2);
-  }, [hasCompletedQuiz]);
+  const handleExplanationVisible = useCallback(() => {
+    markProgress({ explanation_accessed: true });
+  }, [markProgress]);
 
-  const handleNext = () => {
-    // Fire video progress when leaving the video step
-    if (
-      currentStep === 0 &&
-      course?.video &&
-      !course?.progress?.video_accessed
-    ) {
-      markProgress({ video_accessed: true });
-    }
-    setCurrentStep((s) => Math.min(s + 1, 2));
+  const handleAskTutor = (prefill: string) => {
+    setExplainPrefill(prefill);
+    setExplainOpen(true);
   };
-
-  // Opens the "Explain This" AI drawer — no progress side-effect
-  const handleExplainThisOpen = () => setExplainOpen(true);
 
   const handleBack = () => {
     if (window.history.length > 1) {
@@ -526,189 +758,135 @@ export function MiniCoursePage() {
           <MiniCourseSkeleton />
         ) : course ? (
           <>
-            {/* Header */}
+            {/* Header with learning profile pills */}
             <div className="bg-white rounded-2xl border border-brand-border p-6">
-              <h1 className="font-display font-bold text-2xl text-brand-ink mb-1">
-                {course.subtopic_name}
-              </h1>
-              <p className="font-sans text-sm text-brand-muted mb-4">
-                {course.subject_name} · Grade {course.grade_level}
-              </p>
-              <StepperIndicator currentStep={currentStep} />
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h1 className="font-display font-bold text-2xl text-brand-ink mb-0.5">
+                    {course.subtopic_name}
+                  </h1>
+                  <p className="font-sans text-sm text-brand-muted">
+                    {course.topic_name}
+                  </p>
+                  {course.learning_profile && (
+                    <ProfilePills {...course.learning_profile} />
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setExplainPrefill("");
+                    setExplainOpen(true);
+                  }}
+                  className="flex-shrink-0 flex items-center gap-1.5 border border-brand-primary text-brand-primary rounded-full px-4 py-2 text-sm font-sans font-semibold hover:bg-brand-primary/10 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                >
+                  <MessageCircle className="w-4 h-4" aria-hidden="true" />
+                  AI Tutor
+                </button>
+              </div>
             </div>
 
-            {/* Step 0: Video */}
-            {currentStep === 0 && (
-              <>
-                {course.video ? (
-                  <VideoSection
-                    url={course.video.video_url}
-                    title={course.video.title}
-                  />
-                ) : (
-                  <div className="bg-white rounded-2xl border border-brand-border p-10 text-center">
-                    <Play
-                      className="w-10 h-10 text-brand-muted mx-auto mb-3"
-                      aria-hidden="true"
-                    />
-                    <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
-                      No video yet
-                    </h2>
-                    <p className="font-sans text-sm text-brand-body">
-                      A video for this subtopic hasn't been added yet. Continue
-                      to the reading.
-                    </p>
-                  </div>
-                )}
-                <div className="grid grid-cols-3 items-center gap-3">
-                  <div className="flex justify-start" />
-                  <div className="flex justify-center">
-                    <button
-                      onClick={handleExplainThisOpen}
-                      className="flex items-center gap-1.5 border border-brand-primary text-brand-primary rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/10 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-                    >
-                      <MessageCircle className="w-4 h-4" aria-hidden="true" />
-                      AI Tutor
-                    </button>
-                  </div>
-                  <div className="flex justify-end">
-                    <button
-                      onClick={handleNext}
-                      className="flex items-center gap-2 bg-brand-primary text-white rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/90 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-                    >
-                      Next: Read
-                      <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              </>
+            {/* Video */}
+            {course.video ? (
+              <VideoSection
+                url={course.video.video_url}
+                onVisible={handleVideoVisible}
+                alreadyTracked={course.progress.video_accessed}
+              />
+            ) : (
+              <div className="bg-white rounded-2xl border border-brand-border p-10 text-center">
+                <Play
+                  className="w-10 h-10 text-brand-muted mx-auto mb-3"
+                  aria-hidden="true"
+                />
+                <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
+                  No video yet
+                </h2>
+                <p className="font-sans text-sm text-brand-body">
+                  A video for this subtopic hasn't been added yet.
+                </p>
+              </div>
             )}
 
-            {/* Step 1: Explanation */}
-            {currentStep === 1 && (
-              <>
-                {course.explanation ? (
-                  <ExplanationCard
-                    explanationText={course.explanation.explanation_text}
-                    interestCategory={course.explanation.interest_category}
-                    contentId={course.explanation.id}
-                    onMount={() => {
-                      if (!course.progress?.explanation_accessed) {
-                        markProgress({ explanation_accessed: true });
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="bg-white rounded-2xl border border-brand-border p-10 text-center">
-                    <BookOpen
-                      className="w-10 h-10 text-brand-muted mx-auto mb-3"
-                      aria-hidden="true"
-                    />
-                    <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
-                      No explanation yet
-                    </h2>
-                    <p className="font-sans text-sm text-brand-body">
-                      Your teacher hasn't generated an explanation for this
-                      subtopic yet. Check back soon.
-                    </p>
-                  </div>
-                )}
-                <div className="grid grid-cols-3 items-center gap-3">
-                  <div className="flex justify-start">
-                    <button
-                      onClick={() => setCurrentStep(0)}
-                      className="flex items-center gap-1.5 border border-brand-border text-brand-ink rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-bg transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-                    >
-                      <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-                      Back
-                    </button>
-                  </div>
-                  <div className="flex justify-center">
-                    <button
-                      onClick={handleExplainThisOpen}
-                      className="flex items-center gap-1.5 border border-brand-primary text-brand-primary rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/10 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-                    >
-                      <MessageCircle className="w-4 h-4" aria-hidden="true" />
-                      AI Tutor
-                    </button>
-                  </div>
-                  <div className="flex justify-end">
-                    <button
-                      onClick={handleNext}
-                      className="flex items-center gap-2 bg-brand-primary text-white rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/90 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-                    >
-                      Next: Quiz
-                      <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              </>
+            {/* Explanation */}
+            {course.explanation ? (
+              <ExplanationCard
+                explanationText={course.explanation.explanation_text}
+                interestMatched={course.explanation.interest_matched}
+                contentId={String(course.explanation.content_id)}
+                onVisible={handleExplanationVisible}
+                alreadyTracked={course.progress.explanation_accessed}
+              />
+            ) : (
+              <div className="bg-white rounded-2xl border border-brand-border p-10 text-center">
+                <BookOpen
+                  className="w-10 h-10 text-brand-muted mx-auto mb-3"
+                  aria-hidden="true"
+                />
+                <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
+                  No explanation yet
+                </h2>
+                <p className="font-sans text-sm text-brand-body">
+                  Your teacher hasn't generated an explanation for this subtopic
+                  yet. Check back soon.
+                </p>
+              </div>
             )}
 
-            {/* Step 2: Quiz */}
-            {currentStep === 2 && (
-              <>
-                {(course.check_questions ?? []).length > 0 ? (
-                  <CheckQuestions
-                    questions={course.check_questions}
-                    subtopicId={subtopicId!}
-                    subtopicName={course.subtopic_name}
-                  />
-                ) : (
-                  <div className="bg-white rounded-2xl border border-brand-border p-10 text-center">
-                    <CheckCircle
-                      className="w-10 h-10 text-brand-muted mx-auto mb-3"
-                      aria-hidden="true"
-                    />
-                    <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
-                      No quiz questions yet
-                    </h2>
-                    <p className="font-sans text-sm text-brand-body">
-                      Quiz questions for this subtopic haven't been added yet.
-                    </p>
-                  </div>
-                )}
-                <div className="grid grid-cols-3 items-center gap-3">
-                  <div className="flex justify-start">
-                    <button
-                      onClick={() => setCurrentStep(1)}
-                      className="flex items-center gap-1.5 border border-brand-border text-brand-ink rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-bg transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-                    >
-                      <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-                      Back
-                    </button>
-                  </div>
-                  <div className="flex justify-center">
-                    <button
-                      onClick={handleExplainThisOpen}
-                      className="flex items-center gap-1.5 border border-brand-primary text-brand-primary rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/10 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-                    >
-                      <MessageCircle className="w-4 h-4" aria-hidden="true" />
-                      AI Tutor
-                    </button>
-                  </div>
-                  <div className="flex justify-end">
-                    <button
-                      onClick={handleBack}
-                      className="flex items-center gap-2 bg-brand-primary text-white rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/90 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
-                    >
-                      <CheckCircle className="w-4 h-4" aria-hidden="true" />
-                      Finish
-                    </button>
-                  </div>
-                </div>
-              </>
+            {/* MCQ quiz */}
+            {(course.check_questions ?? []).length > 0 ? (
+              <CheckQuestions
+                questions={course.check_questions}
+                subtopicId={subtopicId!}
+                subtopicName={course.subtopic_name}
+                onAskTutor={handleAskTutor}
+              />
+            ) : (
+              <div className="bg-white rounded-2xl border border-brand-border p-10 text-center">
+                <CheckCircle
+                  className="w-10 h-10 text-brand-muted mx-auto mb-3"
+                  aria-hidden="true"
+                />
+                <h2 className="font-display font-bold text-lg text-brand-ink mb-1">
+                  No quiz questions yet
+                </h2>
+                <p className="font-sans text-sm text-brand-body">
+                  Quiz questions for this subtopic haven't been added yet.
+                </p>
+              </div>
+            )}
+
+            {/* AI transfer question */}
+            <TransferQuestionSection
+              subtopicId={subtopicId!}
+              initialAnswer={course.latest_open_answer}
+            />
+
+            {/* Next subtopic navigation */}
+            {course.next_subtopic && (
+              <div className="flex justify-end pb-4">
+                <button
+                  onClick={() =>
+                    navigate(
+                      `/student/subtopics/${course.next_subtopic!.id}/course`,
+                    )
+                  }
+                  className="flex items-center gap-2 bg-brand-primary text-white rounded-full px-5 py-2.5 text-sm font-sans font-semibold hover:bg-brand-primary/90 transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                >
+                  Next: {course.next_subtopic.name}
+                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
             )}
           </>
         ) : null}
       </div>
 
-      {/* Explain This drawer */}
       <ExplainThisDrawer
         open={explainOpen}
         onClose={() => setExplainOpen(false)}
         subtopicId={subtopicId!}
         subtopicName={course?.subtopic_name ?? "this subtopic"}
+        initialQuestion={explainPrefill}
       />
     </StudentLayout>
   );

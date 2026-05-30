@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { X, Send, AlertCircle } from "lucide-react";
-import { useAuthStore } from "@kaihle/auth";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+import { useState, useRef, useEffect } from "react";
+import { X, Send, AlertCircle, Bot, User } from "lucide-react";
+import {
+  useChatHistory,
+  useStreamChatMessage,
+} from "../../hooks/useSubtopicCourse";
 
 export interface ExplainThisDrawerProps {
   open: boolean;
@@ -19,20 +20,43 @@ export function ExplainThisDrawer({
   subtopicName,
   initialQuestion,
 }: ExplainThisDrawerProps) {
-  const [question, setQuestion] = useState("");
-  const [streaming, setStreaming] = useState(false);
-  const [answer, setAnswer] = useState("");
-  const [streamError, setStreamError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const accessToken = useAuthStore((s) => s.accessToken);
+  const [question, setQuestion] = useState(initialQuestion ?? "");
   const drawerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<Element | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  const { data: chatHistory, isFetching: historyLoading } =
+    useChatHistory(subtopicId);
+  const { stream, isStreaming, streamingContent } =
+    useStreamChatMessage(subtopicId);
+
+  // Pre-fill question when initialQuestion changes (e.g. from "Ask AI tutor" in quiz)
+  useEffect(() => {
+    if (initialQuestion) setQuestion(initialQuestion);
+  }, [initialQuestion]);
+
+  // Scroll to bottom on new messages or streaming content change
+  useEffect(() => {
+    if (open) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatHistory?.messages.length, streamingContent, open]);
+
+  // Capture trigger element on open so focus can return on close
+  useEffect(() => {
+    if (open) {
+      triggerRef.current = document.activeElement;
+    } else {
+      (triggerRef.current as HTMLElement | null)?.focus();
+      triggerRef.current = null;
+    }
+  }, [open]);
 
   // Focus trap
   useEffect(() => {
     if (!open) return;
-
-    // Focus close button on open
     closeButtonRef.current?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -40,7 +64,6 @@ export function ExplainThisDrawer({
         onClose();
         return;
       }
-
       if (e.key !== "Tab") return;
 
       const drawer = drawerRef.current;
@@ -53,7 +76,6 @@ export function ExplainThisDrawer({
       ).filter((el) => !el.closest("[hidden]"));
 
       if (focusable.length === 0) return;
-
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
 
@@ -74,96 +96,26 @@ export function ExplainThisDrawer({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
 
-  // Abort stream on close, pre-fill question on open
-  useEffect(() => {
-    if (!open) {
-      abortRef.current?.abort();
-      setQuestion("");
-      setAnswer("");
-      setStreamError(null);
-      setStreaming(false);
-    } else if (initialQuestion) {
-      setQuestion(initialQuestion);
-      setAnswer("");
-      setStreamError(null);
-    }
-  }, [open, initialQuestion]);
+  const handleSend = () => {
+    const q = question.trim();
+    if (!q || isStreaming) return;
 
-  const handleAsk = useCallback(async () => {
-    if (!question.trim() || streaming) return;
-
-    setAnswer("");
-    setStreamError(null);
-    setStreaming(true);
-
-    abortRef.current = new AbortController();
-
-    try {
-      const response = await fetch(
-        `${API_BASE}/api/v1/students/me/subtopics/${subtopicId}/explain`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-          body: JSON.stringify({ question: question.trim() }),
-          signal: abortRef.current.signal,
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Request failed: ${response.status}`);
-      }
-
-      if (!response.body) {
-        throw new Error("No response body");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") break;
-            setAnswer((prev) => prev + data);
-          }
-        }
-      }
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        // drawer closed — silent
-      } else {
-        setStreamError("Something went wrong. Try again.");
-      }
-    } finally {
-      setStreaming(false);
-    }
-  }, [question, streaming, subtopicId, accessToken]);
+    setSendError(null);
+    setQuestion(""); // clear immediately — don't wait for the stream to finish
+    stream(q, {
+      onError: (msg) => setSendError(msg),
+    });
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-      void handleAsk();
+      handleSend();
     }
   };
 
-  const handleAskAnother = () => {
-    setQuestion("");
-    setAnswer("");
-    setStreamError(null);
-  };
-
   if (!open) return null;
+
+  const messages = chatHistory?.messages ?? [];
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -179,15 +131,14 @@ export function ExplainThisDrawer({
         ref={drawerRef}
         role="dialog"
         aria-modal="true"
-        aria-label={`Ask about "${subtopicName}"`}
-        className="relative w-[400px] max-w-[90vw] h-full bg-white shadow-xl flex flex-col animate-slide-in-right"
-        style={{ transform: "translateX(0)" }}
+        aria-label={`AI Tutor — ${subtopicName}`}
+        className="relative w-[420px] max-w-[90vw] h-full bg-white shadow-xl flex flex-col"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-brand-border flex-shrink-0">
           <div>
             <h2 className="font-display font-bold text-lg text-brand-ink leading-tight">
-              Explain This
+              AI Tutor
             </h2>
             <p className="font-sans text-xs text-brand-muted mt-0.5 line-clamp-1">
               {subtopicName}
@@ -203,80 +154,122 @@ export function ExplainThisDrawer({
           </button>
         </div>
 
-        {/* Body — scrollable */}
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
-          {/* Textarea */}
-          <div>
-            <label
-              htmlFor="drawer-explain-question"
-              className="font-sans text-sm font-semibold text-brand-ink mb-1.5 block"
+        {/* Message thread */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {historyLoading && messages.length === 0 && (
+            <div className="space-y-3 animate-pulse">
+              <div className="h-10 bg-brand-border rounded-xl w-4/5" />
+              <div className="h-16 bg-brand-border rounded-xl w-4/5 ml-auto" />
+            </div>
+          )}
+
+          {!historyLoading && messages.length === 0 && (
+            <div className="text-center py-10">
+              <Bot
+                className="w-8 h-8 text-brand-muted mx-auto mb-2"
+                aria-hidden="true"
+              />
+              <p className="font-sans text-sm text-brand-muted">
+                Ask me anything about <strong>{subtopicName}</strong>
+              </p>
+            </div>
+          )}
+
+          {messages.map((msg) => (
+            <div
+              key={msg.created_at}
+              className={`flex gap-2.5 ${msg.role === "student" ? "flex-row-reverse" : ""}`}
             >
-              Ask a question about{" "}
-              <span className="text-brand-primary">{subtopicName}</span>
-            </label>
+              <div
+                className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
+                  msg.role === "ai" ? "bg-brand-primary/10" : "bg-brand-border"
+                }`}
+              >
+                {msg.role === "ai" ? (
+                  <Bot
+                    className="w-4 h-4 text-brand-primary"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <User
+                    className="w-4 h-4 text-brand-muted"
+                    aria-hidden="true"
+                  />
+                )}
+              </div>
+              <div
+                className={`max-w-[80%] rounded-2xl px-4 py-3 font-sans text-sm leading-relaxed whitespace-pre-wrap ${
+                  msg.role === "ai"
+                    ? "bg-brand-primary/5 text-brand-ink rounded-tl-sm"
+                    : "bg-brand-ink text-white rounded-tr-sm"
+                }`}
+              >
+                {msg.content}
+              </div>
+            </div>
+          ))}
+
+          {/* Streaming AI reply — shows live text while generating, replaced by persisted message on done */}
+          {isStreaming && (
+            <div className="flex gap-2.5">
+              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-brand-primary/10 flex items-center justify-center">
+                <Bot
+                  className="w-4 h-4 text-brand-primary"
+                  aria-hidden="true"
+                />
+              </div>
+              <div className="max-w-[80%] bg-brand-primary/5 rounded-2xl rounded-tl-sm px-4 py-3 font-sans text-sm leading-relaxed text-brand-ink whitespace-pre-wrap">
+                {streamingContent || (
+                  <span className="flex gap-1">
+                    {[0, 150, 300].map((delay) => (
+                      <span
+                        key={delay}
+                        className="inline-block w-1.5 h-1.5 rounded-full bg-brand-primary animate-bounce"
+                        style={{ animationDelay: `${delay}ms` }}
+                      />
+                    ))}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Error */}
+        {sendError && (
+          <div className="mx-5 mb-2 flex items-center gap-2 text-red-600 bg-red-50 rounded-xl p-3">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            <p className="font-sans text-sm">{sendError}</p>
+          </div>
+        )}
+
+        {/* Input area */}
+        <div className="border-t border-brand-border px-5 py-4 flex-shrink-0">
+          <div className="flex gap-2 items-end">
             <textarea
-              id="drawer-explain-question"
+              aria-label="Your question"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={handleKeyDown}
               maxLength={500}
-              rows={4}
-              placeholder={`E.g. Can you explain this with a real-life example?`}
-              className="w-full rounded-xl border border-brand-border p-3 font-sans text-sm text-brand-ink placeholder-brand-muted resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+              rows={2}
+              placeholder="Ask a question… (Ctrl+Enter to send)"
+              className="flex-1 rounded-xl border border-brand-border p-3 font-sans text-sm text-brand-ink placeholder-brand-muted resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
             />
-            <p className="font-sans text-xs text-brand-muted text-right mt-1">
-              {question.length} / 500
-            </p>
-          </div>
-
-          {/* Ask button */}
-          <button
-            onClick={() => void handleAsk()}
-            disabled={!question.trim() || streaming}
-            className="flex items-center gap-2 px-5 py-2.5 bg-brand-primary text-white rounded-full font-sans font-semibold text-sm hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="w-4 h-4" aria-hidden="true" />
-            {streaming ? "Thinking..." : "Ask"}
-          </button>
-
-          {/* Error */}
-          {streamError && (
-            <div className="flex items-center gap-2 text-red-600 bg-red-50 rounded-xl p-3">
-              <AlertCircle
-                className="w-4 h-4 flex-shrink-0"
-                aria-hidden="true"
-              />
-              <p className="font-sans text-sm">{streamError}</p>
-            </div>
-          )}
-
-          {/* Answer area */}
-          {(answer || streaming) && (
-            <div className="bg-brand-primary/5 rounded-xl p-4 border border-brand-primary/20">
-              <p className="font-sans text-xs font-bold uppercase tracking-widest text-brand-muted mb-2">
-                Answer
-              </p>
-              <p className="font-sans text-sm text-brand-ink leading-relaxed whitespace-pre-wrap">
-                {answer}
-                {streaming && (
-                  <span
-                    className="inline-block w-[2px] h-4 bg-brand-primary ml-0.5 animate-pulse align-middle"
-                    aria-hidden="true"
-                  />
-                )}
-              </p>
-            </div>
-          )}
-
-          {/* Ask another */}
-          {answer && !streaming && (
             <button
-              onClick={handleAskAnother}
-              className="font-sans text-sm font-semibold text-brand-primary hover:text-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 rounded"
+              onClick={handleSend}
+              disabled={!question.trim() || isStreaming}
+              aria-label="Send message"
+              className="flex-shrink-0 w-10 h-10 rounded-full bg-brand-primary text-white flex items-center justify-center hover:bg-brand-dark transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Ask another question →
+              <Send className="w-4 h-4" aria-hidden="true" />
             </button>
-          )}
+          </div>
+          <p className="font-sans text-xs text-brand-muted mt-1 text-right">
+            {question.length} / 500
+          </p>
         </div>
       </div>
     </div>
