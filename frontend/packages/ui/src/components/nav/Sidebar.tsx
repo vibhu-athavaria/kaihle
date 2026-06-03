@@ -18,6 +18,7 @@ import {
   CreditCard,
   ArrowUpCircle,
   MessageSquare,
+  ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -142,6 +143,11 @@ const adminSections: NavSection[] = [
         label: "Suggestions",
         href: "/kaihle-admin/content/suggestions",
         icon: MessageSquare,
+      },
+      {
+        label: "Question Review",
+        href: "/kaihle-admin/content/question-review",
+        icon: ShieldCheck,
       },
     ],
   },

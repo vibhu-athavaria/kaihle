@@ -23,14 +23,25 @@ from app.models.assessment import Assessment
 from app.models.curriculum import Subtopic
 from app.models.user import UserRole
 from app.schemas.assessments import (
+    AddQuestionRequest,
+    AddQuestionResponse,
     AssessmentCreateRequest,
     AssessmentCreateResponse,
+    AssessmentPreviewResponse,
     AssessmentQuestionWithAnswer,
     AssessmentResponse,
     AssessmentResultsSummary,
+    AssessmentUpdateRequest,
+    AssessmentUpdateResponse,
     AssessmentWithClassResponse,
     DesignTier1DiagnosticRequest,
     QuestionOption,
+    RemoveQuestionResponse,
+    ReplacementCandidate,
+    ReplaceQuestionRequest,
+    ReplaceQuestionResponse,
+    SuggestEditRequest,
+    SuggestEditResponse,
     TopicAvailability,
     TopicAvailabilityRequest,
 )
@@ -461,3 +472,256 @@ async def close_assessment(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
 
     return _assessment_to_response(assessment)
+
+
+@router.get("/assessments/{assessment_id}/preview", response_model=AssessmentPreviewResponse)
+async def get_assessment_preview(
+    assessment_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> AssessmentPreviewResponse:
+    """Return full assessment preview with all pool questions including correct answers.
+
+    Only the creating teacher may call this. Available for DRAFT, ACTIVE, and CLOSED.
+    Returns questions in pool order (order_index), each with correct_answer_key,
+    topic_name, subtopic_name, difficulty_level, and is_teacher_submitted flag.
+    """
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no school")
+    service = AssessmentService(db)
+    try:
+        return await service.get_assessment_preview(
+            assessment_id=assessment_id,
+            school_id=current_user.school_id,
+            teacher_id=current_user.id,
+        )
+    except TeacherNotClassOwnerError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this assessment.",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.patch("/assessments/{assessment_id}", response_model=AssessmentUpdateResponse)
+async def update_assessment(
+    assessment_id: UUID,
+    body: AssessmentUpdateRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> AssessmentUpdateResponse:
+    """Partial update for assessment details.
+
+    Safe fields (always editable): title, instructions, deadline.
+    Risky fields (frontend shows warning if has_attempts=True):
+        question_count, time_limit_minutes, questions_per_topic,
+        minimum_difficulty, maximum_difficulty.
+    CLOSED assessments: only title and instructions accepted (others → 409).
+    """
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no school")
+    service = AssessmentService(db)
+    try:
+        result = await service.update_assessment(
+            assessment_id=assessment_id,
+            school_id=current_user.school_id,
+            teacher_id=current_user.id,
+            body=body,
+        )
+        await db.commit()
+        return result
+    except TeacherNotClassOwnerError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to update this assessment.",
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+
+
+# ── Question pool management routes ──────────────────────────────────────────
+
+
+@router.post(
+    "/assessments/{assessment_id}/questions",
+    response_model=AddQuestionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_question_to_assessment(
+    assessment_id: UUID,
+    body: AddQuestionRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> AddQuestionResponse:
+    """Add a teacher-created question to the assessment pool.
+
+    The question is inserted into the question bank immediately (source='teacher')
+    and linked to this assessment. It is immediately visible to students.
+    A KaihleAdmin review item is created for promotion to the global bank.
+    """
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no school")
+    service = AssessmentService(db)
+    try:
+        result = await service.add_question_to_assessment(
+            assessment_id=assessment_id,
+            school_id=current_user.school_id,
+            teacher_id=current_user.id,
+            body=body,
+        )
+        await db.commit()
+        return result
+    except TeacherNotClassOwnerError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.delete(
+    "/assessments/{assessment_id}/questions/{question_id}",
+    response_model=RemoveQuestionResponse,
+)
+async def remove_question_from_pool(
+    assessment_id: UUID,
+    question_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> RemoveQuestionResponse:
+    """Remove a question from the assessment pool.
+
+    Returns has_responses=true if students have already answered this question.
+    Frontend should warn before calling this endpoint in that case.
+    Blocked if removal would leave 0 questions in the pool.
+    """
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no school")
+    service = AssessmentService(db)
+    try:
+        result = await service.remove_question_from_pool(
+            assessment_id=assessment_id,
+            question_id=question_id,
+            school_id=current_user.school_id,
+            teacher_id=current_user.id,
+        )
+        await db.commit()
+        return result
+    except TeacherNotClassOwnerError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+
+
+@router.get(
+    "/assessments/{assessment_id}/questions/{question_id}/replacements",
+    response_model=list[ReplacementCandidate],
+)
+async def get_replacement_candidates(
+    assessment_id: UUID,
+    question_id: UUID,
+    difficulty_level: int | None = Query(None, ge=1, le=5),
+    question_type: str | None = Query(None),
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> list[ReplacementCandidate]:
+    """Return question bank candidates to replace a given question in the pool.
+
+    Candidates are from the same curriculum topic, not already in the pool,
+    and active. Optional filters: difficulty_level, question_type.
+    """
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no school")
+    service = AssessmentService(db)
+    try:
+        return await service.get_replacement_candidates(
+            assessment_id=assessment_id,
+            question_id=question_id,
+            school_id=current_user.school_id,
+            teacher_id=current_user.id,
+            difficulty_level=difficulty_level,
+            question_type=question_type,
+        )
+    except TeacherNotClassOwnerError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
+@router.post(
+    "/assessments/{assessment_id}/questions/{question_id}/replace",
+    response_model=ReplaceQuestionResponse,
+)
+async def replace_question(
+    assessment_id: UUID,
+    question_id: UUID,
+    body: ReplaceQuestionRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> ReplaceQuestionResponse:
+    """Swap a question in the pool for a replacement from the question bank.
+
+    Returns has_responses_for_old=true if students have already answered the original.
+    This endpoint does NOT block in that case — frontend is responsible for warning.
+    """
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no school")
+    service = AssessmentService(db)
+    try:
+        result = await service.replace_question(
+            assessment_id=assessment_id,
+            old_question_id=question_id,
+            replacement_id=body.replacement_question_id,
+            school_id=current_user.school_id,
+            teacher_id=current_user.id,
+        )
+        await db.commit()
+        return result
+    except TeacherNotClassOwnerError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+    except ValueError as exc:
+        msg = str(exc)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=msg)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=msg)
+
+
+@router.post(
+    "/assessments/{assessment_id}/questions/{question_id}/suggest-edit",
+    response_model=SuggestEditResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def suggest_question_edit(
+    assessment_id: UUID,
+    question_id: UUID,
+    body: SuggestEditRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.TEACHER)),
+    db: AsyncSession = Depends(get_db),
+) -> SuggestEditResponse:
+    """Submit an edit suggestion for a question in the assessment pool.
+
+    Does not modify the question bank. Creates a KaihleAdmin review item
+    and sends an email notification for review/approve/reject workflow.
+    """
+    if current_user.school_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no school")
+    service = AssessmentService(db)
+    try:
+        result = await service.suggest_question_edit(
+            assessment_id=assessment_id,
+            question_id=question_id,
+            school_id=current_user.school_id,
+            teacher_id=current_user.id,
+            body=body,
+        )
+        await db.commit()
+        return result
+    except TeacherNotClassOwnerError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

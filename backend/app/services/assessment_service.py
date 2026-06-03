@@ -28,6 +28,7 @@ from app.models.assessment import (
     AssessmentTopicConfig,
     AssessmentType,
     AttemptStatus,
+    QuestionReviewItem,
     StudentAttempt,
     StudentResponse,
 )
@@ -35,10 +36,22 @@ from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject,
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
 from app.schemas.assessments import (
+    AddQuestionRequest,
+    AddQuestionResponse,
     AssessmentCreateRequest,
+    AssessmentPreviewQuestion,
+    AssessmentPreviewResponse,
     AssessmentResultsSummary,
+    AssessmentUpdateRequest,
+    AssessmentUpdateResponse,
     DesignTier1DiagnosticRequest,
+    QuestionOption,
+    RemoveQuestionResponse,
+    ReplacementCandidate,
+    ReplaceQuestionResponse,
     StudentAttemptSummary,
+    SuggestEditRequest,
+    SuggestEditResponse,
     TopicAvailability,
     TopicBreakdownItem,
 )
@@ -352,10 +365,10 @@ class AssessmentService:
             )
         ).scalar_one_or_none()
         if existing is not None:
-            if existing.status != AssessmentStatus.DRAFT:
+            if existing.status not in (AssessmentStatus.DRAFT, AssessmentStatus.CLOSED):
                 raise ValueError(
                     f"Cannot replace diagnostic: existing assessment is {existing.status}. "
-                    "Only DRAFT diagnostics can be replaced."
+                    "Only DRAFT or CLOSED diagnostics can be replaced."
                 )
             await self.db.execute(
                 delete(AssessmentSelectedQuestion.__table__).where(  # type: ignore
@@ -1422,6 +1435,709 @@ class AssessmentService:
             attempts=attempts,
             topic_breakdown=topic_breakdown,
         )
+
+    # ── Preview (teacher-facing with correct answers) ────────────────────────
+
+    async def get_assessment_preview(
+        self,
+        assessment_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        teacher_id: uuid.UUID,
+    ) -> AssessmentPreviewResponse:
+        """Return full assessment details with all pool questions including correct answers.
+
+        Only the creating teacher may preview their own assessment. Available for
+        all statuses (DRAFT, ACTIVE, CLOSED) so teachers can review closed assessments.
+
+        Args:
+            assessment_id: The assessment UUID.
+            school_id: Teacher's school (multi-tenancy guard).
+            teacher_id: Must match assessment.created_by.
+
+        Returns:
+            AssessmentPreviewResponse with questions including correct_answer_key.
+
+        Raises:
+            ValueError: If assessment not found or school mismatch.
+            TeacherNotClassOwnerError: If teacher does not own the assessment.
+        """
+        assessment = (
+            await self.db.execute(
+                select(Assessment).where(
+                    Assessment.id == assessment_id,
+                    Assessment.school_id == school_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if assessment is None:
+            raise ValueError(f"Assessment not found: {assessment_id}")
+        if assessment.created_by != teacher_id:
+            raise TeacherNotClassOwnerError(f"Teacher {teacher_id} does not own assessment {assessment_id}")
+
+        # Load all pool questions with full curriculum context (single JOIN query)
+        rows = (
+            await self.db.execute(
+                select(
+                    QuestionBank.id.label("question_id"),
+                    QuestionBank.question_text,
+                    QuestionBank.question_type,
+                    QuestionBank.options,
+                    QuestionBank.correct_answer,
+                    QuestionBank.explanation,
+                    QuestionBank.difficulty_level,
+                    QuestionBank.source,
+                    Subtopic.name.label("subtopic_name"),
+                    Topic.name.label("topic_name"),
+                    AssessmentSelectedQuestion.order_index,
+                )
+                .join(
+                    AssessmentSelectedQuestion,
+                    AssessmentSelectedQuestion.question_id == QuestionBank.id,
+                )
+                .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
+                .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                .join(Topic, Topic.id == CurriculumTopic.topic_id)
+                .where(AssessmentSelectedQuestion.assessment_id == assessment_id)
+                .order_by(AssessmentSelectedQuestion.order_index)
+            )
+        ).all()
+
+        # Count attempts for the warning flag
+        attempt_count = (
+            await self.db.execute(
+                select(func.count(StudentAttempt.id)).where(StudentAttempt.assessment_id == assessment_id)
+            )
+        ).scalar() or 0
+
+        questions = [
+            AssessmentPreviewQuestion(
+                question_id=row.question_id,
+                question_text=row.question_text,
+                question_type=row.question_type,
+                options=[QuestionOption(key=o["key"], text=o["text"]) for o in (row.options or [])],
+                correct_answer_key=row.correct_answer,
+                explanation=row.explanation,
+                difficulty_level=int(row.difficulty_level) if row.difficulty_level is not None else 0,
+                subtopic_name=row.subtopic_name,
+                topic_name=row.topic_name,
+                order_index=row.order_index,
+                is_teacher_submitted=row.source == "teacher",
+            )
+            for row in rows
+        ]
+
+        return AssessmentPreviewResponse(
+            id=assessment.id,
+            title=assessment.title,
+            assessment_type=assessment.assessment_type,
+            status=assessment.status,
+            question_count=assessment.question_count,
+            questions_per_topic=assessment.questions_per_topic,
+            minimum_difficulty=assessment.minimum_difficulty,
+            maximum_difficulty=assessment.maximum_difficulty,
+            time_limit_minutes=assessment.time_limit_minutes,
+            deadline=assessment.deadline,
+            instructions=assessment.instructions,
+            questions=questions,
+            attempt_count=int(attempt_count),
+        )
+
+    # ── Edit assessment details ──────────────────────────────────────────────
+
+    async def update_assessment(
+        self,
+        assessment_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        teacher_id: uuid.UUID,
+        body: AssessmentUpdateRequest,
+    ) -> AssessmentUpdateResponse:
+        """Partial update for assessment details.
+
+        Safe fields (always): title, instructions, deadline.
+        Risky fields (allowed but flagged when attempts exist): question_count,
+            time_limit_minutes, questions_per_topic, minimum_difficulty, maximum_difficulty.
+        CLOSED assessments: only title and instructions editable.
+
+        Args:
+            assessment_id: The assessment UUID.
+            school_id: Teacher's school (multi-tenancy guard).
+            teacher_id: Must match assessment.created_by.
+            body: Partial update body (omitted fields unchanged).
+
+        Returns:
+            AssessmentUpdateResponse with has_attempts=True if any attempt exists.
+
+        Raises:
+            ValueError: If assessment not found, school mismatch, or risky field
+                        sent for a CLOSED assessment.
+            TeacherNotClassOwnerError: If teacher does not own the assessment.
+        """
+        assessment = (
+            await self.db.execute(
+                select(Assessment).where(
+                    Assessment.id == assessment_id,
+                    Assessment.school_id == school_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if assessment is None:
+            raise ValueError(f"Assessment not found: {assessment_id}")
+        if assessment.created_by != teacher_id:
+            raise TeacherNotClassOwnerError(f"Teacher {teacher_id} does not own assessment {assessment_id}")
+
+        updates = body.model_dump(exclude_unset=True)
+
+        # CLOSED assessments: block risky fields
+        risky_fields = {
+            "question_count",
+            "time_limit_minutes",
+            "questions_per_topic",
+            "minimum_difficulty",
+            "maximum_difficulty",
+        }
+        if assessment.status == AssessmentStatus.CLOSED:
+            blocked = risky_fields & updates.keys()
+            if blocked:
+                raise ValueError(
+                    f"Cannot update {blocked} on a CLOSED assessment. "
+                    "Only title and instructions are editable after closing."
+                )
+
+        for field, value in updates.items():
+            setattr(assessment, field, value)
+
+        # Check if any attempt exists (for has_attempts warning flag)
+        attempt_count = (
+            await self.db.execute(
+                select(func.count(StudentAttempt.id)).where(StudentAttempt.assessment_id == assessment_id)
+            )
+        ).scalar() or 0
+
+        logger.info(
+            "assessment_updated",
+            assessment_id=str(assessment_id),
+            teacher_id=str(teacher_id),
+            updated_fields=list(updates.keys()),
+            has_attempts=attempt_count > 0,
+        )
+
+        return AssessmentUpdateResponse(
+            id=assessment.id,
+            class_id=assessment.class_id,
+            title=assessment.title,
+            assessment_type=assessment.assessment_type,
+            status=assessment.status,
+            question_count=assessment.question_count,
+            questions_per_topic=assessment.questions_per_topic,
+            minimum_difficulty=assessment.minimum_difficulty,
+            maximum_difficulty=assessment.maximum_difficulty,
+            question_types=assessment.question_types,
+            time_limit_minutes=assessment.time_limit_minutes,
+            instructions=assessment.instructions,
+            deadline=assessment.deadline,
+            published_at=assessment.published_at,
+            created_at=assessment.created_at,
+            has_attempts=attempt_count > 0,
+        )
+
+    # ── Question pool management ─────────────────────────────────────────────
+
+    async def _verify_teacher_owns_assessment(
+        self,
+        assessment_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        teacher_id: uuid.UUID,
+    ) -> Assessment:
+        """Load assessment and verify the teacher owns it. Raises on failure."""
+        assessment = (
+            await self.db.execute(
+                select(Assessment).where(
+                    Assessment.id == assessment_id,
+                    Assessment.school_id == school_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if assessment is None:
+            raise ValueError(f"Assessment not found: {assessment_id}")
+        if assessment.created_by != teacher_id:
+            raise TeacherNotClassOwnerError(f"Teacher {teacher_id} does not own assessment {assessment_id}")
+        return assessment
+
+    async def add_question_to_assessment(
+        self,
+        assessment_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        teacher_id: uuid.UUID,
+        body: AddQuestionRequest,
+    ) -> AddQuestionResponse:
+        """Add a teacher-created question directly to the assessment pool.
+
+        The question is inserted into question_bank immediately (source='teacher',
+        school_id set, review_status='PENDING_REVIEW') so it is live for students.
+        A QuestionReviewItem (type=TEACHER_QUESTION) is created for KaihleAdmin review.
+        On approve: school_id cleared → globally available.
+        On reject: is_active set FALSE.
+
+        Args:
+            assessment_id: The assessment UUID.
+            school_id: Teacher's school_id (multi-tenancy).
+            teacher_id: Must own the assessment's class.
+            body: New question details.
+
+        Returns:
+            AddQuestionResponse with question_id and review_item_id.
+
+        Raises:
+            ValueError: Assessment not found, school mismatch, or subtopic not in class scope.
+            TeacherNotClassOwnerError: Teacher does not own the assessment.
+        """
+        assessment = await self._verify_teacher_owns_assessment(assessment_id, school_id, teacher_id)
+
+        # Verify subtopic belongs to the class's subject + grade
+        class_ = await self.db.get(Class, assessment.class_id)
+        if class_ is None:
+            raise ValueError(f"Class not found for assessment {assessment_id}")
+
+        subtopic_row = (
+            await self.db.execute(
+                select(Subtopic.id)
+                .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                .where(
+                    Subtopic.id == body.subtopic_id,
+                    CurriculumTopic.subject_id == class_.subject_id,
+                    CurriculumTopic.grade_id == class_.grade_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if subtopic_row is None:
+            raise ValueError(
+                f"Subtopic {body.subtopic_id} does not belong to subject {class_.subject_id} / grade {class_.grade_id}"
+            )
+
+        # Insert question_bank row
+        canonical_form = hashlib.sha256(body.question_text.strip().lower().encode()).hexdigest()
+        question = QuestionBank(
+            id=uuid.uuid4(),
+            subtopic_id=body.subtopic_id,
+            question_text=body.question_text,
+            question_type=body.question_type,
+            options=body.options,
+            correct_answer=body.correct_answer,
+            difficulty_level=body.difficulty_level,
+            explanation=body.explanation,
+            canonical_form=canonical_form,
+            problem_signature={},
+            source="teacher",
+            school_id=school_id,
+            submitted_by=teacher_id,
+            review_status="PENDING_REVIEW",
+            is_active=True,
+        )
+        self.db.add(question)
+        await self.db.flush()
+
+        # Link to assessment pool at end of current order
+        max_order_result = await self.db.execute(
+            select(func.max(AssessmentSelectedQuestion.order_index)).where(
+                AssessmentSelectedQuestion.assessment_id == assessment_id
+            )
+        )
+        max_order = max_order_result.scalar() or -1
+        self.db.add(
+            AssessmentSelectedQuestion(
+                assessment_id=assessment_id,
+                question_id=question.id,
+                order_index=max_order + 1,
+            )
+        )
+
+        # Increment question_count
+        if assessment.question_count is not None:
+            assessment.question_count = assessment.question_count + 1
+
+        # Create review item for KaihleAdmin
+        review_item = QuestionReviewItem(
+            id=uuid.uuid4(),
+            item_type="TEACHER_QUESTION",
+            question_id=question.id,
+            submitted_by=teacher_id,
+            school_id=school_id,  # type: ignore[arg-type]
+            assessment_id=assessment_id,
+            status="PENDING",
+        )
+        self.db.add(review_item)
+
+        logger.info(
+            "teacher_question_added_to_assessment",
+            assessment_id=str(assessment_id),
+            question_id=str(question.id),
+            review_item_id=str(review_item.id),
+            teacher_id=str(teacher_id),
+        )
+
+        return AddQuestionResponse(
+            question_id=question.id,
+            review_item_id=review_item.id,
+        )
+
+    async def remove_question_from_pool(
+        self,
+        assessment_id: uuid.UUID,
+        question_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        teacher_id: uuid.UUID,
+    ) -> RemoveQuestionResponse:
+        """Remove a question from the assessment pool.
+
+        Blocks if removal would bring question_count below 1.
+        Returns has_responses=True if any student has already answered this question
+        (frontend should warn before proceeding).
+
+        Args:
+            assessment_id: The assessment UUID.
+            question_id: The question to remove.
+            school_id: Teacher's school (multi-tenancy).
+            teacher_id: Must own the assessment.
+
+        Returns:
+            RemoveQuestionResponse with has_responses flag.
+
+        Raises:
+            ValueError: Assessment/question not found, or removal would empty the pool.
+            TeacherNotClassOwnerError: Teacher does not own the assessment.
+        """
+        assessment = await self._verify_teacher_owns_assessment(assessment_id, school_id, teacher_id)
+
+        # Verify question is in the pool
+        bridge = (
+            await self.db.execute(
+                select(AssessmentSelectedQuestion).where(
+                    AssessmentSelectedQuestion.assessment_id == assessment_id,
+                    AssessmentSelectedQuestion.question_id == question_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if bridge is None:
+            raise ValueError(f"Question {question_id} is not in assessment pool {assessment_id}")
+
+        # Guard: pool must retain at least 1 question
+        pool_size = (
+            await self.db.execute(
+                select(func.count(AssessmentSelectedQuestion.question_id)).where(
+                    AssessmentSelectedQuestion.assessment_id == assessment_id
+                )
+            )
+        ).scalar() or 0
+        if pool_size <= 1:
+            raise ValueError("Cannot remove: assessment must have at least 1 question in the pool.")
+
+        # Check if any student has a response for this question
+        response_exists = (
+            await self.db.execute(
+                select(StudentResponse.id)
+                .join(StudentAttempt, StudentAttempt.id == StudentResponse.attempt_id)
+                .where(
+                    StudentAttempt.assessment_id == assessment_id,
+                    StudentResponse.question_id == question_id,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        has_responses = response_exists is not None
+
+        # Remove bridge row
+        await self.db.execute(
+            delete(AssessmentSelectedQuestion.__table__).where(  # type: ignore
+                AssessmentSelectedQuestion.assessment_id == assessment_id,
+                AssessmentSelectedQuestion.question_id == question_id,
+            )
+        )
+
+        # Decrement question_count
+        if assessment.question_count is not None and assessment.question_count > 1:
+            assessment.question_count = assessment.question_count - 1
+
+        logger.info(
+            "question_removed_from_pool",
+            assessment_id=str(assessment_id),
+            question_id=str(question_id),
+            has_responses=has_responses,
+            teacher_id=str(teacher_id),
+        )
+
+        return RemoveQuestionResponse(has_responses=has_responses)
+
+    async def get_replacement_candidates(
+        self,
+        assessment_id: uuid.UUID,
+        question_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        teacher_id: uuid.UUID,
+        difficulty_level: int | None = None,
+        question_type: str | None = None,
+    ) -> list[ReplacementCandidate]:
+        """Return question_bank candidates to replace a question in the pool.
+
+        Candidates must:
+        - Belong to the same curriculum_topic as the question being replaced.
+        - Be active (is_active=True).
+        - Not already be in the assessment pool.
+        - Optionally match difficulty_level and/or question_type filters.
+
+        Args:
+            assessment_id: The assessment UUID.
+            question_id: The question being replaced.
+            school_id: Teacher's school (multi-tenancy).
+            teacher_id: Must own the assessment.
+            difficulty_level: Optional filter.
+            question_type: Optional filter.
+
+        Returns:
+            List of ReplacementCandidate ordered by difficulty_level.
+        """
+        await self._verify_teacher_owns_assessment(assessment_id, school_id, teacher_id)
+
+        # Get the curriculum_topic_id of the question being replaced
+        topic_row = (
+            await self.db.execute(
+                select(Subtopic.curriculum_topic_id)
+                .join(QuestionBank, QuestionBank.subtopic_id == Subtopic.id)
+                .where(QuestionBank.id == question_id)
+            )
+        ).scalar_one_or_none()
+        if topic_row is None:
+            raise ValueError(f"Question {question_id} not found in question bank")
+        curriculum_topic_id: uuid.UUID = topic_row
+
+        # IDs already in the pool (to exclude)
+        existing_ids_result = await self.db.execute(
+            select(AssessmentSelectedQuestion.question_id).where(
+                AssessmentSelectedQuestion.assessment_id == assessment_id
+            )
+        )
+        existing_ids = {row[0] for row in existing_ids_result.all()}
+
+        # Query candidates
+        q = (
+            select(
+                QuestionBank.id.label("question_id"),
+                QuestionBank.question_text,
+                QuestionBank.question_type,
+                QuestionBank.options,
+                QuestionBank.correct_answer,
+                QuestionBank.difficulty_level,
+                Subtopic.name.label("subtopic_name"),
+                Topic.name.label("topic_name"),
+            )
+            .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
+            .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+            .join(Topic, Topic.id == CurriculumTopic.topic_id)
+            .where(
+                Subtopic.curriculum_topic_id == curriculum_topic_id,
+                QuestionBank.is_active.is_(True),
+                QuestionBank.id.notin_(existing_ids),
+            )
+            .order_by(QuestionBank.difficulty_level)
+            .limit(50)
+        )
+        if difficulty_level is not None:
+            q = q.where(QuestionBank.difficulty_level == difficulty_level)
+        if question_type is not None:
+            q = q.where(QuestionBank.question_type == question_type)
+
+        rows = (await self.db.execute(q)).all()
+
+        return [
+            ReplacementCandidate(
+                question_id=row.question_id,
+                question_text=row.question_text,
+                question_type=row.question_type,
+                options=[QuestionOption(key=o["key"], text=o["text"]) for o in (row.options or [])],
+                correct_answer_key=row.correct_answer,
+                difficulty_level=int(row.difficulty_level) if row.difficulty_level is not None else 0,
+                subtopic_name=row.subtopic_name,
+                topic_name=row.topic_name,
+            )
+            for row in rows
+        ]
+
+    async def replace_question(
+        self,
+        assessment_id: uuid.UUID,
+        old_question_id: uuid.UUID,
+        replacement_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        teacher_id: uuid.UUID,
+    ) -> ReplaceQuestionResponse:
+        """Swap one question in the pool for another.
+
+        Preserves the order_index of the replaced question.
+        Returns has_responses_for_old=True if students have answered the old question
+        (frontend warns but does NOT block).
+
+        Raises:
+            ValueError: old question not in pool, replacement not found or already in pool.
+            TeacherNotClassOwnerError: Teacher does not own the assessment.
+        """
+        await self._verify_teacher_owns_assessment(assessment_id, school_id, teacher_id)
+
+        # Load the old bridge row (need its order_index)
+        old_bridge = (
+            await self.db.execute(
+                select(AssessmentSelectedQuestion).where(
+                    AssessmentSelectedQuestion.assessment_id == assessment_id,
+                    AssessmentSelectedQuestion.question_id == old_question_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if old_bridge is None:
+            raise ValueError(f"Question {old_question_id} is not in assessment pool {assessment_id}")
+
+        # Verify replacement is not already in pool
+        existing_replacement = (
+            await self.db.execute(
+                select(AssessmentSelectedQuestion).where(
+                    AssessmentSelectedQuestion.assessment_id == assessment_id,
+                    AssessmentSelectedQuestion.question_id == replacement_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing_replacement is not None:
+            raise ValueError(f"Question {replacement_id} is already in the assessment pool.")
+
+        # Verify replacement exists in question_bank
+        replacement_exists = (
+            await self.db.execute(
+                select(QuestionBank.id).where(
+                    QuestionBank.id == replacement_id,
+                    QuestionBank.is_active.is_(True),
+                )
+            )
+        ).scalar_one_or_none()
+        if replacement_exists is None:
+            raise ValueError(f"Replacement question {replacement_id} not found or not active.")
+
+        # Check if any student responded to the old question
+        response_exists = (
+            await self.db.execute(
+                select(StudentResponse.id)
+                .join(StudentAttempt, StudentAttempt.id == StudentResponse.attempt_id)
+                .where(
+                    StudentAttempt.assessment_id == assessment_id,
+                    StudentResponse.question_id == old_question_id,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        has_responses_for_old = response_exists is not None
+
+        # Swap: delete old bridge, insert new at same order_index
+        preserved_order = old_bridge.order_index
+        await self.db.execute(
+            delete(AssessmentSelectedQuestion.__table__).where(  # type: ignore
+                AssessmentSelectedQuestion.assessment_id == assessment_id,
+                AssessmentSelectedQuestion.question_id == old_question_id,
+            )
+        )
+        self.db.add(
+            AssessmentSelectedQuestion(
+                assessment_id=assessment_id,
+                question_id=replacement_id,
+                order_index=preserved_order,
+            )
+        )
+
+        logger.info(
+            "question_replaced_in_pool",
+            assessment_id=str(assessment_id),
+            old_question_id=str(old_question_id),
+            new_question_id=str(replacement_id),
+            has_responses_for_old=has_responses_for_old,
+            teacher_id=str(teacher_id),
+        )
+
+        return ReplaceQuestionResponse(has_responses_for_old=has_responses_for_old)
+
+    async def suggest_question_edit(
+        self,
+        assessment_id: uuid.UUID,
+        question_id: uuid.UUID,
+        school_id: uuid.UUID | None,
+        teacher_id: uuid.UUID,
+        body: SuggestEditRequest,
+    ) -> SuggestEditResponse:
+        """Submit an edit suggestion for a question in the assessment pool.
+
+        Creates a QuestionReviewItem (type=EDIT_SUGGESTION) for KaihleAdmin review.
+        Does NOT modify the question_bank directly.
+        Fires an async email notification to all KaihleAdmin users.
+
+        Args:
+            assessment_id: The assessment UUID.
+            question_id: The question to suggest an edit for.
+            school_id: Teacher's school (multi-tenancy).
+            teacher_id: Must own the assessment.
+            body: Proposed changes + required reason.
+
+        Returns:
+            SuggestEditResponse with review_item_id.
+
+        Raises:
+            ValueError: Assessment not found, question not in pool.
+            TeacherNotClassOwnerError: Teacher does not own the assessment.
+        """
+        await self._verify_teacher_owns_assessment(assessment_id, school_id, teacher_id)
+
+        # Verify question is in this assessment's pool
+        in_pool = (
+            await self.db.execute(
+                select(AssessmentSelectedQuestion.question_id).where(
+                    AssessmentSelectedQuestion.assessment_id == assessment_id,
+                    AssessmentSelectedQuestion.question_id == question_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if in_pool is None:
+            raise ValueError(f"Question {question_id} is not in assessment pool {assessment_id}")
+
+        review_item = QuestionReviewItem(
+            id=uuid.uuid4(),
+            item_type="EDIT_SUGGESTION",
+            question_id=question_id,
+            submitted_by=teacher_id,
+            school_id=school_id,  # type: ignore[arg-type]
+            assessment_id=assessment_id,
+            suggested_question_text=body.suggested_question_text,
+            suggested_options=body.suggested_options,  # type: ignore[arg-type]
+            suggested_correct_answer=body.suggested_correct_answer,
+            suggested_explanation=body.suggested_explanation,
+            suggested_difficulty_level=body.suggested_difficulty_level,
+            reason=body.reason,
+            status="PENDING",
+        )
+        self.db.add(review_item)
+        await self.db.flush()
+
+        # Fire email notification to KaihleAdmin (non-blocking, deferred import to avoid cycle)
+        try:
+            from app.tasks.question_review_tasks import notify_kaihle_admins_of_review_item  # noqa: PLC0415
+
+            notify_kaihle_admins_of_review_item.delay(str(review_item.id), "EDIT_SUGGESTION", str(teacher_id))
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "edit_suggestion_email_task_failed",
+                review_item_id=str(review_item.id),
+            )
+
+        logger.info(
+            "edit_suggestion_submitted",
+            assessment_id=str(assessment_id),
+            question_id=str(question_id),
+            review_item_id=str(review_item.id),
+            teacher_id=str(teacher_id),
+        )
+
+        return SuggestEditResponse(review_item_id=review_item.id)
 
 
 def _sample_with_topic_distribution(rows: list[tuple[uuid.UUID, str]], n: int) -> list[uuid.UUID]:

@@ -456,13 +456,19 @@ CREATE TABLE question_bank (
     canonical_form          TEXT    NOT NULL,   -- normalised for dedup
     problem_signature       JSONB   NOT NULL,   -- structural fingerprint
     source                  VARCHAR(10) NOT NULL DEFAULT 'bank',
-    -- 'bank' = from founders 7K import | 'llm' = AI-generated at runtime
+    -- 'bank' = from founders 7K import | 'llm' = AI-generated | 'teacher' = teacher-submitted (school-scoped until promoted)
     meta_tags               JSONB,
     is_active               BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Teacher-submitted question fields (NULL for bank/llm questions)
+    school_id               UUID        REFERENCES schools (id) ON DELETE RESTRICT,
+    submitted_by            UUID        REFERENCES users (id)   ON DELETE SET NULL,
+    review_status           VARCHAR(20),
+    -- NULL for bank/llm; 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' for teacher-submitted
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ,
-    CONSTRAINT chk_qb_difficulty CHECK (difficulty_level IS NULL OR difficulty_level BETWEEN 1.0 AND 5.0),
-    CONSTRAINT chk_qb_source     CHECK (source IN ('bank', 'llm'))
+    CONSTRAINT chk_qb_difficulty    CHECK (difficulty_level IS NULL OR difficulty_level BETWEEN 1.0 AND 5.0),
+    CONSTRAINT chk_qb_source        CHECK (source IN ('bank', 'llm', 'teacher')),
+    CONSTRAINT chk_qb_review_status CHECK (review_status IS NULL OR review_status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED'))
 );
 
 COMMENT ON TABLE question_bank IS
@@ -471,6 +477,7 @@ COMMENT ON TABLE question_bank IS
      All context derived via join: subtopics → curriculum_topics.
      source=bank: /scripts/import_questions.py maps existing 7K questions to subtopic_id.
      source=llm:  quiz_generator.py saves generated questions here for reuse.
+     source=teacher: teacher-submitted via assessment question management; school_id set until KaihleAdmin promotes.
      canonical_form + problem_signature: used to detect near-duplicate questions.';
 
 CREATE INDEX idx_qb_subtopic   ON question_bank (subtopic_id);
@@ -479,6 +486,7 @@ CREATE INDEX idx_qb_difficulty ON question_bank (difficulty_level);
 CREATE INDEX idx_qb_active     ON question_bank (is_active);
 CREATE INDEX idx_qb_source     ON question_bank (source);
 CREATE INDEX idx_qb_text_trgm  ON question_bank USING GIN (question_text gin_trgm_ops);
+CREATE INDEX idx_qb_school     ON question_bank (school_id) WHERE school_id IS NOT NULL;
 
 -- =============================================================================
 -- SECTION 3: SCHOOL & USER MANAGEMENT
@@ -1180,6 +1188,46 @@ COMMENT ON TABLE student_attempt_subtopic_scores IS
      Stores per-subtopic score for that attempt (correct / total for that subtopic).
      Used to compute recency-weighted mastery in subsequent gap state calculations.
      Distinct from gap_states which holds the rolling aggregate.';
+
+-- =============================================================================
+-- SECTION: QUESTION REVIEW ITEMS
+-- Unified review queue for teacher-submitted questions and teacher edit suggestions.
+-- item_type='TEACHER_QUESTION': teacher added a new question to their assessment pool.
+--   question_id → newly inserted question_bank row (source='teacher', school_id set).
+--   On approve: question_bank.school_id cleared → globally available.
+--   On reject:  question_bank.is_active set FALSE.
+-- item_type='EDIT_SUGGESTION': teacher suggested a change to an existing question.
+--   question_id → existing question_bank row; suggested_* fields hold proposed changes.
+--   On approve: suggested (or admin-edited) fields applied to question_bank.
+--   On reject:  question_bank unchanged.
+-- =============================================================================
+
+CREATE TABLE question_review_items (
+    id                          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    item_type                   VARCHAR(20) NOT NULL,
+    question_id                 UUID        NOT NULL REFERENCES question_bank (id) ON DELETE CASCADE,
+    submitted_by                UUID        NOT NULL REFERENCES users (id)         ON DELETE CASCADE,
+    school_id                   UUID        NOT NULL REFERENCES schools (id)       ON DELETE CASCADE,
+    assessment_id               UUID                 REFERENCES assessments (id)   ON DELETE SET NULL,
+    suggested_question_text     TEXT,
+    suggested_options           JSONB,
+    suggested_correct_answer    TEXT,
+    suggested_explanation       TEXT,
+    suggested_difficulty_level  FLOAT,
+    reason                      TEXT,
+    status                      VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    admin_note                  TEXT,
+    resolved_by                 UUID                 REFERENCES users (id)         ON DELETE SET NULL,
+    resolved_at                 TIMESTAMPTZ,
+    created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                  TIMESTAMPTZ,
+    CONSTRAINT chk_qri_item_type CHECK (item_type IN ('TEACHER_QUESTION', 'EDIT_SUGGESTION')),
+    CONSTRAINT chk_qri_status    CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED'))
+);
+
+CREATE INDEX idx_qri_item_type ON question_review_items (item_type);
+CREATE INDEX idx_qri_school    ON question_review_items (school_id);
+CREATE INDEX idx_qri_status    ON question_review_items (status) WHERE status = 'PENDING';
 
 -- =============================================================================
 -- SECTION: MINI-COURSE PROGRESS AND FEEDBACK (v2.2)

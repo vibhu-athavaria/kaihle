@@ -160,3 +160,158 @@ class AssessmentResultsSummary(BaseModel):
     submitted_count: int
     attempts: list[StudentAttemptSummary]
     topic_breakdown: list[TopicBreakdownItem] = []
+
+
+# ── Preview (teacher-facing — correct answers included) ───────────────────────
+
+
+class AssessmentPreviewQuestion(BaseModel):
+    """Teacher-facing question in the assessment preview — includes correct answer."""
+
+    question_id: UUID
+    question_text: str
+    question_type: str
+    options: list[QuestionOption]
+    correct_answer_key: str
+    explanation: str | None
+    difficulty_level: int
+    subtopic_name: str
+    topic_name: str
+    order_index: int
+    is_teacher_submitted: bool = False  # True if source='teacher' (pending review)
+
+
+class AssessmentPreviewResponse(BaseModel):
+    """Full assessment preview for the owning teacher."""
+
+    id: UUID
+    title: str
+    assessment_type: str
+    status: str
+    question_count: int | None
+    questions_per_topic: int
+    minimum_difficulty: int
+    maximum_difficulty: int
+    time_limit_minutes: int
+    deadline: datetime | None
+    instructions: str | None
+    questions: list[AssessmentPreviewQuestion]
+    attempt_count: int  # frontend shows warning banner if > 0
+
+
+# ── Assessment detail edit ────────────────────────────────────────────────────
+
+
+class AssessmentUpdateRequest(BaseModel):
+    """Partial update for assessment details. Omitted fields are unchanged.
+
+    Safe fields (always editable): title, instructions, deadline.
+    Risky fields (editable with frontend warning when attempt_count > 0):
+        question_count, time_limit_minutes, questions_per_topic,
+        minimum_difficulty, maximum_difficulty.
+    CLOSED assessments: only title and instructions accepted.
+    """
+
+    title: str | None = None
+    instructions: str | None = None
+    deadline: datetime | None = Field(default=None)
+    question_count: int | None = Field(default=None, ge=1)
+    time_limit_minutes: int | None = Field(default=None, ge=0)
+    questions_per_topic: int | None = Field(default=None, ge=1)
+    minimum_difficulty: int | None = Field(default=None, ge=1, le=5)
+    maximum_difficulty: int | None = Field(default=None, ge=1, le=5)
+
+
+class AssessmentUpdateResponse(BaseModel):
+    """Response to PATCH /assessments/{id} — includes has_attempts warning flag."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    class_id: UUID
+    title: str
+    assessment_type: str
+    status: str
+    question_count: int | None
+    questions_per_topic: int
+    minimum_difficulty: int
+    maximum_difficulty: int
+    question_types: list[str]
+    time_limit_minutes: int
+    instructions: str | None
+    deadline: datetime | None
+    published_at: datetime | None
+    created_at: datetime
+    has_attempts: bool  # True if any attempt exists — frontend shows risky-field warning
+
+
+# ── Question pool management ──────────────────────────────────────────────────
+
+
+class AddQuestionRequest(BaseModel):
+    """Request to add a teacher-created question to an assessment pool."""
+
+    subtopic_id: UUID
+    question_text: str
+    question_type: str = "MCQ"
+    options: list[dict[str, str]] | None = None  # [{"key": "A", "text": "..."}]
+    correct_answer: str
+    difficulty_level: float = Field(default=3.0, ge=1.0, le=5.0)
+    explanation: str | None = None
+
+
+class AddQuestionResponse(BaseModel):
+    """Response after adding a teacher-created question."""
+
+    question_id: UUID
+    review_item_id: UUID
+    message: str = "Question added to pool and submitted for KaihleAdmin review."
+
+
+class RemoveQuestionResponse(BaseModel):
+    """Response after removing a question from the pool."""
+
+    removed: bool = True
+    has_responses: bool  # True if students have already answered this question
+
+
+class ReplacementCandidate(BaseModel):
+    """A question from the bank that can replace one in the assessment pool."""
+
+    question_id: UUID
+    question_text: str
+    question_type: str
+    options: list[QuestionOption]
+    correct_answer_key: str
+    difficulty_level: int
+    subtopic_name: str
+    topic_name: str
+
+
+class ReplaceQuestionRequest(BaseModel):
+    replacement_question_id: UUID
+
+
+class ReplaceQuestionResponse(BaseModel):
+    """Response after replacing a question in the pool."""
+
+    replaced: bool = True
+    has_responses_for_old: bool  # True if students have answered the replaced question
+
+
+class SuggestEditRequest(BaseModel):
+    """Teacher's proposed edit to an existing question in their assessment pool."""
+
+    suggested_question_text: str | None = None
+    suggested_options: list[dict[str, str]] | None = None
+    suggested_correct_answer: str | None = None
+    suggested_explanation: str | None = None
+    suggested_difficulty_level: float | None = Field(default=None, ge=1.0, le=5.0)
+    reason: str  # required — teacher must explain why the edit is needed
+
+
+class SuggestEditResponse(BaseModel):
+    """Response after submitting an edit suggestion."""
+
+    review_item_id: UUID
+    message: str = "Edit suggestion submitted for KaihleAdmin review."

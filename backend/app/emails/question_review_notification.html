@@ -1,0 +1,48 @@
+{% extends "base.html.jinja2" %}
+{% block content %}
+
+<p style="margin:0 0 8px;font-size:15px;font-weight:600;color:#374151;">Hi {{ admin_name }} 👋</p>
+<p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+  A teacher has submitted a
+  {% if item_type == "TEACHER_QUESTION" %}
+    <strong>new question</strong> for review and promotion to the global question bank.
+  {% else %}
+    <strong>question edit suggestion</strong> for your review.
+  {% endif %}
+</p>
+
+<!-- Info banner -->
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+       style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;margin-bottom:24px;">
+  <tr>
+    <td style="padding:12px 16px;">
+      <table cellpadding="0" cellspacing="0" role="presentation">
+        <tr>
+          <td style="font-size:16px;line-height:1;vertical-align:top;padding-right:10px;">📝</td>
+          <td style="font-size:13px;color:#166534;line-height:1.5;">
+            Log in to the Kaihle Admin panel to approve, reject, or edit this submission.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- CTA Button -->
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:24px;">
+  <tr>
+    <td align="center">
+      <a href="{{ admin_url | default('https://admin.kaihle.com/kaihle-admin/content/question-review') }}"
+         style="display:inline-block;background:#1a5c38;color:#ffffff;font-size:14px;font-weight:600;
+                padding:12px 32px;border-radius:8px;text-decoration:none;letter-spacing:-0.2px;">
+        Review in Admin Panel →
+      </a>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;text-align:center;">
+  This notification was sent because a teacher submitted a question for KaihleAdmin review.
+</p>
+
+{% endblock %}
