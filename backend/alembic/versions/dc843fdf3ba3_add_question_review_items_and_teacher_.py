@@ -5,9 +5,9 @@ Revises: f892502b0975
 Create Date: 2026-06-01 10:47:54.971741
 
 Changes:
-- question_bank: add school_id, submitted_by, review_status columns
-- question_bank: widen chk_qb_source to include 'teacher'
-- question_bank: add chk_qb_review_status CHECK constraint
+- question_bank: add school_id, submitted_by, review_status columns (idempotent)
+- question_bank: widen chk_qb_source to include 'teacher' and 'llm-correction'
+- question_bank: add chk_qb_review_status CHECK constraint (idempotent)
 - New table: question_review_items (unified review queue for teacher questions + edit suggestions)
 """
 
@@ -16,6 +16,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+from sqlalchemy import inspect
+from sqlalchemy.engine import Connection
 
 # revision identifiers, used by Alembic.
 revision: str = "dc843fdf3ba3"
@@ -24,48 +26,94 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _has_column(conn: Connection, table: str, column: str) -> bool:
+    """Check if a column exists in the given table."""
+    insp = inspect(conn)
+    return any(c["name"] == column for c in insp.get_columns(table))
+
+
+def _has_constraint(conn: Connection, table: str, constraint: str) -> bool:
+    """Check if a named constraint exists on the given table."""
+    insp = inspect(conn)
+    for chk in insp.get_check_constraints(table):
+        if chk["name"] == constraint:
+            return True
+    return False
+
+
+def _has_fk(conn: Connection, table: str, fk_name: str) -> bool:
+    """Check if a named foreign key exists on the given table."""
+    insp = inspect(conn)
+    for fk in insp.get_foreign_keys(table):
+        if fk.get("name") == fk_name:
+            return True
+    return False
+
+
+def _has_index(conn: Connection, table: str, index: str) -> bool:
+    """Check if a named index exists."""
+    insp = inspect(conn)
+    for idx in insp.get_indexes(table):
+        if idx["name"] == index:
+            return True
+    return False
+
+
 def upgrade() -> None:
     """Upgrade schema."""
-    # ── question_bank: widen source CHECK to include 'teacher' ──────────────
+    conn = op.get_bind()
+
+    # ── question_bank: widen source CHECK to include 'teacher' and 'llm-correction' ─
     # Alembic cannot diff CHECK constraint text — must be done manually.
-    op.drop_constraint("chk_qb_source", "question_bank", type_="check")
+    if _has_constraint(conn, "question_bank", "chk_qb_source"):
+        op.drop_constraint("chk_qb_source", "question_bank", type_="check")
     op.create_check_constraint(
         "chk_qb_source",
         "question_bank",
-        "source IN ('bank', 'llm', 'teacher')",
+        "source IN ('bank', 'llm', 'llm-correction', 'teacher')",
     )
 
-    # ── question_bank: add teacher-submission columns ────────────────────────
-    op.add_column("question_bank", sa.Column("school_id", sa.UUID(), nullable=True))
-    op.add_column("question_bank", sa.Column("submitted_by", sa.UUID(), nullable=True))
-    op.add_column("question_bank", sa.Column("review_status", sa.String(length=20), nullable=True))
-    op.create_foreign_key(
-        "fk_qb_school",
-        "question_bank",
-        "schools",
-        ["school_id"],
-        ["id"],
-        ondelete="RESTRICT",
-    )
-    op.create_foreign_key(
-        "fk_qb_submitted_by",
-        "question_bank",
-        "users",
-        ["submitted_by"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_check_constraint(
-        "chk_qb_review_status",
-        "question_bank",
-        "review_status IS NULL OR review_status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED')",
-    )
-    op.create_index(
-        "idx_qb_school",
-        "question_bank",
-        ["school_id"],
-        postgresql_where=sa.text("school_id IS NOT NULL"),
-    )
+    # ── question_bank: add teacher-submission columns (idempotent) ────────────
+    if not _has_column(conn, "question_bank", "school_id"):
+        op.add_column("question_bank", sa.Column("school_id", sa.UUID(), nullable=True))
+    if not _has_column(conn, "question_bank", "submitted_by"):
+        op.add_column("question_bank", sa.Column("submitted_by", sa.UUID(), nullable=True))
+    if not _has_column(conn, "question_bank", "review_status"):
+        op.add_column("question_bank", sa.Column("review_status", sa.String(length=20), nullable=True))
+
+    if not _has_fk(conn, "question_bank", "fk_qb_school"):
+        op.create_foreign_key(
+            "fk_qb_school",
+            "question_bank",
+            "schools",
+            ["school_id"],
+            ["id"],
+            ondelete="RESTRICT",
+        )
+    if not _has_fk(conn, "question_bank", "fk_qb_submitted_by"):
+        op.create_foreign_key(
+            "fk_qb_submitted_by",
+            "question_bank",
+            "users",
+            ["submitted_by"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+
+    if not _has_constraint(conn, "question_bank", "chk_qb_review_status"):
+        op.create_check_constraint(
+            "chk_qb_review_status",
+            "question_bank",
+            "review_status IS NULL OR review_status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED')",
+        )
+
+    if not _has_index(conn, "question_bank", "idx_qb_school"):
+        op.create_index(
+            "idx_qb_school",
+            "question_bank",
+            ["school_id"],
+            postgresql_where=sa.text("school_id IS NOT NULL"),
+        )
 
     # ── question_review_items: unified review queue ──────────────────────────
     op.create_table(
@@ -131,16 +179,25 @@ def downgrade() -> None:
     op.drop_table("question_review_items")
 
     # ── question_bank: remove teacher-submission columns ─────────────────────
-    op.drop_index("idx_qb_school", table_name="question_bank")
-    op.drop_constraint("chk_qb_review_status", "question_bank", type_="check")
-    op.drop_constraint("fk_qb_submitted_by", "question_bank", type_="foreignkey")
-    op.drop_constraint("fk_qb_school", "question_bank", type_="foreignkey")
-    op.drop_column("question_bank", "review_status")
-    op.drop_column("question_bank", "submitted_by")
-    op.drop_column("question_bank", "school_id")
+    conn = op.get_bind()
+    if _has_index(conn, "question_bank", "idx_qb_school"):
+        op.drop_index("idx_qb_school", table_name="question_bank")
+    if _has_constraint(conn, "question_bank", "chk_qb_review_status"):
+        op.drop_constraint("chk_qb_review_status", "question_bank", type_="check")
+    if _has_fk(conn, "question_bank", "fk_qb_submitted_by"):
+        op.drop_constraint("fk_qb_submitted_by", "question_bank", type_="foreignkey")
+    if _has_fk(conn, "question_bank", "fk_qb_school"):
+        op.drop_constraint("fk_qb_school", "question_bank", type_="foreignkey")
+    if _has_column(conn, "question_bank", "review_status"):
+        op.drop_column("question_bank", "review_status")
+    if _has_column(conn, "question_bank", "submitted_by"):
+        op.drop_column("question_bank", "submitted_by")
+    if _has_column(conn, "question_bank", "school_id"):
+        op.drop_column("question_bank", "school_id")
 
     # ── question_bank: restore original source CHECK ─────────────────────────
-    op.drop_constraint("chk_qb_source", "question_bank", type_="check")
+    if _has_constraint(conn, "question_bank", "chk_qb_source"):
+        op.drop_constraint("chk_qb_source", "question_bank", type_="check")
     op.create_check_constraint(
         "chk_qb_source",
         "question_bank",

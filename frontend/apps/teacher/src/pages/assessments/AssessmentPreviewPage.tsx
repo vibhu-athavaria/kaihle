@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation, Link } from "react-router-dom";
 import { DashboardLayout, Badge, Skeleton, Button } from "@kaihle/ui";
 import {
   ChevronDown,
@@ -69,8 +69,16 @@ function groupByTopic(questions: PreviewQuestion[]): TopicGroup[] {
   return [...topicMap.values()];
 }
 
+interface LocationState {
+  backPath?: string;
+  backLabel?: string;
+}
+
 export function AssessmentPreviewPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
+  const location = useLocation();
+  const { backPath = "/teacher/assessments", backLabel = "All Assessments" } =
+    (location.state as LocationState) ?? {};
   const [editOpen, setEditOpen] = useState(false);
   const [addQOpen, setAddQOpen] = useState(false);
   const [replaceQuestion, setReplaceQuestion] =
@@ -140,6 +148,23 @@ export function AssessmentPreviewPage() {
   return (
     <DashboardLayout variant="teacher" pageTitle="Assessment Preview">
       <div className="p-6 max-w-3xl mx-auto space-y-6">
+        {/* Breadcrumb */}
+        <nav
+          className="flex items-center gap-2 text-sm text-brand-muted"
+          aria-label="Breadcrumb"
+        >
+          <Link
+            to={backPath}
+            className="hover:text-brand-ink transition-colors"
+          >
+            {backLabel}
+          </Link>
+          <span aria-hidden="true">/</span>
+          <span className="text-brand-ink font-medium truncate">
+            {assessment?.title ?? "Preview"}
+          </span>
+        </nav>
+
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -356,6 +381,35 @@ export function AssessmentPreviewPage() {
                                     <p className="text-sm font-sans text-brand-ink leading-snug">
                                       {q.question_text}
                                     </p>
+                                    {q.options && q.options.length > 0 && (
+                                      <div className="mt-2 space-y-1">
+                                        {q.options.map((opt) => {
+                                          const isCorrect =
+                                            opt.key.toLowerCase() ===
+                                            q.correct_answer_key.toLowerCase();
+                                          return (
+                                            <div
+                                              key={opt.key}
+                                              className={`flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-xs font-sans ${
+                                                isCorrect
+                                                  ? "bg-brand-green-light border border-brand-green/30 text-brand-green font-semibold"
+                                                  : "bg-brand-light border border-brand-border text-brand-body"
+                                              }`}
+                                            >
+                                              <span className="font-bold flex-shrink-0">
+                                                {opt.key.toUpperCase()}.
+                                              </span>
+                                              <span>{opt.text}</span>
+                                              {isCorrect && (
+                                                <span className="ml-auto flex-shrink-0">
+                                                  ✓
+                                                </span>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
                                     <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                                       <span className="inline-flex items-center gap-1 bg-brand-green-light border border-brand-green/30 rounded-md px-2 py-0.5 text-[11px] font-sans font-semibold text-brand-green">
                                         ✓ {q.correct_answer_key.toUpperCase()}

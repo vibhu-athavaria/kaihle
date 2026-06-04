@@ -170,6 +170,16 @@ export function AllAssessmentsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <Link
+                  to={`/teacher/assessments/${assessment.id}/preview`}
+                  state={{
+                    backPath: "/teacher/assessments",
+                    backLabel: "All Assessments",
+                  }}
+                  className="text-xs font-medium text-brand-body hover:text-brand-ink transition-colors px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
+                >
+                  Preview
+                </Link>
                 {(assessment.status === "ACTIVE" ||
                   assessment.status === "CLOSED") && (
                   <Link

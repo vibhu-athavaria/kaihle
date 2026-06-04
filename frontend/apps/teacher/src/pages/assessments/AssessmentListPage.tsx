@@ -211,10 +211,15 @@ export function AssessmentListPage() {
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-end gap-2">
-                      {/* Preview button — always available for owned assessments */}
                       <Link
                         to={`/teacher/assessments/${assessment.id}/preview`}
-                        className="flex items-center gap-1.5 text-xs font-sans font-bold text-brand-body hover:text-brand-ink transition-colors px-2 py-1"
+                        state={{
+                          backPath: `/teacher/classes/${classId}/assessments`,
+                          backLabel: currentClass
+                            ? `${currentClass.name} / Assessments`
+                            : "Assessments",
+                        }}
+                        className="text-xs font-sans font-bold text-brand-body hover:text-brand-ink transition-colors px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
                       >
                         Preview
                       </Link>

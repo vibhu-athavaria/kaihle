@@ -22,7 +22,6 @@ import { TeacherDashboard } from "./pages/dashboard/TeacherDashboard";
 import { TeacherSettingsPage } from "./pages/settings/TeacherSettingsPage";
 import { NewAssessmentPage } from "./pages/assessments/NewAssessmentPage";
 import { AssessmentListPage } from "./pages/assessments/AssessmentListPage";
-import { AssessmentPreviewPage } from "./pages/assessments/AssessmentPreviewPage";
 import { AssessmentResultsPage } from "./pages/assessments/AssessmentResultsPage";
 import { StudentResultDetailPage } from "./pages/assessments/StudentResultDetailPage";
 import { ExplanationReviewPage } from "./pages/classes/ExplanationReviewPage";
@@ -39,6 +38,7 @@ import { ContentReviewPage } from "./pages/content-review/ContentReviewPage";
 import { CourseDetailPage } from "./pages/content-review/CourseDetailPage";
 import { ClassStudyPlanPage } from "./pages/classes/ClassStudyPlanPage";
 import { SubtopicContentBrowser } from "./pages/SubtopicContentBrowser";
+import { AssessmentPreviewPage } from "./pages/assessments/AssessmentPreviewPage";
 
 // Plain function — no state, no effects, no React APIs
 function getTeacherGreeting(firstName: string | undefined): {
@@ -226,18 +226,6 @@ export default function App() {
           }
         />
         <Route
-          path="/teacher/assessments/:assessmentId/preview"
-          element={
-            <PrivateRouteWithPasswordCheck>
-              <RoleRoute allowedRoles={[UserRole.TEACHER]}>
-                <ErrorBoundary role="teacher">
-                  <AssessmentPreviewPage />
-                </ErrorBoundary>
-              </RoleRoute>
-            </PrivateRouteWithPasswordCheck>
-          }
-        />
-        <Route
           path="/teacher/assessments/:assessmentId/results/:studentId"
           element={
             <PrivateRouteWithPasswordCheck>
@@ -250,6 +238,24 @@ export default function App() {
               >
                 <ErrorBoundary role="teacher">
                   <StudentResultDetailPage />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRouteWithPasswordCheck>
+          }
+        />
+        <Route
+          path="/teacher/assessments/:assessmentId/preview"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <RoleRoute
+                allowedRoles={[
+                  UserRole.TEACHER,
+                  UserRole.SCHOOL_ADMIN,
+                  UserRole.KAIHLE_ADMIN,
+                ]}
+              >
+                <ErrorBoundary role="teacher">
+                  <AssessmentPreviewPage />
                 </ErrorBoundary>
               </RoleRoute>
             </PrivateRouteWithPasswordCheck>

@@ -467,7 +467,7 @@ CREATE TABLE question_bank (
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at              TIMESTAMPTZ,
     CONSTRAINT chk_qb_difficulty    CHECK (difficulty_level IS NULL OR difficulty_level BETWEEN 1.0 AND 5.0),
-    CONSTRAINT chk_qb_source        CHECK (source IN ('bank', 'llm', 'teacher')),
+    CONSTRAINT chk_qb_source        CHECK (source IN ('bank', 'llm', 'llm-correction', 'teacher')),
     CONSTRAINT chk_qb_review_status CHECK (review_status IS NULL OR review_status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED'))
 );
 
