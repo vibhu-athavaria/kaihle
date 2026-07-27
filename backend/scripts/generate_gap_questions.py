@@ -265,6 +265,122 @@ CRITICAL GUARDRAILS:
 """
 
 # ---------------------------------------------------------------------------
+# Subject-specific difficulty rubrics (concrete operational definitions)
+# ---------------------------------------------------------------------------
+
+DIFFICULTY_RUBRICS: dict[str, str] = {
+    "ENG": """
+DIFFICULTY RUBRIC FOR ENGLISH LANGUAGE:
+  Level 1 — Direct recall of explicit information from a text, or identification
+    of a basic language feature. Single step. ~30s. Bloom: Remember.
+    Example: "Which word in the passage tells you the character is angry?"
+  Level 2 — Simple inference or understanding of a familiar concept. One-step
+    reasoning with a clear clue in the text. ~45s. Bloom: Understand.
+    Example: "What does the phrase 'his voice trembled' suggest about the character?"
+  Level 3 — Analysis of language effects, structure, or author's craft. Multi-step
+    reasoning applying one concept. ~60s. Bloom: Apply/Analyze.
+    Example: "How does the writer use imagery in paragraph 3 to create a sense of isolation?"
+  Level 4 — Evaluation of arguments, comparison across texts, or analysis of complex
+    techniques. Multiple concepts integrated. ~90s. Bloom: Analyze.
+    Example: "Compare how the two writers use tone to convey their perspective on the same event."
+  Level 5 — Synthesis of ideas across texts, critical evaluation of authorial choices,
+    or extended analytical reasoning. ~120s. Bloom: Evaluate.
+    Example: "Evaluate how effectively the writer's structural choices support their argument."
+""",
+    "MATH": """
+DIFFICULTY RUBRIC FOR MATHEMATICS:
+  Level 1 — Direct recall of a formula, definition, or single arithmetic operation.
+    ~30s. Bloom: Remember.
+    Example: "What is the formula for the area of a rectangle?"
+  Level 2 — Simple application of one formula or concept. Two-step calculation
+    in a familiar context. ~45s. Bloom: Understand.
+    Example: "Calculate the area of a rectangle with length 8 cm and width 5 cm."
+  Level 3 — Multi-step problem applying one concept in an unfamiliar context.
+    Requires setting up the problem. ~60s. Bloom: Apply.
+    Example: "A rectangular garden is 3 m longer than it is wide. If its perimeter is 30 m, find its area."
+  Level 4 — Integration of multiple mathematical concepts. Word problem requiring
+    problem decomposition. ~90s. Bloom: Analyze.
+    Example: "A cylinder has a volume of 500 cm³ and height of 10 cm. A sphere has the same radius. Find the sphere's volume."
+  Level 5 — Proof, generalisation, or multi-concept novel reasoning. Requires
+    abstract thinking or justification. ~120s. Bloom: Evaluate/Create.
+    Example: "Prove that the sum of the squares of the first n natural numbers is n(n+1)(2n+1)/6."
+""",
+    "SCI": """
+DIFFICULTY RUBRIC FOR INTEGRATED SCIENCE:
+  Level 1 — Recall a definition, fact, or scientific term. ~30s. Bloom: Remember.
+  Level 2 — Understand a concept in a familiar context. ~45s. Bloom: Understand.
+  Level 3 — Apply a concept to a new situation. Multi-step reasoning. ~60s. Bloom: Apply.
+  Level 4 — Analyse data, compare theories, or multi-step calculation. ~90s. Bloom: Analyze.
+  Level 5 — Evaluate evidence, synthesise ideas, or design an investigation. ~120s. Bloom: Evaluate.
+""",
+    "BIO": """
+DIFFICULTY RUBRIC FOR BIOLOGY:
+  Level 1 — Recall a definition, structure, or process name. ~30s. Bloom: Remember.
+  Level 2 — Understand a process in a familiar context. ~45s. Bloom: Understand.
+  Level 3 — Apply biological knowledge to a new scenario. ~60s. Bloom: Apply.
+  Level 4 — Analyse relationships between structures/processes. ~90s. Bloom: Analyze.
+  Level 5 — Evaluate evidence, synthesise across systems. ~120s. Bloom: Evaluate.
+""",
+    "CHEM": """
+DIFFICULTY RUBRIC FOR CHEMISTRY:
+  Level 1 — Recall a definition, formula, or element property. ~30s. Bloom: Remember.
+  Level 2 — Understand a reaction or concept in a familiar context. ~45s. Bloom: Understand.
+  Level 3 — Apply chemical principles to a new situation. ~60s. Bloom: Apply.
+  Level 4 — Analyse experimental data, multi-step calculations. ~90s. Bloom: Analyze.
+  Level 5 — Evaluate evidence, synthesise reaction pathways. ~120s. Bloom: Evaluate.
+""",
+    "PHY": """
+DIFFICULTY RUBRIC FOR PHYSICS:
+  Level 1 — Recall a law, definition, or formula. ~30s. Bloom: Remember.
+  Level 2 — Understand a concept in a familiar context. ~45s. Bloom: Understand.
+  Level 3 — Apply a formula to a multi-step problem. ~60s. Bloom: Apply.
+  Level 4 — Analyse forces/energy in complex systems. ~90s. Bloom: Analyze.
+  Level 5 — Evaluate experimental evidence, synthesise concepts. ~120s. Bloom: Evaluate.
+""",
+    "ENGL": """
+DIFFICULTY RUBRIC FOR ENGLISH LITERATURE:
+  Level 1 — Identify a literary device or recall a plot detail. ~30s. Bloom: Remember.
+  Level 2 — Understand the effect of a simple device. ~45s. Bloom: Understand.
+  Level 3 — Analyse language, structure, or form in a text. ~60s. Bloom: Apply/Analyze.
+  Level 4 — Compare texts, evaluate themes, or analyse complex techniques. ~90s. Bloom: Analyze.
+  Level 5 — Evaluate authorial choices, synthesise across texts, construct critical argument. ~120s. Bloom: Evaluate.
+""",
+    "HIST": """
+DIFFICULTY RUBRIC FOR HISTORY:
+  Level 1 — Recall a key event, date, or figure. ~30s. Bloom: Remember.
+  Level 2 — Understand causes or consequences. ~45s. Bloom: Understand.
+  Level 3 — Explain causation, compare perspectives. ~60s. Bloom: Apply.
+  Level 4 — Analyse sources, evaluate evidence. ~90s. Bloom: Analyze.
+  Level 5 — Evaluate competing interpretations, construct an argument. ~120s. Bloom: Evaluate.
+""",
+    "GEO": """
+DIFFICULTY RUBRIC FOR GEOGRAPHY:
+  Level 1 — Recall a definition, location, or term. ~30s. Bloom: Remember.
+  Level 2 — Understand a geographical concept. ~45s. Bloom: Understand.
+  Level 3 — Apply concepts to a case study. ~60s. Bloom: Apply.
+  Level 4 — Analyse data, compare places/processes. ~90s. Bloom: Analyze.
+  Level 5 — Evaluate solutions, synthesise across human/physical geography. ~120s. Bloom: Evaluate.
+""",
+    "GP": """
+DIFFICULTY RUBRIC FOR GLOBAL PERSPECTIVES:
+  Level 1 — Recall a term or definition. ~30s. Bloom: Remember.
+  Level 2 — Understand a perspective or concept. ~45s. Bloom: Understand.
+  Level 3 — Apply research skills to a global issue. ~60s. Bloom: Apply.
+  Level 4 — Analyse multiple stakeholder perspectives. ~90s. Bloom: Analyze.
+  Level 5 — Evaluate evidence, construct reasoned argument. ~120s. Bloom: Evaluate.
+""",
+}
+
+DEFAULT_RUBRIC = """
+DIFFICULTY RUBRIC:
+  Level 1 — Recall. ~30s.
+  Level 2 — Understand. ~45s.
+  Level 3 — Apply. ~60s.
+  Level 4 — Analyse. ~90s.
+  Level 5 — Evaluate/Create. ~120s.
+"""
+
+# ---------------------------------------------------------------------------
 # Bloom's taxonomy bands by difficulty level
 # ---------------------------------------------------------------------------
 
@@ -463,6 +579,7 @@ def build_prompt(
     """
     subject_code = subtopic["subject_code"]
     guardrail = SUBJECT_GUARDRAILS.get(subject_code, DEFAULT_GUARDRAIL)
+    rubric = DIFFICULTY_RUBRICS.get(subject_code, DEFAULT_RUBRIC)
     keywords = subtopic.get("keywords") or []
     keyword_hint = f"\nKey concepts to draw on: {', '.join(keywords)}" if keywords else ""
     description = subtopic.get("subtopic_description") or ""
@@ -512,12 +629,17 @@ CURRICULUM CONTEXT:
 REQUIRED DIFFICULTY DISTRIBUTION:
 {diff_spec}
 
+{rubric}
+
 QUESTION TYPES — mix of MCQ and True/False:
 - "multiple_choice": provide exactly 4 options keyed A, B, C, D.
     • All 4 option VALUES must be unique (no duplicate option text).
     • All 4 options must be non-empty strings.
     • correct_answer must be one of: "A", "B", "C", or "D".
     • Distractors must be plausible misconceptions, not obviously wrong.
+    • GOOD distractor: "The sum of the interior angles of a triangle is 200°" (common misconception)
+    • BAD distractor: "The sum of the interior angles of a triangle is 42" (incoherent number)
+    • For ENG: distractors must be plausible misreadings of the text, not factual errors.
 - "true_false": question_text MUST begin with "True or False: " (exactly this prefix).
     • correct_answer must be "TRUE" or "FALSE" (uppercase).
     • Do NOT include an "options" field for true_false questions.
@@ -527,6 +649,17 @@ QUESTION TYPES — mix of MCQ and True/False:
 
 {guardrail}
 
+ENG READING / LANGUAGE QUESTIONS — FOR ENGLISH LANGUAGE (ENG) ONLY:
+If you are generating a question that requires a text to reference (e.g. inference,
+language analysis, author's intent), you MUST include a SHORT invented passage excerpt
+(2-4 sentences) DIRECTLY IN the question_text, then ask about it.
+  Example:
+    "Read this passage: 'The old house loomed against the grey sky, its windows
+    like hollow eyes watching the road.' How does the writer use personification
+    to create atmosphere?"
+  Do NOT assume the student has read any external text. The question must be
+  self-contained and answerable from the passage excerpt alone.
+
 QUALITY REQUIREMENTS:
 - Every question must DIRECTLY assess the learning objective stated above.
 - Questions at the same difficulty level must test DIFFERENT aspects of the subtopic.
@@ -534,6 +667,13 @@ QUALITY REQUIREMENTS:
 - Hints must scaffold thinking without revealing the answer. hint3 may strongly guide.
 - Do NOT include any HTML tags, markdown formatting, or special characters in text fields.
   Use plain ASCII. Write mathematical expressions in plain text (e.g. "x squared" not "x²").
+
+SELF-VERIFICATION — Before including each question, verify:
+  1. FACTUAL ACCURACY: Is the correct answer DEFINITELY correct? Re-solve if needed.
+  2. DIFFICULTY: Does this question match the rubric for its labeled difficulty level?
+  3. SUBTOPIC: Does this question test the stated learning objective, not a different skill?
+  4. DISTRACTORS: Are wrong answers truly plausible? No obviously wrong options.
+  5. CONTENT DOMAIN: (ENG only) Does this test a language skill, not factual recall?
 
 OUTPUT FORMAT — return ONLY valid JSON, no markdown fences, no trailing commas:
 {{
@@ -545,7 +685,7 @@ OUTPUT FORMAT — return ONLY valid JSON, no markdown fences, no trailing commas
       "options": {{"A": "first option", "B": "second option", "C": "third option", "D": "fourth option"}},
       "correct_answer": "B",
       "bloom_taxonomy_level": "Remember",
-      "estimated_time_seconds": 45,
+      "estimated_time_seconds": 30,
       "learning_objectives": ["Recall the definition of ..."],
       "explanation": "B is correct because ... A is wrong because ... C is wrong because ... D is wrong because ...",
       "hints": {{"hint1": "Think about ...", "hint2": "Consider ...", "hint3": "The answer relates to ..."}}
@@ -556,7 +696,7 @@ OUTPUT FORMAT — return ONLY valid JSON, no markdown fences, no trailing commas
       "question_text": "True or False: [statement about {subtopic["subtopic_name"]}].",
       "correct_answer": "TRUE",
       "bloom_taxonomy_level": "Understand",
-      "estimated_time_seconds": 30,
+      "estimated_time_seconds": 45,
       "learning_objectives": ["Understand ..."],
       "explanation": "This is TRUE because ...",
       "hints": {{"hint1": "Consider ...", "hint2": "Think about ...", "hint3": "Focus on ..."}}

@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     llm_question_generation_model: str = ""
     llm_question_generation_api_base: str | None = None
 
+    llm_question_quality_model: str = ""
+    llm_question_quality_api_base: str | None = None
+
     # Used by KaihleAdmin content-seed endpoints (quiz + explanation regeneration)
     llm_content_seed_model: str = "openrouter/google/gemini-2.0-flash-001"
     llm_content_seed_api_base: str | None = None
