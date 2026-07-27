@@ -266,6 +266,8 @@ CRITICAL GUARDRAILS:
 
 # ---------------------------------------------------------------------------
 # Subject-specific difficulty rubrics (concrete operational definitions)
+# WARNING: This dict is duplicated in backend/scripts/validate_and_fix_questions.py.
+# Keep both in sync when adding or modifying rubrics.
 # ---------------------------------------------------------------------------
 
 DIFFICULTY_RUBRICS: dict[str, str] = {

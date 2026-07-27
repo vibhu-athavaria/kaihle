@@ -93,6 +93,8 @@ VALIDATION_DIR.mkdir(exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Subject-specific difficulty rubrics (same as generate_gap_questions.py)
+# WARNING: This dict is duplicated in backend/scripts/validate_and_fix_questions.py.
+# Keep both in sync when adding or modifying rubrics.
 # ---------------------------------------------------------------------------
 DIFFICULTY_RUBRICS: dict[str, str] = {
     "ENG": """
@@ -242,6 +244,30 @@ CONTENT ACCURACY CHECK:
   - Verify all physics laws, constants, and formulae are correct.
   - Check that numerical answers have correct significant figures.
   - Distractors must reflect common errors (wrong formula, inverted relationship).
+""",
+    "ENGL": """
+CONTENT ACCURACY CHECK:
+  - Verify all literary analysis claims are factually sound.
+  - Check that questions assess literary analysis, not plot recall.
+  - Distractors must reflect common misreadings, not factual errors.
+""",
+    "HIST": """
+CONTENT ACCURACY CHECK:
+  - Verify all historical claims are factually accurate.
+  - Check that questions require historical reasoning, not date memorisation.
+  - Distractors must reflect common historical misunderstandings.
+""",
+    "GEO": """
+CONTENT ACCURACY CHECK:
+  - Verify all geographical claims are factually correct.
+  - Check that questions use realistic data and case studies.
+  - Distractors must reflect genuine geographical misconceptions.
+""",
+    "GP": """
+CONTENT ACCURACY CHECK:
+  - Verify the question assesses analytical reasoning, not factual recall.
+  - Check that no single answer is presented as the only correct political/ethical view.
+  - Distractors must reflect alternative valid perspectives.
 """,
 }
 
@@ -538,7 +564,7 @@ def parse_generated_file(
 
     raw_questions = data.get("questions", [])
     if not raw_questions:
-        log.error("no_questions_in_file", path=file_path)
+        log.error("no_questions_in_file", path=file_path or "pre-loaded_data")
         return []
 
     # Group by hierarchy
@@ -942,6 +968,16 @@ def validate_corrected_question(q: dict[str, Any]) -> list[str]:
     bloom = q.get("bloom_taxonomy_level", "")
     if bloom not in _VALID_BLOOM:
         errors.append(f"invalid bloom_taxonomy_level: {bloom!r}")
+
+    # Validate estimated_time_seconds is positive
+    est = q.get("estimated_time_seconds", 0)
+    if not isinstance(est, int | float) or est <= 0:
+        errors.append(f"estimated_time_seconds must be a positive number, got {est!r}")
+
+    # Validate explanation is non-empty
+    explanation = q.get("explanation", "")
+    if not explanation or not str(explanation).strip():
+        errors.append("explanation must be non-empty")
 
     hints = q.get("hints", {})
     if not isinstance(hints, dict):
