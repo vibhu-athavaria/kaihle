@@ -58,3 +58,4 @@ node_modules/.vite.worktrees/
 .brv/package-lock.json
 .claude/**
 **pyrightconfig.json
+backend/validation_reports/

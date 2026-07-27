@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     llm_question_generation_model: str = ""
     llm_question_generation_api_base: str | None = None
 
+    llm_question_quality_model: str = ""
+    llm_question_quality_api_base: str | None = None
+
     # Used by KaihleAdmin content-seed endpoints (quiz + explanation regeneration)
     llm_content_seed_model: str = "openrouter/google/gemini-2.0-flash-001"
     llm_content_seed_api_base: str | None = None
@@ -97,6 +100,7 @@ class Settings(BaseSettings):
                 "LLM_STUDY_PLAN_MODEL": self.llm_study_plan_model,
                 "LLM_LESSON_PLAN_MODEL": self.llm_lesson_plan_model,
                 "LLM_STUDENT_PACK_MODEL": self.llm_student_pack_model,
+                "LLM_QUESTION_QUALITY_MODEL": self.llm_question_quality_model,
                 "KAIHLE_ADMIN_EMAIL": self.kaihle_admin_email,
             }.items()
             if not val
