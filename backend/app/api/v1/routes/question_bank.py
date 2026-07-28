@@ -81,6 +81,8 @@ def _to_response(row: Any) -> QuestionBankResponse:
         explanation=qb.explanation,
         difficulty_level=qb.difficulty_level,
         is_active=qb.is_active,
+        source=qb.source,
+        replaces_question_id=qb.replaces_question_id,
         subtopic_id=qb.subtopic_id,
         created_at=qb.created_at,
         updated_at=qb.updated_at,
@@ -109,6 +111,9 @@ async def list_questions(
     curriculum_topic_id: UUID | None = Query(None),
     question_type: str | None = Query(None),
     search: str | None = Query(None),
+    is_active: bool | None = Query(None),
+    source: str | None = Query(None),
+    has_replaces: bool | None = Query(None, description="Filter questions that have a replaces_question_id"),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> QuestionBankListResponse:
@@ -131,6 +136,12 @@ async def list_questions(
         query = query.where(QuestionBank.question_type == question_type)
     if search:
         query = query.where(QuestionBank.question_text.ilike(f"%{search}%"))
+    if is_active is not None:
+        query = query.where(QuestionBank.is_active == is_active)
+    if source:
+        query = query.where(QuestionBank.source == source)
+    if has_replaces is True:
+        query = query.where(QuestionBank.replaces_question_id.isnot(None))
 
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     query = query.order_by(QuestionBank.created_at.desc())

@@ -305,10 +305,15 @@ class QuestionBank(Base, UUIDMixin, TimestampMixin):
     learning_objectives: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     canonical_form: Mapped[str] = mapped_column(Text, nullable=False)
     problem_signature: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
-    source: Mapped[str] = mapped_column(String(10), nullable=False, default="bank")
-    # 'bank' = from founders 7K import | 'llm' = AI-generated at runtime
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="bank")
+    # 'bank' = from founders 7K import | 'llm' = AI-generated at runtime | 'llm-correction' = LLM-validated replacement
     meta_tags: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    replaces_question_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("question_bank.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     subtopic: Mapped["Subtopic"] = relationship("Subtopic", back_populates="questions")
 

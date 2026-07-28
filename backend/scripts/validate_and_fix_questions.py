@@ -5,8 +5,12 @@ Three modes:
                        batch, output fixes_to_apply.json for failed questions.
   validate-generated — Read a generated JSON file (from generate_gap_questions.py),
                        validate, output a corrected JSON file ready for import.
-  apply-fixes        — Apply a fixes_to_apply.json to the database (UPDATEs
-                       question rows with corrected fields).
+  apply-fixes        — Apply a fixes_to_apply.json to the database by INSERTING
+                       new correction records (not UPDATING originals).
+
+IMPORTANT: apply-fixes now CREATES new question records with is_active=false
+and replaces_question_id pointing to the original. Originals are NOT modified.
+Approve corrections via the KaihleAdmin UI.
 
 The validator uses a SEPARATE, more capable LLM (configured via
 LLM_QUESTION_QUALITY_MODEL) to review the generator's output. This catches
@@ -770,6 +774,7 @@ def build_fixes_from_validation(
                 # Include question_id if available (from DB)
                 if "question_id" in original:
                     fix["question_id"] = original["question_id"]
+                    fix["subtopic_id"] = original.get("subtopic_id")
 
                 fixes.append(fix)
 
@@ -845,15 +850,28 @@ async def apply_fixes_to_db(
 ) -> int:
     """Apply fixes to the question_bank table.
 
-    Each fix has a question_id and a corrected dict with the new field values.
-    Returns the number of fixes applied.
+    For each fix, creates a NEW question record (INSERT) with:
+      - Corrected fields from the LLM
+      - is_active = False (pending human review)
+      - source = 'llm-correction'
+      - replaces_question_id = original question's id
+      - canonical_form and problem_signature recalculated
+
+    The original question remains active until a human approves the correction
+    via the KaihleAdmin UI.
+
+    Returns the number of corrections created.
     """
     applied = 0
 
     for fix in fixes:
         question_id = fix.get("question_id")
+        subtopic_id = fix.get("subtopic_id")
         if not question_id:
             log.warning("fix_missing_question_id", subtopic=fix.get("subtopic_info", {}).get("subtopic_name", "?"))
+            continue
+        if not subtopic_id:
+            log.warning("fix_missing_subtopic_id", question_id=question_id)
             continue
 
         corrected = fix.get("corrected", {})
@@ -864,32 +882,54 @@ async def apply_fixes_to_db(
         new_canonical = make_canonical_form(corrected.get("question_text", ""))
         new_signature = make_problem_signature(corrected)
 
-        # Build the update — serialize JSON values, use CAST in SQL
+        # Build the insert — all fields needed for a new question row
         options_val = corrected.get("options")
         hints = corrected.get("hints", {})
         learning_objectives = corrected.get("learning_objectives", [])
 
-        update_sql = sa_text("""
-            UPDATE question_bank
-            SET
-                question_text = :question_text,
-                options = CAST(:options AS jsonb),
-                correct_answer = :correct_answer,
-                explanation = :explanation,
-                hints = CAST(:hints AS jsonb),
-                difficulty_level = :difficulty_level,
-                bloom_taxonomy_level = :bloom_taxonomy_level,
-                estimated_time_seconds = :estimated_time_seconds,
-                learning_objectives = :learning_objectives,
-                canonical_form = :canonical_form,
-                problem_signature = CAST(:problem_signature AS jsonb),
-                updated_at = now()
-            WHERE id = CAST(:question_id AS uuid)
+        insert_sql = sa_text("""
+            INSERT INTO question_bank (
+                subtopic_id,
+                question_text,
+                question_type,
+                options,
+                correct_answer,
+                explanation,
+                hints,
+                difficulty_level,
+                bloom_taxonomy_level,
+                estimated_time_seconds,
+                learning_objectives,
+                canonical_form,
+                problem_signature,
+                source,
+                is_active,
+                replaces_question_id
+            ) VALUES (
+                CAST(:subtopic_id AS uuid),
+                :question_text,
+                :question_type,
+                CAST(:options AS jsonb),
+                :correct_answer,
+                :explanation,
+                CAST(:hints AS jsonb),
+                :difficulty_level,
+                :bloom_taxonomy_level,
+                :estimated_time_seconds,
+                :learning_objectives,
+                :canonical_form,
+                CAST(:problem_signature AS jsonb),
+                'llm-correction',
+                false,
+                CAST(:replaces_question_id AS uuid)
+            )
         """)
 
         params = {
-            "question_id": question_id,
+            "subtopic_id": subtopic_id,
+            "replaces_question_id": question_id,
             "question_text": corrected.get("question_text", ""),
+            "question_type": corrected.get("question_type", ""),
             "options": json.dumps(options_val if isinstance(options_val, dict | list) else None),
             "correct_answer": corrected.get("correct_answer", ""),
             "explanation": corrected.get("explanation", ""),
@@ -904,25 +944,25 @@ async def apply_fixes_to_db(
 
         if dry_run:
             log.info(
-                "dry_run_would_update",
+                "dry_run_would_insert_correction",
                 question_id=question_id,
                 subtopic=fix.get("subtopic_info", {}).get("subtopic_name", "?"),
                 changes=fix.get("changes_made", []),
             )
             applied += 1
         else:
-            await db.execute(update_sql, params)
+            await db.execute(insert_sql, params)
             applied += 1
             log.info(
-                "fix_applied",
-                question_id=question_id,
+                "correction_inserted",
+                replaces_question_id=question_id,
                 subtopic=fix.get("subtopic_info", {}).get("subtopic_name", "?"),
                 changes=fix.get("changes_made", []),
             )
 
     if not dry_run:
         await db.commit()
-        log.info("fixes_committed", count=applied)
+        log.info("corrections_committed", count=applied)
 
     return applied
 
@@ -1172,7 +1212,7 @@ async def run_apply_fixes(
     file_path: str,
     dry_run: bool,
 ) -> int:
-    """Apply a fixes_to_apply.json to the database."""
+    """Insert correction records from a fixes_to_apply.json into the database."""
     with open(file_path, encoding="utf-8") as f:
         fixes_data = json.load(f)
 
@@ -1181,7 +1221,7 @@ async def run_apply_fixes(
         log.info("no_fixes_to_apply")
         return 0
 
-    log.info("applying_fixes", count=len(fixes), dry_run=dry_run)
+    log.info("creating_corrections", count=len(fixes), dry_run=dry_run)
 
     engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
     async_session = async_sessionmaker(engine, expire_on_commit=False)
@@ -1191,7 +1231,7 @@ async def run_apply_fixes(
             applied = await apply_fixes_to_db(db, fixes, dry_run=dry_run)
 
         log.info(
-            "fixes_applied",
+            "corrections_created",
             applied=applied,
             total=len(fixes),
             dry_run=dry_run,
@@ -1251,7 +1291,7 @@ if __name__ == "__main__":
             "THREE MODES:\n"
             "  validate-existing  — Read active questions from DB, validate, output fixes.\n"
             "  validate-generated — Read a generated JSON file, validate, output corrected JSON.\n"
-            "  apply-fixes        — Apply a fixes JSON to the database.\n"
+            "  apply-fixes        — Insert correction records into the DB (is_active=false).\n"
             "\n"
             "Examples:\n"
             "  # Dry-run validation of existing ENG questions:\n"
@@ -1266,7 +1306,7 @@ if __name__ == "__main__":
             "  python -m scripts.validate_and_fix_questions \\\n"
             "    --mode validate-generated --file gap_questions_ENG.json\n"
             "\n"
-            "  # Apply fixes to the DB:\n"
+            "  # Insert corrections into the DB (creates new inactive records):\n"
             "  python -m scripts.validate_and_fix_questions \\\n"
             "    --mode apply-fixes --file fixes_to_apply_ENG.json\n"
             "\n"
