@@ -1864,7 +1864,6 @@ RESEND_API_KEY=<key>
 FROM_EMAIL=no-reply@kaihle.ai
 
 # LLM Providers
-GOOGLE_API_KEY=<key>
 OPENAI_API_KEY=<key>
 ANTHROPIC_API_KEY=<key>
 YOUTUBE_DATA_API_KEY=<key>

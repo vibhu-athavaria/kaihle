@@ -93,8 +93,6 @@ VALIDATION_DIR.mkdir(exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Subject-specific difficulty rubrics (same as generate_gap_questions.py)
-# WARNING: This dict is duplicated in backend/scripts/validate_and_fix_questions.py.
-# Keep both in sync when adding or modifying rubrics.
 # ---------------------------------------------------------------------------
 DIFFICULTY_RUBRICS: dict[str, str] = {
     "ENG": """
@@ -155,38 +153,6 @@ DIFFICULTY RUBRIC FOR PHYSICS:
   Level 4 — Analyse forces/energy in complex systems. ~90s. Bloom: Analyze.
   Level 5 — Evaluate experimental evidence, synthesise concepts. ~120s. Bloom: Evaluate.
 """,
-    "ENGL": """
-DIFFICULTY RUBRIC FOR ENGLISH LITERATURE:
-  Level 1 — Identify a literary device or recall a plot detail. ~30s. Bloom: Remember.
-  Level 2 — Understand the effect of a simple device. ~45s. Bloom: Understand.
-  Level 3 — Analyse language, structure, or form in a text. ~60s. Bloom: Apply/Analyze.
-  Level 4 — Compare texts, evaluate themes, or analyse complex techniques. ~90s. Bloom: Analyze.
-  Level 5 — Evaluate authorial choices, synthesise across texts, construct critical argument. ~120s. Bloom: Evaluate.
-""",
-    "HIST": """
-DIFFICULTY RUBRIC FOR HISTORY:
-  Level 1 — Recall a key event, date, or figure. ~30s. Bloom: Remember.
-  Level 2 — Understand causes or consequences. ~45s. Bloom: Understand.
-  Level 3 — Explain causation, compare perspectives. ~60s. Bloom: Apply.
-  Level 4 — Analyse sources, evaluate evidence. ~90s. Bloom: Analyze.
-  Level 5 — Evaluate competing interpretations, construct an argument. ~120s. Bloom: Evaluate.
-""",
-    "GEO": """
-DIFFICULTY RUBRIC FOR GEOGRAPHY:
-  Level 1 — Recall a definition, location, or term. ~30s. Bloom: Remember.
-  Level 2 — Understand a geographical concept. ~45s. Bloom: Understand.
-  Level 3 — Apply concepts to a case study. ~60s. Bloom: Apply.
-  Level 4 — Analyse data, compare places/processes. ~90s. Bloom: Analyze.
-  Level 5 — Evaluate solutions, synthesise across human/physical geography. ~120s. Bloom: Evaluate.
-""",
-    "GP": """
-DIFFICULTY RUBRIC FOR GLOBAL PERSPECTIVES:
-  Level 1 — Recall a term or definition. ~30s. Bloom: Remember.
-  Level 2 — Understand a perspective or concept. ~45s. Bloom: Understand.
-  Level 3 — Apply research skills to a global issue. ~60s. Bloom: Apply.
-  Level 4 — Analyse multiple stakeholder perspectives. ~90s. Bloom: Analyze.
-  Level 5 — Evaluate evidence, construct reasoned argument. ~120s. Bloom: Evaluate.
-""",
 }
 
 DEFAULT_RUBRIC = """
@@ -244,30 +210,6 @@ CONTENT ACCURACY CHECK:
   - Verify all physics laws, constants, and formulae are correct.
   - Check that numerical answers have correct significant figures.
   - Distractors must reflect common errors (wrong formula, inverted relationship).
-""",
-    "ENGL": """
-CONTENT ACCURACY CHECK:
-  - Verify all literary analysis claims are factually sound.
-  - Check that questions assess literary analysis, not plot recall.
-  - Distractors must reflect common misreadings, not factual errors.
-""",
-    "HIST": """
-CONTENT ACCURACY CHECK:
-  - Verify all historical claims are factually accurate.
-  - Check that questions require historical reasoning, not date memorisation.
-  - Distractors must reflect common historical misunderstandings.
-""",
-    "GEO": """
-CONTENT ACCURACY CHECK:
-  - Verify all geographical claims are factually correct.
-  - Check that questions use realistic data and case studies.
-  - Distractors must reflect genuine geographical misconceptions.
-""",
-    "GP": """
-CONTENT ACCURACY CHECK:
-  - Verify the question assesses analytical reasoning, not factual recall.
-  - Check that no single answer is presented as the only correct political/ethical view.
-  - Distractors must reflect alternative valid perspectives.
 """,
 }
 
@@ -543,28 +485,18 @@ async def fetch_existing_questions(
 # ---------------------------------------------------------------------------
 
 
-def parse_generated_file(
-    file_path: str | None = None,
-    data: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
+def parse_generated_file(file_path: str) -> list[dict[str, Any]]:
     """Parse a generated JSON file and group questions by subtopic.
 
-    Accepts either a file_path or pre-loaded data dict (not both).
     The generated file has a flat "questions" array. We group them by
     (subject_code, grade_level, topic_name, subtopic_name) for batching.
     """
-    if file_path and data:
-        raise ValueError("Provide either file_path or data, not both")
-    if not file_path and not data:
-        raise ValueError("Provide either file_path or data")
-
-    if data is None:
-        with open(file_path, encoding="utf-8") as f:
-            data = json.load(f)
+    with open(file_path, encoding="utf-8") as f:
+        data = json.load(f)
 
     raw_questions = data.get("questions", [])
     if not raw_questions:
-        log.error("no_questions_in_file", path=file_path or "pre-loaded_data")
+        log.error("no_questions_in_file", path=file_path)
         return []
 
     # Group by hierarchy
@@ -655,130 +587,137 @@ async def validate_subtopic_batch(
             "summary": "Dry run — no LLM call made",
         }
 
-    async with semaphore:
-        # Map subject_code to a usable code for rubrics
-        subject_code = subtopic_info.get("subject_code", "")
-        # If subject_code looks like a full name (from generated JSON), try to map it
-        subject_code_map = {
-            "English Language": "ENG",
-            "English": "ENG",
-            "English Literature": "ENGL",
-            "Literature": "ENGL",
-            "Mathematics": "MATH",
-            "Math": "MATH",
-            "Science": "SCI",
-            "Biology": "BIO",
-            "Chemistry": "CHEM",
-            "Physics": "PHY",
-            "History": "HIST",
-            "Geography": "GEO",
-            "Global Perspectives": "GP",
-        }
-        mapped_code = subject_code_map.get(subject_code, subject_code)
-        subtopic_info["subject_code"] = mapped_code
+    # Map subject_code to a usable code for rubrics
+    subject_code = subtopic_info.get("subject_code", "")
+    subject_code_map = {
+        "English Language": "ENG",
+        "English": "ENG",
+        "Mathematics": "MATH",
+        "Math": "MATH",
+        "Science": "SCI",
+        "Biology": "BIO",
+        "Chemistry": "CHEM",
+        "Physics": "PHY",
+    }
+    mapped_code = subject_code_map.get(subject_code, subject_code)
+    subtopic_info["subject_code"] = mapped_code
 
-        prompt = build_validation_prompt(subtopic_info, questions)
+    # Chunk questions into smaller batches so the LLM can properly validate
+    # each one without hitting token limits or getting truncated.
+    CHUNK_SIZE = 15
+
+    async def _validate_chunk(chunk_questions: list[dict[str, Any]], chunk_start_idx: int) -> list[dict[str, Any]]:
+        """Validate a chunk of at most CHUNK_SIZE questions and return per-question results."""
+        prompt = build_validation_prompt(subtopic_info, chunk_questions)
 
         log.info(
-            "validating_subtopic",
+            "validating_subtopic_chunk",
             subject=mapped_code,
             grade=subtopic_info["grade_level"],
             subtopic=subtopic_info["subtopic_name"],
-            questions=len(questions),
+            chunk_start=chunk_start_idx,
+            questions=len(chunk_questions),
         )
 
-        try:
-            response_text = await complete(
-                task="question_quality",
-                messages=[
+        async with semaphore:
+            try:
+                response_text = await complete(
+                    task="question_quality",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a strict quality assurance reviewer for Cambridge assessment questions. "
+                                "Output valid JSON only. No markdown fences. No text outside the JSON object. "
+                                "Be thorough — re-solve every question independently."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.2,
+                    max_tokens=12000,
+                )
+            except Exception as exc:
+                log.error(
+                    "llm_validation_failed",
+                    error=str(exc),
+                    subtopic=subtopic_info["subtopic_name"],
+                    chunk_start=chunk_start_idx,
+                )
+                return [
                     {
-                        "role": "system",
-                        "content": (
-                            "You are a strict quality assurance reviewer for Cambridge assessment questions. "
-                            "Output valid JSON only. No markdown fences. No text outside the JSON object. "
-                            "Be thorough — re-solve every question independently."
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.2,
-                max_tokens=12000,
-            )
-        except Exception as exc:
-            log.error(
-                "llm_validation_failed",
-                error=str(exc),
-                subtopic=subtopic_info["subtopic_name"],
-            )
-            return {
-                "subtopic": subtopic_info["subtopic_name"],
-                "subject_code": mapped_code,
-                "grade_level": subtopic_info["grade_level"],
-                "questions": [
-                    {
-                        "index": i,
+                        "index": chunk_start_idx + i,
                         "overall_pass": False,
                         "validations": {},
                         "corrected_question": None,
                         "changes_made": [],
                         "error": f"LLM call failed: {exc}",
                     }
-                    for i in range(len(questions))
-                ],
-                "pass_rate": f"0/{len(questions)}",
-                "summary": f"LLM call failed: {exc}",
-            }
+                    for i in range(len(chunk_questions))
+                ]
 
-        # Strip markdown fences
-        response_text = response_text.strip()
-        if response_text.startswith("```"):
-            response_text = re.sub(r"^```(?:json)?\s*", "", response_text)
-            response_text = re.sub(r"\s*```\s*$", "", response_text.strip())
+            # Strip markdown fences
+            response_text = response_text.strip()
+            if response_text.startswith("```"):
+                response_text = re.sub(r"^```(?:json)?\s*", "", response_text)
+                response_text = re.sub(r"\s*```\s*$", "", response_text.strip())
 
-        try:
-            result = json.loads(response_text)
-        except json.JSONDecodeError as exc:
-            log.error(
-                "validation_response_parse_failed",
-                error=str(exc),
-                subtopic=subtopic_info["subtopic_name"],
-                preview=response_text[:300],
-            )
-            return {
-                "subtopic": subtopic_info["subtopic_name"],
-                "subject_code": mapped_code,
-                "grade_level": subtopic_info["grade_level"],
-                "questions": [
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError as exc:
+                log.error(
+                    "validation_response_parse_failed",
+                    error=str(exc),
+                    subtopic=subtopic_info["subtopic_name"],
+                    chunk_start=chunk_start_idx,
+                    preview=response_text[:300],
+                )
+                return [
                     {
-                        "index": i,
+                        "index": chunk_start_idx + i,
                         "overall_pass": False,
                         "validations": {},
                         "corrected_question": None,
                         "changes_made": [],
                         "error": "Failed to parse validation response",
                     }
-                    for i in range(len(questions))
-                ],
-                "pass_rate": f"0/{len(questions)}",
-                "summary": "Failed to parse validation LLM response",
-            }
+                    for i in range(len(chunk_questions))
+                ]
 
-        # Count passes
-        q_results = result.get("questions", [])
-        passed = sum(1 for q in q_results if q.get("overall_pass"))
-        total = len(q_results)
-        result["pass_rate"] = f"{passed}/{total}"
-        result["summary"] = f"{passed}/{total} questions passed. {total - passed} questions need fixes."
+            q_results = result.get("questions", [])
+            # Re-index to global positions
+            for qr in q_results:
+                qr["index"] = chunk_start_idx + qr.get("index", 0)
+            return q_results
 
-        log.info(
-            "subtopic_validated",
-            subject=mapped_code,
-            grade=subtopic_info["grade_level"],
-            subtopic=subtopic_info["subtopic_name"],
-            pass_rate=result["pass_rate"],
-        )
+    # Split questions into chunks and validate each
+    chunks = [questions[i : i + CHUNK_SIZE] for i in range(0, len(questions), CHUNK_SIZE)]
+    all_question_results: list[dict[str, Any]] = []
+    for ci, chunk in enumerate(chunks):
+        chunk_start = ci * CHUNK_SIZE
+        chunk_results = await _validate_chunk(chunk, chunk_start)
+        all_question_results.extend(chunk_results)
 
-        return result
+    # Aggregate results
+    passed = sum(1 for qr in all_question_results if qr.get("overall_pass") is True)
+    total = len(all_question_results)
+
+    log.info(
+        "subtopic_validated",
+        subject=mapped_code,
+        grade=subtopic_info["grade_level"],
+        subtopic=subtopic_info["subtopic_name"],
+        pass_rate=f"{passed}/{total}",
+    )
+
+    return {
+        "subtopic": subtopic_info["subtopic_name"],
+        "subject_code": mapped_code,
+        "grade_level": subtopic_info["grade_level"],
+        "questions": all_question_results,
+        "pass_rate": f"{passed}/{total}",
+        "summary": f"{passed}/{total} questions passed. {total - passed} questions need fixes.",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -895,104 +834,6 @@ def build_corrected_generated_file(
 
 
 # ---------------------------------------------------------------------------
-# Structural validation for corrected questions (before applying to DB)
-# ---------------------------------------------------------------------------
-
-_VALID_BLOOM = {"Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"}
-_VALID_QUESTION_TYPES = {"multiple_choice", "true_false"}
-_TF_PREFIX_RE = re.compile(r"^true or false\s*:", re.IGNORECASE)
-
-
-def validate_corrected_question(q: dict[str, Any]) -> list[str]:
-    """Return a list of structural validation errors. Empty list = valid."""
-    errors: list[str] = []
-
-    required = (
-        "question_text",
-        "question_type",
-        "correct_answer",
-        "bloom_taxonomy_level",
-        "estimated_time_seconds",
-        "learning_objectives",
-        "explanation",
-        "hints",
-        "difficulty_level",
-    )
-    missing = [f for f in required if f not in q]
-    if missing:
-        errors.append(f"missing fields: {missing}")
-        return errors
-
-    q_type = q.get("question_type", "")
-    if q_type not in _VALID_QUESTION_TYPES:
-        errors.append(f"invalid question_type: {q_type!r}")
-        return errors
-
-    try:
-        difficulty = int(float(q["difficulty_level"]))
-        if difficulty not in range(1, 6):
-            errors.append(f"difficulty_level {difficulty} out of range 1–5")
-    except (TypeError, ValueError):
-        errors.append(f"difficulty_level is not numeric: {q['difficulty_level']!r}")
-
-    q_text = q.get("question_text", "")
-    if not q_text or not q_text.strip():
-        errors.append("question_text is empty")
-
-    if q_type == "multiple_choice":
-        options = q.get("options")
-        if not isinstance(options, dict):
-            errors.append("options must be a dict for multiple_choice")
-        elif set(options.keys()) != {"A", "B", "C", "D"}:
-            errors.append(f"options must have keys A/B/C/D, got {sorted(options.keys())}")
-        else:
-            empty_keys = [k for k, v in options.items() if not v or not str(v).strip()]
-            if empty_keys:
-                errors.append(f"options {empty_keys} have empty values")
-            values = list(options.values())
-            if len(set(str(v).strip().lower() for v in values)) < len(values):
-                errors.append("MCQ options contain duplicate values")
-            correct = q.get("correct_answer")
-            if correct not in options:
-                errors.append(f"correct_answer {correct!r} not in option keys (A/B/C/D)")
-
-    if q_type == "true_false":
-        answer = str(q.get("correct_answer", "")).upper().strip()
-        if answer not in ("TRUE", "FALSE"):
-            errors.append(f"true_false correct_answer must be 'TRUE' or 'FALSE', got {q.get('correct_answer')!r}")
-        if not _TF_PREFIX_RE.match(q_text.strip()):
-            errors.append("true_false question_text must begin with 'True or False: '")
-        if "options" in q:
-            errors.append("true_false questions must NOT include an 'options' field")
-
-    bloom = q.get("bloom_taxonomy_level", "")
-    if bloom not in _VALID_BLOOM:
-        errors.append(f"invalid bloom_taxonomy_level: {bloom!r}")
-
-    # Validate estimated_time_seconds is positive
-    est = q.get("estimated_time_seconds", 0)
-    if not isinstance(est, int | float) or est <= 0:
-        errors.append(f"estimated_time_seconds must be a positive number, got {est!r}")
-
-    # Validate explanation is non-empty
-    explanation = q.get("explanation", "")
-    if not explanation or not str(explanation).strip():
-        errors.append("explanation must be non-empty")
-
-    hints = q.get("hints", {})
-    if not isinstance(hints, dict):
-        errors.append("hints must be a dict")
-    elif not all(f"hint{i}" in hints for i in (1, 2, 3)):
-        errors.append("hints must contain hint1, hint2, hint3")
-
-    objectives = q.get("learning_objectives", [])
-    if not isinstance(objectives, list) or not objectives:
-        errors.append("learning_objectives must be a non-empty list")
-
-    return errors
-
-
-# ---------------------------------------------------------------------------
 # Apply fixes to the DB
 # ---------------------------------------------------------------------------
 
@@ -1005,8 +846,6 @@ async def apply_fixes_to_db(
     """Apply fixes to the question_bank table.
 
     Each fix has a question_id and a corrected dict with the new field values.
-    Structural validation is performed before each update. Invalid fixes are
-    skipped with a warning.
     Returns the number of fixes applied.
     """
     applied = 0
@@ -1019,17 +858,6 @@ async def apply_fixes_to_db(
 
         corrected = fix.get("corrected", {})
         if not corrected:
-            continue
-
-        # ── Structural validation before applying ──────────────────────────
-        validation_errors = validate_corrected_question(corrected)
-        if validation_errors:
-            log.warning(
-                "fix_skipped_structural_validation_failed",
-                question_id=question_id,
-                subtopic=fix.get("subtopic_info", {}).get("subtopic_name", "?"),
-                errors=validation_errors,
-            )
             continue
 
         # Recalculate canonical_form and problem_signature
@@ -1291,7 +1119,7 @@ async def run_validate_generated(
     with open(file_path, encoding="utf-8") as f:
         original_data = json.load(f)
 
-    subtopic_groups = parse_generated_file(data=original_data)
+    subtopic_groups = parse_generated_file(file_path)
     if not subtopic_groups:
         return 1
 
@@ -1387,16 +1215,7 @@ async def main(args: argparse.Namespace) -> int:
 
     if mode == "validate-existing":
         subject_filter = [s.strip().upper() for s in args.subject.split(",")] if args.subject else ["ENG"]
-
-        grade_filter = None
-        if args.grade:
-            try:
-                grade_filter = [int(g.strip()) for g in args.grade.split(",")]
-            except ValueError:
-                log.error(
-                    "invalid_grade_filter", value=args.grade, hint="Use comma-separated integers, e.g. --grade 6,7,8"
-                )
-                return 1
+        grade_filter = [int(g.strip()) for g in args.grade.split(",")] if args.grade else None
         return await run_validate_existing(
             subject_filter=subject_filter,
             grade_filter=grade_filter,
