@@ -229,3 +229,50 @@ async def create_question(
         raise HTTPException(status_code=500, detail="Failed to reload question after create")
 
     return _to_response(row)
+
+
+@router.post("/{question_id}/approve", response_model=QuestionBankResponse)
+async def approve_correction(
+    question_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> QuestionBankResponse:
+    """Atomically approve a correction: activate the correction and deactivate the original.
+
+    In a single transaction:
+      1. Sets is_active=true on the correction (the question_id param)
+      2. Sets is_active=false on the original question (via replaces_question_id)
+    """
+    correction = await db.get(QuestionBank, question_id)
+    if not correction:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Correction not found")
+    if correction.source != "llm-correction":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only llm-correction questions can be approved",
+        )
+    if not correction.replaces_question_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Correction has no replaces_question_id",
+        )
+
+    # Fetch original
+    original = await db.get(QuestionBank, correction.replaces_question_id)
+    if not original:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Original question not found",
+        )
+
+    # Atomic transaction: activate correction, deactivate original
+    correction.is_active = True
+    original.is_active = False
+    await db.commit()
+    await db.refresh(correction)
+
+    row = (await db.execute(_base_query().where(QuestionBank.id == correction.id))).one_or_none()
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to reload question after approval")
+
+    return _to_response(row)

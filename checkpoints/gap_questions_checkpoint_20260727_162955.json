@@ -1,0 +1,14 @@
+{
+  "completed_subtopic_ids": [],
+  "questions": [],
+  "stats": {
+    "llm_calls": 18,
+    "validation_failures": 0,
+    "duplicates_detected": 0,
+    "questions_accepted": 0,
+    "subtopics_attempted": 6,
+    "subtopics_completed": 0,
+    "subtopics_empty": 6
+  },
+  "saved_at": "2026-07-27T16:29:55.889618"
+}

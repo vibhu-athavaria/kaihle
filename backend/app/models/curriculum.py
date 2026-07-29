@@ -323,7 +323,7 @@ class QuestionBank(Base, UUIDMixin, TimestampMixin):
             name="chk_qb_difficulty",
         ),
         CheckConstraint(
-            "source IN ('bank', 'llm')",
+            "source IN ('bank', 'llm', 'llm-correction')",
             name="chk_qb_source",
         ),
     )

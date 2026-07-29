@@ -1172,20 +1172,14 @@ function CorrectionReviewModal({
     setActionLoading(true);
     setError(null);
     try {
-      // Activate the correction
-      await apiClient.patch(`/api/v1/question-bank/${correction.id}`, {
-        is_active: true,
-      });
-      // Deactivate the original
-      if (correction.replaces_question_id) {
-        await apiClient.patch(
-          `/api/v1/question-bank/${correction.replaces_question_id}`,
-          { is_active: false },
-        );
-      }
+      await apiClient.post(`/api/v1/question-bank/${correction.id}/approve`);
       onApprove();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to approve correction");
+      const msg =
+        e instanceof Error
+          ? e.message
+          : "Failed to approve correction. Please try again.";
+      setError(msg);
     } finally {
       setActionLoading(false);
     }
