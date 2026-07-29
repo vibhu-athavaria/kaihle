@@ -18,6 +18,9 @@ class QuestionBankResponse(BaseModel):
     explanation: str | None
     difficulty_level: float | None
     is_active: bool
+    meta_tags: dict[str, Any] | None = None
+    source: str | None = None
+    replaces_question_id: UUID | None = None
     subtopic_id: UUID | None
     created_at: datetime
     updated_at: datetime | None

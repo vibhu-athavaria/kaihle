@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 import { AdminLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +22,9 @@ interface QuestionRow {
   explanation: string | null;
   difficulty_level: number | null;
   is_active: boolean;
+  meta_tags: Record<string, unknown> | null;
+  source: string | null;
+  replaces_question_id: string | null;
   subtopic_id: string | null;
   curriculum_id: string | null;
   curriculum_name: string | null;
@@ -82,6 +85,7 @@ export function AdminQuestionReview() {
   const curriculumTopicId = searchParams.get("curriculum_topic_id") ?? "";
   const questionType = searchParams.get("question_type") ?? "";
   const search = searchParams.get("search") ?? "";
+  const statusFilter = searchParams.get("status") ?? "";
   const page = parseInt(searchParams.get("page") ?? "1", 10);
 
   const { data: curriculaData } = useQuery({
@@ -136,10 +140,16 @@ export function AdminQuestionReview() {
     null,
   );
   const [addingQuestion, setAddingQuestion] = useState(false);
+  const [reviewingCorrection, setReviewingCorrection] =
+    useState<QuestionRow | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     setLoading(true);
-    const params: Record<string, string | number> = { page, page_size: 20 };
+    const params: Record<string, string | number | boolean> = {
+      page,
+      page_size: 20,
+    };
     if (curriculumId) params.curriculum_id = curriculumId;
     if (gradeId) params.grade_id = gradeId;
     if (subjectId) params.subject_id = subjectId;
@@ -148,6 +158,10 @@ export function AdminQuestionReview() {
     if (curriculumTopicId) params.curriculum_topic_id = curriculumTopicId;
     if (questionType) params.question_type = questionType;
     if (search) params.search = search;
+    if (statusFilter === "inactive") params.is_active = false;
+    if (statusFilter === "pending") params.source = "llm-correction";
+    if (statusFilter === "pending") params.is_active = false;
+    if (statusFilter === "pending") params.has_replaces = true;
 
     apiClient
       .get("/api/v1/question-bank", { params })
@@ -163,7 +177,9 @@ export function AdminQuestionReview() {
     curriculumTopicId,
     questionType,
     search,
+    statusFilter,
     page,
+    refreshKey,
   ]);
 
   const setFilter = useCallback(
@@ -174,7 +190,10 @@ export function AdminQuestionReview() {
       } else {
         next.delete(key);
       }
-      next.delete("page");
+      // Reset to page 1 only when a filter (not page) changes
+      if (key !== "page") {
+        next.delete("page");
+      }
       setSearchParams(next);
     },
     [searchParams, setSearchParams],
@@ -306,6 +325,16 @@ export function AdminQuestionReview() {
               </option>
             ))}
           </select>
+          <select
+            className={`${selectCls} w-40`}
+            value={statusFilter}
+            onChange={(e) => setFilter("status", e.target.value)}
+          >
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="pending">Pending Corrections</option>
+          </select>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -397,6 +426,11 @@ export function AdminQuestionReview() {
                       className="border-b border-[#eaecf0] hover:bg-[#fafafa] transition-colors"
                     >
                       <td className="py-2 px-3 text-xs text-[#374151] max-w-xs truncate">
+                        {q.source === "llm-correction" && (
+                          <span className="inline-block bg-orange-50 text-orange-700 text-[10px] font-bold uppercase px-1 py-0.5 rounded mr-1.5 align-middle">
+                            Correction
+                          </span>
+                        )}
                         {q.question_text.slice(0, 80)}
                         {q.question_text.length > 80 ? "…" : ""}
                       </td>
@@ -431,14 +465,27 @@ export function AdminQuestionReview() {
                         {diff.label}
                       </td>
                       <td className="py-2 px-3">
-                        <button
-                          onClick={() => setEditingQuestion(q)}
-                          className="w-7 h-7 rounded border border-[#eaecf0] bg-white text-[#6b7280] hover:bg-[#f3f4f6] flex items-center justify-center"
-                          title="Edit"
-                          aria-label="Edit question"
-                        >
-                          <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-                        </button>
+                        {q.source === "llm-correction" ? (
+                          <button
+                            onClick={() => setReviewingCorrection(q)}
+                            className="text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 px-2 py-1 rounded hover:bg-orange-100 transition-colors"
+                            title="Review correction"
+                          >
+                            Review
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setEditingQuestion(q)}
+                            className="w-7 h-7 rounded border border-[#eaecf0] bg-white text-[#6b7280] hover:bg-[#f3f4f6] flex items-center justify-center"
+                            title="Edit"
+                            aria-label="Edit question"
+                          >
+                            <Pencil
+                              className="w-3.5 h-3.5"
+                              aria-hidden="true"
+                            />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -521,6 +568,22 @@ export function AdminQuestionReview() {
           subtopics={subtopics}
           onClose={() => setAddingQuestion(false)}
           onSave={handleCreated}
+        />
+      )}
+
+      {/* Review Correction Modal */}
+      {reviewingCorrection && (
+        <CorrectionReviewModal
+          correction={reviewingCorrection}
+          onClose={() => setReviewingCorrection(null)}
+          onApprove={() => {
+            setReviewingCorrection(null);
+            setRefreshKey((k) => k + 1);
+          }}
+          onReject={() => {
+            setReviewingCorrection(null);
+            setRefreshKey((k) => k + 1);
+          }}
         />
       )}
     </AdminLayout>
@@ -1086,6 +1149,340 @@ function QuestionModal({
               : isEdit
                 ? "Save changes"
                 : "Add question"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Correction Review Modal ─────────────────────────────────────────────────
+
+interface CorrectionReviewModalProps {
+  correction: QuestionRow;
+  onClose: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+}
+
+function CorrectionReviewModal({
+  correction,
+  onClose,
+  onApprove,
+  onReject,
+}: CorrectionReviewModalProps) {
+  const [original, setOriginal] = useState<QuestionRow | null>(null);
+  const [loading, setLoading] = useState(!!correction.replaces_question_id);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Meta data from the correction record
+  const metaTags = correction.meta_tags as
+    | {
+        changes_made?: string[];
+        validations?: Record<string, { pass: boolean; note: string }>;
+        original?: {
+          question_text?: string;
+          correct_answer?: string;
+          difficulty_level?: number;
+          question_type?: string;
+          options?: McqOption[];
+        };
+      }
+    | undefined;
+
+  // Fetch original question if we have replaces_question_id
+  useEffect(() => {
+    if (!correction.replaces_question_id) {
+      setLoading(false);
+      return;
+    }
+    apiClient
+      .get(`/api/v1/question-bank/${correction.replaces_question_id}`)
+      .then((r) => setOriginal(r.data))
+      .catch(() => setOriginal(null))
+      .finally(() => setLoading(false));
+  }, [correction.replaces_question_id]);
+
+  const handleApprove = async () => {
+    setActionLoading(true);
+    setError(null);
+    try {
+      await apiClient.post(`/api/v1/question-bank/${correction.id}/approve`);
+      onApprove();
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : "Failed to approve correction. Please try again.";
+      setError(msg);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    setActionLoading(true);
+    setError(null);
+    try {
+      await apiClient.patch(`/api/v1/question-bank/${correction.id}`, {
+        is_active: false,
+      });
+      onReject();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to reject correction");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const diff = difficultyLabel(correction.difficulty_level);
+
+  const leftQuestion = original || {
+    question_text: metaTags?.original?.question_text || "",
+    correct_answer: metaTags?.original?.correct_answer || "",
+    difficulty_level: metaTags?.original?.difficulty_level ?? null,
+    question_type:
+      metaTags?.original?.question_type || correction.question_type,
+    options: (metaTags?.original?.options as McqOption[]) || null,
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white rounded-lg w-full max-w-[960px] shadow-xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-[#eaecf0] flex items-center justify-between flex-shrink-0">
+          <h2 className="text-sm font-semibold text-[#111827] flex items-center gap-2">
+            <span className="bg-orange-50 text-orange-700 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded">
+              Correction
+            </span>
+            Review Correction
+          </h2>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded hover:bg-[#f3f4f6] flex items-center justify-center text-[#6b7280]"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto px-6 py-5 flex-1 space-y-5">
+          {loading && (
+            <div className="text-center py-8 text-xs text-[#9ca3af]">
+              Loading original question…
+            </div>
+          )}
+
+          {error && (
+            <div
+              role="alert"
+              className="text-xs text-[#ef4444] bg-red-50 border border-red-200 rounded-md px-3 py-2"
+            >
+              {error}
+            </div>
+          )}
+
+          {!loading && (
+            <>
+              {/* Side-by-side comparison */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Original Question */}
+                <div className="border border-[#eaecf0] rounded-lg p-3 bg-[#fafafa]">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-2">
+                    Original
+                  </h3>
+                  {leftQuestion.question_text ? (
+                    <>
+                      <p className="text-xs text-[#374151] mb-2 leading-relaxed">
+                        {leftQuestion.question_text}
+                      </p>
+                      {/* MCQ options for original */}
+                      {leftQuestion.question_type === "MCQ" &&
+                        leftQuestion.options &&
+                        leftQuestion.options.length > 0 && (
+                          <div className="space-y-1 mb-2">
+                            {leftQuestion.options.map((opt) => (
+                              <div
+                                key={opt.key}
+                                className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded ${
+                                  opt.key === leftQuestion.correct_answer
+                                    ? "bg-green-100 text-[#16a34a] font-semibold"
+                                    : "text-[#6b7280]"
+                                }`}
+                              >
+                                <span className="w-5 h-5 rounded-full bg-[#f3f4f6] border border-[#eaecf0] flex items-center justify-center text-[10px] font-bold text-[#374151] flex-shrink-0">
+                                  {opt.key}
+                                </span>
+                                {opt.text}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        <span className="text-[10px] font-semibold text-[#6b7280] bg-gray-100 px-1.5 py-0.5 rounded">
+                          Correct: {leftQuestion.correct_answer}
+                        </span>
+                        <span
+                          className={
+                            "text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-50 " +
+                            difficultyLabel(leftQuestion.difficulty_level).cls
+                          }
+                        >
+                          {difficultyLabel(leftQuestion.difficulty_level).label}{" "}
+                          ({leftQuestion.difficulty_level})
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-[#9ca3af] italic">
+                      Original not available
+                    </p>
+                  )}
+                </div>
+
+                {/* Corrected Question */}
+                <div className="border border-[#1a5c38] rounded-lg p-3 bg-green-50/30">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#1a5c38] mb-2">
+                    Correction
+                  </h3>
+                  <p className="text-xs text-[#374151] mb-2 leading-relaxed">
+                    {correction.question_text}
+                  </p>
+                  {/* MCQ options for correction */}
+                  {correction.question_type === "MCQ" &&
+                    correction.options &&
+                    correction.options.length > 0 && (
+                      <div className="space-y-1 mb-2">
+                        {correction.options.map((opt) => (
+                          <div
+                            key={opt.key}
+                            className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded ${
+                              opt.key === correction.correct_answer
+                                ? "bg-green-100 text-[#16a34a] font-semibold"
+                                : "text-[#6b7280]"
+                            }`}
+                          >
+                            <span className="w-5 h-5 rounded-full bg-[#f3f4f6] border border-[#eaecf0] flex items-center justify-center text-[10px] font-bold text-[#374151] flex-shrink-0">
+                              {opt.key}
+                            </span>
+                            {opt.text}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    <span className="text-[10px] font-semibold text-[#6b7280] bg-gray-100 px-1.5 py-0.5 rounded">
+                      Correct: {correction.correct_answer}
+                    </span>
+                    <span
+                      className={
+                        "text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-50 " +
+                        diff.cls
+                      }
+                    >
+                      {diff.label} ({correction.difficulty_level})
+                    </span>
+                  </div>
+                  {correction.explanation && (
+                    <p className="text-[10px] text-[#6b7280] italic leading-relaxed">
+                      {correction.explanation}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Validation results */}
+              {metaTags?.validations && (
+                <div>
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-2">
+                    Validation Results
+                  </h3>
+                  <div className="space-y-1.5">
+                    {Object.entries(metaTags.validations).map(([key, val]) => (
+                      <div
+                        key={key}
+                        className={
+                          "flex items-start gap-2 text-xs px-3 py-1.5 rounded-md " +
+                          (val.pass
+                            ? "bg-green-50 text-[#16a34a]"
+                            : "bg-red-50 text-[#ef4444]")
+                        }
+                      >
+                        <span className="font-semibold shrink-0 w-28 capitalize">
+                          {key.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-[#374151]">{val.note}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Changes made */}
+              {metaTags?.changes_made && metaTags.changes_made.length > 0 && (
+                <div>
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-2">
+                    Changes Made
+                  </h3>
+                  <ul className="list-disc list-inside space-y-1">
+                    {metaTags.changes_made.map(
+                      (change: string, idx: number) => (
+                        <li
+                          key={idx}
+                          className="text-xs text-[#374151] leading-relaxed"
+                        >
+                          {change}
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </div>
+              )}
+
+              {/* Replaces info */}
+              {correction.replaces_question_id && (
+                <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+                  <p className="text-[10px] text-blue-700">
+                    This correction replaces question{" "}
+                    <span className="font-mono font-semibold">
+                      {correction.replaces_question_id.slice(0, 8)}…
+                    </span>
+                    . Approving will deactivate the original and activate this
+                    correction.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-[#eaecf0] px-6 py-4 flex justify-end items-center gap-3 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="border border-[#eaecf0] bg-white text-[#374151] text-xs font-semibold px-4 py-2 rounded-md hover:bg-[#f3f4f6]"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleReject}
+            disabled={actionLoading}
+            className="flex items-center gap-1.5 border border-[#ef4444] bg-white text-[#ef4444] text-xs font-semibold px-4 py-2 rounded-md hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+            {actionLoading ? "Rejecting…" : "Reject"}
+          </button>
+          <button
+            onClick={handleApprove}
+            disabled={actionLoading}
+            className="bg-[#1a5c38] text-white text-xs font-semibold px-4 py-2 rounded-md hover:bg-[#155231] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {actionLoading ? "Approving…" : "Approve & Publish"}
           </button>
         </div>
       </div>

@@ -20,8 +20,8 @@ The JSON includes BOTH subtopic_id UUIDs (for preresolved) AND full name hierarc
 without re-running any LLM calls.
 
 LLM routing follows router.py:
-  LLM_QUESTION_GEN_MODEL       — model name (e.g. gemini/gemini-2.5-flash)
-  LLM_QUESTION_GEN_API_BASE    — optional custom endpoint (e.g. RunPod vLLM server)
+  LLM_QUESTION_GENERATION_MODEL       — model name (e.g. gemini/gemini-2.5-flash)
+  LLM_QUESTION_GENERATION_API_BASE    — optional custom endpoint (e.g. RunPod vLLM server)
 
 Usage (from project root):
     # Generate for all subjects with zero-question subtopics:
@@ -53,8 +53,8 @@ Usage (from project root):
     # Outside Docker (requires env vars set):
     cd backend
     DATABASE_URL=postgresql+asyncpg://kaihle:kaihle@localhost:5433/kaihle \
-    LLM_QUESTION_GEN_MODEL=openai/Qwen2.5-14B-Instruct \
-    LLM_QUESTION_GEN_API_BASE=https://your-pod-id-8000.proxy.runpod.net/v1 \
+    LLM_QUESTION_GENERATION_MODEL=openai/Qwen2.5-14B-Instruct \
+    LLM_QUESTION_GENERATION_API_BASE=https://your-pod-id-8000.proxy.runpod.net/v1 \
       uv run python -m scripts.generate_gap_questions --subject ENGL
 """
 

@@ -25,7 +25,6 @@ logger = structlog.get_logger()
 # so we bridge them here — the one place all LLM calls originate.
 _KEY_MAP = {
     "OPENAI_API_KEY": settings.openai_api_key,
-    "GOOGLE_API_KEY": settings.google_api_key,
     "OPENROUTER_API_KEY": settings.openrouter_api_key,
     "ANTHROPIC_API_KEY": settings.anthropic_api_key,
 }

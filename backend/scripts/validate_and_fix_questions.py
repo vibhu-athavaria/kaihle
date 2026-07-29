@@ -5,8 +5,12 @@ Three modes:
                        batch, output fixes_to_apply.json for failed questions.
   validate-generated — Read a generated JSON file (from generate_gap_questions.py),
                        validate, output a corrected JSON file ready for import.
-  apply-fixes        — Apply a fixes_to_apply.json to the database (UPDATEs
-                       question rows with corrected fields).
+  apply-fixes        — Apply a fixes_to_apply.json to the database by INSERTING
+                       new correction records (not UPDATING originals).
+
+IMPORTANT: apply-fixes now CREATES new question records with is_active=false
+and replaces_question_id pointing to the original. Originals are NOT modified.
+Approve corrections via the KaihleAdmin UI.
 
 The validator uses a SEPARATE, more capable LLM (configured via
 LLM_QUESTION_QUALITY_MODEL) to review the generator's output. This catches
@@ -93,8 +97,6 @@ VALIDATION_DIR.mkdir(exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Subject-specific difficulty rubrics (same as generate_gap_questions.py)
-# WARNING: This dict is duplicated in backend/scripts/validate_and_fix_questions.py.
-# Keep both in sync when adding or modifying rubrics.
 # ---------------------------------------------------------------------------
 DIFFICULTY_RUBRICS: dict[str, str] = {
     "ENG": """
@@ -155,38 +157,6 @@ DIFFICULTY RUBRIC FOR PHYSICS:
   Level 4 — Analyse forces/energy in complex systems. ~90s. Bloom: Analyze.
   Level 5 — Evaluate experimental evidence, synthesise concepts. ~120s. Bloom: Evaluate.
 """,
-    "ENGL": """
-DIFFICULTY RUBRIC FOR ENGLISH LITERATURE:
-  Level 1 — Identify a literary device or recall a plot detail. ~30s. Bloom: Remember.
-  Level 2 — Understand the effect of a simple device. ~45s. Bloom: Understand.
-  Level 3 — Analyse language, structure, or form in a text. ~60s. Bloom: Apply/Analyze.
-  Level 4 — Compare texts, evaluate themes, or analyse complex techniques. ~90s. Bloom: Analyze.
-  Level 5 — Evaluate authorial choices, synthesise across texts, construct critical argument. ~120s. Bloom: Evaluate.
-""",
-    "HIST": """
-DIFFICULTY RUBRIC FOR HISTORY:
-  Level 1 — Recall a key event, date, or figure. ~30s. Bloom: Remember.
-  Level 2 — Understand causes or consequences. ~45s. Bloom: Understand.
-  Level 3 — Explain causation, compare perspectives. ~60s. Bloom: Apply.
-  Level 4 — Analyse sources, evaluate evidence. ~90s. Bloom: Analyze.
-  Level 5 — Evaluate competing interpretations, construct an argument. ~120s. Bloom: Evaluate.
-""",
-    "GEO": """
-DIFFICULTY RUBRIC FOR GEOGRAPHY:
-  Level 1 — Recall a definition, location, or term. ~30s. Bloom: Remember.
-  Level 2 — Understand a geographical concept. ~45s. Bloom: Understand.
-  Level 3 — Apply concepts to a case study. ~60s. Bloom: Apply.
-  Level 4 — Analyse data, compare places/processes. ~90s. Bloom: Analyze.
-  Level 5 — Evaluate solutions, synthesise across human/physical geography. ~120s. Bloom: Evaluate.
-""",
-    "GP": """
-DIFFICULTY RUBRIC FOR GLOBAL PERSPECTIVES:
-  Level 1 — Recall a term or definition. ~30s. Bloom: Remember.
-  Level 2 — Understand a perspective or concept. ~45s. Bloom: Understand.
-  Level 3 — Apply research skills to a global issue. ~60s. Bloom: Apply.
-  Level 4 — Analyse multiple stakeholder perspectives. ~90s. Bloom: Analyze.
-  Level 5 — Evaluate evidence, construct reasoned argument. ~120s. Bloom: Evaluate.
-""",
 }
 
 DEFAULT_RUBRIC = """
@@ -244,30 +214,6 @@ CONTENT ACCURACY CHECK:
   - Verify all physics laws, constants, and formulae are correct.
   - Check that numerical answers have correct significant figures.
   - Distractors must reflect common errors (wrong formula, inverted relationship).
-""",
-    "ENGL": """
-CONTENT ACCURACY CHECK:
-  - Verify all literary analysis claims are factually sound.
-  - Check that questions assess literary analysis, not plot recall.
-  - Distractors must reflect common misreadings, not factual errors.
-""",
-    "HIST": """
-CONTENT ACCURACY CHECK:
-  - Verify all historical claims are factually accurate.
-  - Check that questions require historical reasoning, not date memorisation.
-  - Distractors must reflect common historical misunderstandings.
-""",
-    "GEO": """
-CONTENT ACCURACY CHECK:
-  - Verify all geographical claims are factually correct.
-  - Check that questions use realistic data and case studies.
-  - Distractors must reflect genuine geographical misconceptions.
-""",
-    "GP": """
-CONTENT ACCURACY CHECK:
-  - Verify the question assesses analytical reasoning, not factual recall.
-  - Check that no single answer is presented as the only correct political/ethical view.
-  - Distractors must reflect alternative valid perspectives.
 """,
 }
 
@@ -543,28 +489,18 @@ async def fetch_existing_questions(
 # ---------------------------------------------------------------------------
 
 
-def parse_generated_file(
-    file_path: str | None = None,
-    data: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
+def parse_generated_file(file_path: str) -> list[dict[str, Any]]:
     """Parse a generated JSON file and group questions by subtopic.
 
-    Accepts either a file_path or pre-loaded data dict (not both).
     The generated file has a flat "questions" array. We group them by
     (subject_code, grade_level, topic_name, subtopic_name) for batching.
     """
-    if file_path and data:
-        raise ValueError("Provide either file_path or data, not both")
-    if not file_path and not data:
-        raise ValueError("Provide either file_path or data")
-
-    if data is None:
-        with open(file_path, encoding="utf-8") as f:
-            data = json.load(f)
+    with open(file_path, encoding="utf-8") as f:
+        data = json.load(f)
 
     raw_questions = data.get("questions", [])
     if not raw_questions:
-        log.error("no_questions_in_file", path=file_path or "pre-loaded_data")
+        log.error("no_questions_in_file", path=file_path)
         return []
 
     # Group by hierarchy
@@ -655,130 +591,137 @@ async def validate_subtopic_batch(
             "summary": "Dry run — no LLM call made",
         }
 
-    async with semaphore:
-        # Map subject_code to a usable code for rubrics
-        subject_code = subtopic_info.get("subject_code", "")
-        # If subject_code looks like a full name (from generated JSON), try to map it
-        subject_code_map = {
-            "English Language": "ENG",
-            "English": "ENG",
-            "English Literature": "ENGL",
-            "Literature": "ENGL",
-            "Mathematics": "MATH",
-            "Math": "MATH",
-            "Science": "SCI",
-            "Biology": "BIO",
-            "Chemistry": "CHEM",
-            "Physics": "PHY",
-            "History": "HIST",
-            "Geography": "GEO",
-            "Global Perspectives": "GP",
-        }
-        mapped_code = subject_code_map.get(subject_code, subject_code)
-        subtopic_info["subject_code"] = mapped_code
+    # Map subject_code to a usable code for rubrics
+    subject_code = subtopic_info.get("subject_code", "")
+    subject_code_map = {
+        "English Language": "ENG",
+        "English": "ENG",
+        "Mathematics": "MATH",
+        "Math": "MATH",
+        "Science": "SCI",
+        "Biology": "BIO",
+        "Chemistry": "CHEM",
+        "Physics": "PHY",
+    }
+    mapped_code = subject_code_map.get(subject_code, subject_code)
+    subtopic_info["subject_code"] = mapped_code
 
-        prompt = build_validation_prompt(subtopic_info, questions)
+    # Chunk questions into smaller batches so the LLM can properly validate
+    # each one without hitting token limits or getting truncated.
+    CHUNK_SIZE = 15
+
+    async def _validate_chunk(chunk_questions: list[dict[str, Any]], chunk_start_idx: int) -> list[dict[str, Any]]:
+        """Validate a chunk of at most CHUNK_SIZE questions and return per-question results."""
+        prompt = build_validation_prompt(subtopic_info, chunk_questions)
 
         log.info(
-            "validating_subtopic",
+            "validating_subtopic_chunk",
             subject=mapped_code,
             grade=subtopic_info["grade_level"],
             subtopic=subtopic_info["subtopic_name"],
-            questions=len(questions),
+            chunk_start=chunk_start_idx,
+            questions=len(chunk_questions),
         )
 
-        try:
-            response_text = await complete(
-                task="question_quality",
-                messages=[
+        async with semaphore:
+            try:
+                response_text = await complete(
+                    task="question_quality",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a strict quality assurance reviewer for Cambridge assessment questions. "
+                                "Output valid JSON only. No markdown fences. No text outside the JSON object. "
+                                "Be thorough — re-solve every question independently."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.2,
+                    max_tokens=12000,
+                )
+            except Exception as exc:
+                log.error(
+                    "llm_validation_failed",
+                    error=str(exc),
+                    subtopic=subtopic_info["subtopic_name"],
+                    chunk_start=chunk_start_idx,
+                )
+                return [
                     {
-                        "role": "system",
-                        "content": (
-                            "You are a strict quality assurance reviewer for Cambridge assessment questions. "
-                            "Output valid JSON only. No markdown fences. No text outside the JSON object. "
-                            "Be thorough — re-solve every question independently."
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=0.2,
-                max_tokens=12000,
-            )
-        except Exception as exc:
-            log.error(
-                "llm_validation_failed",
-                error=str(exc),
-                subtopic=subtopic_info["subtopic_name"],
-            )
-            return {
-                "subtopic": subtopic_info["subtopic_name"],
-                "subject_code": mapped_code,
-                "grade_level": subtopic_info["grade_level"],
-                "questions": [
-                    {
-                        "index": i,
+                        "index": chunk_start_idx + i,
                         "overall_pass": False,
                         "validations": {},
                         "corrected_question": None,
                         "changes_made": [],
                         "error": f"LLM call failed: {exc}",
                     }
-                    for i in range(len(questions))
-                ],
-                "pass_rate": f"0/{len(questions)}",
-                "summary": f"LLM call failed: {exc}",
-            }
+                    for i in range(len(chunk_questions))
+                ]
 
-        # Strip markdown fences
-        response_text = response_text.strip()
-        if response_text.startswith("```"):
-            response_text = re.sub(r"^```(?:json)?\s*", "", response_text)
-            response_text = re.sub(r"\s*```\s*$", "", response_text.strip())
+            # Strip markdown fences
+            response_text = response_text.strip()
+            if response_text.startswith("```"):
+                response_text = re.sub(r"^```(?:json)?\s*", "", response_text)
+                response_text = re.sub(r"\s*```\s*$", "", response_text.strip())
 
-        try:
-            result = json.loads(response_text)
-        except json.JSONDecodeError as exc:
-            log.error(
-                "validation_response_parse_failed",
-                error=str(exc),
-                subtopic=subtopic_info["subtopic_name"],
-                preview=response_text[:300],
-            )
-            return {
-                "subtopic": subtopic_info["subtopic_name"],
-                "subject_code": mapped_code,
-                "grade_level": subtopic_info["grade_level"],
-                "questions": [
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError as exc:
+                log.error(
+                    "validation_response_parse_failed",
+                    error=str(exc),
+                    subtopic=subtopic_info["subtopic_name"],
+                    chunk_start=chunk_start_idx,
+                    preview=response_text[:300],
+                )
+                return [
                     {
-                        "index": i,
+                        "index": chunk_start_idx + i,
                         "overall_pass": False,
                         "validations": {},
                         "corrected_question": None,
                         "changes_made": [],
                         "error": "Failed to parse validation response",
                     }
-                    for i in range(len(questions))
-                ],
-                "pass_rate": f"0/{len(questions)}",
-                "summary": "Failed to parse validation LLM response",
-            }
+                    for i in range(len(chunk_questions))
+                ]
 
-        # Count passes
-        q_results = result.get("questions", [])
-        passed = sum(1 for q in q_results if q.get("overall_pass"))
-        total = len(q_results)
-        result["pass_rate"] = f"{passed}/{total}"
-        result["summary"] = f"{passed}/{total} questions passed. {total - passed} questions need fixes."
+            q_results = result.get("questions", [])
+            # Re-index to global positions
+            for qr in q_results:
+                qr["index"] = chunk_start_idx + qr.get("index", 0)
+            return q_results
 
-        log.info(
-            "subtopic_validated",
-            subject=mapped_code,
-            grade=subtopic_info["grade_level"],
-            subtopic=subtopic_info["subtopic_name"],
-            pass_rate=result["pass_rate"],
-        )
+    # Split questions into chunks and validate each
+    chunks = [questions[i : i + CHUNK_SIZE] for i in range(0, len(questions), CHUNK_SIZE)]
+    all_question_results: list[dict[str, Any]] = []
+    for ci, chunk in enumerate(chunks):
+        chunk_start = ci * CHUNK_SIZE
+        chunk_results = await _validate_chunk(chunk, chunk_start)
+        all_question_results.extend(chunk_results)
 
-        return result
+    # Aggregate results
+    passed = sum(1 for qr in all_question_results if qr.get("overall_pass") is True)
+    total = len(all_question_results)
+
+    log.info(
+        "subtopic_validated",
+        subject=mapped_code,
+        grade=subtopic_info["grade_level"],
+        subtopic=subtopic_info["subtopic_name"],
+        pass_rate=f"{passed}/{total}",
+    )
+
+    return {
+        "subtopic": subtopic_info["subtopic_name"],
+        "subject_code": mapped_code,
+        "grade_level": subtopic_info["grade_level"],
+        "questions": all_question_results,
+        "pass_rate": f"{passed}/{total}",
+        "summary": f"{passed}/{total} questions passed. {total - passed} questions need fixes.",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -822,6 +765,8 @@ def build_fixes_from_validation(
                         "question_text": original.get("question_text", ""),
                         "difficulty_level": original.get("difficulty_level", 1),
                         "correct_answer": original.get("correct_answer", ""),
+                        "options": original.get("options"),
+                        "question_type": original.get("question_type", ""),
                     },
                     "corrected": corrected,
                     "changes_made": qr.get("changes_made", []),
@@ -831,6 +776,7 @@ def build_fixes_from_validation(
                 # Include question_id if available (from DB)
                 if "question_id" in original:
                     fix["question_id"] = original["question_id"]
+                    fix["subtopic_id"] = group["subtopic_info"].get("subtopic_id")
 
                 fixes.append(fix)
 
@@ -895,106 +841,150 @@ def build_corrected_generated_file(
 
 
 # ---------------------------------------------------------------------------
-# Structural validation for corrected questions (before applying to DB)
+# Apply fixes to the DB
 # ---------------------------------------------------------------------------
 
-_VALID_BLOOM = {"Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"}
-_VALID_QUESTION_TYPES = {"multiple_choice", "true_false"}
-_TF_PREFIX_RE = re.compile(r"^true or false\s*:", re.IGNORECASE)
+# Map from LLM output formats to DB enum values
+_QUESTION_TYPE_MAP: dict[str, str] = {
+    "multiple_choice": "MCQ",
+    "MULTIPLE_CHOICE": "MCQ",
+    "mcq": "MCQ",
+    "true_false": "TRUE_FALSE",
+    "TRUE_FALSE": "TRUE_FALSE",
+    "short_answer": "SHORT_ANSWER",
+    "SHORT_ANSWER": "SHORT_ANSWER",
+}
+
+_VALID_QUESTION_TYPES = {"MCQ", "TRUE_FALSE", "SHORT_ANSWER"}
+_MCQ_KEYS = {"A", "B", "C", "D"}
 
 
-def validate_corrected_question(q: dict[str, Any]) -> list[str]:
-    """Return a list of structural validation errors. Empty list = valid."""
+def normalize_and_validate_corrected_question(q: dict[str, Any]) -> list[str]:
+    """Normalize LLM output to DB schema and return structural validation errors.
+
+    Normalizes:
+      - question_type: multiple_choice/MULTIPLE_CHOICE → MCQ
+      - options: flat array ["a","b","c","d"] → [{"key":"A","text":"a"}, ...]
+      - correct_answer: ensures it matches MCQ option keys
+
+    Returns a list of error messages. Empty list = valid.
+    """
     errors: list[str] = []
 
+    # --- Normalize question_type ---
+    raw_type = q.get("question_type", "")
+    mapped = _QUESTION_TYPE_MAP.get(raw_type)
+    if mapped:
+        q["question_type"] = mapped
+    elif raw_type not in _VALID_QUESTION_TYPES:
+        errors.append(f"invalid question_type: {raw_type!r}")
+        return errors  # don't bother checking further
+
+    q_type = q["question_type"]
+
+    # --- Required fields ---
     required = (
         "question_text",
-        "question_type",
         "correct_answer",
+        "explanation",
+        "difficulty_level",
         "bloom_taxonomy_level",
         "estimated_time_seconds",
-        "learning_objectives",
-        "explanation",
-        "hints",
-        "difficulty_level",
     )
-    missing = [f for f in required if f not in q]
+    missing = [f for f in required if not q.get(f)]
     if missing:
-        errors.append(f"missing fields: {missing}")
-        return errors
+        errors.append(f"missing required fields: {missing}")
+        # still validate structure below so we report all errors
 
-    q_type = q.get("question_type", "")
-    if q_type not in _VALID_QUESTION_TYPES:
-        errors.append(f"invalid question_type: {q_type!r}")
-        return errors
-
-    try:
-        difficulty = int(float(q["difficulty_level"]))
-        if difficulty not in range(1, 6):
-            errors.append(f"difficulty_level {difficulty} out of range 1–5")
-    except (TypeError, ValueError):
-        errors.append(f"difficulty_level is not numeric: {q['difficulty_level']!r}")
-
+    # --- question_text ---
     q_text = q.get("question_text", "")
     if not q_text or not q_text.strip():
         errors.append("question_text is empty")
 
-    if q_type == "multiple_choice":
-        options = q.get("options")
-        if not isinstance(options, dict):
-            errors.append("options must be a dict for multiple_choice")
-        elif set(options.keys()) != {"A", "B", "C", "D"}:
-            errors.append(f"options must have keys A/B/C/D, got {sorted(options.keys())}")
-        else:
-            empty_keys = [k for k, v in options.items() if not v or not str(v).strip()]
-            if empty_keys:
-                errors.append(f"options {empty_keys} have empty values")
-            values = list(options.values())
-            if len(set(str(v).strip().lower() for v in values)) < len(values):
-                errors.append("MCQ options contain duplicate values")
-            correct = q.get("correct_answer")
-            if correct not in options:
-                errors.append(f"correct_answer {correct!r} not in option keys (A/B/C/D)")
+    # --- difficulty_level ---
+    try:
+        diff = float(q["difficulty_level"])
+        if diff < 1.0 or diff > 5.0:
+            errors.append(f"difficulty_level {diff} out of range 1.0–5.0")
+    except (TypeError, ValueError):
+        errors.append(f"difficulty_level is not numeric: {q.get('difficulty_level')!r}")
 
-    if q_type == "true_false":
+    # --- estimated_time_seconds ---
+    try:
+        ets = int(q["estimated_time_seconds"])
+        if ets <= 0:
+            errors.append(f"estimated_time_seconds must be positive, got {ets}")
+    except (TypeError, ValueError):
+        errors.append(f"estimated_time_seconds is not numeric: {q.get('estimated_time_seconds')!r}")
+
+    # --- MCQ: normalize options ---
+    if q_type == "MCQ":
+        options = q.get("options")
+        if not options:
+            errors.append("MCQ question missing options")
+            return errors
+
+        # Normalize flat array ["a","b","c","d"] → [{"key":"A","text":"a"}, ...]
+        if isinstance(options, list):
+            if all(isinstance(o, str) for o in options):
+                normalized = []
+                for i, text in enumerate(options):
+                    if i >= 4:
+                        break
+                    normalized.append({"key": _MCQ_KEYS_LIST[i], "text": text})
+                q["options"] = normalized
+                options = normalized
+            elif all(isinstance(o, dict) for o in options):
+                # Already in correct format — ensure keys are uppercase
+                for opt in options:
+                    if "key" in opt:
+                        opt["key"] = opt["key"].upper()
+            else:
+                errors.append(f"MCQ options has unexpected element types: {[type(o).__name__ for o in options]}")
+                return errors
+        elif isinstance(options, dict):
+            # Dict format {"A": "text", "B": "text", ...} — convert to list
+            normalized = [{"key": k, "text": v} for k, v in sorted(options.items())]
+            q["options"] = normalized
+            options = normalized
+        else:
+            errors.append(f"MCQ options has unexpected type: {type(options).__name__}")
+            return errors
+
+        # Validate option keys
+        if isinstance(options, list):
+            keys = {o.get("key", "") for o in options}
+            if not _MCQ_KEYS.issuperset(keys):
+                errors.append(f"MCQ option keys must be A/B/C/D, got {sorted(keys)}")
+                return errors
+
+            # Check for empty option text
+            empty_keys = [o.get("key", "?") for o in options if not o.get("text", "").strip()]
+            if empty_keys:
+                errors.append(f"MCQ options {empty_keys} have empty text")
+
+            # Check for duplicate values
+            texts = [o.get("text", "").strip().lower() for o in options]
+            if len(set(texts)) < len(texts):
+                errors.append("MCQ options contain duplicate values")
+
+            # Check correct_answer is a valid key
+            correct = q.get("correct_answer", "")
+            if correct not in keys:
+                errors.append(f"correct_answer {correct!r} not in MCQ option keys {sorted(keys)}")
+
+    # --- TRUE_FALSE: validate ---
+    if q_type == "TRUE_FALSE":
         answer = str(q.get("correct_answer", "")).upper().strip()
         if answer not in ("TRUE", "FALSE"):
             errors.append(f"true_false correct_answer must be 'TRUE' or 'FALSE', got {q.get('correct_answer')!r}")
-        if not _TF_PREFIX_RE.match(q_text.strip()):
-            errors.append("true_false question_text must begin with 'True or False: '")
-        if "options" in q:
-            errors.append("true_false questions must NOT include an 'options' field")
-
-    bloom = q.get("bloom_taxonomy_level", "")
-    if bloom not in _VALID_BLOOM:
-        errors.append(f"invalid bloom_taxonomy_level: {bloom!r}")
-
-    # Validate estimated_time_seconds is positive
-    est = q.get("estimated_time_seconds", 0)
-    if not isinstance(est, int | float) or est <= 0:
-        errors.append(f"estimated_time_seconds must be a positive number, got {est!r}")
-
-    # Validate explanation is non-empty
-    explanation = q.get("explanation", "")
-    if not explanation or not str(explanation).strip():
-        errors.append("explanation must be non-empty")
-
-    hints = q.get("hints", {})
-    if not isinstance(hints, dict):
-        errors.append("hints must be a dict")
-    elif not all(f"hint{i}" in hints for i in (1, 2, 3)):
-        errors.append("hints must contain hint1, hint2, hint3")
-
-    objectives = q.get("learning_objectives", [])
-    if not isinstance(objectives, list) or not objectives:
-        errors.append("learning_objectives must be a non-empty list")
+        if "options" in q and q["options"] is not None:
+            errors.append("true_false questions must NOT include options")
 
     return errors
 
 
-# ---------------------------------------------------------------------------
-# Apply fixes to the DB
-# ---------------------------------------------------------------------------
+_MCQ_KEYS_LIST = ["A", "B", "C", "D"]
 
 
 async def apply_fixes_to_db(
@@ -1004,25 +994,45 @@ async def apply_fixes_to_db(
 ) -> int:
     """Apply fixes to the question_bank table.
 
-    Each fix has a question_id and a corrected dict with the new field values.
-    Structural validation is performed before each update. Invalid fixes are
-    skipped with a warning.
-    Returns the number of fixes applied.
+    For each fix, creates a NEW question record (INSERT) with:
+      - Corrected fields from the LLM
+      - is_active = False (pending human review)
+      - source = 'llm-correction'
+      - replaces_question_id = original question's id
+      - canonical_form and problem_signature recalculated
+
+    The original question remains active until a human approves the correction
+    via the KaihleAdmin UI.
+
+    Returns the number of corrections created.
     """
     applied = 0
 
     for fix in fixes:
         question_id = fix.get("question_id")
+        subtopic_id = fix.get("subtopic_id")
         if not question_id:
             log.warning("fix_missing_question_id", subtopic=fix.get("subtopic_info", {}).get("subtopic_name", "?"))
             continue
+        if not subtopic_id:
+            # Fallback: query the original question's subtopic_id from DB
+            row = await db.execute(
+                sa_text("SELECT subtopic_id FROM question_bank WHERE id = CAST(:qid AS uuid)"),
+                {"qid": question_id},
+            )
+            r = row.first()
+            if r and r[0]:
+                subtopic_id = str(r[0])
+            else:
+                log.warning("fix_missing_subtopic_id", question_id=question_id)
+                continue
 
         corrected = fix.get("corrected", {})
         if not corrected:
             continue
 
-        # ── Structural validation before applying ──────────────────────────
-        validation_errors = validate_corrected_question(corrected)
+        # Normalize and validate the corrected question structure
+        validation_errors = normalize_and_validate_corrected_question(corrected)
         if validation_errors:
             log.warning(
                 "fix_skipped_structural_validation_failed",
@@ -1036,32 +1046,56 @@ async def apply_fixes_to_db(
         new_canonical = make_canonical_form(corrected.get("question_text", ""))
         new_signature = make_problem_signature(corrected)
 
-        # Build the update — serialize JSON values, use CAST in SQL
+        # Build the insert — all fields needed for a new question row
         options_val = corrected.get("options")
         hints = corrected.get("hints", {})
         learning_objectives = corrected.get("learning_objectives", [])
 
-        update_sql = sa_text("""
-            UPDATE question_bank
-            SET
-                question_text = :question_text,
-                options = CAST(:options AS jsonb),
-                correct_answer = :correct_answer,
-                explanation = :explanation,
-                hints = CAST(:hints AS jsonb),
-                difficulty_level = :difficulty_level,
-                bloom_taxonomy_level = :bloom_taxonomy_level,
-                estimated_time_seconds = :estimated_time_seconds,
-                learning_objectives = :learning_objectives,
-                canonical_form = :canonical_form,
-                problem_signature = CAST(:problem_signature AS jsonb),
-                updated_at = now()
-            WHERE id = CAST(:question_id AS uuid)
+        insert_sql = sa_text("""
+            INSERT INTO question_bank (
+                subtopic_id,
+                question_text,
+                question_type,
+                options,
+                correct_answer,
+                explanation,
+                hints,
+                difficulty_level,
+                bloom_taxonomy_level,
+                estimated_time_seconds,
+                learning_objectives,
+                canonical_form,
+                problem_signature,
+                meta_tags,
+                source,
+                is_active,
+                replaces_question_id
+            ) VALUES (
+                CAST(:subtopic_id AS uuid),
+                :question_text,
+                :question_type,
+                CAST(:options AS jsonb),
+                :correct_answer,
+                :explanation,
+                CAST(:hints AS jsonb),
+                :difficulty_level,
+                :bloom_taxonomy_level,
+                :estimated_time_seconds,
+                :learning_objectives,
+                :canonical_form,
+                CAST(:problem_signature AS jsonb),
+                CAST(:meta_tags AS jsonb),
+                'llm-correction',
+                false,
+                CAST(:replaces_question_id AS uuid)
+            )
         """)
 
         params = {
-            "question_id": question_id,
+            "subtopic_id": subtopic_id,
+            "replaces_question_id": question_id,
             "question_text": corrected.get("question_text", ""),
+            "question_type": corrected.get("question_type", ""),
             "options": json.dumps(options_val if isinstance(options_val, dict | list) else None),
             "correct_answer": corrected.get("correct_answer", ""),
             "explanation": corrected.get("explanation", ""),
@@ -1072,29 +1106,42 @@ async def apply_fixes_to_db(
             "learning_objectives": learning_objectives if isinstance(learning_objectives, list) else [],
             "canonical_form": new_canonical,
             "problem_signature": json.dumps(new_signature),
+            "meta_tags": json.dumps(
+                {
+                    "changes_made": fix.get("changes_made", []),
+                    "validations": fix.get("validations", {}),
+                    "original": {
+                        "question_text": fix.get("original", {}).get("question_text", ""),
+                        "correct_answer": fix.get("original", {}).get("correct_answer", ""),
+                        "difficulty_level": fix.get("original", {}).get("difficulty_level", 1),
+                        "options": fix.get("original", {}).get("options"),
+                        "question_type": fix.get("original", {}).get("question_type", ""),
+                    },
+                }
+            ),
         }
 
         if dry_run:
             log.info(
-                "dry_run_would_update",
+                "dry_run_would_insert_correction",
                 question_id=question_id,
                 subtopic=fix.get("subtopic_info", {}).get("subtopic_name", "?"),
                 changes=fix.get("changes_made", []),
             )
             applied += 1
         else:
-            await db.execute(update_sql, params)
+            await db.execute(insert_sql, params)
             applied += 1
             log.info(
-                "fix_applied",
-                question_id=question_id,
+                "correction_inserted",
+                replaces_question_id=question_id,
                 subtopic=fix.get("subtopic_info", {}).get("subtopic_name", "?"),
                 changes=fix.get("changes_made", []),
             )
 
     if not dry_run:
         await db.commit()
-        log.info("fixes_committed", count=applied)
+        log.info("corrections_committed", count=applied)
 
     return applied
 
@@ -1291,7 +1338,7 @@ async def run_validate_generated(
     with open(file_path, encoding="utf-8") as f:
         original_data = json.load(f)
 
-    subtopic_groups = parse_generated_file(data=original_data)
+    subtopic_groups = parse_generated_file(file_path)
     if not subtopic_groups:
         return 1
 
@@ -1344,7 +1391,7 @@ async def run_apply_fixes(
     file_path: str,
     dry_run: bool,
 ) -> int:
-    """Apply a fixes_to_apply.json to the database."""
+    """Insert correction records from a fixes_to_apply.json into the database."""
     with open(file_path, encoding="utf-8") as f:
         fixes_data = json.load(f)
 
@@ -1353,7 +1400,7 @@ async def run_apply_fixes(
         log.info("no_fixes_to_apply")
         return 0
 
-    log.info("applying_fixes", count=len(fixes), dry_run=dry_run)
+    log.info("creating_corrections", count=len(fixes), dry_run=dry_run)
 
     engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
     async_session = async_sessionmaker(engine, expire_on_commit=False)
@@ -1363,7 +1410,7 @@ async def run_apply_fixes(
             applied = await apply_fixes_to_db(db, fixes, dry_run=dry_run)
 
         log.info(
-            "fixes_applied",
+            "corrections_created",
             applied=applied,
             total=len(fixes),
             dry_run=dry_run,
@@ -1387,16 +1434,7 @@ async def main(args: argparse.Namespace) -> int:
 
     if mode == "validate-existing":
         subject_filter = [s.strip().upper() for s in args.subject.split(",")] if args.subject else ["ENG"]
-
-        grade_filter = None
-        if args.grade:
-            try:
-                grade_filter = [int(g.strip()) for g in args.grade.split(",")]
-            except ValueError:
-                log.error(
-                    "invalid_grade_filter", value=args.grade, hint="Use comma-separated integers, e.g. --grade 6,7,8"
-                )
-                return 1
+        grade_filter = [int(g.strip()) for g in args.grade.split(",")] if args.grade else None
         return await run_validate_existing(
             subject_filter=subject_filter,
             grade_filter=grade_filter,
@@ -1432,7 +1470,7 @@ if __name__ == "__main__":
             "THREE MODES:\n"
             "  validate-existing  — Read active questions from DB, validate, output fixes.\n"
             "  validate-generated — Read a generated JSON file, validate, output corrected JSON.\n"
-            "  apply-fixes        — Apply a fixes JSON to the database.\n"
+            "  apply-fixes        — Insert correction records into the DB (is_active=false).\n"
             "\n"
             "Examples:\n"
             "  # Dry-run validation of existing ENG questions:\n"
@@ -1447,7 +1485,7 @@ if __name__ == "__main__":
             "  python -m scripts.validate_and_fix_questions \\\n"
             "    --mode validate-generated --file gap_questions_ENG.json\n"
             "\n"
-            "  # Apply fixes to the DB:\n"
+            "  # Insert corrections into the DB (creates new inactive records):\n"
             "  python -m scripts.validate_and_fix_questions \\\n"
             "    --mode apply-fixes --file fixes_to_apply_ENG.json\n"
             "\n"

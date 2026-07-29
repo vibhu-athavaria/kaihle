@@ -81,6 +81,9 @@ def _to_response(row: Any) -> QuestionBankResponse:
         explanation=qb.explanation,
         difficulty_level=qb.difficulty_level,
         is_active=qb.is_active,
+        meta_tags=qb.meta_tags,
+        source=qb.source,
+        replaces_question_id=qb.replaces_question_id,
         subtopic_id=qb.subtopic_id,
         created_at=qb.created_at,
         updated_at=qb.updated_at,
@@ -109,6 +112,9 @@ async def list_questions(
     curriculum_topic_id: UUID | None = Query(None),
     question_type: str | None = Query(None),
     search: str | None = Query(None),
+    is_active: bool | None = Query(None),
+    source: str | None = Query(None),
+    has_replaces: bool | None = Query(None, description="Filter questions that have a replaces_question_id"),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> QuestionBankListResponse:
@@ -131,6 +137,12 @@ async def list_questions(
         query = query.where(QuestionBank.question_type == question_type)
     if search:
         query = query.where(QuestionBank.question_text.ilike(f"%{search}%"))
+    if is_active is not None:
+        query = query.where(QuestionBank.is_active == is_active)
+    if source:
+        query = query.where(QuestionBank.source == source)
+    if has_replaces is True:
+        query = query.where(QuestionBank.replaces_question_id.isnot(None))
 
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     query = query.order_by(QuestionBank.created_at.desc())
@@ -142,6 +154,19 @@ async def list_questions(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/{question_id}", response_model=QuestionBankResponse)
+async def get_question(
+    question_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> QuestionBankResponse:
+    """Get a single question by ID with curriculum context."""
+    row = (await db.execute(_base_query().where(QuestionBank.id == question_id))).one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+    return _to_response(row)
 
 
 @router.patch("/{question_id}", response_model=QuestionBankResponse)
@@ -216,5 +241,52 @@ async def create_question(
     row = (await db.execute(_base_query().where(QuestionBank.id == question.id))).one_or_none()
     if not row:
         raise HTTPException(status_code=500, detail="Failed to reload question after create")
+
+    return _to_response(row)
+
+
+@router.post("/{question_id}/approve", response_model=QuestionBankResponse)
+async def approve_correction(
+    question_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> QuestionBankResponse:
+    """Atomically approve a correction: activate the correction and deactivate the original.
+
+    In a single transaction:
+      1. Sets is_active=true on the correction (the question_id param)
+      2. Sets is_active=false on the original question (via replaces_question_id)
+    """
+    correction = await db.get(QuestionBank, question_id)
+    if not correction:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Correction not found")
+    if correction.source != "llm-correction":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only llm-correction questions can be approved",
+        )
+    if not correction.replaces_question_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Correction has no replaces_question_id",
+        )
+
+    # Fetch original
+    original = await db.get(QuestionBank, correction.replaces_question_id)
+    if not original:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Original question not found",
+        )
+
+    # Atomic transaction: activate correction, deactivate original
+    correction.is_active = True
+    original.is_active = False
+    await db.commit()
+    await db.refresh(correction)
+
+    row = (await db.execute(_base_query().where(QuestionBank.id == correction.id))).one_or_none()
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to reload question after approval")
 
     return _to_response(row)
