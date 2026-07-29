@@ -842,6 +842,148 @@ def build_corrected_generated_file(
 # Apply fixes to the DB
 # ---------------------------------------------------------------------------
 
+# Map from LLM output formats to DB enum values
+_QUESTION_TYPE_MAP: dict[str, str] = {
+    "multiple_choice": "MCQ",
+    "MULTIPLE_CHOICE": "MCQ",
+    "mcq": "MCQ",
+    "true_false": "TRUE_FALSE",
+    "TRUE_FALSE": "TRUE_FALSE",
+    "short_answer": "SHORT_ANSWER",
+    "SHORT_ANSWER": "SHORT_ANSWER",
+}
+
+_VALID_QUESTION_TYPES = {"MCQ", "TRUE_FALSE", "SHORT_ANSWER"}
+_MCQ_KEYS = {"A", "B", "C", "D"}
+
+
+def normalize_and_validate_corrected_question(q: dict[str, Any]) -> list[str]:
+    """Normalize LLM output to DB schema and return structural validation errors.
+
+    Normalizes:
+      - question_type: multiple_choice/MULTIPLE_CHOICE → MCQ
+      - options: flat array ["a","b","c","d"] → [{"key":"A","text":"a"}, ...]
+      - correct_answer: ensures it matches MCQ option keys
+
+    Returns a list of error messages. Empty list = valid.
+    """
+    errors: list[str] = []
+
+    # --- Normalize question_type ---
+    raw_type = q.get("question_type", "")
+    mapped = _QUESTION_TYPE_MAP.get(raw_type)
+    if mapped:
+        q["question_type"] = mapped
+    elif raw_type not in _VALID_QUESTION_TYPES:
+        errors.append(f"invalid question_type: {raw_type!r}")
+        return errors  # don't bother checking further
+
+    q_type = q["question_type"]
+
+    # --- Required fields ---
+    required = (
+        "question_text",
+        "correct_answer",
+        "explanation",
+        "difficulty_level",
+        "bloom_taxonomy_level",
+        "estimated_time_seconds",
+    )
+    missing = [f for f in required if not q.get(f)]
+    if missing:
+        errors.append(f"missing required fields: {missing}")
+        # still validate structure below so we report all errors
+
+    # --- question_text ---
+    q_text = q.get("question_text", "")
+    if not q_text or not q_text.strip():
+        errors.append("question_text is empty")
+
+    # --- difficulty_level ---
+    try:
+        diff = float(q["difficulty_level"])
+        if diff < 1.0 or diff > 5.0:
+            errors.append(f"difficulty_level {diff} out of range 1.0–5.0")
+    except (TypeError, ValueError):
+        errors.append(f"difficulty_level is not numeric: {q.get('difficulty_level')!r}")
+
+    # --- estimated_time_seconds ---
+    try:
+        ets = int(q["estimated_time_seconds"])
+        if ets <= 0:
+            errors.append(f"estimated_time_seconds must be positive, got {ets}")
+    except (TypeError, ValueError):
+        errors.append(f"estimated_time_seconds is not numeric: {q.get('estimated_time_seconds')!r}")
+
+    # --- MCQ: normalize options ---
+    if q_type == "MCQ":
+        options = q.get("options")
+        if not options:
+            errors.append("MCQ question missing options")
+            return errors
+
+        # Normalize flat array ["a","b","c","d"] → [{"key":"A","text":"a"}, ...]
+        if isinstance(options, list):
+            if all(isinstance(o, str) for o in options):
+                normalized = []
+                for i, text in enumerate(options):
+                    if i >= 4:
+                        break
+                    normalized.append({"key": _MCQ_KEYS_LIST[i], "text": text})
+                q["options"] = normalized
+                options = normalized
+            elif all(isinstance(o, dict) for o in options):
+                # Already in correct format — ensure keys are uppercase
+                for opt in options:
+                    if "key" in opt:
+                        opt["key"] = opt["key"].upper()
+            else:
+                errors.append(f"MCQ options has unexpected element types: {[type(o).__name__ for o in options]}")
+                return errors
+        elif isinstance(options, dict):
+            # Dict format {"A": "text", "B": "text", ...} — convert to list
+            normalized = [{"key": k, "text": v} for k, v in sorted(options.items())]
+            q["options"] = normalized
+            options = normalized
+        else:
+            errors.append(f"MCQ options has unexpected type: {type(options).__name__}")
+            return errors
+
+        # Validate option keys
+        if isinstance(options, list):
+            keys = {o.get("key", "") for o in options}
+            if not _MCQ_KEYS.issuperset(keys):
+                errors.append(f"MCQ option keys must be A/B/C/D, got {sorted(keys)}")
+                return errors
+
+            # Check for empty option text
+            empty_keys = [o.get("key", "?") for o in options if not o.get("text", "").strip()]
+            if empty_keys:
+                errors.append(f"MCQ options {empty_keys} have empty text")
+
+            # Check for duplicate values
+            texts = [o.get("text", "").strip().lower() for o in options]
+            if len(set(texts)) < len(texts):
+                errors.append("MCQ options contain duplicate values")
+
+            # Check correct_answer is a valid key
+            correct = q.get("correct_answer", "")
+            if correct not in keys:
+                errors.append(f"correct_answer {correct!r} not in MCQ option keys {sorted(keys)}")
+
+    # --- TRUE_FALSE: validate ---
+    if q_type == "TRUE_FALSE":
+        answer = str(q.get("correct_answer", "")).upper().strip()
+        if answer not in ("TRUE", "FALSE"):
+            errors.append(f"true_false correct_answer must be 'TRUE' or 'FALSE', got {q.get('correct_answer')!r}")
+        if "options" in q and q["options"] is not None:
+            errors.append("true_false questions must NOT include options")
+
+    return errors
+
+
+_MCQ_KEYS_LIST = ["A", "B", "C", "D"]
+
 
 async def apply_fixes_to_db(
     db,
@@ -885,6 +1027,17 @@ async def apply_fixes_to_db(
 
         corrected = fix.get("corrected", {})
         if not corrected:
+            continue
+
+        # Normalize and validate the corrected question structure
+        validation_errors = normalize_and_validate_corrected_question(corrected)
+        if validation_errors:
+            log.warning(
+                "fix_skipped_structural_validation_failed",
+                question_id=question_id,
+                subtopic=fix.get("subtopic_info", {}).get("subtopic_name", "?"),
+                errors=validation_errors,
+            )
             continue
 
         # Recalculate canonical_form and problem_signature
