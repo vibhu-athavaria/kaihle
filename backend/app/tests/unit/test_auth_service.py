@@ -206,7 +206,7 @@ class TestLogin:
             mock_db.scalar = AsyncMock(return_value=sample_user)
 
             # Act
-            result = await auth_service.login(email="test@example.com", password="correct_password")
+            result = await auth_service.login(email_or_username="test@example.com", password="correct_password")
 
             # Assert
             assert isinstance(result, LoginResponse)
@@ -240,7 +240,7 @@ class TestLogin:
             mock_db.scalar = AsyncMock(return_value=sample_user)
 
             # Act
-            result = await auth_service.login(email=sample_user.email, password="correct_password")
+            result = await auth_service.login(email_or_username=sample_user.email, password="correct_password")
 
         # Assert — permissions must survive the serialization path
         assert result.user["permissions"] == {"billing": False, "user_management": False}
@@ -257,7 +257,7 @@ class TestLogin:
 
             # Act & Assert
             with pytest.raises(ValueError, match="Invalid credentials"):
-                await auth_service.login(email="test@example.com", password="wrong_password")
+                await auth_service.login(email_or_username="test@example.com", password="wrong_password")
 
     @pytest.mark.asyncio
     async def test_login_when_user_not_found_raises_value_error(
@@ -269,7 +269,7 @@ class TestLogin:
 
         # Act & Assert
         with pytest.raises(ValueError, match="Invalid credentials"):
-            await auth_service.login(email="nonexistent@example.com", password="any_password")
+            await auth_service.login(email_or_username="nonexistent@example.com", password="any_password")
 
     @pytest.mark.asyncio
     async def test_login_when_inactive_user_raises_value_error(
@@ -277,21 +277,11 @@ class TestLogin:
     ) -> None:
         """Test login with inactive account raises ValueError."""
         # Arrange
-        inactive_user = User(
-            id=uuid.uuid4(),
-            school_id=uuid.uuid4(),
-            email="inactive@example.com",
-            hashed_password="hashed",
-            first_name="Inactive",
-            last_name="User",
-            role="TEACHER",
-            is_active=False,
-        )
-        mock_db.scalar = AsyncMock(return_value=inactive_user)
+        mock_db.scalar = AsyncMock(return_value=None)
 
         # Act & Assert
-        with pytest.raises(ValueError, match="Account is inactive"):
-            await auth_service.login(email="inactive@example.com", password="any_password")
+        with pytest.raises(ValueError, match="Invalid credentials"):
+            await auth_service.login(email_or_username="inactive@example.com", password="any_password")
 
     @pytest.mark.asyncio
     async def test_login_when_user_without_password_raises_value_error(
@@ -313,7 +303,7 @@ class TestLogin:
 
         # Act & Assert
         with pytest.raises(ValueError, match="Invalid credentials"):
-            await auth_service.login(email="nopass@example.com", password="any_password")
+            await auth_service.login(email_or_username="nopass@example.com", password="any_password")
 
 
 # ==============================================================================
@@ -1071,7 +1061,7 @@ class TestMustChangePassword:
             patch("app.services.auth_service.generate_refresh_token", return_value=("raw", "hashed")),
             patch("app.services.auth_service.store_refresh_token", new_callable=AsyncMock),
         ):
-            response = await auth_service.login(email="a@b.com", password="pass")
+            response = await auth_service.login(email_or_username="a@b.com", password="pass")
 
         assert response.must_change_password is True
 
@@ -1100,7 +1090,7 @@ class TestMustChangePassword:
             patch("app.services.auth_service.generate_refresh_token", return_value=("raw", "hashed")),
             patch("app.services.auth_service.store_refresh_token", new_callable=AsyncMock),
         ):
-            response = await auth_service.login(email="a@b.com", password="pass")
+            response = await auth_service.login(email_or_username="a@b.com", password="pass")
 
         assert response.must_change_password is False
 

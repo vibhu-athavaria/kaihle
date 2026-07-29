@@ -86,6 +86,7 @@ export interface StudentListItem {
   first_name: string;
   last_name: string;
   email: string;
+  username: string | null;
   is_active: boolean;
   last_login_at: string | null;
   worst_mastery: number | null;
@@ -136,6 +137,7 @@ export interface StudentProfile {
   first_name: string;
   last_name: string;
   email: string;
+  username: string | null;
   is_active: boolean;
   grade_id: string | null;
   grade_level: number | null;
@@ -451,7 +453,8 @@ export function useInviteUser() {
 export interface UserDirectCreatePayload {
   first_name: string;
   last_name: string;
-  email: string;
+  email?: string;
+  username?: string;
   password: string;
   role: "STUDENT" | "TEACHER" | "PARENT";
   age?: number;
@@ -557,6 +560,7 @@ export interface ClassStudent {
   first_name: string;
   last_name: string;
   email: string;
+  username: string | null;
   grade_name: string | null;
   worst_mastery: number | null;
   diagnostic_completed: boolean;
@@ -581,6 +585,7 @@ export function useUpdateUser() {
       userId: string;
       first_name?: string;
       last_name?: string;
+      username?: string;
       email?: string;
       grade_id?: string;
       is_active?: boolean;

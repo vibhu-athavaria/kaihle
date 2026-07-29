@@ -11,7 +11,8 @@ from app.models.user import UserRole
 class UserInvite(BaseModel):
     """Schema for inviting a new user to a school."""
 
-    email: EmailStr
+    email: EmailStr | None = None
+    username: str | None = Field(default=None, min_length=3, max_length=100)
     role: UserRole  # TEACHER | SCHOOL_ADMIN | PARENT
     first_name: str
     last_name: str
@@ -22,12 +23,19 @@ class UserInvite(BaseModel):
     # when creating school admins directly.
     password: str | None = Field(default=None, min_length=8, max_length=72)
 
+    @model_validator(mode="after")
+    def validate_email_or_username(self) -> "UserInvite":
+        if not self.email and not self.username:
+            raise ValueError("Either email or username must be provided")
+        return self
+
 
 class UserUpdate(BaseModel):
     """Schema for updating user information."""
 
     first_name: str | None = None
     last_name: str | None = None
+    username: str | None = Field(default=None, min_length=3, max_length=100)
     email: EmailStr | None = None
     grade_id: uuid.UUID | None = None  # student only
     is_active: bool | None = None
@@ -40,7 +48,8 @@ class UserResponse(BaseModel):
     """Schema for user response."""
 
     id: uuid.UUID
-    email: str
+    email: str | None = None
+    username: str | None = None
     role: str  # Using str for response compatibility
     first_name: str
     last_name: str
@@ -66,7 +75,8 @@ class StudentListItem(BaseModel):
     id: uuid.UUID
     first_name: str
     last_name: str
-    email: str
+    email: str | None = None
+    username: str | None = None
     is_active: bool
     last_login_at: datetime | None
     # NULL = no enrollments yet (or no gap states recorded)
@@ -117,7 +127,8 @@ class MeResponse(BaseModel):
     """
 
     id: uuid.UUID
-    email: str
+    email: str | None = None
+    username: str | None = None
     first_name: str
     last_name: str
     role: str
@@ -137,7 +148,8 @@ class UserPermissionsUpdate(BaseModel):
 class UserDirectCreate(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
-    email: EmailStr
+    email: EmailStr | None = None
+    username: str | None = Field(default=None, min_length=3, max_length=100)
     password: str = Field(..., min_length=8, max_length=72)
     role: UserRole
 
@@ -160,4 +172,6 @@ class UserDirectCreate(BaseModel):
                 raise ValueError("age is required for students")
         if self.role not in (UserRole.STUDENT, UserRole.TEACHER, UserRole.PARENT):
             raise ValueError("role must be STUDENT, TEACHER, or PARENT")
+        if not self.email and not self.username:
+            raise ValueError("Either email or username must be provided")
         return self

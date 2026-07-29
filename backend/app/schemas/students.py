@@ -30,6 +30,7 @@ class StudentInfoResponse(BaseModel):
     first_name: str = Field(..., alias="firstName")
     last_name: str = Field(..., alias="lastName")
     email: str = Field(..., alias="email")
+    username: str | None = Field(None, alias="username")
     grade_name: str = Field(..., alias="gradeName")
     curriculum_name: str = Field(..., alias="curriculumName")
     class_id: UUID | None = Field(None, alias="classId")

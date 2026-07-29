@@ -355,7 +355,9 @@ function StudentRow({ student, action, onAction, isPending }: StudentRowProps) {
           {student.first_name} {student.last_name}
         </p>
         <p className="text-xs text-brand-muted truncate">
-          {(student as StudentListItem).email ??
+          {(student as StudentListItem).username ??
+            (student as ClassStudent).username ??
+            (student as StudentListItem).email ??
             (student as ClassStudent).email}
         </p>
       </div>

@@ -7,22 +7,30 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    email: EmailStr | None = None
+    username: str | None = Field(default=None, min_length=3, max_length=100)
     password: str
     role: str
     school_id: uuid.UUID | None = None
     first_name: str
     last_name: str
 
+    @model_validator(mode="after")
+    def validate_email_or_username(self) -> "RegisterRequest":
+        if not self.email and not self.username:
+            raise ValueError("Either email or username must be provided")
+        return self
+
 
 class RegisterResponse(BaseModel):
     user_id: uuid.UUID
-    email: str
+    email: str | None = None
+    username: str | None = None
     role: str
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str  # Accepts email or username
     password: str
 
 

@@ -546,7 +546,8 @@ CREATE TABLE users (
     school_id           UUID        REFERENCES schools (id) ON DELETE SET NULL,
     -- NULL is valid ONLY for KAIHLE_ADMIN. All other roles require school_id.
     -- Enforced by: CHECK (role = 'KAIHLE_ADMIN' OR school_id IS NOT NULL)
-    email               VARCHAR(255) NOT NULL,
+    email               VARCHAR(255),       -- NULL for username-only students
+    username            VARCHAR(100),       -- NULL for email-only users
     hashed_password     VARCHAR(255),
     -- NULL for magic-link-only users (invited teachers/parents)
     first_name          VARCHAR(100) NOT NULL,
@@ -558,6 +559,7 @@ CREATE TABLE users (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ,
     CONSTRAINT users_email_unique UNIQUE (email),
+    CONSTRAINT users_username_unique UNIQUE (username),
     CONSTRAINT chk_user_school_id_required CHECK (role = 'KAIHLE_ADMIN' OR school_id IS NOT NULL)
 );
 
@@ -568,10 +570,12 @@ COMMENT ON TABLE users IS
      Enforced by CHECK constraint: CHECK (role = ''KAIHLE_ADMIN'' OR school_id IS NOT NULL).
      hashed_password NULL: user authenticates via magic link only.
      email UNIQUE: globally unique, not per-school (simplifies magic link auth).
+     username UNIQUE: globally unique, for students without email.
      must_change_password (v2.2): set TRUE after password reset to force change on next login.';
 
 CREATE INDEX idx_users_school_role ON users (school_id, role);
 CREATE INDEX idx_users_email       ON users (email);
+CREATE INDEX idx_users_username    ON users (username);
 
 -- ---------------------------------------------------------------------------
 

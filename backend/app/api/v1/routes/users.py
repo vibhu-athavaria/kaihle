@@ -90,7 +90,7 @@ async def create_user_direct(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Email '{body.email}' is already registered in the system.",
+            detail="Email or username is already registered in the system.",
         )
 
 
@@ -180,7 +180,8 @@ async def list_users(
                     id=u.id,
                     first_name=u.first_name,
                     last_name=u.last_name,
-                    email=u.email,
+                    email=u.email or "",
+                    username=u.username or "",
                     is_active=u.is_active,
                     last_login_at=u.last_login_at,
                     worst_mastery=summary_map[u.id].worst_mastery if u.id in summary_map else None,

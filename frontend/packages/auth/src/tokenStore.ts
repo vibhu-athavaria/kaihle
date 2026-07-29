@@ -7,6 +7,7 @@ const STORAGE_KEY = "kaihle-auth";
 export interface User {
   id: string;
   email: string;
+  username: string;
   first_name: string;
   role: UserRoleType;
   school_id: string | null;

@@ -59,6 +59,7 @@ const fakeStudent: StudentProfile = {
   first_name: "Alice",
   last_name: "Wong",
   email: "alice@school.edu",
+  username: null,
   is_active: true,
   grade_id: "grade-7-uuid",
   grade_level: 7,

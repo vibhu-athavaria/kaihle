@@ -60,7 +60,9 @@ describe("CreateStudentModal", () => {
     renderModal();
     fireEvent.click(screen.getByRole("button", { name: /create student/i }));
     expect(screen.getAllByText("Required").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Valid email required")).toBeInTheDocument();
+    expect(
+      screen.getByText("Either email or username is required"),
+    ).toBeInTheDocument();
     expect(screen.getByText("At least 8 characters")).toBeInTheDocument();
     expect(screen.getByText("Age between 5 and 25")).toBeInTheDocument();
     expect(screen.getByText("Select a grade")).toBeInTheDocument();
@@ -118,6 +120,54 @@ describe("CreateStudentModal", () => {
         first_name: "Aisha",
         last_name: "Al-Rashid",
         email: "aisha@school.edu",
+        password: "Password123!",
+        role: "STUDENT",
+        age: 13,
+        grade_id: "g1",
+      });
+    });
+
+    expect(toast.success).toHaveBeenCalledWith(
+      "Student Aisha Al-Rashid created",
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  test("test_create_student_modal_when_username_only_then_submits_without_email", async () => {
+    const mutateAsync = jest.fn().mockResolvedValue({});
+    mockedUseCreateUser.mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateUser>);
+
+    const { onOpenChange } = renderModal();
+
+    fireEvent.change(screen.getByPlaceholderText("Aisha"), {
+      target: { value: "Aisha" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Al-Rashid"), {
+      target: { value: "Al-Rashid" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("aisha.rashid"), {
+      target: { value: "aisha.rashid" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Set a temporary password"), {
+      target: { value: "Password123!" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("13"), {
+      target: { value: "13" },
+    });
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "g1" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /create student/i }));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        first_name: "Aisha",
+        last_name: "Al-Rashid",
+        username: "aisha.rashid",
         password: "Password123!",
         role: "STUDENT",
         age: 13,

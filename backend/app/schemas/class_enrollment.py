@@ -82,6 +82,7 @@ class StudentSummary(BaseModel):
 
     id: uuid.UUID
     email: str
+    username: str | None = None
     first_name: str
     last_name: str
     worst_mastery: float | None
@@ -98,6 +99,7 @@ class TeacherStudentItem(BaseModel):
     first_name: str
     last_name: str
     email: str
+    username: str | None = None
     grade_name: str | None = None
     class_ids: list[uuid.UUID]
     class_names: list[str]
