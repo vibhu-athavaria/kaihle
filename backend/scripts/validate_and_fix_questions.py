@@ -774,7 +774,7 @@ def build_fixes_from_validation(
                 # Include question_id if available (from DB)
                 if "question_id" in original:
                     fix["question_id"] = original["question_id"]
-                    fix["subtopic_id"] = original.get("subtopic_id")
+                    fix["subtopic_id"] = group["subtopic_info"].get("subtopic_id")
 
                 fixes.append(fix)
 
@@ -871,8 +871,17 @@ async def apply_fixes_to_db(
             log.warning("fix_missing_question_id", subtopic=fix.get("subtopic_info", {}).get("subtopic_name", "?"))
             continue
         if not subtopic_id:
-            log.warning("fix_missing_subtopic_id", question_id=question_id)
-            continue
+            # Fallback: query the original question's subtopic_id from DB
+            row = await db.execute(
+                sa_text("SELECT subtopic_id FROM question_bank WHERE id = CAST(:qid AS uuid)"),
+                {"qid": question_id},
+            )
+            r = row.first()
+            if r and r[0]:
+                subtopic_id = str(r[0])
+            else:
+                log.warning("fix_missing_subtopic_id", question_id=question_id)
+                continue
 
         corrected = fix.get("corrected", {})
         if not corrected:
