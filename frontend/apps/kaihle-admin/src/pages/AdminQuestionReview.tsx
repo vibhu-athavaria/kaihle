@@ -22,6 +22,7 @@ interface QuestionRow {
   explanation: string | null;
   difficulty_level: number | null;
   is_active: boolean;
+  meta_tags: Record<string, unknown> | null;
   source: string | null;
   replaces_question_id: string | null;
   subtopic_id: string | null;
@@ -141,6 +142,7 @@ export function AdminQuestionReview() {
   const [addingQuestion, setAddingQuestion] = useState(false);
   const [reviewingCorrection, setReviewingCorrection] =
     useState<QuestionRow | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     setLoading(true);
@@ -177,6 +179,7 @@ export function AdminQuestionReview() {
     search,
     statusFilter,
     page,
+    refreshKey,
   ]);
 
   const setFilter = useCallback(
@@ -187,7 +190,10 @@ export function AdminQuestionReview() {
       } else {
         next.delete(key);
       }
-      next.delete("page");
+      // Reset to page 1 only when a filter (not page) changes
+      if (key !== "page") {
+        next.delete("page");
+      }
       setSearchParams(next);
     },
     [searchParams, setSearchParams],
@@ -572,11 +578,11 @@ export function AdminQuestionReview() {
           onClose={() => setReviewingCorrection(null)}
           onApprove={() => {
             setReviewingCorrection(null);
-            queryClient.invalidateQueries({ queryKey: ["question-bank"] });
+            setRefreshKey((k) => k + 1);
           }}
           onReject={() => {
             setReviewingCorrection(null);
-            queryClient.invalidateQueries({ queryKey: ["question-bank"] });
+            setRefreshKey((k) => k + 1);
           }}
         />
       )}
@@ -1165,8 +1171,38 @@ function CorrectionReviewModal({
   onApprove,
   onReject,
 }: CorrectionReviewModalProps) {
+  const [original, setOriginal] = useState<QuestionRow | null>(null);
+  const [loading, setLoading] = useState(!!correction.replaces_question_id);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Meta data from the correction record
+  const metaTags = correction.meta_tags as
+    | {
+        changes_made?: string[];
+        validations?: Record<string, { pass: boolean; note: string }>;
+        original?: {
+          question_text?: string;
+          correct_answer?: string;
+          difficulty_level?: number;
+          question_type?: string;
+          options?: McqOption[];
+        };
+      }
+    | undefined;
+
+  // Fetch original question if we have replaces_question_id
+  useEffect(() => {
+    if (!correction.replaces_question_id) {
+      setLoading(false);
+      return;
+    }
+    apiClient
+      .get(`/api/v1/question-bank/${correction.replaces_question_id}`)
+      .then((r) => setOriginal(r.data))
+      .catch(() => setOriginal(null))
+      .finally(() => setLoading(false));
+  }, [correction.replaces_question_id]);
 
   const handleApprove = async () => {
     setActionLoading(true);
@@ -1202,12 +1238,21 @@ function CorrectionReviewModal({
 
   const diff = difficultyLabel(correction.difficulty_level);
 
+  const leftQuestion = original || {
+    question_text: metaTags?.original?.question_text || "",
+    correct_answer: metaTags?.original?.correct_answer || "",
+    difficulty_level: metaTags?.original?.difficulty_level ?? null,
+    question_type:
+      metaTags?.original?.question_type || correction.question_type,
+    options: (metaTags?.original?.options as McqOption[]) || null,
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-white rounded-lg w-full max-w-[600px] shadow-xl max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-lg w-full max-w-[960px] shadow-xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#eaecf0] flex items-center justify-between flex-shrink-0">
           <h2 className="text-sm font-semibold text-[#111827] flex items-center gap-2">
@@ -1226,7 +1271,13 @@ function CorrectionReviewModal({
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto px-6 py-5 flex-1 space-y-4">
+        <div className="overflow-y-auto px-6 py-5 flex-1 space-y-5">
+          {loading && (
+            <div className="text-center py-8 text-xs text-[#9ca3af]">
+              Loading original question…
+            </div>
+          )}
+
           {error && (
             <div
               role="alert"
@@ -1236,73 +1287,177 @@ function CorrectionReviewModal({
             </div>
           )}
 
-          {/* Question details */}
-          <div>
-            <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-1">
-              Question Text
-            </h3>
-            <p className="text-xs text-[#374151] leading-relaxed bg-[#fafafa] border border-[#eaecf0] rounded-md px-3 py-2">
-              {correction.question_text}
-            </p>
-          </div>
+          {!loading && (
+            <>
+              {/* Side-by-side comparison */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Original Question */}
+                <div className="border border-[#eaecf0] rounded-lg p-3 bg-[#fafafa]">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-2">
+                    Original
+                  </h3>
+                  {leftQuestion.question_text ? (
+                    <>
+                      <p className="text-xs text-[#374151] mb-2 leading-relaxed">
+                        {leftQuestion.question_text}
+                      </p>
+                      {/* MCQ options for original */}
+                      {leftQuestion.question_type === "MCQ" &&
+                        leftQuestion.options &&
+                        leftQuestion.options.length > 0 && (
+                          <div className="space-y-1 mb-2">
+                            {leftQuestion.options.map((opt) => (
+                              <div
+                                key={opt.key}
+                                className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded ${
+                                  opt.key === leftQuestion.correct_answer
+                                    ? "bg-green-100 text-[#16a34a] font-semibold"
+                                    : "text-[#6b7280]"
+                                }`}
+                              >
+                                <span className="w-5 h-5 rounded-full bg-[#f3f4f6] border border-[#eaecf0] flex items-center justify-center text-[10px] font-bold text-[#374151] flex-shrink-0">
+                                  {opt.key}
+                                </span>
+                                {opt.text}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        <span className="text-[10px] font-semibold text-[#6b7280] bg-gray-100 px-1.5 py-0.5 rounded">
+                          Correct: {leftQuestion.correct_answer}
+                        </span>
+                        <span
+                          className={
+                            "text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-50 " +
+                            difficultyLabel(leftQuestion.difficulty_level).cls
+                          }
+                        >
+                          {difficultyLabel(leftQuestion.difficulty_level).label}{" "}
+                          ({leftQuestion.difficulty_level})
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-[#9ca3af] italic">
+                      Original not available
+                    </p>
+                  )}
+                </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-1">
-                Type
-              </h3>
-              <span
-                className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
-                  TYPE_PILL[correction.question_type] ||
-                  "bg-gray-50 text-gray-600"
-                }`}
-              >
-                {correction.question_type}
-              </span>
-            </div>
-            <div>
-              <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-1">
-                Difficulty
-              </h3>
-              <span
-                className={`text-xs font-semibold px-1.5 py-0.5 rounded bg-gray-50 ${diff.cls}`}
-              >
-                {diff.label} ({correction.difficulty_level})
-              </span>
-            </div>
-          </div>
+                {/* Corrected Question */}
+                <div className="border border-[#1a5c38] rounded-lg p-3 bg-green-50/30">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#1a5c38] mb-2">
+                    Correction
+                  </h3>
+                  <p className="text-xs text-[#374151] mb-2 leading-relaxed">
+                    {correction.question_text}
+                  </p>
+                  {/* MCQ options for correction */}
+                  {correction.question_type === "MCQ" &&
+                    correction.options &&
+                    correction.options.length > 0 && (
+                      <div className="space-y-1 mb-2">
+                        {correction.options.map((opt) => (
+                          <div
+                            key={opt.key}
+                            className={`flex items-center gap-1.5 text-[11px] px-2 py-1 rounded ${
+                              opt.key === correction.correct_answer
+                                ? "bg-green-100 text-[#16a34a] font-semibold"
+                                : "text-[#6b7280]"
+                            }`}
+                          >
+                            <span className="w-5 h-5 rounded-full bg-[#f3f4f6] border border-[#eaecf0] flex items-center justify-center text-[10px] font-bold text-[#374151] flex-shrink-0">
+                              {opt.key}
+                            </span>
+                            {opt.text}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    <span className="text-[10px] font-semibold text-[#6b7280] bg-gray-100 px-1.5 py-0.5 rounded">
+                      Correct: {correction.correct_answer}
+                    </span>
+                    <span
+                      className={
+                        "text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-50 " +
+                        diff.cls
+                      }
+                    >
+                      {diff.label} ({correction.difficulty_level})
+                    </span>
+                  </div>
+                  {correction.explanation && (
+                    <p className="text-[10px] text-[#6b7280] italic leading-relaxed">
+                      {correction.explanation}
+                    </p>
+                  )}
+                </div>
+              </div>
 
-          <div>
-            <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-1">
-              Correct Answer
-            </h3>
-            <p className="text-xs text-[#374151] font-semibold">
-              {correction.correct_answer}
-            </p>
-          </div>
+              {/* Validation results */}
+              {metaTags?.validations && (
+                <div>
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-2">
+                    Validation Results
+                  </h3>
+                  <div className="space-y-1.5">
+                    {Object.entries(metaTags.validations).map(([key, val]) => (
+                      <div
+                        key={key}
+                        className={
+                          "flex items-start gap-2 text-xs px-3 py-1.5 rounded-md " +
+                          (val.pass
+                            ? "bg-green-50 text-[#16a34a]"
+                            : "bg-red-50 text-[#ef4444]")
+                        }
+                      >
+                        <span className="font-semibold shrink-0 w-28 capitalize">
+                          {key.replace(/_/g, " ")}
+                        </span>
+                        <span className="text-[#374151]">{val.note}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          {correction.explanation && (
-            <div>
-              <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-1">
-                Explanation
-              </h3>
-              <p className="text-xs text-[#6b7280] leading-relaxed">
-                {correction.explanation}
-              </p>
-            </div>
-          )}
+              {/* Changes made */}
+              {metaTags?.changes_made && metaTags.changes_made.length > 0 && (
+                <div>
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af] mb-2">
+                    Changes Made
+                  </h3>
+                  <ul className="list-disc list-inside space-y-1">
+                    {metaTags.changes_made.map(
+                      (change: string, idx: number) => (
+                        <li
+                          key={idx}
+                          className="text-xs text-[#374151] leading-relaxed"
+                        >
+                          {change}
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </div>
+              )}
 
-          {correction.replaces_question_id && (
-            <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
-              <p className="text-[10px] text-blue-700">
-                This correction currently replaces question{" "}
-                <span className="font-mono font-semibold">
-                  {correction.replaces_question_id.slice(0, 8)}…
-                </span>
-                . Approving will deactivate the original and activate this
-                correction.
-              </p>
-            </div>
+              {/* Replaces info */}
+              {correction.replaces_question_id && (
+                <div className="bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+                  <p className="text-[10px] text-blue-700">
+                    This correction replaces question{" "}
+                    <span className="font-mono font-semibold">
+                      {correction.replaces_question_id.slice(0, 8)}…
+                    </span>
+                    . Approving will deactivate the original and activate this
+                    correction.
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
 

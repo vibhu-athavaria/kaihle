@@ -81,6 +81,7 @@ def _to_response(row: Any) -> QuestionBankResponse:
         explanation=qb.explanation,
         difficulty_level=qb.difficulty_level,
         is_active=qb.is_active,
+        meta_tags=qb.meta_tags,
         source=qb.source,
         replaces_question_id=qb.replaces_question_id,
         subtopic_id=qb.subtopic_id,
@@ -153,6 +154,19 @@ async def list_questions(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/{question_id}", response_model=QuestionBankResponse)
+async def get_question(
+    question_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> QuestionBankResponse:
+    """Get a single question by ID with curriculum context."""
+    row = (await db.execute(_base_query().where(QuestionBank.id == question_id))).one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+    return _to_response(row)
 
 
 @router.patch("/{question_id}", response_model=QuestionBankResponse)

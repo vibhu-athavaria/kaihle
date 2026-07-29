@@ -765,6 +765,8 @@ def build_fixes_from_validation(
                         "question_text": original.get("question_text", ""),
                         "difficulty_level": original.get("difficulty_level", 1),
                         "correct_answer": original.get("correct_answer", ""),
+                        "options": original.get("options"),
+                        "question_type": original.get("question_type", ""),
                     },
                     "corrected": corrected,
                     "changes_made": qr.get("changes_made", []),
@@ -1064,6 +1066,7 @@ async def apply_fixes_to_db(
                 learning_objectives,
                 canonical_form,
                 problem_signature,
+                meta_tags,
                 source,
                 is_active,
                 replaces_question_id
@@ -1081,6 +1084,7 @@ async def apply_fixes_to_db(
                 :learning_objectives,
                 :canonical_form,
                 CAST(:problem_signature AS jsonb),
+                CAST(:meta_tags AS jsonb),
                 'llm-correction',
                 false,
                 CAST(:replaces_question_id AS uuid)
@@ -1102,6 +1106,19 @@ async def apply_fixes_to_db(
             "learning_objectives": learning_objectives if isinstance(learning_objectives, list) else [],
             "canonical_form": new_canonical,
             "problem_signature": json.dumps(new_signature),
+            "meta_tags": json.dumps(
+                {
+                    "changes_made": fix.get("changes_made", []),
+                    "validations": fix.get("validations", {}),
+                    "original": {
+                        "question_text": fix.get("original", {}).get("question_text", ""),
+                        "correct_answer": fix.get("original", {}).get("correct_answer", ""),
+                        "difficulty_level": fix.get("original", {}).get("difficulty_level", 1),
+                        "options": fix.get("original", {}).get("options"),
+                        "question_type": fix.get("original", {}).get("question_type", ""),
+                    },
+                }
+            ),
         }
 
         if dry_run:
