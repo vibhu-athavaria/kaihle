@@ -25,7 +25,10 @@ class EmailService:
         return template.render(**ctx)
 
     async def send(self, *, to: str, subject: str, template: str, ctx: dict[str, object]) -> None:
-        """Render template and send email via Resend. Logs and re-raises on failure."""
+        """Render template and send email via Resend. Logs and re-raises on failure.
+
+        Callers must ensure `to` is a non-empty string before calling this method.
+        """
         import resend
 
         from app.core.config import settings

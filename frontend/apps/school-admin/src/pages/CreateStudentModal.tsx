@@ -12,6 +12,7 @@ interface FormErrors {
   first_name?: string;
   last_name?: string;
   email?: string;
+  username?: string;
   password?: string;
   age?: string;
   grade_id?: string;
@@ -50,7 +51,7 @@ function PasswordStrengthBar({ password }: { password: string }) {
         ))}
       </div>
       <p className="text-xs text-brand-muted">
-        {label} · student will be prompted to change this on first login
+        {label} · share this password with the student
       </p>
     </div>
   );
@@ -60,6 +61,7 @@ export default function CreateStudentModal({ open, onOpenChange }: Props) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [age, setAge] = useState("");
@@ -73,8 +75,15 @@ export default function CreateStudentModal({ open, onOpenChange }: Props) {
     const e: FormErrors = {};
     if (!firstName.trim()) e.first_name = "Required";
     if (!lastName.trim()) e.last_name = "Required";
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    // Either email or username is required
+    const hasEmail = email.trim().length > 0;
+    const hasUsername = username.trim().length > 0;
+    if (!hasEmail && !hasUsername) {
+      e.email = "Either email or username is required";
+    }
+    if (hasEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       e.email = "Valid email required";
+    }
     if (password.length < 8) e.password = "At least 8 characters";
     if (!age || isNaN(Number(age)) || Number(age) < 5 || Number(age) > 25)
       e.age = "Age between 5 and 25";
@@ -86,6 +95,7 @@ export default function CreateStudentModal({ open, onOpenChange }: Props) {
     setFirstName("");
     setLastName("");
     setEmail("");
+    setUsername("");
     setPassword("");
     setAge("");
     setGradeId("");
@@ -100,15 +110,30 @@ export default function CreateStudentModal({ open, onOpenChange }: Props) {
       return;
     }
     try {
-      await createUser({
+      const payload: {
+        first_name: string;
+        last_name: string;
+        email?: string;
+        username?: string;
+        password: string;
+        role: "STUDENT";
+        age: number;
+        grade_id: string;
+      } = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        email: email.trim().toLowerCase(),
         password,
         role: "STUDENT",
         age: Number(age),
         grade_id: gradeId,
-      });
+      };
+      if (email.trim()) {
+        payload.email = email.trim().toLowerCase();
+      }
+      if (username.trim()) {
+        payload.username = username.trim();
+      }
+      await createUser(payload);
       toast.success(`Student ${firstName} ${lastName} created`);
       reset();
       onOpenChange(false);
@@ -129,8 +154,8 @@ export default function CreateStudentModal({ open, onOpenChange }: Props) {
     >
       <form onSubmit={handleSubmit} className="space-y-4 p-6">
         <p className="text-sm text-brand-body -mt-2">
-          Student can log in immediately and will be prompted to change their
-          password on first login.
+          Student can log in immediately with the username/email and password
+          below.
         </p>
 
         {/* Name row */}
@@ -165,10 +190,26 @@ export default function CreateStudentModal({ open, onOpenChange }: Props) {
           </div>
         </div>
 
+        {/* Username */}
+        <div className="space-y-1">
+          <label className="block text-[11px] font-bold uppercase tracking-wide text-brand-ink">
+            Username
+          </label>
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="aisha.rashid"
+            className="w-full px-3 py-2.5 border border-brand-border rounded-lg text-sm focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 outline-none"
+          />
+          <p className="text-xs text-brand-muted">
+            Either username or email is required
+          </p>
+        </div>
+
         {/* Email */}
         <div className="space-y-1">
           <label className="block text-[11px] font-bold uppercase tracking-wide text-brand-ink">
-            Email address
+            Email address <span className="text-brand-muted">(optional)</span>
           </label>
           <input
             type="email"

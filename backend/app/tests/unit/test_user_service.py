@@ -618,9 +618,9 @@ class TestCreateUserDirect:
         mock_hash.assert_called_once_with("Secure123!")
         # db.add called twice: once for User, once for StudentProfile
         assert mock_db.add.call_count == 2
-        # User created with must_change_password=True
+        # User created with must_change_password=False (students don't change password on first login)
         created_user = mock_db.add.call_args_list[0][0][0]
-        assert created_user.must_change_password is True
+        assert created_user.must_change_password is False
         assert created_user.hashed_password == "hashed"
 
     @pytest.mark.asyncio
@@ -1271,6 +1271,7 @@ class TestGetStudentInfo:
         student.first_name = "Josua"
         student.last_name = "Tan"
         student.email = "josua@school.edu"
+        student.username = ""
         student.school_id = uuid.uuid4()
         return student
 

@@ -528,7 +528,7 @@ export function CreateClassModal({
                             {s.first_name} {s.last_name}
                           </p>
                           <p className="text-xs text-brand-muted truncate">
-                            {s.email}
+                            {s.email ?? s.username}
                           </p>
                         </div>
                         {inAnotherClass && (

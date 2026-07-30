@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff } from "lucide-react";
 
 const loginSchema = z.object({
-  email: z.string().email("Enter a valid email address"),
+  email: z.string().min(1, "Email or username is required"),
   password: z.string().min(1, "Password is required"),
 });
 
@@ -132,15 +132,15 @@ export function LoginForm({
                 htmlFor="email"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                Email
+                Email or Username
               </label>
               <input
                 id="email"
-                type="email"
-                autoComplete="email"
+                type="text"
+                autoComplete="username"
                 {...passwordForm.register("email")}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                placeholder="you@school.edu"
+                placeholder="email@school.edu or username"
               />
               {passwordForm.formState.errors.email && (
                 <p className="mt-1 text-xs text-red-500">

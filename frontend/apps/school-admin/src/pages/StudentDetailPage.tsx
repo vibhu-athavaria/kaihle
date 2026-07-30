@@ -165,6 +165,10 @@ export function StudentDetailPage() {
                 .
               </div>
               <div className="text-xs text-brand-muted mt-0.5">
+                {student.username && (
+                  <span className="font-medium">@{student.username} · </span>
+                )}
+                {student.email && <span>{student.email} · </span>}
                 {student.grade_name ??
                   (student.grade_level !== null &&
                   student.grade_level !== undefined

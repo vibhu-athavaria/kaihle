@@ -67,14 +67,26 @@ class UserService:
             raise ValueError(f"Cannot invite user with role '{data.role}'")
 
         # Check email uniqueness within school
-        existing = await self.db.scalar(
-            select(User).where(
-                User.email == data.email,
-                User.school_id == school_id,
+        if data.email:
+            existing = await self.db.scalar(
+                select(User).where(
+                    User.email == data.email,
+                    User.school_id == school_id,
+                )
             )
-        )
-        if existing:
-            raise ValueError(f"Email '{data.email}' is already registered at this school")
+            if existing:
+                raise ValueError(f"Email '{data.email}' is already registered at this school")
+
+        # Check username uniqueness within school
+        if data.username:
+            existing = await self.db.scalar(
+                select(User).where(
+                    User.username == data.username,
+                    User.school_id == school_id,
+                )
+            )
+            if existing:
+                raise ValueError(f"Username '{data.username}' is already taken at this school")
 
         # When a password is provided use it directly (admin-set flow);
         # otherwise use a random unusable password and send a magic link.
@@ -82,6 +94,7 @@ class UserService:
         raw_password: str = data.password if data.password is not None else secrets.token_hex(32)
         user = User(
             email=data.email,
+            username=data.username,
             hashed_password=hash_password(raw_password),
             role=data.role,
             school_id=school_id,
@@ -144,30 +157,48 @@ class UserService:
         data: UserDirectCreate,
     ) -> User:
         """Create a user with an admin-set password. No magic link is sent.
-        User will be required to change password on first login (must_change_password=True).
+        Students will NOT be asked to change password on first login.
+        Teachers/parents will be asked to change password on first login.
         """
 
         # Check email uniqueness within school
-        result = await self.db.execute(
-            select(User).where(
-                User.email == data.email,
-                User.school_id == school_id,
+        if data.email:
+            result = await self.db.execute(
+                select(User).where(
+                    User.email == data.email,
+                    User.school_id == school_id,
+                )
             )
-        )
-        if result.scalar_one_or_none() is not None:
-            raise ValueError(f"A user with email '{data.email}' already exists in this school")
+            if result.scalar_one_or_none() is not None:
+                raise ValueError(f"A user with email '{data.email}' already exists in this school")
+
+        # Check username uniqueness within school
+        if data.username:
+            result = await self.db.execute(
+                select(User).where(
+                    User.username == data.username,
+                    User.school_id == school_id,
+                )
+            )
+            if result.scalar_one_or_none() is not None:
+                raise ValueError(f"Username '{data.username}' is already taken at this school")
 
         raw_password = data.password  # captured before hashing for welcome email
+
+        # Students are NOT asked to change password on first login
+        # Teachers/parents are asked to change password on first login
+        must_change = data.role != UserRole.STUDENT
 
         user = User(
             school_id=school_id,
             email=data.email,
+            username=data.username,
             first_name=data.first_name,
             last_name=data.last_name,
             role=data.role,
             hashed_password=hash_password(raw_password),
             is_active=True,
-            must_change_password=True,
+            must_change_password=must_change,
         )
         self.db.add(user)
         await self.db.flush()  # get user.id before creating related rows
@@ -196,7 +227,9 @@ class UserService:
                 for student_id in data.student_ids:
                     self.db.add(ParentStudent(parent_id=user.id, student_id=student_id))
 
-        await self._send_credentials_email(user, raw_password, school_id)
+        # Only send email if user has an email address
+        if user.email:
+            await self._send_credentials_email(user, raw_password, school_id)
         return user
 
     async def list_users(
@@ -271,6 +304,19 @@ class UserService:
             if conflict:
                 raise ValueError(f"Email '{new_email}' is already registered at this school")
 
+        # Username uniqueness check — only when username is actually changing
+        new_username = update_data.get("username")
+        if new_username is not None and new_username != user.username:
+            conflict = await self.db.scalar(
+                select(User).where(
+                    User.school_id == school_id,
+                    User.username == new_username,
+                    User.id != user_id,
+                )
+            )
+            if conflict:
+                raise ValueError(f"Username '{new_username}' is already taken at this school")
+
         for field, value in update_data.items():
             setattr(user, field, value)
 
@@ -297,7 +343,7 @@ class UserService:
             grade_changed=grade_id is not None,
         )
 
-        if new_password is not None:
+        if new_password is not None and user.email:
             await self._send_password_changed_email(user, school_id)
 
         return user
@@ -350,6 +396,9 @@ class UserService:
 
     async def _send_welcome_email(self, user: User, token: str, base_url: str) -> None:
         """Send magic link welcome email via EmailService."""
+        if not user.email:
+            logger.info("welcome_email_skipped_no_email", user_id=str(user.id))
+            return
         verify_url = f"{base_url}/api/v1/auth/magic-link/verify?token={token}"
         email_service = EmailService()
         try:
@@ -369,6 +418,9 @@ class UserService:
 
     async def _send_credentials_email(self, user: User, raw_password: str, school_id: uuid.UUID) -> None:
         """Send welcome email containing login credentials to a newly created user."""
+        if not user.email:
+            logger.info("credentials_email_skipped_no_email", user_id=str(user.id))
+            return
         school = await self.db.get(School, school_id)
         school_name = school.name if school else "your school"
 
@@ -406,6 +458,9 @@ class UserService:
 
     async def _send_password_changed_email(self, user: User, school_id: uuid.UUID) -> None:
         """Notify user that their password was changed by a school administrator."""
+        if not user.email:
+            logger.info("password_changed_email_skipped_no_email", user_id=str(user.id))
+            return
         school = await self.db.get(School, school_id)
         school_name = school.name if school else "your school"
 
@@ -551,6 +606,7 @@ class UserService:
             first_name=student.first_name or "",
             last_name=student.last_name or "",
             email=student.email or "",
+            username=student.username or "",
             is_active=student.is_active if student.is_active is not None else True,
             grade_id=str(grade_id) if grade_id else None,
             grade_level=grade_level,
@@ -761,7 +817,8 @@ class UserService:
             id=student.id,
             first_name=student.first_name or "",
             last_name=student.last_name or "",
-            email=student.email,
+            email=student.email or "",
+            username=student.username or "",
             grade_name=grade_name,
             curriculum_name=curriculum_name,
             class_id=class_id,
@@ -903,6 +960,7 @@ class UserService:
             search_pattern = f"%{q}%"
             stmt = stmt.where(
                 (User.email.ilike(search_pattern))
+                | (User.username.ilike(search_pattern))
                 | (User.first_name.ilike(search_pattern))
                 | (User.last_name.ilike(search_pattern))
             )
@@ -924,6 +982,7 @@ class UserService:
             search_pattern = f"%{q}%"
             count_stmt = count_stmt.where(
                 (User.email.ilike(search_pattern))
+                | (User.username.ilike(search_pattern))
                 | (User.first_name.ilike(search_pattern))
                 | (User.last_name.ilike(search_pattern))
             )

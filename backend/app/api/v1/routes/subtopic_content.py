@@ -1311,6 +1311,8 @@ async def suggest_video_change(
 
         resend.api_key = settings.resend_api_key
         for admin in admins:
+            if not admin.email:
+                continue
             resend.Emails.send(
                 {
                     "from": settings.from_email,

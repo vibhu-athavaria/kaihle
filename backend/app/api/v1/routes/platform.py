@@ -34,6 +34,7 @@ class PlatformUserSummary(BaseModel):
     first_name: str
     last_name: str
     email: str
+    username: str | None = None
     role: str
     is_active: bool
     last_active: str | None
@@ -102,7 +103,8 @@ async def get_platform_users(
                 school_id=str(user.school_id) if user.school_id else None,
                 first_name=user.first_name or "",
                 last_name=user.last_name or "",
-                email=user.email,
+                email=user.email or "",
+                username=user.username or "",
                 role=user.role,
                 is_active=user.is_active,
                 last_active=user.last_login_at.isoformat() if user.last_login_at else None,

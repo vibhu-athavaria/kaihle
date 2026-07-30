@@ -49,23 +49,32 @@ class AuthService:
 
     async def register(
         self,
-        email: str,
+        email: str | None,
         password: str,
         role: str,
         school_id: uuid.UUID | None,
         first_name: str,
         last_name: str,
+        username: str | None = None,
     ) -> RegisterResponse:
         """
         Create a new user. Does NOT issue tokens — user is created as inactive
         and must be activated by an admin before they can log in.
-        Raises ValueError if email already exists (globally unique).
+        Raises ValueError if email or username already exists.
         """
-        # Email is globally unique across all schools
-        stmt = select(User).where(User.email == email)
-        existing = await self.db.scalar(stmt)
-        if existing:
-            raise ValueError("Email already registered")
+        # Check email uniqueness (global, across all schools)
+        if email:
+            stmt = select(User).where(User.email == email)
+            existing = await self.db.scalar(stmt)
+            if existing:
+                raise ValueError("Email already registered")
+
+        # Check username uniqueness (global, across all schools)
+        if username:
+            stmt = select(User).where(User.username == username)
+            existing = await self.db.scalar(stmt)
+            if existing:
+                raise ValueError("Username already taken")
 
         # Validate school exists if provided
         if school_id:
@@ -76,6 +85,7 @@ class AuthService:
         hashed = hash_password(password)
         user = User(
             email=email,
+            username=username,
             hashed_password=hashed,
             role=role,
             school_id=school_id,
@@ -85,15 +95,15 @@ class AuthService:
         )
         self.db.add(user)
         await self.db.flush()
-        return RegisterResponse(user_id=user.id, email=user.email, role=user.role)
+        return RegisterResponse(user_id=user.id, email=user.email, username=user.username, role=user.role)
 
-    async def login(self, email: str, password: str) -> LoginResponse:
+    async def login(self, email_or_username: str, password: str) -> LoginResponse:
         """
-        Authenticate with email + password.
+        Authenticate with email or username + password.
         Returns access + refresh tokens.
         Raises ValueError on invalid credentials or inactive account.
         """
-        user = await self._get_active_user_by_email(email)
+        user = await self._get_active_user_by_login(email_or_username)
         if not user.hashed_password or not verify_password(password, user.hashed_password):
             raise ValueError("Invalid credentials")
 
@@ -111,7 +121,8 @@ class AuthService:
             must_change_password=bool(user.must_change_password),
             user={
                 "id": str(user.id),
-                "email": user.email,
+                "email": user.email or "",
+                "username": user.username or "",
                 "first_name": user.first_name,
                 "role": user.role,
                 "school_id": str(user.school_id) if user.school_id else None,
@@ -124,7 +135,7 @@ class AuthService:
         Generate and email a magic link.
         Always returns successfully — even if email not found (security).
         """
-        user = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
+        user: User | None = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not user:
             return  # Silent — do not reveal whether email exists
 
@@ -132,8 +143,9 @@ class AuthService:
         token_hash = hash_token(token)
         await store_magic_link_token(self.db, user.id, token_hash)
 
-        # Send email via Resend
-        await self._send_magic_link_email(user.email, user.first_name, token, base_url)
+        # Send email via Resend — user was found by email, so it's non-null
+        if user.email:
+            await self._send_magic_link_email(user.email, user.first_name, token, base_url)
 
     async def verify_magic_link(self, token: str) -> LoginResponse:
         """
@@ -186,7 +198,8 @@ class AuthService:
             must_change_password=bool(user.must_change_password),
             user={
                 "id": str(user.id),
-                "email": user.email,
+                "email": user.email or "",
+                "username": user.username or "",
                 "first_name": user.first_name,
                 "role": user.role,
                 "school_id": str(user.school_id) if user.school_id else None,
@@ -278,7 +291,8 @@ class AuthService:
             must_change_password=False,
             user={
                 "id": str(user.id),
-                "email": user.email,
+                "email": user.email or "",
+                "username": user.username or "",
                 "first_name": user.first_name,
                 "role": user.role,
                 "school_id": str(user.school_id) if user.school_id else None,
@@ -323,8 +337,34 @@ class AuthService:
             auth_token.used_at = datetime.now(UTC)
             await self.db.flush()
 
+    async def _get_active_user_by_login(self, login_id: str) -> User:
+        """Find an active user by email or username.
+
+        Tries email match first, then username fallback. This avoids
+        non-deterministic results when one user's email happens to match
+        another user's username.
+        """
+        user: User | None = await self.db.scalar(
+            select(User).where(
+                User.email == login_id,
+                User.is_active.is_(True),
+            )
+        )
+        if user:
+            return user
+        user = await self.db.scalar(
+            select(User).where(
+                User.username == login_id,
+                User.is_active.is_(True),
+            )
+        )
+        if not user:
+            raise ValueError("Invalid credentials")
+        return user
+
     async def _get_active_user_by_email(self, email: str) -> User:
-        user = await self.db.scalar(select(User).where(User.email == email))
+        """Find an active user by email."""
+        user: User | None = await self.db.scalar(select(User).where(User.email == email))
         if not user:
             raise ValueError("Invalid credentials")
         if not user.is_active:
@@ -353,7 +393,7 @@ class AuthService:
         """
         from app.core.config import settings
 
-        user = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
+        user: User | None = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not user:
             return
 
@@ -373,6 +413,7 @@ class AuthService:
 
         # Send email before persisting the token — if email fails the token never
         # enters the DB, so the user isn't left with an unusable dead token.
+        assert user.email is not None  # user was found by email
         email_service = EmailService()
         try:
             await email_service.send(

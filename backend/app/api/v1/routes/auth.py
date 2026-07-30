@@ -41,18 +41,19 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
             school_id=body.school_id,
             first_name=body.first_name,
             last_name=body.last_name,
+            username=body.username,
         )
     except SchoolNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except IntegrityError:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or username already registered")
 
 
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> LoginResponse:
-    """Login with email and password."""
+    """Login with email or username and password."""
     service = AuthService(db)
     try:
         return await service.login(body.email, body.password)

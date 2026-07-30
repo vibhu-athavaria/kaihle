@@ -593,8 +593,13 @@ export function UsersPage() {
                             >
                               {initials(s.first_name, s.last_name)}
                             </div>
-                            <div className="text-sm font-bold text-brand-ink">
-                              {nameDisplay(s.first_name, s.last_name)}
+                            <div>
+                              <div className="text-sm font-bold text-brand-ink">
+                                {nameDisplay(s.first_name, s.last_name)}
+                              </div>
+                              <div className="text-xs text-brand-muted">
+                                {s.username ?? s.email}
+                              </div>
                             </div>
                           </div>
                         </td>

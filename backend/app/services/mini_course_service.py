@@ -1179,8 +1179,11 @@ class MiniCourseService:
                 students_out.append(
                     {
                         "student_id": str(sid),
-                        "student_name": f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email,
-                        "email": user.email,
+                        "student_name": f"{user.first_name or ''} {user.last_name or ''}".strip()
+                        or user.username
+                        or user.email
+                        or "Unknown",
+                        "email": user.email or "",
                         "auto_interest_category": auto_category,
                         "override_interest_category": override_category,
                         "effective_interest_category": effective,

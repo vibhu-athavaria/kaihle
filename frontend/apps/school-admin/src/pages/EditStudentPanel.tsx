@@ -13,6 +13,7 @@ import {
 const editStudentSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   last_name: z.string().min(1, "Last name is required"),
+  username: z.string().optional().or(z.literal("")),
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   grade_id: z.string().min(1, "Grade is required").optional().or(z.literal("")),
   is_active: z.boolean(),
@@ -52,6 +53,7 @@ export function EditStudentPanel({
     defaultValues: {
       first_name: "",
       last_name: "",
+      username: "",
       email: "",
       grade_id: "",
       is_active: true,
@@ -65,6 +67,7 @@ export function EditStudentPanel({
       reset({
         first_name: student.first_name,
         last_name: student.last_name,
+        username: student.username ?? "",
         email: student.email ?? "",
         grade_id: student.grade_id ?? "",
         is_active: student.is_active,
@@ -89,6 +92,7 @@ export function EditStudentPanel({
       userId: string;
       first_name?: string;
       last_name?: string;
+      username?: string;
       email?: string;
       grade_id?: string;
       is_active?: boolean;
@@ -100,7 +104,12 @@ export function EditStudentPanel({
       is_active: values.is_active,
     };
 
-    // Only include email if it changed (we don't have original email from student detail)
+    // Only include username if it changed
+    if (values.username) {
+      payload.username = values.username;
+    }
+
+    // Only include email if it changed
     if (values.email) {
       payload.email = values.email;
     }
@@ -228,6 +237,31 @@ export function EditStudentPanel({
           )}
         </div>
 
+        {/* Username */}
+        <div>
+          <label
+            htmlFor="username"
+            className="block text-sm font-semibold text-brand-ink mb-1.5"
+          >
+            Username
+          </label>
+          <input
+            id="username"
+            type="text"
+            {...register("username")}
+            className="w-full px-4 py-2.5 rounded-xl border border-brand-border bg-white text-brand-ink font-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+            placeholder="Student username"
+          />
+          {errors.username && (
+            <p className="mt-1 text-xs text-brand-red">
+              {errors.username.message}
+            </p>
+          )}
+          <p className="mt-1 text-xs text-brand-muted">
+            Student uses this or email to log in
+          </p>
+        </div>
+
         {/* Email */}
         <div>
           <label
@@ -249,7 +283,8 @@ export function EditStudentPanel({
             </p>
           )}
           <p className="mt-1 text-xs text-brand-muted">
-            Changing this will update the student&apos;s login email
+            Changing this will update the student&apos;s login email. Optional
+            if username is set.
           </p>
         </div>
 

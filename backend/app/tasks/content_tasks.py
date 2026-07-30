@@ -146,6 +146,9 @@ async def _notify_admins_personalised_ready(
 ) -> None:
     """Send email notification to all active KaihleAdmin users."""
     for admin in admins:
+        if not admin.email:
+            logger.warning("admin_email_missing", admin_id=str(admin.id))
+            continue
         try:
             resend.Emails.send(
                 {

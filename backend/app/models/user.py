@@ -66,7 +66,8 @@ class User(Base, TimestampMixin):
         ForeignKey("schools.id", ondelete="SET NULL"),
         nullable=True,
     )
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     hashed_password: Mapped[str | None] = mapped_column(String(255))
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)

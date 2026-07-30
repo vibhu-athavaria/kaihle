@@ -484,10 +484,10 @@ async def test_login_empty_email_returns_422(
 
 
 @pytest.mark.asyncio
-async def test_login_empty_password_returns_401(
+async def test_login_empty_password_returns_422(
     client: AsyncClient,
 ) -> None:
-    """LOGIN-06: Empty password returns 401."""
+    """LOGIN-06: Empty password returns 422 (rejected at schema level)."""
     response = await client.post(
         "/api/v1/auth/login",
         json={
@@ -496,4 +496,4 @@ async def test_login_empty_password_returns_401(
         },
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 422
