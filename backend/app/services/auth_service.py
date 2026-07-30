@@ -135,7 +135,7 @@ class AuthService:
         Generate and email a magic link.
         Always returns successfully — even if email not found (security).
         """
-        user = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
+        user: User | None = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not user:
             return  # Silent — do not reveal whether email exists
 
@@ -338,10 +338,23 @@ class AuthService:
             await self.db.flush()
 
     async def _get_active_user_by_login(self, login_id: str) -> User:
-        """Find an active user by email or username."""
+        """Find an active user by email or username.
+
+        Tries email match first, then username fallback. This avoids
+        non-deterministic results when one user's email happens to match
+        another user's username.
+        """
+        user: User | None = await self.db.scalar(
+            select(User).where(
+                User.email == login_id,
+                User.is_active.is_(True),
+            )
+        )
+        if user:
+            return user
         user = await self.db.scalar(
             select(User).where(
-                (User.email == login_id) | (User.username == login_id),
+                User.username == login_id,
                 User.is_active.is_(True),
             )
         )
@@ -351,7 +364,7 @@ class AuthService:
 
     async def _get_active_user_by_email(self, email: str) -> User:
         """Find an active user by email."""
-        user = await self.db.scalar(select(User).where(User.email == email))
+        user: User | None = await self.db.scalar(select(User).where(User.email == email))
         if not user:
             raise ValueError("Invalid credentials")
         if not user.is_active:
@@ -380,7 +393,7 @@ class AuthService:
         """
         from app.core.config import settings
 
-        user = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
+        user: User | None = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not user:
             return
 

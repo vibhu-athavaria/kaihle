@@ -30,8 +30,8 @@ class RegisterResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str  # Accepts email or username
-    password: str
+    email: str = Field(min_length=1)  # Accepts email or username
+    password: str = Field(min_length=1)
 
 
 class LoginResponse(BaseModel):

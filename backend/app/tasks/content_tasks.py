@@ -148,7 +148,7 @@ async def _notify_admins_personalised_ready(
     for admin in admins:
         if not admin.email:
             logger.warning("admin_email_missing", admin_id=str(admin.id))
-            return
+            continue
         try:
             resend.Emails.send(
                 {
