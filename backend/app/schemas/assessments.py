@@ -175,6 +175,7 @@ class AssessmentPreviewQuestion(BaseModel):
     correct_answer_key: str
     explanation: str | None
     difficulty_level: int
+    subtopic_id: UUID
     subtopic_name: str
     topic_name: str
     order_index: int
@@ -185,6 +186,7 @@ class AssessmentPreviewResponse(BaseModel):
     """Full assessment preview for the owning teacher."""
 
     id: UUID
+    class_id: UUID
     title: str
     assessment_type: str
     status: str

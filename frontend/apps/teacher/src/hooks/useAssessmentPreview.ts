@@ -9,6 +9,7 @@ export interface PreviewQuestion {
   correct_answer_key: string;
   explanation: string | null;
   difficulty_level: number;
+  subtopic_id: string;
   subtopic_name: string;
   topic_name: string;
   order_index: number;
@@ -17,6 +18,7 @@ export interface PreviewQuestion {
 
 export interface AssessmentPreview {
   id: string;
+  class_id: string;
   title: string;
   assessment_type: string;
   status: string;

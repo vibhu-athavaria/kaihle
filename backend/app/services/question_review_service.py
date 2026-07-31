@@ -182,9 +182,10 @@ class QuestionReviewService:
         admin_edits = body.model_dump(exclude_unset=True)
 
         if item.item_type == "TEACHER_QUESTION":
-            # Apply admin edits to the question_bank row (overrides teacher submission)
-            for field, value in admin_edits.items():
-                setattr(question, field, value)
+            # Apply admin edits (whitelist) to the question_bank row (overrides teacher submission)
+            allowed_fields = {"question_text", "options", "correct_answer", "explanation", "difficulty_level"}
+            for field in allowed_fields & admin_edits.keys():
+                setattr(question, field, admin_edits[field])
             # Promote: clear school_id so it becomes globally available
             question.school_id = None
             question.review_status = "APPROVED"
@@ -210,6 +211,15 @@ class QuestionReviewService:
                     setattr(question, qb_field, admin_edits[qb_field])
                 elif getattr(item, suggestion_field) is not None:
                     setattr(question, qb_field, getattr(item, suggestion_field))
+            # Also apply any other whitelisted fields from admin_edits not in field_map
+            for field in (admin_edits.keys() - field_map.keys()) & {
+                "question_text",
+                "options",
+                "correct_answer",
+                "explanation",
+                "difficulty_level",
+            }:
+                setattr(question, field, admin_edits[field])
 
             logger.info(
                 "edit_suggestion_approved",

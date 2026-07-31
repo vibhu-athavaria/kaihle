@@ -30,6 +30,7 @@ export function ReplaceQuestionDrawer({
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [responsesWarning, setResponsesWarning] = useState<string | null>(null);
 
   const { data: candidates = [], isLoading } = useReplacementCandidates(
     assessmentId,
@@ -45,13 +46,17 @@ export function ReplaceQuestionDrawer({
   async function handleReplace() {
     if (!selectedId || !question) return;
     setErrorMsg(null);
+    setResponsesWarning(null);
     try {
       const result = await replaceMutation.mutateAsync({
         questionId: question.question_id,
         replacementQuestionId: selectedId,
       });
       if (result.has_responses_for_old) {
-        // Show warning but still close — replacement already done
+        setResponsesWarning(
+          "This question had student responses. Replacement was applied, but those responses are now hidden from the detail view.",
+        );
+        return; // Stay open to show the warning
       }
       onSuccess?.();
       onOpenChange(false);
@@ -175,6 +180,18 @@ export function ReplaceQuestionDrawer({
         {errorMsg && (
           <div className="bg-brand-red-light border border-brand-red/30 rounded-xl p-3">
             <p className="text-xs font-sans text-brand-red">{errorMsg}</p>
+          </div>
+        )}
+
+        {responsesWarning && (
+          <div className="flex items-start gap-2 bg-[#fffbeb] border border-[#fde68a] rounded-xl p-3">
+            <AlertTriangle
+              className="w-4 h-4 text-brand-gold-dark flex-shrink-0 mt-0.5"
+              aria-hidden="true"
+            />
+            <p className="text-xs font-sans text-brand-gold-dark leading-relaxed">
+              {responsesWarning}
+            </p>
           </div>
         )}
 

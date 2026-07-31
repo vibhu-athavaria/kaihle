@@ -59,6 +59,12 @@ def _has_index(conn: Connection, table: str, index: str) -> bool:
     return False
 
 
+def _has_table(conn: Connection, table: str) -> bool:
+    """Check if a table exists."""
+    insp = inspect(conn)
+    return insp.has_table(table)
+
+
 def upgrade() -> None:
     """Upgrade schema."""
     conn = op.get_bind()
@@ -116,63 +122,78 @@ def upgrade() -> None:
         )
 
     # ── question_review_items: unified review queue ──────────────────────────
-    op.create_table(
-        "question_review_items",
-        sa.Column("id", sa.UUID(), nullable=False),
-        sa.Column("item_type", sa.String(length=20), nullable=False),
-        sa.Column("question_id", sa.UUID(), nullable=False),
-        sa.Column("submitted_by", sa.UUID(), nullable=False),
-        sa.Column("school_id", sa.UUID(), nullable=False),
-        sa.Column("assessment_id", sa.UUID(), nullable=True),
-        sa.Column("suggested_question_text", sa.Text(), nullable=True),
-        sa.Column(
-            "suggested_options",
-            postgresql.JSONB(astext_type=sa.Text()),
-            nullable=True,
-        ),
-        sa.Column("suggested_correct_answer", sa.Text(), nullable=True),
-        sa.Column("suggested_explanation", sa.Text(), nullable=True),
-        sa.Column("suggested_difficulty_level", sa.Float(), nullable=True),
-        sa.Column("reason", sa.Text(), nullable=True),
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="PENDING"),
-        sa.Column("admin_note", sa.Text(), nullable=True),
-        sa.Column("resolved_by", sa.UUID(), nullable=True),
-        sa.Column("resolved_at", postgresql.TIMESTAMP(timezone=True), nullable=True),
-        sa.Column(
-            "created_at",
-            postgresql.TIMESTAMP(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("updated_at", postgresql.TIMESTAMP(timezone=True), nullable=True),
-        sa.CheckConstraint(
-            "item_type IN ('TEACHER_QUESTION', 'EDIT_SUGGESTION')",
-            name="chk_qri_item_type",
-        ),
-        sa.CheckConstraint(
-            "status IN ('PENDING', 'APPROVED', 'REJECTED')",
-            name="chk_qri_status",
-        ),
-        sa.ForeignKeyConstraint(["assessment_id"], ["assessments.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["question_id"], ["question_bank.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["resolved_by"], ["users.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["school_id"], ["schools.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["submitted_by"], ["users.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index("idx_qri_item_type", "question_review_items", ["item_type"])
-    op.create_index("idx_qri_school", "question_review_items", ["school_id"])
-    op.create_index(
-        "idx_qri_status",
-        "question_review_items",
-        ["status"],
-        postgresql_where=sa.text("status = 'PENDING'"),
-    )
+    if not _has_table(conn, "question_review_items"):
+        op.create_table(
+            "question_review_items",
+            sa.Column("id", sa.UUID(), nullable=False),
+            sa.Column("item_type", sa.String(length=20), nullable=False),
+            sa.Column("question_id", sa.UUID(), nullable=False),
+            sa.Column("submitted_by", sa.UUID(), nullable=False),
+            sa.Column("school_id", sa.UUID(), nullable=False),
+            sa.Column("assessment_id", sa.UUID(), nullable=True),
+            sa.Column("suggested_question_text", sa.Text(), nullable=True),
+            sa.Column(
+                "suggested_options",
+                postgresql.JSONB(astext_type=sa.Text()),
+                nullable=True,
+            ),
+            sa.Column("suggested_correct_answer", sa.Text(), nullable=True),
+            sa.Column("suggested_explanation", sa.Text(), nullable=True),
+            sa.Column("suggested_difficulty_level", sa.Float(), nullable=True),
+            sa.Column("reason", sa.Text(), nullable=True),
+            sa.Column("status", sa.String(length=20), nullable=False, server_default="PENDING"),
+            sa.Column("admin_note", sa.Text(), nullable=True),
+            sa.Column("resolved_by", sa.UUID(), nullable=True),
+            sa.Column("resolved_at", postgresql.TIMESTAMP(timezone=True), nullable=True),
+            sa.Column(
+                "created_at",
+                postgresql.TIMESTAMP(timezone=True),
+                server_default=sa.text("now()"),
+                nullable=False,
+            ),
+            sa.Column("updated_at", postgresql.TIMESTAMP(timezone=True), nullable=True),
+            sa.CheckConstraint(
+                "item_type IN ('TEACHER_QUESTION', 'EDIT_SUGGESTION')",
+                name="chk_qri_item_type",
+            ),
+            sa.CheckConstraint(
+                "status IN ('PENDING', 'APPROVED', 'REJECTED')",
+                name="chk_qri_status",
+            ),
+            sa.ForeignKeyConstraint(["assessment_id"], ["assessments.id"], ondelete="SET NULL"),
+            sa.ForeignKeyConstraint(["question_id"], ["question_bank.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(["resolved_by"], ["users.id"], ondelete="SET NULL"),
+            sa.ForeignKeyConstraint(["school_id"], ["schools.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(["submitted_by"], ["users.id"], ondelete="CASCADE"),
+            sa.PrimaryKeyConstraint("id"),
+        )
+        op.create_index("idx_qri_item_type", "question_review_items", ["item_type"])
+        op.create_index("idx_qri_school", "question_review_items", ["school_id"])
+        op.create_index(
+            "idx_qri_status",
+            "question_review_items",
+            ["status"],
+            postgresql_where=sa.text("status = 'PENDING'"),
+        )
+        # Prevent duplicate PENDING review items for the same question+type
+        # Uses a partial unique INDEX because PostgreSQL does not support
+        # postgresql_where on UniqueConstraint.
+        if not _has_index(conn, "question_review_items", "uq_qri_pending_question_type"):
+            op.create_index(
+                "uq_qri_pending_question_type",
+                "question_review_items",
+                ["question_id", "item_type"],
+                unique=True,
+                postgresql_where=sa.text("status = 'PENDING'"),
+            )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
     # ── question_review_items ────────────────────────────────────────────────
+    conn = op.get_bind()
+    if _has_index(conn, "question_review_items", "uq_qri_pending_question_type"):
+        op.drop_index("uq_qri_pending_question_type", table_name="question_review_items")
     op.drop_index("idx_qri_status", table_name="question_review_items")
     op.drop_index("idx_qri_school", table_name="question_review_items")
     op.drop_index("idx_qri_item_type", table_name="question_review_items")

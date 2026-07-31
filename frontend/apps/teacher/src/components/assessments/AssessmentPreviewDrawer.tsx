@@ -80,6 +80,17 @@ export function AssessmentPreviewDrawer({
 
   const topicGroups = assessment ? groupByTopic(assessment.questions) : [];
 
+  const availableSubtopics = assessment
+    ? [
+        ...new Map(
+          assessment.questions.map((q) => [
+            q.subtopic_id,
+            { id: q.subtopic_id, name: q.subtopic_name },
+          ]),
+        ).values(),
+      ]
+    : [];
+
   const diffCount: Record<number, number> = {};
   for (const q of assessment?.questions ?? []) {
     diffCount[q.difficulty_level] = (diffCount[q.difficulty_level] ?? 0) + 1;
@@ -409,7 +420,7 @@ export function AssessmentPreviewDrawer({
             open={addQOpen}
             onOpenChange={setAddQOpen}
             assessmentId={assessmentId}
-            subtopics={[]}
+            subtopics={availableSubtopics}
           />
           <EditAssessmentDetailsModal
             open={editOpen}

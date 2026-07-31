@@ -804,6 +804,7 @@ class TestGetAssessmentPreview:
             explanation="Basic arithmetic",
             difficulty_level=1.0,
             source="bank",
+            subtopic_id=uuid.uuid4(),
             subtopic_name="Arithmetic",
             topic_name="Numbers",
             order_index=0,

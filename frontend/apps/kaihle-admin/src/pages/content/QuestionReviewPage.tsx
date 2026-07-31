@@ -68,7 +68,14 @@ function ReviewModal({ item, onClose }: ReviewModalProps) {
           question_text: editedText,
           correct_answer: editedAnswer,
         }
-      : undefined;
+      : item.item_type === "EDIT_SUGGESTION"
+        ? {
+            question_text: item.suggested_question_text ?? undefined,
+            correct_answer: item.suggested_correct_answer ?? undefined,
+            explanation: item.suggested_explanation ?? undefined,
+            difficulty_level: item.suggested_difficulty_level ?? undefined,
+          }
+        : undefined;
     try {
       await approveMutation.mutateAsync({ itemId: item.id, payload });
       onClose();
@@ -471,6 +478,7 @@ export function QuestionReviewPage() {
         >
           {selectedItem && (
             <ReviewModal
+              key={selectedItem.id}
               item={selectedItem}
               onClose={() => setSelectedItem(null)}
             />

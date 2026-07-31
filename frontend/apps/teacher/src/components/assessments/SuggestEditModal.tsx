@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Modal, Button } from "@kaihle/ui";
 import { useSuggestEdit } from "../../hooks/useAssessmentQuestions";
 import type { PreviewQuestion } from "../../hooks/useAssessmentPreview";
@@ -27,6 +27,7 @@ export function SuggestEditModal({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const suggestMutation = useSuggestEdit(assessmentId);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (open && question) {
@@ -38,6 +39,13 @@ export function SuggestEditModal({
       setSuccessMsg(null);
       setErrorMsg(null);
     }
+    // Cleanup timeout on unmount or when open/closed
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+        closeTimeoutRef.current = null;
+      }
+    };
   }, [open, question]);
 
   if (!question) return null;
@@ -73,7 +81,7 @@ export function SuggestEditModal({
       });
       setSuccessMsg("Suggestion submitted for KaihleAdmin review.");
       onSuccess?.();
-      setTimeout(() => onOpenChange(false), 1500);
+      closeTimeoutRef.current = setTimeout(() => onOpenChange(false), 1500);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data

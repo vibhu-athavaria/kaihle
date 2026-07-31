@@ -124,6 +124,16 @@ export function AssessmentPreviewPage() {
 
   const statusBadge = STATUS_BADGE[assessment.status] ?? STATUS_BADGE.CLOSED;
   const topicGroups = groupByTopic(assessment.questions);
+  const classId = assessment.class_id;
+
+  const availableSubtopics = [
+    ...new Map(
+      assessment.questions.map((q) => [
+        q.subtopic_id,
+        { id: q.subtopic_id, name: q.subtopic_name },
+      ]),
+    ).values(),
+  ];
 
   // Build difficulty distribution
   const diffCount: Record<number, number> = {};
@@ -535,13 +545,13 @@ export function AssessmentPreviewPage() {
               open={editOpen}
               onOpenChange={setEditOpen}
               assessment={assessment}
-              classId={assessment.id}
+              classId={classId}
             />
             <AddQuestionModal
               open={addQOpen}
               onOpenChange={setAddQOpen}
               assessmentId={assessment.id}
-              subtopics={[]}
+              subtopics={availableSubtopics}
             />
             <ReplaceQuestionDrawer
               open={replaceQuestion !== null}

@@ -1478,6 +1478,7 @@ class AssessmentService:
         rows = (
             await self.db.execute(
                 select(
+                    Subtopic.id.label("subtopic_id"),
                     QuestionBank.id.label("question_id"),
                     QuestionBank.question_text,
                     QuestionBank.question_type,
@@ -1518,6 +1519,7 @@ class AssessmentService:
                 correct_answer_key=row.correct_answer,
                 explanation=row.explanation,
                 difficulty_level=int(row.difficulty_level) if row.difficulty_level is not None else 0,
+                subtopic_id=row.subtopic_id,
                 subtopic_name=row.subtopic_name,
                 topic_name=row.topic_name,
                 order_index=row.order_index,
@@ -1528,6 +1530,7 @@ class AssessmentService:
 
         return AssessmentPreviewResponse(
             id=assessment.id,
+            class_id=assessment.class_id,
             title=assessment.title,
             assessment_type=assessment.assessment_type,
             status=assessment.status,

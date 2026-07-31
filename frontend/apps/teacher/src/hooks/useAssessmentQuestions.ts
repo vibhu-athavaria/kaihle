@@ -131,6 +131,7 @@ export function useReplaceQuestion(assessmentId: string) {
 }
 
 export function useSuggestEdit(assessmentId: string) {
+  const queryClient = useQueryClient();
   return useMutation<
     SuggestEditResult,
     Error,
@@ -142,6 +143,11 @@ export function useSuggestEdit(assessmentId: string) {
         payload,
       );
       return res.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["assessment", "preview", assessmentId],
+      });
     },
   });
 }
