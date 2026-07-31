@@ -1,7 +1,8 @@
 """Assessment-related SQLAlchemy models.
 
 Covers: assessments, assessment_topic_config, assessment_selected_questions,
-        student_attempts, student_responses, student_attempt_subtopic_scores
+        student_attempts, student_responses, student_attempt_subtopic_scores,
+        question_review_items
 """
 
 import uuid
@@ -13,11 +14,13 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, TIMESTAMP, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -304,4 +307,73 @@ class StudentAttemptSubtopicScore(Base):
         ),
         Index("idx_subtopic_scores_student_sub", "student_id", "subtopic_id"),
         CheckConstraint("score BETWEEN 0.0 AND 1.0", name="chk_sats_score"),
+    )
+
+
+class QuestionReviewItem(Base, UUIDMixin, TimestampMixin):
+    """Unified review queue for teacher-submitted questions and edit suggestions.
+
+    item_type='TEACHER_QUESTION': teacher added a new question to their assessment.
+        question_id → newly inserted question_bank row (source='teacher', school-scoped).
+        suggested_* fields are NULL; question is already live in the assessment pool.
+        On KaihleAdmin approve: school_id cleared → question promoted to global bank.
+        On KaihleAdmin reject:  question_bank.is_active set FALSE.
+
+    item_type='EDIT_SUGGESTION': teacher suggested a change to an existing question.
+        question_id → existing question_bank row.
+        suggested_* fields contain the proposed changes.
+        On KaihleAdmin approve: suggested (or admin-edited) fields applied to question_bank.
+        On KaihleAdmin reject:  question_bank unchanged.
+    """
+
+    __tablename__ = "question_review_items"
+
+    item_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("question_bank.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    submitted_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    school_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("schools.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    assessment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assessments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    suggested_question_text: Mapped[str | None] = mapped_column(Text)
+    suggested_options: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    suggested_correct_answer: Mapped[str | None] = mapped_column(Text)
+    suggested_explanation: Mapped[str | None] = mapped_column(Text)
+    suggested_difficulty_level: Mapped[float | None]
+    reason: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
+    admin_note: Mapped[str | None] = mapped_column(Text)
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "item_type IN ('TEACHER_QUESTION', 'EDIT_SUGGESTION')",
+            name="chk_qri_item_type",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING', 'APPROVED', 'REJECTED')",
+            name="chk_qri_status",
+        ),
+        Index("idx_qri_status", "status", postgresql_where=text("status = 'PENDING'")),
+        Index("idx_qri_school", "school_id"),
+        Index("idx_qri_item_type", "item_type"),
     )

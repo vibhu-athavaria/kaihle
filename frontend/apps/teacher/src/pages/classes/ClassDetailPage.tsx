@@ -133,7 +133,6 @@ export function ClassDetailPage() {
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardInitialStep, setWizardInitialStep] = useState<1 | 2>(1);
-
   const activeTab = (searchParams.get("tab") as TabId) ?? "topics";
 
   function setTab(tab: TabId) {
@@ -296,17 +295,9 @@ export function ClassDetailPage() {
       {/* ── Assessments tab ──────────────────────────────────────────────── */}
       {activeTab === "assessments" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display font-semibold text-lg text-brand-ink">
-              Assessments
-            </h2>
-            <Link
-              to={`/teacher/classes/${classId}/assessments`}
-              className="text-sm font-semibold text-brand-gold hover:text-brand-gold-dark transition-colors"
-            >
-              Manage assessments →
-            </Link>
-          </div>
+          <h2 className="font-display font-semibold text-lg text-brand-ink">
+            Assessments
+          </h2>
           {assessmentsLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -353,15 +344,27 @@ export function ClassDetailPage() {
                       </span>
                     </div>
                   </div>
-                  {(assessment.status === "ACTIVE" ||
-                    assessment.status === "CLOSED") && (
+                  <div className="flex items-center gap-3">
                     <Link
-                      to={`/teacher/assessments/${assessment.id}/results`}
-                      className="text-xs font-semibold text-brand-gold hover:text-brand-gold-dark"
+                      to={`/teacher/assessments/${assessment.id}/preview`}
+                      state={{
+                        backPath: `/teacher/classes/${classId}?tab=assessments`,
+                        backLabel: "Class / Assessments",
+                      }}
+                      className="text-xs font-semibold text-brand-body hover:text-brand-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold rounded"
                     >
-                      Results →
+                      Preview
                     </Link>
-                  )}
+                    {(assessment.status === "ACTIVE" ||
+                      assessment.status === "CLOSED") && (
+                      <Link
+                        to={`/teacher/assessments/${assessment.id}/results`}
+                        className="text-xs font-semibold text-brand-gold hover:text-brand-gold-dark"
+                      >
+                        Results →
+                      </Link>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

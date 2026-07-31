@@ -38,6 +38,7 @@ import { ContentReviewPage } from "./pages/content-review/ContentReviewPage";
 import { CourseDetailPage } from "./pages/content-review/CourseDetailPage";
 import { ClassStudyPlanPage } from "./pages/classes/ClassStudyPlanPage";
 import { SubtopicContentBrowser } from "./pages/SubtopicContentBrowser";
+import { AssessmentPreviewPage } from "./pages/assessments/AssessmentPreviewPage";
 
 // Plain function — no state, no effects, no React APIs
 function getTeacherGreeting(firstName: string | undefined): {
@@ -237,6 +238,24 @@ export default function App() {
               >
                 <ErrorBoundary role="teacher">
                   <StudentResultDetailPage />
+                </ErrorBoundary>
+              </RoleRoute>
+            </PrivateRouteWithPasswordCheck>
+          }
+        />
+        <Route
+          path="/teacher/assessments/:assessmentId/preview"
+          element={
+            <PrivateRouteWithPasswordCheck>
+              <RoleRoute
+                allowedRoles={[
+                  UserRole.TEACHER,
+                  UserRole.SCHOOL_ADMIN,
+                  UserRole.KAIHLE_ADMIN,
+                ]}
+              >
+                <ErrorBoundary role="teacher">
+                  <AssessmentPreviewPage />
                 </ErrorBoundary>
               </RoleRoute>
             </PrivateRouteWithPasswordCheck>

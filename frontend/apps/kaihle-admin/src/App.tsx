@@ -23,6 +23,7 @@ import { ContentReviewQueue } from "./pages/content/VideoReviewQueue";
 import { ContentReviewDetail } from "./pages/content/VideoReviewDetail";
 import { PromotionQueuePage } from "./pages/content/PromotionQueue";
 import { SuggestionsQueuePage } from "./pages/content/SuggestionsQueue";
+import { QuestionReviewPage } from "./pages/content/QuestionReviewPage";
 import { ScriptsPage } from "./pages/scripts/ScriptsPage";
 import { ScriptDetailPage } from "./pages/scripts/ScriptDetailPage";
 import { SmokeTestPage } from "./pages/scripts/SmokeTestPage";
@@ -83,6 +84,10 @@ export default function App() {
                       <Route
                         path="content/suggestions"
                         element={<SuggestionsQueuePage />}
+                      />
+                      <Route
+                        path="content/question-review"
+                        element={<QuestionReviewPage />}
                       />
                       {/* Legacy redirect */}
                       <Route

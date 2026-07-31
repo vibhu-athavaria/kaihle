@@ -23,6 +23,7 @@ from app.api.v1.routes import (
     parent,
     platform,
     question_bank,
+    question_management,
     schools,
     scripts,
     smoke_tests,
@@ -103,6 +104,7 @@ app.include_router(parent.router, prefix="/api/v1")
 app.include_router(parent.parents_router, prefix="/api/v1")
 app.include_router(platform.router, prefix="/api/v1")
 app.include_router(question_bank.router, prefix="/api/v1")
+app.include_router(question_management.router, prefix="/api/v1")
 app.include_router(schools.router, prefix="/api/v1")
 app.include_router(study_plans.router, prefix="/api/v1")
 app.include_router(subtopic_content.router, prefix="/api/v1")
