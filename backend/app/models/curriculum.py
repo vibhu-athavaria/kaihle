@@ -1,7 +1,8 @@
 """Curriculum-related SQLAlchemy models.
 
 Covers: curricula, subjects, grades, topics, curriculum_subjects,
-curriculum_topics, subtopics, subtopic_prerequisites, curriculum_chunks, question_bank
+curriculum_topics, subtopics, subtopic_prerequisites, curriculum_chunks,
+learning_objectives, subtopic_objectives, question_bank
 """
 
 import uuid
@@ -211,16 +212,30 @@ class Subtopic(Base, UUIDMixin, TimestampMixin):
     sequence_order: Mapped[int | None]
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
+    # IGCSE Core/Extended tiering. Tier is a curriculum-PLACEMENT property, so it lives
+    # here and nowhere else — not on learning_objectives, not on subtopic_objectives.
+    # Lower Secondary (grades 6-8) has no tiering and is always 'BOTH'.
+    # Core students see tier IN ('CORE','BOTH'); Extended students see all three.
+    tier: Mapped[str] = mapped_column(String(10), nullable=False, default="BOTH", server_default="BOTH")
 
     __table_args__ = (
         CheckConstraint(
             "difficulty_level IS NULL OR (difficulty_level BETWEEN 1 AND 5)",
             name="chk_subtopic_difficulty",
         ),
+        CheckConstraint(
+            "tier IN ('CORE', 'EXTENDED', 'BOTH')",
+            name="chk_subtopic_tier",
+        ),
     )
 
     curriculum_topic: Mapped["CurriculumTopic"] = relationship("CurriculumTopic", back_populates="subtopics")
     questions: Mapped[list["QuestionBank"]] = relationship("QuestionBank", back_populates="subtopic")
+    learning_objectives: Mapped[list["LearningObjective"]] = relationship(
+        "LearningObjective",
+        secondary="subtopic_objectives",
+        back_populates="subtopics",
+    )
     subtopic_contents: Mapped[list["SubtopicContent"]] = relationship(  # noqa: F821
         "SubtopicContent", back_populates="subtopic"
     )
@@ -276,15 +291,89 @@ class CurriculumChunk(Base, UUIDMixin, TimestampMixin):
     __table_args__ = (CheckConstraint("chunk_index >= 0", name="chk_chunk_index"),)
 
 
+class LearningObjective(Base, UUIDMixin, TimestampMixin):
+    """A curriculum-agnostic statement of what a learner should be able to do.
+
+    This is the stable binding target for questions. Subtopics are curriculum
+    PLACEMENT (they change when a curriculum is remapped); learning objectives are
+    the underlying concept and survive remapping. Deliberately carries neither a
+    difficulty range (that is a per-question property) nor a grade range (that is a
+    placement property, expressed via curriculum_topics -> subtopics).
+    """
+
+    __tablename__ = "learning_objectives"
+
+    # Human-readable stable identifier, e.g. 'MATH-NEGATIVE-NUMBERS'.
+    canonical_code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    # Full objective text. This is the basis for text/semantic de-duplication.
+    learning_objective: Mapped[str] = mapped_column(Text, nullable=False)
+    # RESTRICT: topics are shared across grades and curricula, so deleting a topic that
+    # still owns objectives must be a hard error rather than a silent cascade.
+    topic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("topics.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    bloom_taxonomy_level: Mapped[str | None] = mapped_column(String(50))
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    topic: Mapped["Topic"] = relationship("Topic")
+    subtopics: Mapped[list["Subtopic"]] = relationship(
+        "Subtopic",
+        secondary="subtopic_objectives",
+        back_populates="learning_objectives",
+    )
+    questions: Mapped[list["QuestionBank"]] = relationship("QuestionBank", back_populates="learning_objective")
+
+
+class SubtopicObjective(Base):
+    """Many-to-many bridge between curriculum placement and concept.
+
+    One subtopic can teach several objectives, and one objective can be taught by
+    several subtopics (across grades, and across curriculum versions). The initial
+    Cambridge v2 mapping is close to 1:1, but the bridge is what allows a future
+    curriculum to reuse existing objectives instead of duplicating them.
+    """
+
+    __tablename__ = "subtopic_objectives"
+
+    subtopic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subtopics.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # RESTRICT: an objective still referenced by any subtopic must not be deleted.
+    learning_objective_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("learning_objectives.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+
+
 class QuestionBank(Base, UUIDMixin, TimestampMixin):
     """Single canonical question store."""
 
     __tablename__ = "question_bank"
 
-    subtopic_id: Mapped[uuid.UUID] = mapped_column(
+    # NULLABLE as of the v2 curriculum remap. Retained for legacy/audit only — it is
+    # no longer used for question selection anywhere. Selection goes through
+    # learning_objective_id. A question is transiently NULL here between the scoped
+    # curriculum wipe and its re-mapping to a learning objective.
+    subtopic_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("subtopics.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
+    )
+    # The primary binding for question selection. Nullable only during the remap
+    # transition; Phase 7 validation asserts every active question has one.
+    learning_objective_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("learning_objectives.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
     )
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
     question_type: Mapped[str] = mapped_column(
@@ -328,7 +417,10 @@ class QuestionBank(Base, UUIDMixin, TimestampMixin):
     review_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # NULL for bank/llm; 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' for teacher-submitted
 
-    subtopic: Mapped["Subtopic"] = relationship("Subtopic", back_populates="questions")
+    subtopic: Mapped["Subtopic | None"] = relationship("Subtopic", back_populates="questions")
+    learning_objective: Mapped["LearningObjective | None"] = relationship(
+        "LearningObjective", back_populates="questions"
+    )
 
     __table_args__ = (
         CheckConstraint(

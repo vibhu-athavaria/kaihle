@@ -3,6 +3,12 @@
 import uuid
 
 from app.models.assessment import Assessment, AssessmentStatus
+from app.models.curriculum import (
+    LearningObjective,
+    QuestionBank,
+    Subtopic,
+    SubtopicObjective,
+)
 from app.models.interest_category import InterestCategory
 from app.models.onboarding import StudentLearningProfile
 from app.models.school import ClassEnrollment
@@ -346,3 +352,111 @@ class TestInterestCategory:
     def test_name_is_indexed(self) -> None:
         col = InterestCategory.__table__.c.name
         assert col.index is True
+
+
+class TestLearningObjective:
+    """Tests for LearningObjective model (curriculum remap v2)."""
+
+    def test_tablename_is_learning_objectives(self) -> None:
+        assert LearningObjective.__tablename__ == "learning_objectives"
+
+    def test_canonical_code_when_declared_then_unique_and_not_nullable(self) -> None:
+        col = LearningObjective.__table__.c.canonical_code
+        assert col.unique is True
+        assert col.nullable is False
+
+    def test_learning_objective_text_when_declared_then_not_nullable(self) -> None:
+        # The full LO text is the de-duplication basis, so it must always be present.
+        assert LearningObjective.__table__.c.learning_objective.nullable is False
+
+    def test_topic_id_when_declared_then_restrict_fk_and_indexed(self) -> None:
+        col = LearningObjective.__table__.c.topic_id
+        assert col.nullable is False
+        assert col.index is True
+        fk = next(iter(col.foreign_keys))
+        assert fk.column.table.name == "topics"
+        # Topics are shared across grades and curricula — deleting one that still
+        # owns objectives must be a hard error, never a cascade.
+        assert fk.ondelete == "RESTRICT"
+
+    def test_embedding_when_declared_then_768_dimensions(self) -> None:
+        # Must match subtopics.embedding so the two can be compared directly.
+        assert LearningObjective.__table__.c.embedding.type.dim == 768
+
+    def test_model_when_no_grade_or_difficulty_columns_then_stays_curriculum_agnostic(
+        self,
+    ) -> None:
+        # Difficulty is a per-question property; grade is a placement property.
+        # Neither may leak onto the objective or the LO layer stops being reusable.
+        cols = set(LearningObjective.__table__.c.keys())
+        assert cols.isdisjoint({"grade_id", "grade_level", "difficulty_level", "tier"})
+
+    def test_instantiation_when_given_required_fields_then_sets_attributes(self) -> None:
+        topic_id = uuid.uuid4()
+        lo = LearningObjective(
+            id=uuid.uuid4(),
+            canonical_code="MATH-NEGATIVE-NUMBERS",
+            name="Using negative numbers",
+            learning_objective="Order and use negative numbers in practical contexts.",
+            topic_id=topic_id,
+            bloom_taxonomy_level="Apply",
+            is_active=True,
+        )
+        assert lo.canonical_code == "MATH-NEGATIVE-NUMBERS"
+        assert lo.topic_id == topic_id
+        assert lo.is_active is True
+
+
+class TestSubtopicObjective:
+    """Tests for the SubtopicObjective M:N bridge (curriculum remap v2)."""
+
+    def test_tablename_is_subtopic_objectives(self) -> None:
+        assert SubtopicObjective.__tablename__ == "subtopic_objectives"
+
+    def test_primary_key_when_declared_then_composite_of_both_fks(self) -> None:
+        pk = {c.name for c in SubtopicObjective.__table__.primary_key}
+        assert pk == {"subtopic_id", "learning_objective_id"}
+
+    def test_subtopic_fk_when_declared_then_cascades(self) -> None:
+        # Deleting a subtopic during a scoped wipe should drop its bridge rows.
+        col = SubtopicObjective.__table__.c.subtopic_id
+        assert next(iter(col.foreign_keys)).ondelete == "CASCADE"
+
+    def test_objective_fk_when_declared_then_restricts(self) -> None:
+        # An objective still referenced by any subtopic must survive the wipe.
+        col = SubtopicObjective.__table__.c.learning_objective_id
+        assert next(iter(col.foreign_keys)).ondelete == "RESTRICT"
+
+    def test_bridge_when_declared_then_carries_no_tier_column(self) -> None:
+        # Tier lives only on subtopics — never on the bridge, never on the LO.
+        assert "tier" not in SubtopicObjective.__table__.c.keys()
+
+
+class TestSubtopicTier:
+    """Tests for the Core/Extended tier column on Subtopic (curriculum remap v2)."""
+
+    def test_tier_when_declared_then_not_nullable_and_defaults_to_both(self) -> None:
+        col = Subtopic.__table__.c.tier
+        assert col.nullable is False
+        assert col.server_default.arg == "BOTH"
+
+    def test_tier_when_declared_then_check_constraint_limits_values(self) -> None:
+        names = {c.name for c in Subtopic.__table__.constraints}
+        assert "chk_subtopic_tier" in names
+
+
+class TestQuestionBankObjectiveBinding:
+    """Tests for question_bank's new LO binding (curriculum remap v2)."""
+
+    def test_learning_objective_id_when_declared_then_indexed_restrict_fk(self) -> None:
+        col = QuestionBank.__table__.c.learning_objective_id
+        assert col.index is True
+        fk = next(iter(col.foreign_keys))
+        assert fk.column.table.name == "learning_objectives"
+        # Deleting an LO that still owns questions must be a hard error rather
+        # than silently orphaning them — the failure the old coupling allowed.
+        assert fk.ondelete == "RESTRICT"
+
+    def test_subtopic_id_when_remapped_then_nullable_for_transition(self) -> None:
+        # Questions are transiently unbound between the scoped wipe and remap.
+        assert QuestionBank.__table__.c.subtopic_id.nullable is True
