@@ -20,14 +20,25 @@ from app.models.user import User, UserRole
 # Set test environment variables BEFORE importing app modules
 # This is critical because app.core.database creates engine at import time
 # ruff: noqa: E402
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL",
-    os.environ.get(
-        "DATABASE_URL",
-        "postgresql+asyncpg://kaihle:kaihle@localhost:5433/kaihle_test",
-    ),
-)
-os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+DEFAULT_TEST_DATABASE_URL = "postgresql+asyncpg://kaihle:kaihle@localhost:5433/kaihle_test"
+
+# This suite creates, truncates and drops data. It must NEVER resolve to a working
+# database. It previously fell back to DATABASE_URL, so running pytest in any shell
+# that had sourced .env silently wiped the dev database — a single-step accident with
+# no warning. The fallback is gone; only TEST_DATABASE_URL can override the default.
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
+
+_test_db_name = TEST_DATABASE_URL.rsplit("/", 1)[-1].split("?")[0]
+if not _test_db_name.endswith("_test"):
+    raise RuntimeError(
+        f"Refusing to run integration tests against database {_test_db_name!r}: "
+        "the name must end in '_test'. Set TEST_DATABASE_URL to a dedicated test "
+        f"database (default: {DEFAULT_TEST_DATABASE_URL})."
+    )
+
+# Force, not setdefault: app.core.database builds its engine from DATABASE_URL at
+# import time, so an inherited value would point the app at the real database.
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-integration-tests")
 
 import random
