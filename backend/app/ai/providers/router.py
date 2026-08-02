@@ -262,21 +262,64 @@ async def embed(text: str) -> list[float]:
     if not text or not text.strip():
         raise ValueError("text must be a non-empty string for embedding generation")
 
+    return (await embed_batch([text]))[0]
+
+
+async def embed_batch(texts: list[str]) -> list[list[float]]:
+    """Embed several texts in one request. Provider-agnostic.
+
+    Embedding a whole curriculum one string at a time is dominated by round-trip
+    latency, so the batch form is the primary implementation and embed() delegates
+    to it.
+
+    Args:
+        texts: Non-empty strings to embed.
+
+    Returns:
+        Vectors in the same order as the inputs.
+
+    Raises:
+        ValueError: If texts is empty, any entry is blank, the provider returns the
+            wrong number of vectors, or a vector has an unexpected dimensionality.
+    """
+    if not texts:
+        raise ValueError("texts must be a non-empty list for embedding generation")
+    if any(not t or not t.strip() for t in texts):
+        raise ValueError("every entry in texts must be a non-empty string")
+
     model = TASK_MODEL_MAP["embeddings"]
     api_base = TASK_API_BASE_MAP.get("embeddings")
+    dimensions = settings.llm_embeddings_dimensions
 
-    response = await litellm.aembedding(
-        model=model,
-        api_base=api_base or None,
-        input=text,
-    )
+    kwargs: dict[str, Any] = {"model": model, "api_base": api_base or None, "input": texts}
+    if dimensions is not None:
+        kwargs["dimensions"] = dimensions
 
-    # Validate response structure before accessing
+    response = await litellm.aembedding(**kwargs)
+
     if not response.data or len(response.data) == 0:
         raise ValueError("Embedding API returned empty data array")
+    if len(response.data) != len(texts):
+        raise ValueError(f"Embedding API returned {len(response.data)} vectors for {len(texts)} inputs")
 
-    embedding = response.data[0].get("embedding")
-    if embedding is None:
-        raise ValueError("Embedding API response missing 'embedding' field")
+    # Providers order results by an explicit index, not by position. Sorting on it
+    # keeps vectors aligned with their inputs; a silent misalignment here would
+    # attach every embedding to the wrong objective.
+    ordered = sorted(response.data, key=lambda d: d.get("index", 0))
 
-    return embedding
+    vectors: list[list[float]] = []
+    for item in ordered:
+        vector = item.get("embedding")
+        if vector is None:
+            raise ValueError("Embedding API response missing 'embedding' field")
+        # Fail here rather than at INSERT time: pgvector rejects a mismatched width
+        # with an opaque error, and a silently truncated vector would corrupt search.
+        if dimensions is not None and len(vector) != dimensions:
+            raise ValueError(
+                f"Embedding model {model!r} returned {len(vector)} dimensions, expected {dimensions}. "
+                "Set LLM_EMBEDDINGS_DIMENSIONS to match the model, or use a model that "
+                "supports the requested dimensionality."
+            )
+        vectors.append(vector)
+
+    return vectors

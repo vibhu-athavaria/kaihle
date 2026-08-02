@@ -40,6 +40,11 @@ class Settings(BaseSettings):
 
     llm_embeddings_model: str = "text-embedding-004"
     llm_embeddings_api_base: str | None = None
+    # Requested output dimensionality. Must match the vector(N) columns on
+    # subtopics.embedding and learning_objectives.embedding, or writes are rejected.
+    # Models supporting Matryoshka truncation (the text-embedding-3 family) honour
+    # this; for fixed-width models leave it unset and size the columns to the model.
+    llm_embeddings_dimensions: int | None = 768
 
     llm_question_generation_model: str = ""
     llm_question_generation_api_base: str | None = None
