@@ -11,6 +11,7 @@ Tests cover all acceptance criteria from M1-2-T1:
 - Subtopic embedding is NULL (populated later by M1-2-T2)
 """
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -445,3 +446,41 @@ async def test_subtopics_embedding_is_null(db_session: AsyncSession) -> None:
 
     for st in subtopics:
         assert st.embedding is None, f"Subtopic {st.canonical_code} should have NULL embedding, got {st.embedding}"
+
+
+# ---------------------------------------------------------------------------
+# Core/Extended tier persistence (curriculum remap v2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_seed_when_subtopic_has_tier_then_tier_is_persisted(db_session: AsyncSession) -> None:
+    """IGCSE data carries an explicit tier; the seeder must store it verbatim."""
+    data = copy.deepcopy(MINIMAL_VALID_JSON)
+    subtopics = data["curriculum_tree"][0]["topics"][0]["subtopics"]
+    subtopics[0]["tier"] = "EXTENDED"
+    subtopics[1]["tier"] = "CORE"
+
+    await run_seeder(db_session, data)
+
+    result = await db_session.execute(
+        select(Subtopic).where(
+            Subtopic.canonical_code.in_([subtopics[0]["canonical_code"], subtopics[1]["canonical_code"]])
+        )
+    )
+    by_code = {s.canonical_code: s.tier for s in result.scalars()}
+    assert by_code[subtopics[0]["canonical_code"]] == "EXTENDED"
+    assert by_code[subtopics[1]["canonical_code"]] == "CORE"
+
+
+@pytest.mark.asyncio
+async def test_seed_when_subtopic_omits_tier_then_defaults_to_both(db_session: AsyncSession) -> None:
+    """Lower Secondary data has no tier key — tiering does not apply below IGCSE."""
+    data = copy.deepcopy(MINIMAL_VALID_JSON)
+    code = data["curriculum_tree"][0]["topics"][0]["subtopics"][0]["canonical_code"]
+    assert "tier" not in data["curriculum_tree"][0]["topics"][0]["subtopics"][0]
+
+    await run_seeder(db_session, data)
+
+    result = await db_session.execute(select(Subtopic).where(Subtopic.canonical_code == code))
+    assert result.scalar_one().tier == "BOTH"

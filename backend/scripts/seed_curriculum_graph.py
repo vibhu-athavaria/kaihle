@@ -137,6 +137,12 @@ class CurriculumSeeder:
 
     async def _seed_interest_categories(self) -> None:
         """Upsert the four canonical interest categories. Idempotent."""
+        # Every other seed helper guards dry-run before touching self.db; this one
+        # did not, so --dry-run crashed here with db=None before any validation ran.
+        if self.dry_run:
+            log.debug("dry_run_would_upsert", table="interest_categories")
+            return
+
         categories = [
             ("sports_movement", "Sports & Movement"),
             ("tech_gaming", "Technology & Gaming"),
@@ -370,7 +376,10 @@ class CurriculumSeeder:
             difficulty_level=data.get("difficulty_level"),
             estimated_minutes=data.get("estimated_minutes"),
             sequence_order=data.get("sequence_order"),
-            embedding=None,  # Populated by M1-2-T2 (curriculum PDF ingestion)
+            # IGCSE Core/Extended tiering. Lower Secondary data carries no "tier" key
+            # and correctly defaults to BOTH; IGCSE entries set it explicitly.
+            tier=data.get("tier", "BOTH"),
+            embedding=None,  # Populated by the learning-objective pipeline
             is_active=True,
         )
         self.db.add(row)
@@ -616,11 +625,42 @@ def validate_json(data: dict) -> list[str]:
         if cs.get("subject_code") not in subject_codes:
             errors.append(f"curriculum_subjects: unknown subject_code '{cs.get('subject_code')}'")
 
+    valid_tiers = {"CORE", "EXTENDED", "BOTH"}
+    seen_subtopic_codes: dict[str, str] = {}
+
     for entry in data.get("curriculum_tree", []):
         if entry.get("curriculum_code") not in curricula_codes:
             errors.append(f"curriculum_tree: unknown curriculum_code '{entry.get('curriculum_code')}'")
         if entry.get("subject_code") not in subject_codes:
             errors.append(f"curriculum_tree: unknown subject_code '{entry.get('subject_code')}'")
+
+        scope = f"{entry.get('subject_code')} G{entry.get('grade_level')}"
+        for topic in entry.get("topics", []):
+            for sub in topic.get("subtopics", []):
+                code = sub.get("canonical_code")
+
+                # subtopics.canonical_code is VARCHAR(50) — catch overflow here rather
+                # than as a truncation error mid-seed.
+                if code and len(code) > 50:
+                    errors.append(f"subtopic canonical_code exceeds 50 chars ({len(code)}): '{code}'")
+
+                # Codes must be globally unique: the seeder upserts on canonical_code,
+                # so a duplicate would silently bind two placements to one row.
+                if code in seen_subtopic_codes:
+                    errors.append(
+                        f"duplicate subtopic canonical_code '{code}' "
+                        f"in {scope} (already used in {seen_subtopic_codes[code]})"
+                    )
+                elif code:
+                    seen_subtopic_codes[code] = scope
+
+                # learning_objective is NOT NULL and is the LO de-duplication basis.
+                if not (sub.get("learning_objective") or "").strip():
+                    errors.append(f"subtopic '{code}' in {scope} has an empty learning_objective")
+
+                tier = sub.get("tier")
+                if tier is not None and tier not in valid_tiers:
+                    errors.append(f"subtopic '{code}' in {scope} has invalid tier '{tier}' (expected {valid_tiers})")
 
     return errors
 
