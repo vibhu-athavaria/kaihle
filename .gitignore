@@ -59,3 +59,8 @@ node_modules/.vite.worktrees/
 .claude/**
 **pyrightconfig.json
 backend/validation_reports/
+
+# Database dumps and curriculum-remap archives — large, environment-specific,
+# and may contain student PII. Never commit.
+backups/
+/*.sql
