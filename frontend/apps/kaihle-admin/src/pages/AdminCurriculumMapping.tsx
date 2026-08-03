@@ -120,6 +120,9 @@ export function AdminCurriculumMapping() {
   const [error, setError] = useState<string | null>(null);
   const [inspecting, setInspecting] = useState<ReviewItem | null>(null);
   const [rebindTarget, setRebindTarget] = useState<ItemQuestion | null>(null);
+  const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(
+    new Set(),
+  );
 
   const { data: counts } = useQuery<ReviewCounts>({
     queryKey: ["lo-review", "counts"],
@@ -210,24 +213,34 @@ export function AdminCurriculumMapping() {
 
   const rebind = useMutation({
     mutationFn: async (vars: {
-      questionId: string;
+      questionIds: string[];
       objectiveId: string | null;
     }) =>
       (
-        await apiClient.patch(
-          `/api/v1/lo-review/questions/${vars.questionId}/objective`,
-          { objective_id: vars.objectiveId },
-        )
+        await apiClient.patch("/api/v1/lo-review/questions/objective", {
+          question_ids: vars.questionIds,
+          objective_id: vars.objectiveId,
+        })
       ).data,
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ["lo-review", "questions"],
-      });
+      // Invalidate the whole namespace: a rebind changes the item's unassigned
+      // count as well as the question list.
+      void queryClient.invalidateQueries({ queryKey: ["lo-review"] });
       setRebindTarget(null);
+      setSelectedQuestions(new Set());
       setSearchResults([]);
       setSearchTerm("");
     },
   });
+
+  const toggleQuestion = useCallback((id: string) => {
+    setSelectedQuestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const split = useMutation({
     mutationFn: async () => {
@@ -692,15 +705,124 @@ export function AdminCurriculumMapping() {
                   </span>
                 </p>
 
+                {/* Bulk assignment. Questions a split leaves behind often share an
+                    objective outright — three "Calculate N x M" rows are one decision,
+                    not three — so selecting them together avoids fatigue errors on the
+                    least ambiguous cases. */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <label className="flex items-center gap-2 text-xs text-[#374151] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className={`accent-[#1a5c38] ${FOCUS}`}
+                      checked={
+                        selectedQuestions.size > 0 &&
+                        selectedQuestions.size ===
+                          itemQuestions.questions.length
+                      }
+                      onChange={(e) =>
+                        setSelectedQuestions(
+                          e.target.checked
+                            ? new Set(
+                                itemQuestions.questions.map(
+                                  (q) => q.question_id,
+                                ),
+                              )
+                            : new Set(),
+                        )
+                      }
+                    />
+                    Select all
+                  </label>
+                  <button
+                    onClick={() =>
+                      setSelectedQuestions(
+                        new Set(
+                          itemQuestions.questions
+                            .filter((q) => q.objective_id === null)
+                            .map((q) => q.question_id),
+                        ),
+                      )
+                    }
+                    className={`text-xs font-semibold text-[#1a5c38] hover:underline ${FOCUS}`}
+                  >
+                    Select unassigned ({itemQuestions.unbound})
+                  </button>
+                  {selectedQuestions.size > 0 && (
+                    <span className="text-xs text-[#111827] font-semibold ml-auto">
+                      {selectedQuestions.size} selected
+                    </span>
+                  )}
+                </div>
+
+                {selectedQuestions.size > 0 && (
+                  <div className="bg-[#f0f7f3] border border-[#1a5c38]/25 rounded-md p-3 space-y-2">
+                    <p className="text-xs text-[#111827]">
+                      Assign {selectedQuestions.size} question
+                      {selectedQuestions.size === 1 ? "" : "s"} to:
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && void runSearch()}
+                        placeholder="Search objectives"
+                        aria-label="Search objectives for bulk assignment"
+                        className={`flex-1 min-h-[34px] border border-[#eaecf0] rounded-md text-xs px-2 bg-white ${FOCUS}`}
+                      />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        loading={searching}
+                        onClick={() => void runSearch()}
+                      >
+                        Search
+                      </Button>
+                    </div>
+                    {searchResults.map((r) => (
+                      <button
+                        key={r.objective_id}
+                        disabled={rebind.isPending}
+                        onClick={() =>
+                          rebind.mutate({
+                            questionIds: [...selectedQuestions],
+                            objectiveId: r.objective_id,
+                          })
+                        }
+                        className={`w-full text-left p-2 rounded-md border border-[#eaecf0] bg-white hover:bg-[#fafafa] text-xs disabled:opacity-50 ${FOCUS}`}
+                      >
+                        {r.learning_objective}
+                        <span className="block text-[10px] text-[#9ca3af]">
+                          {r.canonical_code}
+                          {r.match === "semantic"
+                            ? " · matched by meaning"
+                            : ""}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div className="max-h-[26rem] overflow-y-auto space-y-2 pr-1">
                   {itemQuestions.questions.map((q) => (
                     <div
                       key={q.question_id}
-                      className="border border-[#eaecf0] rounded-md p-3"
+                      className={`border rounded-md p-3 ${
+                        selectedQuestions.has(q.question_id)
+                          ? "border-[#1a5c38] bg-[#1a5c38]/5"
+                          : "border-[#eaecf0]"
+                      }`}
                     >
-                      <p className="text-sm text-[#111827] leading-relaxed">
-                        {q.question_text}
-                      </p>
+                      <label className="flex gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className={`mt-1 accent-[#1a5c38] flex-shrink-0 ${FOCUS}`}
+                          checked={selectedQuestions.has(q.question_id)}
+                          onChange={() => toggleQuestion(q.question_id)}
+                        />
+                        <span className="text-sm text-[#111827] leading-relaxed">
+                          {q.question_text}
+                        </span>
+                      </label>
                       <div className="flex items-start justify-between gap-3 mt-2">
                         {q.objective_code ? (
                           <span className="text-[11px] text-[#4b5563] leading-relaxed">
@@ -763,7 +885,7 @@ export function AdminCurriculumMapping() {
                               key={r.objective_id}
                               onClick={() =>
                                 rebind.mutate({
-                                  questionId: q.question_id,
+                                  questionIds: [q.question_id],
                                   objectiveId: r.objective_id,
                                 })
                               }
@@ -784,7 +906,7 @@ export function AdminCurriculumMapping() {
                               size="sm"
                               onClick={() =>
                                 rebind.mutate({
-                                  questionId: q.question_id,
+                                  questionIds: [q.question_id],
                                   objectiveId: null,
                                 })
                               }

@@ -7,6 +7,7 @@ there is no school scoping here and no per-tenant filtering to apply.
 """
 
 import uuid
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -150,7 +151,8 @@ class ItemQuestionsResponse(BaseModel):
 
 
 class RebindRequest(BaseModel):
-    # null unbinds the question, returning it to the coverage gap report.
+    question_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=500)
+    # null unbinds them, returning them to the coverage gap report.
     objective_id: uuid.UUID | None = None
 
 
@@ -164,17 +166,19 @@ async def list_item_questions(
     return ItemQuestionsResponse(**await LoReviewService(db).list_item_questions(item_id))
 
 
-@router.patch("/questions/{question_id}/objective")
-async def rebind_question(
-    question_id: uuid.UUID,
+@router.patch("/questions/objective")
+async def rebind_questions(
     body: RebindRequest,
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
-) -> dict[str, str | None]:
-    """Correct a single question's objective, or unbind it."""
+) -> dict[str, Any]:
+    """Assign one or many questions to an objective, or unbind them."""
     if current_user.id is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing user context")
-    return await LoReviewService(db).rebind_question(question_id, body.objective_id, current_user.id)
+    result: dict[str, Any] = await LoReviewService(db).rebind_questions(
+        body.question_ids, body.objective_id, current_user.id
+    )
+    return result
 
 
 @router.post("/items/{item_id}/approve", response_model=ResolveResponse)

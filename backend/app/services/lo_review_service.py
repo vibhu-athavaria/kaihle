@@ -374,21 +374,24 @@ class LoReviewService:
             "questions": questions,
         }
 
-    async def rebind_question(
+    async def rebind_questions(
         self,
-        question_id: uuid.UUID,
+        question_ids: list[uuid.UUID],
         objective_id: uuid.UUID | None,
         reviewer_id: uuid.UUID,
     ) -> dict[str, Any]:
-        """Move one question to a different objective, or unbind it entirely.
+        """Assign questions to an objective, or unbind them. Bulk by design.
 
-        Unlike the group actions this overwrites an existing binding — that is the
-        point: it exists to correct a machine decision a human disagrees with.
+        One-at-a-time is the wrong unit of work for what a split leaves behind: a run
+        of "Calculate 123 x 15", "Calculate 23 x 4", "Calculate 246 x 37" plainly share
+        an objective, and demanding a separate decision for each invites fatigue errors
+        on precisely the least ambiguous cases.
+
+        Unlike the group actions, this OVERWRITES existing bindings — correcting a
+        machine decision a human disagrees with is the entire purpose.
         """
-        result = await self.db.execute(select(QuestionBank).where(QuestionBank.id == question_id))
-        question = result.scalar_one_or_none()
-        if question is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Question {question_id} not found")
+        if not question_ids:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No questions selected.")
 
         if objective_id is not None:
             objective = await self.db.execute(select(LearningObjective).where(LearningObjective.id == objective_id))
@@ -397,18 +400,20 @@ class LoReviewService:
                     status_code=status.HTTP_404_NOT_FOUND, detail=f"Learning objective {objective_id} not found"
                 )
 
-        previous = question.learning_objective_id
-        question.learning_objective_id = objective_id
+        result = await self.db.execute(
+            update(QuestionBank).where(QuestionBank.id.in_(question_ids)).values(learning_objective_id=objective_id)
+        )
+        updated = cast("CursorResult[Any]", result).rowcount or 0
         await self.db.commit()
 
         logger.info(
-            "lo_review_question_rebound",
-            question_id=str(question_id),
-            previous_objective_id=str(previous) if previous else None,
+            "lo_review_questions_rebound",
+            requested=len(question_ids),
+            updated=updated,
             new_objective_id=str(objective_id) if objective_id else None,
             reviewer_id=str(reviewer_id),
         )
-        return {"question_id": str(question_id), "objective_id": str(objective_id) if objective_id else None}
+        return {"updated": updated, "objective_id": str(objective_id) if objective_id else None}
 
     async def search_objectives(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         """Find objectives by meaning, falling back to literal matching.
