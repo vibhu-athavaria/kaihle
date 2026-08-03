@@ -61,6 +61,12 @@ const CARD = "bg-white border border-[#eaecf0] rounded-lg";
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5c38] focus-visible:ring-offset-2";
 
+/** Distinguishes an expired session from a genuine server failure. */
+function isUnauthorized(err: unknown): boolean {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  return status === 401 || status === 403;
+}
+
 /**
  * Similarity is shown because it explains why the pipeline hesitated, but it is
  * deliberately quiet: a reviewer should decide from the objective text, not anchor
@@ -89,7 +95,13 @@ export function AdminCurriculumMapping() {
     queryFn: async () => (await apiClient.get("/lo-review/counts")).data,
   });
 
-  const { data, isLoading } = useQuery<ReviewListResponse>({
+  const {
+    data,
+    isLoading,
+    isError,
+    error: loadError,
+    refetch,
+  } = useQuery<ReviewListResponse>({
     queryKey: ["lo-review", "items", statusFilter],
     queryFn: async () =>
       (
@@ -214,6 +226,33 @@ export function AdminCurriculumMapping() {
                 <Skeleton className="h-3 w-2/3" />
               </div>
             ))}
+          </div>
+        ) : isError ? (
+          /*
+           * A failed load must never be dressed up as an empty queue. Falling back to
+           * `data?.items ?? []` showed a green tick and "Nothing waiting for review"
+           * when the request had actually 401'd — reporting success for a failure.
+           */
+          <div className={`${CARD} p-6 text-center`}>
+            <AlertTriangle
+              className="w-6 h-6 text-[#b45309] mx-auto mb-3"
+              aria-hidden="true"
+            />
+            <h3 className="text-sm font-semibold text-[#111827] mb-1">
+              Could not load the review queue
+            </h3>
+            <p className="text-xs text-[#6b7280] mb-4">
+              {isUnauthorized(loadError)
+                ? "Your session has expired. Sign in again to continue."
+                : "The server did not return the queue. This does not mean the queue is empty."}
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void refetch()}
+            >
+              Try again
+            </Button>
           </div>
         ) : items.length === 0 ? (
           <div className={CARD}>
