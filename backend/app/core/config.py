@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     llm_question_generation_model: str = ""
     llm_question_generation_api_base: str | None = None
 
+    # Adjudicates ambiguous curriculum-remap matches, where embedding similarity is
+    # inconclusive and the decision needs the meaning of the objectives, not their
+    # vector distance.
+    llm_lo_matching_model: str = ""
+    llm_lo_matching_api_base: str | None = None
+
     llm_question_quality_model: str = ""
     llm_question_quality_api_base: str | None = None
 

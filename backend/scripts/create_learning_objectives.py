@@ -184,6 +184,21 @@ def build_canonical_code(subject_code: str, objective_text: str, taken: set[str]
     raise LearningObjectiveError(f"Could not generate a unique canonical code from {base!r}")
 
 
+def parse_vector(raw: object) -> list[float] | None:
+    """Coerce a pgvector value to a plain list of floats.
+
+    Read through raw SQL, pgvector comes back as its text form ('[0.1,0.2,...]'),
+    not a sequence — list() on it would yield single characters and every similarity
+    would silently be garbage. The ORM path returns a real sequence, so both are
+    handled here.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        return [float(x) for x in raw.strip().lstrip("[").rstrip("]").split(",") if x.strip()]
+    return [float(x) for x in cast("list[Any]", raw)]
+
+
 def cosine_similarity(a: list[float], b: list[float]) -> float:
     """Cosine similarity without a numpy dependency in the hot path."""
     dot = sum(x * y for x, y in zip(a, b, strict=True))
@@ -258,9 +273,7 @@ async def load_existing_objectives(db: AsyncSession, topic_ids: set[uuid.UUID]) 
     by_topic: dict[uuid.UUID, list[dict]] = {}
     for row in result.mappings():
         item = dict(row)
-        raw = item.get("embedding")
-        # pgvector returns its own type; normalise to a plain list for comparison.
-        item["embedding"] = list(raw) if raw is not None else None
+        item["embedding"] = parse_vector(item.get("embedding"))
         by_topic.setdefault(item["topic_id"], []).append(item)
     return by_topic
 
