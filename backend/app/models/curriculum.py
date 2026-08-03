@@ -436,3 +436,88 @@ class QuestionBank(Base, UUIDMixin, TimestampMixin):
             name="chk_qb_review_status",
         ),
     )
+
+
+class LearningObjectiveReviewItem(Base, UUIDMixin, TimestampMixin):
+    """A curriculum-mapping decision awaiting human judgement.
+
+    Produced by the remap pipeline wherever automated matching is inconclusive:
+    embedding similarity lands in the ambiguous band, or the adjudicating model
+    declines to choose. Each item bundles the source objective, the candidate targets
+    with their scores, and the model's suggestion and stated reason, so a reviewer sees
+    why the machine hesitated rather than being asked to rubber-stamp a bare pick.
+
+    Deliberately has NO school_id. These are curriculum-level rulings — one decision
+    applies to every school — which is why question_review_items cannot be reused for
+    them: that table is NOT NULL on both school_id and submitted_by. Constitution
+    Rule 2 exempts curriculum tables from the school_id requirement.
+    """
+
+    __tablename__ = "lo_review_items"
+
+    # QUESTION_REMAP: which objective should an old subtopic's questions bind to.
+    # OBJECTIVE_DEDUP: are two objectives the same concept and should they be merged.
+    item_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="PENDING", server_default="PENDING", index=True
+    )
+
+    # Identity of the thing being mapped FROM. For QUESTION_REMAP this is the old
+    # subtopic's canonical_code, which survives the wipe only in the snapshot — hence
+    # storing the text here rather than an FK to a row that no longer exists.
+    source_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_name: Mapped[str | None] = mapped_column(Text)
+    source_learning_objective: Mapped[str] = mapped_column(Text, nullable=False)
+    subject_code: Mapped[str | None] = mapped_column(String(20))
+    grade_level: Mapped[int | None]
+
+    # How many questions this single decision governs — shown to the reviewer because
+    # it is the blast radius of getting it wrong.
+    question_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    # [{"objective_id": ..., "canonical_code": ..., "learning_objective": ..., "similarity": 0.83}]
+    candidates: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+
+    # The questions this decision governs, so approving an item can bind them without
+    # re-reading the wipe snapshot from disk. These ids are ENVIRONMENT-LOCAL and are
+    # deliberately not part of the exported artifact — the artifact carries only
+    # source_code -> objective_code, which every environment resolves against its own
+    # snapshot.
+    question_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+
+    llm_suggested_code: Mapped[str | None] = mapped_column(String(50))
+    llm_reason: Mapped[str | None] = mapped_column(Text)
+
+    # RESTRICT: an objective a reviewer has bound work to must not vanish underneath it.
+    chosen_objective_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("learning_objectives.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    admin_note: Mapped[str | None] = mapped_column(Text)
+
+    chosen_objective: Mapped["LearningObjective | None"] = relationship("LearningObjective")
+
+    __table_args__ = (
+        UniqueConstraint("item_type", "source_code", name="uq_lo_review_item_source"),
+        CheckConstraint(
+            "item_type IN ('QUESTION_REMAP', 'OBJECTIVE_DEDUP')",
+            name="chk_lo_review_item_type",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING', 'APPROVED', 'REJECTED')",
+            name="chk_lo_review_status",
+        ),
+        # An approved item must say what it approved; a pending one must not pretend to.
+        CheckConstraint(
+            "(status = 'APPROVED' AND chosen_objective_id IS NOT NULL) OR "
+            "(status <> 'APPROVED' AND (status <> 'PENDING' OR chosen_objective_id IS NULL))",
+            name="chk_lo_review_resolution_consistent",
+        ),
+    )

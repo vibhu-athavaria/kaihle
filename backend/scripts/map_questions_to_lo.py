@@ -50,6 +50,7 @@ if str(_BACKEND_ROOT) not in sys.path:
 
 from app.ai.providers.router import complete  # noqa: E402
 from app.core.config import settings  # noqa: E402
+from app.services.lo_review_service import ITEM_TYPE_QUESTION_REMAP, upsert_review_item  # noqa: E402
 from scripts.create_learning_objectives import cosine_similarity, embed_all, parse_vector  # noqa: E402
 
 _PROMPTS_DIR = _BACKEND_ROOT / "app" / "ai" / "prompts"
@@ -294,6 +295,41 @@ async def main(
                     bound_total += await bind_questions(db, group["question_ids"], chosen_id)
                 else:
                     bound_total += len(group["question_ids"])
+
+            # Anything unresolved becomes a review-queue item, so a curriculum
+            # specialist can settle it in KaihleAdmin instead of reading JSON from a
+            # backups directory. Items already resolved by a human are left untouched.
+            queued = 0
+            for record in review_items + unmatched:
+                group = groups.get(record["old_canonical_code"])
+                if group is None:
+                    continue
+
+                # Only queue what is genuinely unresolved. A group whose questions are
+                # already bound — by an earlier run, or by a reviewer — must not
+                # reappear in the queue as if nothing had been decided.
+                still_unbound = await db.execute(
+                    text("SELECT count(*) FROM question_bank WHERE id = ANY(:ids) AND learning_objective_id IS NULL"),
+                    {"ids": [uuid.UUID(q) for q in group["question_ids"]]},
+                )
+                if int(still_unbound.scalar_one()) == 0:
+                    continue
+
+                if await upsert_review_item(
+                    db,
+                    item_type=ITEM_TYPE_QUESTION_REMAP,
+                    source_code=record["old_canonical_code"],
+                    source_name=record["old_subtopic_name"],
+                    source_learning_objective=record["old_learning_objective"],
+                    subject_code=record["subject_code"],
+                    grade_level=record["grade_level"],
+                    question_ids=group["question_ids"],
+                    candidates=record["candidates"],
+                    llm_suggested_code=None,
+                    llm_reason=record.get("llm_verdict"),
+                ):
+                    queued += 1
+            log.info("review_items_queued", count=queued)
 
             if dry_run:
                 await db.rollback()
