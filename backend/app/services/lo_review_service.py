@@ -311,6 +311,84 @@ class LoReviewService:
         )
         return {"item_id": str(item_id), "questions_bound": 0, "status": STATUS_REJECTED}
 
+    async def list_item_questions(self, item_id: uuid.UUID) -> dict[str, Any]:
+        """Return every question in a group with the objective it is bound to.
+
+        A split reports only a per-objective tally, which is a summary, not a review.
+        This is what makes the individual assignments inspectable and correctable —
+        without it the model's per-question decisions are unauditable.
+        """
+        item = await self.db.execute(
+            select(LearningObjectiveReviewItem).where(LearningObjectiveReviewItem.id == item_id)
+        )
+        row = item.scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Review item {item_id} not found")
+
+        result = await self.db.execute(
+            select(QuestionBank, LearningObjective)
+            .outerjoin(LearningObjective, LearningObjective.id == QuestionBank.learning_objective_id)
+            .where(QuestionBank.id.in_([uuid.UUID(q) for q in row.question_ids]))
+            # Unbound first: those are the ones still needing a human.
+            .order_by(LearningObjective.canonical_code.nulls_first(), QuestionBank.question_text)
+        )
+        questions = [
+            {
+                "question_id": str(q.id),
+                "question_text": q.question_text,
+                "question_type": q.question_type,
+                "difficulty_level": q.difficulty_level,
+                "objective_id": str(lo.id) if lo else None,
+                "objective_code": lo.canonical_code if lo else None,
+                "objective_text": lo.learning_objective if lo else None,
+            }
+            for q, lo in result.all()
+        ]
+        return {
+            "item_id": str(row.id),
+            "source_name": row.source_name,
+            "source_learning_objective": row.source_learning_objective,
+            "total": len(questions),
+            "unbound": sum(1 for q in questions if q["objective_id"] is None),
+            "questions": questions,
+        }
+
+    async def rebind_question(
+        self,
+        question_id: uuid.UUID,
+        objective_id: uuid.UUID | None,
+        reviewer_id: uuid.UUID,
+    ) -> dict[str, Any]:
+        """Move one question to a different objective, or unbind it entirely.
+
+        Unlike the group actions this overwrites an existing binding — that is the
+        point: it exists to correct a machine decision a human disagrees with.
+        """
+        result = await self.db.execute(select(QuestionBank).where(QuestionBank.id == question_id))
+        question = result.scalar_one_or_none()
+        if question is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Question {question_id} not found")
+
+        if objective_id is not None:
+            objective = await self.db.execute(select(LearningObjective).where(LearningObjective.id == objective_id))
+            if objective.scalar_one_or_none() is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail=f"Learning objective {objective_id} not found"
+                )
+
+        previous = question.learning_objective_id
+        question.learning_objective_id = objective_id
+        await self.db.commit()
+
+        logger.info(
+            "lo_review_question_rebound",
+            question_id=str(question_id),
+            previous_objective_id=str(previous) if previous else None,
+            new_objective_id=str(objective_id) if objective_id else None,
+            reviewer_id=str(reviewer_id),
+        )
+        return {"question_id": str(question_id), "objective_id": str(objective_id) if objective_id else None}
+
     async def search_objectives(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         """Free-text objective search, so a reviewer can pick outside the shortlist."""
         pattern = f"%{query.strip()}%"

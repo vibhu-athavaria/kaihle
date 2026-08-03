@@ -128,6 +128,53 @@ async def search_objectives(
     return [ObjectiveSearchItem(**r) for r in results]
 
 
+class ItemQuestion(BaseModel):
+    question_id: str
+    question_text: str
+    question_type: str
+    difficulty_level: float | None
+    objective_id: str | None
+    objective_code: str | None
+    objective_text: str | None
+
+
+class ItemQuestionsResponse(BaseModel):
+    item_id: str
+    source_name: str | None
+    source_learning_objective: str
+    total: int
+    unbound: int
+    questions: list[ItemQuestion]
+
+
+class RebindRequest(BaseModel):
+    # null unbinds the question, returning it to the coverage gap report.
+    objective_id: uuid.UUID | None = None
+
+
+@router.get("/items/{item_id}/questions", response_model=ItemQuestionsResponse)
+async def list_item_questions(
+    item_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+) -> ItemQuestionsResponse:
+    """Every question in the group with the objective it is currently bound to."""
+    return ItemQuestionsResponse(**await LoReviewService(db).list_item_questions(item_id))
+
+
+@router.patch("/questions/{question_id}/objective")
+async def rebind_question(
+    question_id: uuid.UUID,
+    body: RebindRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+) -> dict[str, str | None]:
+    """Correct a single question's objective, or unbind it."""
+    if current_user.id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing user context")
+    return await LoReviewService(db).rebind_question(question_id, body.objective_id, current_user.id)
+
+
 @router.post("/items/{item_id}/approve", response_model=ResolveResponse)
 async def approve_review_item(
     item_id: uuid.UUID,

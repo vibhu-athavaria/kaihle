@@ -43,6 +43,25 @@ interface ReviewCounts {
   SPLIT: number;
 }
 
+interface ItemQuestion {
+  question_id: string;
+  question_text: string;
+  question_type: string;
+  difficulty_level: number | null;
+  objective_id: string | null;
+  objective_code: string | null;
+  objective_text: string | null;
+}
+
+interface ItemQuestionsResponse {
+  item_id: string;
+  source_name: string | null;
+  source_learning_objective: string;
+  total: number;
+  unbound: number;
+  questions: ItemQuestion[];
+}
+
 interface ObjectiveSearchItem {
   objective_id: string;
   canonical_code: string;
@@ -58,6 +77,13 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: "SPLIT", label: "Split" },
   { value: "REJECTED", label: "Rejected" },
 ];
+
+const STATUS_LABEL: Record<string, string> = {
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  SPLIT: "Split per question",
+  PENDING: "Pending",
+};
 
 const CARD = "bg-white border border-[#eaecf0] rounded-lg";
 const FOCUS =
@@ -91,6 +117,8 @@ export function AdminCurriculumMapping() {
   const [searchResults, setSearchResults] = useState<ObjectiveSearchItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inspecting, setInspecting] = useState<ReviewItem | null>(null);
+  const [rebindTarget, setRebindTarget] = useState<ItemQuestion | null>(null);
 
   const { data: counts } = useQuery<ReviewCounts>({
     queryKey: ["lo-review", "counts"],
@@ -165,6 +193,39 @@ export function AdminCurriculumMapping() {
     },
     onError: (err: { response?: { data?: { detail?: string } } }) =>
       setError(err?.response?.data?.detail ?? "Could not apply this decision."),
+  });
+
+  const { data: itemQuestions, isLoading: questionsLoading } =
+    useQuery<ItemQuestionsResponse>({
+      queryKey: ["lo-review", "questions", inspecting?.id],
+      enabled: inspecting !== null,
+      queryFn: async () =>
+        (
+          await apiClient.get(
+            `/api/v1/lo-review/items/${inspecting?.id}/questions`,
+          )
+        ).data,
+    });
+
+  const rebind = useMutation({
+    mutationFn: async (vars: {
+      questionId: string;
+      objectiveId: string | null;
+    }) =>
+      (
+        await apiClient.patch(
+          `/api/v1/lo-review/questions/${vars.questionId}/objective`,
+          { objective_id: vars.objectiveId },
+        )
+      ).data,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["lo-review", "questions"],
+      });
+      setRebindTarget(null);
+      setSearchResults([]);
+      setSearchTerm("");
+    },
   });
 
   const split = useMutation({
@@ -327,7 +388,7 @@ export function AdminCurriculumMapping() {
                       {item.question_count} question
                       {item.question_count === 1 ? "" : "s"}
                     </span>
-                    {item.status === "PENDING" && (
+                    {item.status === "PENDING" ? (
                       <Button
                         size="sm"
                         onClick={() => {
@@ -339,13 +400,21 @@ export function AdminCurriculumMapping() {
                       >
                         Review
                       </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setInspecting(item)}
+                      >
+                        Inspect questions
+                      </Button>
                     )}
                   </div>
                 </div>
 
                 {item.status !== "PENDING" && (
                   <p className="text-[11px] text-[#6b7280] mt-3 pt-3 border-t border-[#eaecf0]">
-                    {item.status === "APPROVED" ? "Approved" : "Rejected"}
+                    {STATUS_LABEL[item.status] ?? item.status}
                     {item.resolved_at
                       ? ` · ${new Date(item.resolved_at).toLocaleDateString()}`
                       : ""}
@@ -569,6 +638,151 @@ export function AdminCurriculumMapping() {
               </div>
             </div>
           )}
+        </Modal>
+
+        <Modal
+          open={inspecting !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setInspecting(null);
+              setRebindTarget(null);
+              setSearchResults([]);
+              setSearchTerm("");
+            }
+          }}
+          title="Questions in this group"
+          maxWidth="3xl"
+          titleClassName="font-['Inter'] font-bold text-xl text-[#111827] mb-1 pr-8"
+        >
+          <div className="font-['Inter'] space-y-3">
+            {questionsLoading ? (
+              <div className="space-y-2">
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : !itemQuestions ? (
+              <p className="text-xs text-[#b91c1c]">
+                Could not load these questions.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-[#6b7280]">
+                  {itemQuestions.total} questions ·{" "}
+                  <span
+                    className={
+                      itemQuestions.unbound > 0 ? "text-[#b45309]" : ""
+                    }
+                  >
+                    {itemQuestions.unbound} still unassigned
+                  </span>
+                </p>
+
+                <div className="max-h-[26rem] overflow-y-auto space-y-2 pr-1">
+                  {itemQuestions.questions.map((q) => (
+                    <div
+                      key={q.question_id}
+                      className="border border-[#eaecf0] rounded-md p-3"
+                    >
+                      <p className="text-sm text-[#111827] leading-relaxed">
+                        {q.question_text}
+                      </p>
+                      <div className="flex items-start justify-between gap-3 mt-2">
+                        {q.objective_code ? (
+                          <span className="text-[11px] text-[#4b5563] leading-relaxed">
+                            <Check
+                              className="w-3 h-3 inline mr-1 text-[#1a5c38]"
+                              aria-hidden="true"
+                            />
+                            {q.objective_text}
+                            <span className="block text-[10px] text-[#9ca3af] mt-0.5">
+                              {q.objective_code}
+                            </span>
+                          </span>
+                        ) : (
+                          /* Unassigned is a real state, not a failure — the model
+                             declined rather than guessing. Say so plainly. */
+                          <span className="text-[11px] text-[#b45309]">
+                            <AlertTriangle
+                              className="w-3 h-3 inline mr-1"
+                              aria-hidden="true"
+                            />
+                            Not assigned — needs a decision
+                          </span>
+                        )}
+                        <button
+                          onClick={() => {
+                            setRebindTarget(q);
+                            setSearchTerm("");
+                            setSearchResults([]);
+                          }}
+                          className={`text-[11px] font-semibold text-[#1a5c38] hover:underline flex-shrink-0 ${FOCUS}`}
+                        >
+                          {q.objective_code ? "Change" : "Assign"}
+                        </button>
+                      </div>
+
+                      {rebindTarget?.question_id === q.question_id && (
+                        <div className="mt-3 pt-3 border-t border-[#eaecf0] space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              onKeyDown={(e) =>
+                                e.key === "Enter" && void runSearch()
+                              }
+                              placeholder="Search objectives"
+                              aria-label="Search objectives"
+                              className={`flex-1 min-h-[32px] border border-[#eaecf0] rounded-md text-xs px-2 ${FOCUS}`}
+                            />
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              loading={searching}
+                              onClick={() => void runSearch()}
+                            >
+                              Search
+                            </Button>
+                          </div>
+                          {searchResults.map((r) => (
+                            <button
+                              key={r.objective_id}
+                              onClick={() =>
+                                rebind.mutate({
+                                  questionId: q.question_id,
+                                  objectiveId: r.objective_id,
+                                })
+                              }
+                              className={`w-full text-left p-2 rounded-md border border-[#eaecf0] hover:bg-[#fafafa] text-xs ${FOCUS}`}
+                            >
+                              {r.learning_objective}
+                              <span className="block text-[10px] text-[#9ca3af]">
+                                {r.canonical_code}
+                              </span>
+                            </button>
+                          ))}
+                          {q.objective_code && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() =>
+                                rebind.mutate({
+                                  questionId: q.question_id,
+                                  objectiveId: null,
+                                })
+                              }
+                            >
+                              Unassign this question
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </Modal>
       </div>
     </AdminLayout>
