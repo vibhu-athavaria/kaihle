@@ -521,3 +521,36 @@ class LearningObjectiveReviewItem(Base, UUIDMixin, TimestampMixin):
             name="chk_lo_review_resolution_consistent",
         ),
     )
+
+
+class CurriculumMigration(Base, UUIDMixin):
+    """Record of a curriculum remap artifact applied to this environment.
+
+    Alembic's alembic_version tracks which SCHEMA migrations an environment has run.
+    Nothing tracked which CURRICULUM artifacts it had applied, so "has production had
+    the ENG remap?" could only be answered by inspecting rows and inferring.
+
+    That gap is not hypothetical. Production was found carrying a revision recorded as
+    applied whose objects did not exist — alembic_version at least made the lie
+    visible. Artifact application had no equivalent.
+
+    Keyed on artifact_name so the importer can refuse to apply the same artifact twice.
+    """
+
+    __tablename__ = "curriculum_migrations"
+
+    # Filename of the artifact, e.g. 'remap_artifact_cambridge_v2.json'.
+    artifact_name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    artifact_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    # The (curriculum, subjects, grades) the artifact targeted.
+    scope: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+    # Counts observed at apply time. Recorded so a later audit can tell whether the
+    # artifact fully applied or only partially — the failure mode that made the
+    # production drift invisible.
+    objectives_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    placements_linked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    questions_bound: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    groups_unresolved: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    applied_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

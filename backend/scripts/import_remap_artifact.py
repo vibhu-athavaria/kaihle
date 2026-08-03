@@ -235,7 +235,55 @@ async def apply_question_mapping(
     }
 
 
-async def main(artifact_path: Path, snapshot_path: Path, dry_run: bool) -> int:
+async def already_applied(db: AsyncSession, artifact_name: str) -> dict[str, Any] | None:
+    """Return the prior application record for this artifact, if any."""
+    result = await db.execute(
+        text(
+            "SELECT artifact_name, applied_at, objectives_created, placements_linked, "
+            "questions_bound FROM curriculum_migrations WHERE artifact_name = :name"
+        ),
+        {"name": artifact_name},
+    )
+    row = result.mappings().one_or_none()
+    return dict(row) if row else None
+
+
+async def record_application(
+    db: AsyncSession,
+    artifact: dict[str, Any],
+    artifact_name: str,
+    counts: dict[str, int],
+) -> None:
+    """Record that this artifact was applied, with the counts observed.
+
+    Storing the counts lets a later audit distinguish a full application from a partial
+    one — the failure mode that let production drift go unnoticed for so long.
+    """
+    await db.execute(
+        text(
+            """
+            INSERT INTO curriculum_migrations (
+                id, artifact_name, artifact_version, scope, objectives_created,
+                placements_linked, questions_bound, groups_unresolved, applied_at
+            ) VALUES (
+                gen_random_uuid(), :name, :version, CAST(:scope AS jsonb), :created,
+                :linked, :bound, :unresolved, now()
+            )
+            """
+        ),
+        {
+            "name": artifact_name,
+            "version": artifact["artifact_version"],
+            "scope": json.dumps(artifact["scope"]),
+            "created": counts.get("created", 0),
+            "linked": counts.get("linked", 0),
+            "bound": counts.get("questions_bound", 0),
+            "unresolved": counts.get("unresolved_groups", 0),
+        },
+    )
+
+
+async def main(artifact_path: Path, snapshot_path: Path, dry_run: bool, force: bool = False) -> int:
     if not artifact_path.exists():
         log.error("artifact_not_found", path=str(artifact_path))
         return 1
@@ -256,6 +304,17 @@ async def main(artifact_path: Path, snapshot_path: Path, dry_run: bool) -> int:
 
     try:
         async with async_session() as db:
+            prior = await already_applied(db, artifact_path.name)
+            if prior and not force:
+                log.error(
+                    "artifact_already_applied",
+                    artifact=artifact_path.name,
+                    applied_at=str(prior["applied_at"]),
+                    previously=dict(prior),
+                    hint="pass --force to apply again; the import is idempotent either way",
+                )
+                return 1
+
             try:
                 objectives = await import_objectives(db, artifact["learning_objectives"], dry_run)
                 placements = await import_placements(db, artifact["placements"], dry_run)
@@ -265,6 +324,10 @@ async def main(artifact_path: Path, snapshot_path: Path, dry_run: bool) -> int:
                     await db.rollback()
                     log.warning("dry_run_no_changes_made", hint="re-run without --dry-run to apply")
                 else:
+                    if prior is None:
+                        await record_application(
+                            db, artifact, artifact_path.name, {**objectives, **placements, **questions}
+                        )
                     await db.commit()
             except Exception:
                 await db.rollback()
@@ -289,9 +352,14 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--artifact", type=Path, required=True)
     parser.add_argument("--snapshot", type=Path, required=True, help="This environment's own wipe snapshot")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Apply even if curriculum_migrations already records this artifact.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    sys.exit(asyncio.run(main(args.artifact, args.snapshot, args.dry_run)))
+    sys.exit(asyncio.run(main(args.artifact, args.snapshot, args.dry_run, args.force)))
