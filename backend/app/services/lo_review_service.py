@@ -34,6 +34,7 @@ from app.models.curriculum import LearningObjective, LearningObjectiveReviewItem
 logger = structlog.get_logger()
 
 ITEM_TYPE_QUESTION_REMAP = "QUESTION_REMAP"
+ITEM_TYPE_REMAINDER = "QUESTION_REMAP_REMAINDER"
 STATUS_PENDING = "PENDING"
 STATUS_APPROVED = "APPROVED"
 STATUS_REJECTED = "REJECTED"
@@ -255,6 +256,26 @@ class LoReviewService:
             )
             bound += cast("CursorResult[Any]", result).rowcount or 0
 
+        # Undecided questions must stay visible as outstanding work. Leaving them
+        # only inside a SPLIT card made the Pending count understate the queue by 88
+        # questions across two groups.
+        undecided_ids = [str(qid) for qid, code in results if code is None or code not in by_code]
+        if undecided_ids:
+            await upsert_review_item(
+                self.db,
+                item_type=ITEM_TYPE_REMAINDER,
+                source_code=f"{item.source_code}#REMAINDER",
+                source_name=f"{item.source_name or item.source_code} — unresolved after split",
+                source_learning_objective=item.source_learning_objective,
+                subject_code=item.subject_code,
+                grade_level=item.grade_level,
+                question_ids=undecided_ids,
+                # Deliberately no candidates: these questions are heterogeneous by
+                # definition, so there is no single objective the group could bind to.
+                candidates=[],
+                llm_reason="Left unassigned during split — review each question individually.",
+            )
+
         breakdown = ", ".join(f"{code}: {len(ids)}" for code, ids in sorted(per_objective.items()))
         item.status = STATUS_SPLIT
         item.resolved_by = reviewer_id
@@ -390,29 +411,88 @@ class LoReviewService:
         return {"question_id": str(question_id), "objective_id": str(objective_id) if objective_id else None}
 
     async def search_objectives(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
-        """Free-text objective search, so a reviewer can pick outside the shortlist."""
-        pattern = f"%{query.strip()}%"
+        """Find objectives by meaning, falling back to literal matching.
+
+        The original implementation was a single ILIKE on the whole phrase, which
+        required those exact words adjacent in the text. "addition subtraction"
+        returned nothing even spelled correctly, because no objective contains that
+        phrase — a reviewer describing a concept got silence.
+
+        Reviewers describe concepts, not strings, so the primary path is embedding
+        similarity over the same vectors the remap itself uses. Literal matching is
+        kept as a supplement, since a canonical code typed verbatim should still work
+        and needs no model call.
+        """
+        cleaned = query.strip()
+        if not cleaned:
+            return []
+
+        results: dict[str, dict[str, Any]] = {}
+
+        # Literal first: every term must appear somewhere, rather than the whole
+        # phrase appearing verbatim.
+        terms = [t for t in cleaned.split() if t]
+        conditions = [
+            (LearningObjective.learning_objective.ilike(f"%{t}%"))
+            | (LearningObjective.canonical_code.ilike(f"%{t}%"))
+            | (LearningObjective.name.ilike(f"%{t}%"))
+            for t in terms
+        ]
         rows = await self.db.execute(
             select(LearningObjective)
-            .where(
-                LearningObjective.is_active.is_(True),
-                # Bound parameters — never string-formatted into the SQL.
-                (LearningObjective.learning_objective.ilike(pattern))
-                | (LearningObjective.canonical_code.ilike(pattern))
-                | (LearningObjective.name.ilike(pattern)),
-            )
+            .where(LearningObjective.is_active.is_(True), *conditions)
             .order_by(LearningObjective.canonical_code)
             .limit(limit)
         )
-        return [
-            {
+        for o in rows.scalars().all():
+            results[str(o.id)] = {
                 "objective_id": str(o.id),
                 "canonical_code": o.canonical_code,
                 "name": o.name,
                 "learning_objective": o.learning_objective,
+                "match": "literal",
             }
-            for o in rows.scalars().all()
-        ]
+
+        if len(results) >= limit:
+            return list(results.values())[:limit]
+
+        # Semantic: rank the remaining slots by meaning.
+        try:
+            vector = (await embed_all([cleaned]))[0]
+        except Exception as exc:
+            logger.warning("objective_search_embedding_failed", error=str(exc))
+            return list(results.values())
+
+        candidates = await self.db.execute(
+            text(
+                "SELECT id::text AS objective_id, canonical_code, name, learning_objective, embedding "
+                "FROM learning_objectives WHERE is_active AND embedding IS NOT NULL"
+            )
+        )
+        scored: list[tuple[float, dict[str, Any]]] = []
+        for row in candidates.mappings():
+            emb = parse_vector(row["embedding"])
+            if emb is None:
+                continue
+            scored.append(
+                (
+                    cosine_similarity(vector, emb),
+                    {
+                        "objective_id": row["objective_id"],
+                        "canonical_code": row["canonical_code"],
+                        "name": row["name"],
+                        "learning_objective": row["learning_objective"],
+                        "match": "semantic",
+                    },
+                )
+            )
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        for _, item in scored:
+            if len(results) >= limit:
+                break
+            results.setdefault(item["objective_id"], item)
+
+        return list(results.values())[:limit]
 
     async def _subject_objectives(self, subject_code: str | None) -> list[dict[str, Any]]:
         """Active objectives placed somewhere in this subject, with their embeddings."""

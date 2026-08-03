@@ -507,7 +507,7 @@ class LearningObjectiveReviewItem(Base, UUIDMixin, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("item_type", "source_code", name="uq_lo_review_item_source"),
         CheckConstraint(
-            "item_type IN ('QUESTION_REMAP', 'OBJECTIVE_DEDUP')",
+            "item_type IN ('QUESTION_REMAP', 'QUESTION_REMAP_REMAINDER', 'OBJECTIVE_DEDUP')",
             name="chk_lo_review_item_type",
         ),
         CheckConstraint(

@@ -67,6 +67,7 @@ interface ObjectiveSearchItem {
   canonical_code: string;
   name: string;
   learning_objective: string;
+  match: "literal" | "semantic";
 }
 
 type StatusFilter = "PENDING" | "APPROVED" | "REJECTED" | "SPLIT";
@@ -368,6 +369,11 @@ export function AdminCurriculumMapping() {
                       <h2 className="text-sm font-semibold text-[#111827]">
                         {item.source_name ?? item.source_code}
                       </h2>
+                      {item.item_type === "QUESTION_REMAP_REMAINDER" && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#92400e] bg-[#fffbeb] border border-[#fde68a] px-1.5 py-0.5 rounded">
+                          Needs individual review
+                        </span>
+                      )}
                       {item.subject_code && (
                         <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6b7280] bg-[#f3f4f6] px-1.5 py-0.5 rounded">
                           {item.subject_code}
@@ -388,7 +394,8 @@ export function AdminCurriculumMapping() {
                       {item.question_count} question
                       {item.question_count === 1 ? "" : "s"}
                     </span>
-                    {item.status === "PENDING" ? (
+                    {item.status === "PENDING" &&
+                    item.item_type !== "QUESTION_REMAP_REMAINDER" ? (
                       <Button
                         size="sm"
                         onClick={() => {
@@ -403,10 +410,14 @@ export function AdminCurriculumMapping() {
                     ) : (
                       <Button
                         size="sm"
-                        variant="secondary"
+                        variant={
+                          item.status === "PENDING" ? "primary" : "secondary"
+                        }
                         onClick={() => setInspecting(item)}
                       >
-                        Inspect questions
+                        {item.status === "PENDING"
+                          ? "Assign individually"
+                          : "Inspect questions"}
                       </Button>
                     )}
                   </div>
@@ -553,6 +564,9 @@ export function AdminCurriculumMapping() {
                           </span>
                           <span className="block text-[10px] text-[#9ca3af] mt-0.5">
                             {result.canonical_code}
+                            {result.match === "semantic"
+                              ? " · matched by meaning"
+                              : ""}
                           </span>
                         </button>
                       );
@@ -758,6 +772,9 @@ export function AdminCurriculumMapping() {
                               {r.learning_objective}
                               <span className="block text-[10px] text-[#9ca3af]">
                                 {r.canonical_code}
+                                {r.match === "semantic"
+                                  ? " · matched by meaning"
+                                  : ""}
                               </span>
                             </button>
                           ))}

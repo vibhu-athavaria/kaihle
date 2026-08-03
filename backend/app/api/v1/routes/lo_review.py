@@ -89,12 +89,14 @@ class ObjectiveSearchItem(BaseModel):
     canonical_code: str
     name: str
     learning_objective: str
+    # "literal" (the words appear) or "semantic" (matched by meaning).
+    match: str = "literal"
 
 
 @router.get("/items", response_model=ReviewListResponse)
 async def list_review_items(
     status_filter: str = Query("PENDING", pattern="^(PENDING|APPROVED|REJECTED|SPLIT)$", alias="status"),
-    item_type: str | None = Query(None, pattern="^(QUESTION_REMAP|OBJECTIVE_DEDUP)$"),
+    item_type: str | None = Query(None, pattern="^(QUESTION_REMAP|QUESTION_REMAP_REMAINDER|OBJECTIVE_DEDUP)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
