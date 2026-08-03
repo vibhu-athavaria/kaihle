@@ -459,14 +459,14 @@ class LoReviewService:
             }
 
         if len(results) >= limit:
-            return list(results.values())[:limit]
+            return await self._with_placements(list(results.values())[:limit])
 
         # Semantic: rank the remaining slots by meaning.
         try:
             vector = (await embed_all([cleaned]))[0]
         except Exception as exc:
             logger.warning("objective_search_embedding_failed", error=str(exc))
-            return list(results.values())
+            return await self._with_placements(list(results.values()))
 
         candidates = await self.db.execute(
             text(
@@ -497,7 +497,53 @@ class LoReviewService:
                 break
             results.setdefault(item["objective_id"], item)
 
-        return list(results.values())[:limit]
+        return await self._with_placements(list(results.values())[:limit])
+
+    async def _with_placements(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Attach curriculum placement to each result. Every return path uses this."""
+        placements = await self._placements_for([r["objective_id"] for r in results])
+        for r in results:
+            r["placements"] = placements.get(r["objective_id"], [])
+        return results
+
+    async def _placements_for(self, objective_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+        """Where each objective sits in the curriculum: subject, grade, topic.
+
+        Objectives are deliberately grade-agnostic — grade is a property of placement,
+        not of the concept, which is why one objective can be taught in several grades.
+        But a reviewer deciding where a Grade 6 question belongs needs to see that
+        context, otherwise the search returns a flat list of sentences with no way to
+        tell a Grade 6 objective from a Grade 9 one.
+        """
+        if not objective_ids:
+            return {}
+        rows = await self.db.execute(
+            text(
+                """
+                SELECT DISTINCT so.learning_objective_id::text AS objective_id,
+                                s.code AS subject_code, g.level AS grade_level, t.name AS topic_name
+                FROM subtopic_objectives so
+                JOIN subtopics sub        ON sub.id = so.subtopic_id
+                JOIN curriculum_topics ct ON ct.id = sub.curriculum_topic_id
+                JOIN subjects s           ON s.id = ct.subject_id
+                JOIN grades   g           ON g.id = ct.grade_id
+                JOIN topics   t           ON t.id = ct.topic_id
+                WHERE so.learning_objective_id = ANY(CAST(:ids AS uuid[]))
+                ORDER BY 2, 3, 4
+                """
+            ),
+            {"ids": objective_ids},
+        )
+        placements: dict[str, list[dict[str, Any]]] = {}
+        for row in rows.mappings():
+            placements.setdefault(row["objective_id"], []).append(
+                {
+                    "subject_code": row["subject_code"],
+                    "grade_level": row["grade_level"],
+                    "topic_name": row["topic_name"],
+                }
+            )
+        return placements
 
     async def _subject_objectives(self, subject_code: str | None) -> list[dict[str, Any]]:
         """Active objectives placed somewhere in this subject, with their embeddings."""

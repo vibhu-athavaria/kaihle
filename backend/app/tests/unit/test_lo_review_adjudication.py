@@ -112,3 +112,82 @@ class TestAdjudicateQuestion:
         context["candidates"][0].pop("canonical_code")
         with patch("app.services.lo_review_service.complete", self._reply('{"choice": 1}')):
             assert await adjudicate_question(_question(), context) is None
+
+
+class TestSerialise:
+    """The list payload the review screen renders."""
+
+    @staticmethod
+    def _item() -> object:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            id="a",
+            item_type="QUESTION_REMAP",
+            status="PENDING",
+            source_code="MATH-NUM-G6-04",
+            source_name="Ratio and Proportion",
+            source_learning_objective="Write and simplify ratios.",
+            subject_code="MATH",
+            grade_level=6,
+            question_count=103,
+            candidates=[{"canonical_code": "MATH-X"}],
+            llm_suggested_code=None,
+            llm_reason=None,
+            chosen_objective_id=None,
+            admin_note=None,
+            resolved_at=None,
+        )
+
+    def test_serialise_when_unresolved_then_ids_are_null_not_missing(self) -> None:
+        from app.services.lo_review_service import LoReviewService
+
+        payload = LoReviewService._serialise(self._item())  # type: ignore[arg-type]
+
+        # The client distinguishes "no decision yet" from "field absent"; emitting the
+        # key with null keeps that unambiguous.
+        assert payload["chosen_objective_id"] is None
+        assert payload["resolved_at"] is None
+
+    def test_serialise_when_called_then_carries_the_blast_radius(self) -> None:
+        from app.services.lo_review_service import LoReviewService
+
+        payload = LoReviewService._serialise(self._item())  # type: ignore[arg-type]
+
+        # question_count drives ordering and the confirm-button label.
+        assert payload["question_count"] == 103
+        assert payload["source_name"] == "Ratio and Proportion"
+
+
+@pytest.mark.asyncio
+class TestWithPlacements:
+    """Placement attachment is what lets a reviewer tell a Grade 6 objective from a
+    Grade 12 one; every search return path must apply it."""
+
+    async def test_attaches_placements_by_objective_id(self) -> None:
+        from unittest.mock import MagicMock
+
+        from app.services.lo_review_service import LoReviewService
+
+        service = LoReviewService(MagicMock())
+        with patch.object(
+            service,
+            "_placements_for",
+            AsyncMock(return_value={"1": [{"subject_code": "MATH", "grade_level": 6, "topic_name": "Fractions"}]}),
+        ):
+            result = await service._with_placements([{"objective_id": "1"}, {"objective_id": "2"}])
+
+        assert result[0]["placements"][0]["grade_level"] == 6
+        # An objective with no placement gets an empty list, never a missing key —
+        # the UI renders that as an explicit data defect.
+        assert result[1]["placements"] == []
+
+    async def test_when_no_results_then_returns_empty_without_querying(self) -> None:
+        from unittest.mock import MagicMock
+
+        from app.services.lo_review_service import LoReviewService
+
+        service = LoReviewService(MagicMock())
+        with patch.object(service, "_placements_for", AsyncMock(return_value={})) as mock:
+            assert await service._with_placements([]) == []
+        mock.assert_awaited_once_with([])

@@ -85,6 +85,14 @@ class SplitResponse(BaseModel):
     status: str
 
 
+class ObjectivePlacement(BaseModel):
+    """Where an objective is taught. An objective may have several."""
+
+    subject_code: str
+    grade_level: int
+    topic_name: str
+
+
 class ObjectiveSearchItem(BaseModel):
     objective_id: str
     canonical_code: str
@@ -92,6 +100,8 @@ class ObjectiveSearchItem(BaseModel):
     learning_objective: str
     # "literal" (the words appear) or "semantic" (matched by meaning).
     match: str = "literal"
+    # Grade lives on the placement, never on the objective — see ObjectivePlacement.
+    placements: list[ObjectivePlacement] = []
 
 
 @router.get("/items", response_model=ReviewListResponse)

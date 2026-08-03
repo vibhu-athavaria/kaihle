@@ -62,12 +62,19 @@ interface ItemQuestionsResponse {
   questions: ItemQuestion[];
 }
 
+interface ObjectivePlacement {
+  subject_code: string;
+  grade_level: number;
+  topic_name: string;
+}
+
 interface ObjectiveSearchItem {
   objective_id: string;
   canonical_code: string;
   name: string;
   learning_objective: string;
   match: "literal" | "semantic";
+  placements: ObjectivePlacement[];
 }
 
 type StatusFilter = "PENDING" | "APPROVED" | "REJECTED" | "SPLIT";
@@ -89,6 +96,45 @@ const STATUS_LABEL: Record<string, string> = {
 const CARD = "bg-white border border-[#eaecf0] rounded-lg";
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5c38] focus-visible:ring-offset-2";
+
+/**
+ * Objectives are grade-agnostic by design — grade is a property of placement, not of
+ * the concept. But a reviewer choosing where a Grade 6 question belongs must be able
+ * to see that a match sits in Grade 9 Chemistry, or they will pick it by mistake.
+ * Grades are collapsed per subject+topic so a genuinely cross-grade objective reads
+ * "SCI · Grades 6, 7" rather than repeating itself.
+ */
+function PlacementChips({ placements }: { placements: ObjectivePlacement[] }) {
+  if (!placements || placements.length === 0) {
+    return (
+      <span className="text-[10px] text-[#b45309]">
+        Not placed in any curriculum
+      </span>
+    );
+  }
+  const grouped = new Map<string, number[]>();
+  for (const p of placements) {
+    const key = `${p.subject_code}|${p.topic_name}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), p.grade_level]);
+  }
+  return (
+    <span className="flex flex-wrap gap-1 mt-1">
+      {[...grouped.entries()].map(([key, grades]) => {
+        const [subject, topic] = key.split("|");
+        const sorted = [...new Set(grades)].sort((a, b) => a - b);
+        return (
+          <span
+            key={key}
+            className="text-[10px] text-[#374151] bg-[#f3f4f6] px-1.5 py-0.5 rounded"
+          >
+            {subject} · {sorted.length > 1 ? "Grades" : "Grade"}{" "}
+            {sorted.join(", ")} · {topic}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 
 /** Distinguishes an expired session from a genuine server failure. */
 function isUnauthorized(err: unknown): boolean {
@@ -581,6 +627,7 @@ export function AdminCurriculumMapping() {
                               ? " · matched by meaning"
                               : ""}
                           </span>
+                          <PlacementChips placements={result.placements} />
                         </button>
                       );
                     })}
@@ -797,6 +844,7 @@ export function AdminCurriculumMapping() {
                             ? " · matched by meaning"
                             : ""}
                         </span>
+                        <PlacementChips placements={r.placements} />
                       </button>
                     ))}
                   </div>
@@ -898,6 +946,7 @@ export function AdminCurriculumMapping() {
                                   ? " · matched by meaning"
                                   : ""}
                               </span>
+                              <PlacementChips placements={r.placements} />
                             </button>
                           ))}
                           {q.objective_code && (
