@@ -49,9 +49,9 @@ if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
 from app.ai.providers.router import complete  # noqa: E402
+from app.ai.similarity import cosine_similarity, embed_all, parse_vector  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.services.lo_review_service import ITEM_TYPE_QUESTION_REMAP, upsert_review_item  # noqa: E402
-from scripts.create_learning_objectives import cosine_similarity, embed_all, parse_vector  # noqa: E402
 
 _PROMPTS_DIR = _BACKEND_ROOT / "app" / "ai" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)), autoescape=False)  # noqa: S701

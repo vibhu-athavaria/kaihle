@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 import { AdminLayout, Button, EmptyState, Modal, Skeleton } from "@kaihle/ui";
-import { AlertTriangle, Check, Search, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Check, Search, Sparkles, Split, X } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +40,7 @@ interface ReviewCounts {
   PENDING: number;
   APPROVED: number;
   REJECTED: number;
+  SPLIT: number;
 }
 
 interface ObjectiveSearchItem {
@@ -49,11 +50,12 @@ interface ObjectiveSearchItem {
   learning_objective: string;
 }
 
-type StatusFilter = "PENDING" | "APPROVED" | "REJECTED";
+type StatusFilter = "PENDING" | "APPROVED" | "REJECTED" | "SPLIT";
 
 const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: "PENDING", label: "Pending" },
   { value: "APPROVED", label: "Approved" },
+  { value: "SPLIT", label: "Split" },
   { value: "REJECTED", label: "Rejected" },
 ];
 
@@ -163,6 +165,25 @@ export function AdminCurriculumMapping() {
     },
     onError: (err: { response?: { data?: { detail?: string } } }) =>
       setError(err?.response?.data?.detail ?? "Could not apply this decision."),
+  });
+
+  const split = useMutation({
+    mutationFn: async () => {
+      if (!activeItem) return null;
+      return (
+        await apiClient.post(`/api/v1/lo-review/items/${activeItem.id}/split`)
+      ).data as {
+        questions_bound: number;
+        objectives_used: number;
+        undecided: number;
+      };
+    },
+    onSuccess: () => {
+      invalidate();
+      closeModal();
+    },
+    onError: (err: { response?: { data?: { detail?: string } } }) =>
+      setError(err?.response?.data?.detail ?? "Could not split this group."),
   });
 
   const runSearch = useCallback(async () => {
@@ -491,6 +512,38 @@ export function AdminCurriculumMapping() {
                 <p role="alert" className="text-xs text-[#b91c1c]">
                   {error}
                 </p>
+              )}
+
+              {activeItem.candidates.length > 1 && (
+                /*
+                 * An old subtopic could be broader than any single new objective —
+                 * "Ratio and Proportion" covers simplifying ratios, dividing a
+                 * quantity, AND the unitary method, which are now three objectives.
+                 * Binding all its questions to one of them mis-targets most of them.
+                 */
+                <div className="bg-[#fffbeb] border border-[#fde68a] rounded-md p-3">
+                  <p className="text-xs text-[#92400e] leading-relaxed mb-2">
+                    If these questions do not all test the same skill, assign
+                    them individually instead. Each question is judged on its
+                    own; anything unclear is left unbound for you rather than
+                    guessed.
+                  </p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={split.isPending}
+                    onClick={() => split.mutate()}
+                    icon={<Split className="w-4 h-4" aria-hidden="true" />}
+                  >
+                    Assign each question separately
+                  </Button>
+                  {split.isPending && (
+                    <p className="text-[11px] text-[#92400e] mt-2">
+                      Reviewing {activeItem.question_count} questions — this can
+                      take a minute.
+                    </p>
+                  )}
+                </div>
               )}
 
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-[#eaecf0]">

@@ -56,6 +56,7 @@ class ReviewCountsResponse(BaseModel):
     PENDING: int
     APPROVED: int
     REJECTED: int
+    SPLIT: int
 
 
 class ApproveRequest(BaseModel):
@@ -75,6 +76,14 @@ class ResolveResponse(BaseModel):
     status: str
 
 
+class SplitResponse(BaseModel):
+    item_id: str
+    questions_bound: int
+    objectives_used: int
+    undecided: int
+    status: str
+
+
 class ObjectiveSearchItem(BaseModel):
     objective_id: str
     canonical_code: str
@@ -84,7 +93,7 @@ class ObjectiveSearchItem(BaseModel):
 
 @router.get("/items", response_model=ReviewListResponse)
 async def list_review_items(
-    status_filter: str = Query("PENDING", pattern="^(PENDING|APPROVED|REJECTED)$", alias="status"),
+    status_filter: str = Query("PENDING", pattern="^(PENDING|APPROVED|REJECTED|SPLIT)$", alias="status"),
     item_type: str | None = Query(None, pattern="^(QUESTION_REMAP|OBJECTIVE_DEDUP)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -136,6 +145,24 @@ async def approve_review_item(
         admin_note=body.admin_note,
     )
     return ResolveResponse(**result)
+
+
+@router.post("/items/{item_id}/split", response_model=SplitResponse)
+async def split_review_item(
+    item_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+) -> SplitResponse:
+    """Assign each question in the group individually.
+
+    For groups whose old subtopic was broader than any one objective in the newer
+    curriculum. Runs one model call per question, bounded-concurrent, so a large group
+    takes tens of seconds rather than minutes.
+    """
+    if current_user.id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing user context")
+    result = await LoReviewService(db).split_item(item_id=item_id, reviewer_id=current_user.id)
+    return SplitResponse(**result)
 
 
 @router.post("/items/{item_id}/reject", response_model=ResolveResponse)

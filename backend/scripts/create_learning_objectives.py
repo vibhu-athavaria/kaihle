@@ -62,7 +62,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-from app.ai.providers.router import embed_batch  # noqa: E402
+from app.ai.similarity import cosine_similarity, embed_all, parse_vector  # noqa: E402
 from app.core.config import settings  # noqa: E402
 
 structlog.configure(
@@ -184,31 +184,6 @@ def build_canonical_code(subject_code: str, objective_text: str, taken: set[str]
     raise LearningObjectiveError(f"Could not generate a unique canonical code from {base!r}")
 
 
-def parse_vector(raw: object) -> list[float] | None:
-    """Coerce a pgvector value to a plain list of floats.
-
-    Read through raw SQL, pgvector comes back as its text form ('[0.1,0.2,...]'),
-    not a sequence — list() on it would yield single characters and every similarity
-    would silently be garbage. The ORM path returns a real sequence, so both are
-    handled here.
-    """
-    if raw is None:
-        return None
-    if isinstance(raw, str):
-        return [float(x) for x in raw.strip().lstrip("[").rstrip("]").split(",") if x.strip()]
-    return [float(x) for x in cast("list[Any]", raw)]
-
-
-def cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Cosine similarity without a numpy dependency in the hot path."""
-    dot = sum(x * y for x, y in zip(a, b, strict=True))
-    norm_a = sum(x * x for x in a) ** 0.5
-    norm_b = sum(y * y for y in b) ** 0.5
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return dot / (norm_a * norm_b)
-
-
 _SCOPE_FILTER = """
     JOIN curricula c ON c.id = ct.curriculum_id
     JOIN subjects  s ON s.id = ct.subject_id
@@ -276,16 +251,6 @@ async def load_existing_objectives(db: AsyncSession, topic_ids: set[uuid.UUID]) 
         item["embedding"] = parse_vector(item.get("embedding"))
         by_topic.setdefault(item["topic_id"], []).append(item)
     return by_topic
-
-
-async def embed_all(texts: list[str]) -> list[list[float]]:
-    """Embed in provider-sized batches so one oversized request cannot fail the run."""
-    vectors: list[list[float]] = []
-    for start in range(0, len(texts), EMBED_BATCH_SIZE):
-        chunk = texts[start : start + EMBED_BATCH_SIZE]
-        vectors.extend(await embed_batch(chunk))
-        log.info("embedded_batch", done=min(start + EMBED_BATCH_SIZE, len(texts)), total=len(texts))
-    return vectors
 
 
 async def run_new_tree(

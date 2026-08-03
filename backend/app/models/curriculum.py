@@ -511,7 +511,7 @@ class LearningObjectiveReviewItem(Base, UUIDMixin, TimestampMixin):
             name="chk_lo_review_item_type",
         ),
         CheckConstraint(
-            "status IN ('PENDING', 'APPROVED', 'REJECTED')",
+            "status IN ('PENDING', 'APPROVED', 'REJECTED', 'SPLIT')",
             name="chk_lo_review_status",
         ),
         # An approved item must say what it approved; a pending one must not pretend to.

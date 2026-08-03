@@ -24,6 +24,7 @@ from app.services.lo_review_service import (
     STATUS_APPROVED,
     STATUS_PENDING,
     STATUS_REJECTED,
+    STATUS_SPLIT,
     LoReviewService,
     upsert_review_item,
 )
@@ -286,5 +287,5 @@ class TestLoReviewQueue:
 
         counts = await LoReviewService(db_session).counts_by_status()
 
-        assert set(counts) == {STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED}
+        assert set(counts) == {STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED, STATUS_SPLIT}
         assert counts[STATUS_PENDING] >= 1
