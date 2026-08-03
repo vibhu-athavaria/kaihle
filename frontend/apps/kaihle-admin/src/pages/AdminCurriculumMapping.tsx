@@ -92,7 +92,7 @@ export function AdminCurriculumMapping() {
 
   const { data: counts } = useQuery<ReviewCounts>({
     queryKey: ["lo-review", "counts"],
-    queryFn: async () => (await apiClient.get("/lo-review/counts")).data,
+    queryFn: async () => (await apiClient.get("/api/v1/lo-review/counts")).data,
   });
 
   const {
@@ -105,7 +105,7 @@ export function AdminCurriculumMapping() {
     queryKey: ["lo-review", "items", statusFilter],
     queryFn: async () =>
       (
-        await apiClient.get("/lo-review/items", {
+        await apiClient.get("/api/v1/lo-review/items", {
           params: { status: statusFilter },
         })
       ).data,
@@ -128,10 +128,13 @@ export function AdminCurriculumMapping() {
     mutationFn: async () => {
       if (!activeItem || !selectedObjectiveId) return null;
       return (
-        await apiClient.post(`/lo-review/items/${activeItem.id}/approve`, {
-          objective_id: selectedObjectiveId,
-          admin_note: note.trim() || null,
-        })
+        await apiClient.post(
+          `/api/v1/lo-review/items/${activeItem.id}/approve`,
+          {
+            objective_id: selectedObjectiveId,
+            admin_note: note.trim() || null,
+          },
+        )
       ).data;
     },
     onSuccess: () => {
@@ -146,9 +149,12 @@ export function AdminCurriculumMapping() {
     mutationFn: async () => {
       if (!activeItem) return null;
       return (
-        await apiClient.post(`/lo-review/items/${activeItem.id}/reject`, {
-          admin_note: note.trim() || null,
-        })
+        await apiClient.post(
+          `/api/v1/lo-review/items/${activeItem.id}/reject`,
+          {
+            admin_note: note.trim() || null,
+          },
+        )
       ).data;
     },
     onSuccess: () => {
@@ -163,7 +169,7 @@ export function AdminCurriculumMapping() {
     if (searchTerm.trim().length < 2) return;
     setSearching(true);
     try {
-      const res = await apiClient.get("/lo-review/objectives/search", {
+      const res = await apiClient.get("/api/v1/lo-review/objectives/search", {
         params: { q: searchTerm.trim() },
       });
       setSearchResults(res.data);
