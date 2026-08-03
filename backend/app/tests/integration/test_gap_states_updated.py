@@ -29,9 +29,11 @@ from app.models.curriculum import (
     CurriculumSubject,
     CurriculumTopic,
     Grade,
+    LearningObjective,
     QuestionBank,
     Subject,
     Subtopic,
+    SubtopicObjective,
     Topic,
 )
 from app.models.gap import GapState
@@ -387,3 +389,185 @@ class TestGapStatesUpdated:
         )
         scores = score_result.scalars().all()
         assert len(scores) == 1
+
+
+@pytest.mark.asyncio
+class TestGapStatesAfterCurriculumRemap:
+    """Regression tests for the v2 curriculum remap.
+
+    A remapped question has subtopic_id = NULL and is reachable only through its
+    learning objective. Resolving attribution via question_bank.subtopic_id silently
+    dropped every such response, so no mastery was ever recorded for a remapped
+    scope — the diagnostic, which is the core product, went quietly dead.
+    """
+
+    async def test_gap_states_when_question_has_no_subtopic_id_then_attributed_via_objective(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        curriculum, grade, subject, ct, subtopic = await _create_curriculum_chain(db_session, school)
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, grade, subject, teacher)
+
+        objective = LearningObjective(
+            id=uuid.uuid4(),
+            canonical_code=f"LO-{uuid.uuid4().hex[:10]}",
+            name="Remapped objective",
+            learning_objective="Order negative integers on a number line.",
+            topic_id=ct.topic_id,
+            is_active=True,
+        )
+        db_session.add(objective)
+        await db_session.flush()
+        db_session.add(SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=objective.id))
+        await db_session.flush()
+
+        # Exactly the post-wipe shape: no subtopic_id, bound only via the objective.
+        question = QuestionBank(
+            id=uuid.uuid4(),
+            subtopic_id=None,
+            learning_objective_id=objective.id,
+            question_text="What is -3 + 5?",
+            question_type="MCQ",
+            options=[{"key": "A", "text": "2"}],
+            correct_answer="A",
+            canonical_form=f"q-{uuid.uuid4().hex[:8]}",
+            problem_signature={},
+            difficulty_level=2.0,
+            source="bank",
+            is_active=True,
+        )
+        db_session.add(question)
+        await db_session.flush()
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-remap-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="Remap",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        assessment = await _create_assessment(db_session, school, class_, teacher)
+        attempt = await _create_attempt(db_session, assessment, student)
+        await _create_response(db_session, attempt, question, is_correct=True)
+
+        result = await GapService(db_session).calculate_gap_states_for_attempt(attempt.id)
+
+        assert result["subtopics_updated"] == 1
+        gs = await db_session.execute(
+            select(GapState).where(
+                GapState.student_id == student.id,
+                GapState.subtopic_id == subtopic.id,
+                GapState.class_id == class_.id,
+            )
+        )
+        assert gs.scalar_one_or_none() is not None
+
+    async def test_gap_states_when_objective_placed_outside_class_scope_then_not_attributed(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        """An objective can be taught in several placements. Attribution must stay
+        inside the class's own curriculum/subject/grade, never leak across it."""
+        curriculum, grade, subject, ct, subtopic = await _create_curriculum_chain(db_session, school)
+        other_curriculum, other_grade, other_subject, other_ct, other_subtopic = await _create_curriculum_chain(
+            db_session, school
+        )
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, grade, subject, teacher)
+
+        objective = LearningObjective(
+            id=uuid.uuid4(),
+            canonical_code=f"LO-{uuid.uuid4().hex[:10]}",
+            name="Shared objective",
+            learning_objective="Shared across two placements.",
+            topic_id=other_ct.topic_id,
+            is_active=True,
+        )
+        db_session.add(objective)
+        await db_session.flush()
+        # Placed ONLY outside the class's scope.
+        db_session.add(SubtopicObjective(subtopic_id=other_subtopic.id, learning_objective_id=objective.id))
+        await db_session.flush()
+
+        question = QuestionBank(
+            id=uuid.uuid4(),
+            subtopic_id=None,
+            learning_objective_id=objective.id,
+            question_text="Out of scope?",
+            question_type="MCQ",
+            options=[{"key": "A", "text": "1"}],
+            correct_answer="A",
+            canonical_form=f"q-{uuid.uuid4().hex[:8]}",
+            problem_signature={},
+            difficulty_level=2.0,
+            source="bank",
+            is_active=True,
+        )
+        db_session.add(question)
+        await db_session.flush()
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-scope-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="Scope",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        assessment = await _create_assessment(db_session, school, class_, teacher)
+        attempt = await _create_attempt(db_session, assessment, student)
+        await _create_response(db_session, attempt, question, is_correct=True)
+
+        await GapService(db_session).calculate_gap_states_for_attempt(attempt.id)
+
+        leaked = await db_session.execute(
+            select(GapState).where(
+                GapState.student_id == student.id,
+                GapState.subtopic_id == other_subtopic.id,
+            )
+        )
+        assert leaked.scalar_one_or_none() is None
+
+    async def test_gap_states_when_legacy_question_still_has_subtopic_id_then_still_attributed(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        """Untouched scopes keep a populated subtopic_id. The fallback must preserve
+        them, or fixing the remapped scope would break every scope that was fine."""
+        curriculum, grade, subject, ct, subtopic = await _create_curriculum_chain(db_session, school)
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, grade, subject, teacher)
+        question = await _create_question(db_session, subtopic)
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-legacy-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="Legacy",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        assessment = await _create_assessment(db_session, school, class_, teacher)
+        attempt = await _create_attempt(db_session, assessment, student)
+        await _create_response(db_session, attempt, question, is_correct=True)
+
+        result = await GapService(db_session).calculate_gap_states_for_attempt(attempt.id)
+
+        assert result["subtopics_updated"] == 1
