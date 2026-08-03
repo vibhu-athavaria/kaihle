@@ -18,6 +18,7 @@ import { AdminSchoolDetail } from "./pages/AdminSchoolDetail";
 import { AdminConfig } from "./pages/AdminConfig";
 import { AdminUsers } from "./pages/AdminUsers";
 import { AdminGrades } from "./pages/AdminGrades";
+import { AdminCurriculumMapping } from "./pages/AdminCurriculumMapping";
 import { AdminQuestionReview } from "./pages/AdminQuestionReview";
 import { ContentReviewQueue } from "./pages/content/VideoReviewQueue";
 import { ContentReviewDetail } from "./pages/content/VideoReviewDetail";
@@ -68,6 +69,10 @@ export default function App() {
                       <Route
                         path="question-bank"
                         element={<AdminQuestionReview />}
+                      />
+                      <Route
+                        path="curriculum/mapping"
+                        element={<AdminCurriculumMapping />}
                       />
                       <Route
                         path="content/review"
