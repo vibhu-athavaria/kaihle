@@ -69,6 +69,7 @@ from app.schemas.subtopic_content import (
     VideoStatusUpdateRequest,
     VideoSuggestionRequest,
 )
+from app.services.question_selection import resolve_objective_for_subtopic
 from app.services.youtube_service import search_youtube_videos
 from app.tasks.content_tasks import generate_personalised_explanations
 from app.tasks.teacher_content_tasks import generate_teacher_requested_content
@@ -823,10 +824,26 @@ async def update_quiz(
                 QuestionBank.source == "llm",
             )
         )
+        # A question stored without an objective is unreachable: selection and gap
+        # attribution both resolve through learning_objective_id, so it would be
+        # generated, persisted and never served.
+        objective_id = await resolve_objective_for_subtopic(db, subtopic_id)
+        if objective_id is None:
+            logger.error(
+                "quiz_publish_subtopic_has_no_objective",
+                subtopic_id=str(subtopic_id),
+                note="questions would be unreachable; run create_learning_objectives",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Subtopic has no learning objective; questions cannot be published.",
+            )
+
         for q in body.questions:
             db.add(
                 QuestionBank(
                     subtopic_id=subtopic_id,
+                    learning_objective_id=objective_id,
                     question_text=q.get("question_text", ""),
                     question_type="MCQ",
                     options=q.get("options", []),
@@ -1414,6 +1431,20 @@ async def teacher_approve_content(
         # can serve them. Options are stored as "A: text" strings in the JSONB;
         # QuestionBank expects [{"key": "A", "text": "..."}] dicts.
         if content_type == "quiz" and content.quiz_questions:
+            # Selection and gap attribution both resolve through learning_objective_id.
+            # Publishing without one stores questions nothing can ever reach.
+            objective_id = await resolve_objective_for_subtopic(db, subtopic_id)
+            if objective_id is None:
+                logger.error(
+                    "quiz_publish_subtopic_has_no_objective",
+                    subtopic_id=str(subtopic_id),
+                    note="questions would be unreachable; run create_learning_objectives",
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Subtopic has no learning objective; questions cannot be published.",
+                )
+
             await db.execute(
                 delete(QuestionBank).where(
                     QuestionBank.subtopic_id == subtopic_id,
@@ -1432,6 +1463,7 @@ async def teacher_approve_content(
                 db.add(
                     QuestionBank(
                         subtopic_id=subtopic_id,
+                        learning_objective_id=objective_id,
                         question_text=q.get("question_text", ""),
                         question_type="MCQ",
                         options=parsed_opts,

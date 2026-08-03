@@ -17,8 +17,10 @@ from app.models.curriculum import (
     Curriculum,
     CurriculumTopic,
     Grade,
+    LearningObjective,
     Subject,
     Subtopic,
+    SubtopicObjective,
     Topic,
 )
 from app.models.school import School
@@ -77,6 +79,20 @@ async def _create_curriculum_subtopic(db: AsyncSession) -> tuple[Subtopic, Topic
         is_active=True,
     )
     db.add(subtopic)
+    await db.flush()
+
+    # Check questions resolve through the objective, so the fixture needs one.
+    objective = LearningObjective(
+        id=uuid.uuid4(),
+        canonical_code=f"LO-{uuid.uuid4().hex[:10]}",
+        name="Solve linear equations",
+        learning_objective="Solve linear equations",
+        topic_id=topic.id,
+        is_active=True,
+    )
+    db.add(objective)
+    await db.flush()
+    db.add(SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=objective.id))
     await db.commit()
 
     return subtopic, topic

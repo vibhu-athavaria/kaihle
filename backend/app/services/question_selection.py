@@ -20,7 +20,8 @@ need an old-path/new-path branch forever.
 import uuid
 from typing import Any, Literal
 
-from sqlalchemy import ColumnElement, Select
+from sqlalchemy import ColumnElement, Select, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subtopic, SubtopicObjective
 
@@ -64,6 +65,49 @@ def active_scope_filters(
         Subtopic.is_active.is_(True),
         QuestionBank.is_active.is_(True),
     ]
+
+
+def questions_for_subtopic(subtopic_id: uuid.UUID) -> Select[Any]:
+    """Select active questions taught by a single subtopic, via its objectives.
+
+    The subtopic-scoped counterpart to join_questions_via_objectives, for callers that
+    already hold a subtopic id and do not need the curriculum scope.
+
+    De-duplication happens in a subquery rather than via DISTINCT on the outer select:
+    a subtopic teaching several objectives can reach one question more than once, but
+    Postgres rejects SELECT DISTINCT combined with an ORDER BY expression that is not
+    in the select list — which would break the common `.order_by(func.random())` case.
+    """
+    matching_ids = (
+        select(QuestionBank.id)
+        .join(SubtopicObjective, SubtopicObjective.learning_objective_id == QuestionBank.learning_objective_id)
+        .where(
+            SubtopicObjective.subtopic_id == subtopic_id,
+            QuestionBank.is_active.is_(True),
+        )
+        .scalar_subquery()
+    )
+    return select(QuestionBank).where(QuestionBank.id.in_(matching_ids))
+
+
+async def resolve_objective_for_subtopic(db: AsyncSession, subtopic_id: uuid.UUID) -> uuid.UUID | None:
+    """Return the objective a newly authored question for this subtopic should bind to.
+
+    Anything that CREATES a question must set learning_objective_id. Selection resolves
+    through the objective, so a question stored with only a subtopic_id is unreachable:
+    generated, persisted, and never served to anyone.
+
+    Ordered so that repeated calls pick the same objective when a subtopic teaches
+    several. Returns None if the subtopic has no objective, which is a data defect the
+    caller should surface rather than silently write an unreachable row.
+    """
+    result = await db.execute(
+        select(SubtopicObjective.learning_objective_id)
+        .where(SubtopicObjective.subtopic_id == subtopic_id)
+        .order_by(SubtopicObjective.learning_objective_id)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 def tier_filter(tier: StudentTier | None) -> ColumnElement[bool]:

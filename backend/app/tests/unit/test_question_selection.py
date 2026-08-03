@@ -14,6 +14,7 @@ from app.services.question_selection import (
     TIER_VISIBILITY,
     active_scope_filters,
     join_questions_via_objectives,
+    questions_for_subtopic,
     tier_filter,
 )
 
@@ -100,3 +101,36 @@ class TestModelWiring:
 
     def test_subtopic_carries_the_tier_column(self) -> None:
         assert "tier" in Subtopic.__table__.c
+
+
+class TestQuestionsForSubtopic:
+    """Subtopic-scoped selection, used by the mini-course check step."""
+
+    def test_query_when_built_then_routes_through_the_objective_bridge(self) -> None:
+        sql = str(questions_for_subtopic(uuid.uuid4()))
+        assert "subtopic_objectives" in sql
+        assert "learning_objective_id" in sql
+
+    def test_query_when_built_then_never_keys_on_question_subtopic_id(self) -> None:
+        """subtopic_id may appear in the select list (the whole row is returned) — what
+        matters is that it is never a join or filter key, since it is NULL for every
+        remapped question."""
+        sql = str(questions_for_subtopic(uuid.uuid4()))
+        assert "question_bank.subtopic_id =" not in sql
+        assert "question_bank.subtopic_id IN" not in sql
+
+    def test_query_when_built_then_avoids_distinct_on_the_outer_select(self) -> None:
+        """Postgres rejects SELECT DISTINCT with an ORDER BY expression absent from the
+        select list, which breaks the order_by(random()) callers actually use.
+        De-duplication therefore happens in a subquery."""
+        sql = str(questions_for_subtopic(uuid.uuid4()))
+        assert "DISTINCT" not in sql.upper()
+
+    def test_query_when_ordered_randomly_then_remains_valid_sql(self) -> None:
+        from sqlalchemy import func
+
+        sql = str(questions_for_subtopic(uuid.uuid4()).order_by(func.random()).limit(3))
+        assert "random()" in sql.lower()
+
+    def test_query_when_built_then_excludes_inactive_questions(self) -> None:
+        assert "is_active" in str(questions_for_subtopic(uuid.uuid4()))
