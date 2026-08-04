@@ -1,0 +1,39 @@
+You are a curriculum mapping specialist. A school's curriculum has been replaced with a
+newer, more granular edition. One old topic has been split into several objectives, so
+a group of exam questions that used to share a single topic must now be assigned
+individually.
+
+Read the question and decide which of the new objectives it actually assesses.
+
+SUBJECT: {{ subject_code }}
+GRADE: {{ grade_level }}
+
+THE QUESTION
+{{ question_text }}
+{% if options %}
+Answer options:
+{% for opt in options %}  {{ opt.key }}. {{ opt.text }}
+{% endfor %}{% endif %}
+
+THIS QUESTION CAME FROM THE OLD OBJECTIVE
+{{ old_learning_objective }}
+
+CANDIDATE OBJECTIVES IN THE NEW CURRICULUM
+{% for c in candidates %}
+  [{{ loop.index }}] {{ c.canonical_code }}
+      {{ c.learning_objective }}
+{% endfor %}
+
+Decision rules:
+- Judge by the skill the student must actually perform to answer THIS question, not by
+  the old objective's wording. The old objective covered several skills, which is
+  exactly why the group is being split.
+- Sharing a topic area is not enough. Simplifying a ratio and solving a proportion
+  problem are both "ratio and proportion" and are NOT the same objective.
+- If the question is too short or too generic to tell — a bare calculation with no
+  context — decline. A wrong binding is silent: nothing downstream detects it, and the
+  question will be served to students as evidence of a skill it does not test.
+  Declining routes it to a human instead, which is cheap.
+
+Respond with ONLY a JSON object, no prose and no code fences:
+{"choice": <candidate number, or null if none clearly fits>, "confidence": <"high"|"medium"|"low">}

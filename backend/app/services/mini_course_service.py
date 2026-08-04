@@ -54,6 +54,7 @@ from app.schemas.mini_course import (
     SubtopicVideoItem,
     TransferQuestionResponse,
 )
+from app.services.question_selection import questions_for_subtopic
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "ai" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)), autoescape=False)
@@ -597,15 +598,15 @@ class MiniCourseService:
         )
 
     async def _fetch_check_questions(self, subtopic_id: uuid.UUID) -> list[CheckQuestion]:
-        """Return up to 3 random active questions from question_bank for subtopic."""
+        """Return up to 3 random active questions from question_bank for subtopic.
+
+        Resolves through the subtopic's learning objectives, not question_bank.subtopic_id.
+        That column is NULL for every remapped question, so keying on it returned an
+        empty list for any remapped subtopic and the check step silently had no
+        questions at all.
+        """
         result = await self.db.execute(
-            select(QuestionBank)
-            .where(
-                QuestionBank.subtopic_id == subtopic_id,
-                QuestionBank.is_active.is_(True),
-            )
-            .order_by(func.random())
-            .limit(_CHECK_QUESTION_LIMIT)
+            questions_for_subtopic(subtopic_id).order_by(func.random()).limit(_CHECK_QUESTION_LIMIT)
         )
         rows = result.scalars().all()
 

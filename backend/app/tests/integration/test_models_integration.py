@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,8 +23,11 @@ from app.models.curriculum import (
     CurriculumSubject,
     CurriculumTopic,
     Grade,
+    LearningObjective,
+    QuestionBank,
     Subject,
     Subtopic,
+    SubtopicObjective,
     Topic,
 )
 from app.models.gap import GapState
@@ -629,3 +632,263 @@ class TestConstraints:
             await db_session.commit()
 
         await db_session.rollback()
+
+
+@pytest.mark.asyncio
+class TestLearningObjectiveLayer:
+    """Integration tests for the LO layer introduced by the v2 curriculum remap.
+
+    These assert database-enforced behaviour (uniqueness, RESTRICT, CASCADE, CHECK)
+    that model-level unit tests cannot prove.
+    """
+
+    async def _make_subtopic(
+        self,
+        db_session: AsyncSession,
+        test_curriculum: Curriculum,
+        test_subject: Subject,
+        test_grade: Grade,
+        topic: Topic,
+        name: str = "Test Subtopic",
+    ) -> Subtopic:
+        # curriculum_topics is UNIQUE on (curriculum, subject, grade, topic), so reuse
+        # the pivot row — several subtopics legitimately hang off the same placement.
+        existing = await db_session.execute(
+            select(CurriculumTopic).where(
+                CurriculumTopic.curriculum_id == test_curriculum.id,
+                CurriculumTopic.subject_id == test_subject.id,
+                CurriculumTopic.grade_id == test_grade.id,
+                CurriculumTopic.topic_id == topic.id,
+            )
+        )
+        ct = existing.scalar_one_or_none()
+        if ct is None:
+            ct = CurriculumTopic(
+                id=uuid.uuid4(),
+                curriculum_id=test_curriculum.id,
+                subject_id=test_subject.id,
+                grade_id=test_grade.id,
+                topic_id=topic.id,
+                sequence_order=1,
+                is_required=True,
+            )
+            db_session.add(ct)
+            await db_session.flush()
+
+        subtopic = Subtopic(
+            id=uuid.uuid4(),
+            curriculum_topic_id=ct.id,
+            name=name,
+            canonical_code=f"ST-{uuid.uuid4().hex[:8]}",
+            learning_objective=f"Objective for {name}.",
+            is_active=True,
+        )
+        db_session.add(subtopic)
+        await db_session.commit()
+        return subtopic
+
+    @staticmethod
+    def _make_lo(topic_id: uuid.UUID, code: str | None = None) -> LearningObjective:
+        return LearningObjective(
+            id=uuid.uuid4(),
+            canonical_code=code or f"MATH-LO-{uuid.uuid4().hex[:8]}",
+            name="Using negative numbers",
+            learning_objective="Order and use negative numbers in practical contexts.",
+            topic_id=topic_id,
+            bloom_taxonomy_level="Apply",
+            is_active=True,
+        )
+
+    async def test_learning_objective_when_persisted_then_reads_back(
+        self, db_session: AsyncSession, test_topic: Topic
+    ) -> None:
+        lo = self._make_lo(test_topic.id)
+        db_session.add(lo)
+        await db_session.commit()
+
+        result = await db_session.execute(select(LearningObjective).where(LearningObjective.id == lo.id))
+        fetched = result.scalar_one()
+        assert fetched.topic_id == test_topic.id
+        assert fetched.is_active is True
+        assert fetched.embedding is None
+
+    async def test_canonical_code_when_duplicated_then_raises_integrity_error(
+        self, db_session: AsyncSession, test_topic: Topic
+    ) -> None:
+        code = f"MATH-DUP-{uuid.uuid4().hex[:8]}"
+        db_session.add(self._make_lo(test_topic.id, code))
+        await db_session.commit()
+
+        db_session.add(self._make_lo(test_topic.id, code))
+        with pytest.raises(IntegrityError):
+            await db_session.commit()
+        await db_session.rollback()
+
+    async def test_topic_when_deleted_with_objectives_then_restrict_blocks_delete(
+        self, db_session: AsyncSession, test_topic: Topic
+    ) -> None:
+        """Topics are shared across grades/curricula — the wipe must never cascade them away."""
+        db_session.add(self._make_lo(test_topic.id))
+        await db_session.commit()
+
+        # The FK is checked at statement time, not at COMMIT — so the raise must
+        # wrap the DELETE itself.
+        with pytest.raises(IntegrityError):
+            await db_session.execute(delete(Topic).where(Topic.id == test_topic.id))
+        await db_session.rollback()
+
+    async def test_bridge_when_one_subtopic_has_two_objectives_then_both_persist(
+        self,
+        db_session: AsyncSession,
+        test_curriculum: Curriculum,
+        test_subject: Subject,
+        test_grade: Grade,
+        test_topic: Topic,
+    ) -> None:
+        subtopic = await self._make_subtopic(db_session, test_curriculum, test_subject, test_grade, test_topic)
+        lo_a, lo_b = self._make_lo(test_topic.id), self._make_lo(test_topic.id)
+        db_session.add_all([lo_a, lo_b])
+        await db_session.flush()
+        db_session.add_all(
+            [
+                SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=lo_a.id),
+                SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=lo_b.id),
+            ]
+        )
+        await db_session.commit()
+
+        result = await db_session.execute(select(SubtopicObjective).where(SubtopicObjective.subtopic_id == subtopic.id))
+        assert {r.learning_objective_id for r in result.scalars()} == {lo_a.id, lo_b.id}
+
+    async def test_bridge_when_one_objective_shared_by_two_subtopics_then_both_persist(
+        self,
+        db_session: AsyncSession,
+        test_curriculum: Curriculum,
+        test_subject: Subject,
+        test_grade: Grade,
+        test_topic: Topic,
+    ) -> None:
+        """This is the case that makes the bank curriculum-agnostic: the same concept
+        taught at two placements resolves to a single objective."""
+        st_a = await self._make_subtopic(
+            db_session, test_curriculum, test_subject, test_grade, test_topic, "Ordering decimals G6"
+        )
+        st_b = await self._make_subtopic(
+            db_session, test_curriculum, test_subject, test_grade, test_topic, "Ordering decimals G7"
+        )
+        lo = self._make_lo(test_topic.id)
+        db_session.add(lo)
+        await db_session.flush()
+        db_session.add_all(
+            [
+                SubtopicObjective(subtopic_id=st_a.id, learning_objective_id=lo.id),
+                SubtopicObjective(subtopic_id=st_b.id, learning_objective_id=lo.id),
+            ]
+        )
+        await db_session.commit()
+
+        result = await db_session.execute(
+            select(SubtopicObjective).where(SubtopicObjective.learning_objective_id == lo.id)
+        )
+        assert {r.subtopic_id for r in result.scalars()} == {st_a.id, st_b.id}
+
+    async def test_subtopic_when_deleted_then_bridge_cascades_but_objective_survives(
+        self,
+        db_session: AsyncSession,
+        test_curriculum: Curriculum,
+        test_subject: Subject,
+        test_grade: Grade,
+        test_topic: Topic,
+    ) -> None:
+        """Exactly the scoped-wipe path: placement is removed, the concept is kept."""
+        subtopic = await self._make_subtopic(db_session, test_curriculum, test_subject, test_grade, test_topic)
+        lo = self._make_lo(test_topic.id)
+        db_session.add(lo)
+        await db_session.flush()
+        db_session.add(SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=lo.id))
+        await db_session.commit()
+
+        await db_session.execute(delete(Subtopic).where(Subtopic.id == subtopic.id))
+        await db_session.commit()
+
+        bridge = await db_session.execute(
+            select(SubtopicObjective).where(SubtopicObjective.learning_objective_id == lo.id)
+        )
+        assert bridge.scalars().all() == []
+        surviving = await db_session.execute(select(LearningObjective).where(LearningObjective.id == lo.id))
+        assert surviving.scalar_one().id == lo.id
+
+    async def test_objective_when_deleted_while_bridged_then_restrict_blocks_delete(
+        self,
+        db_session: AsyncSession,
+        test_curriculum: Curriculum,
+        test_subject: Subject,
+        test_grade: Grade,
+        test_topic: Topic,
+    ) -> None:
+        subtopic = await self._make_subtopic(db_session, test_curriculum, test_subject, test_grade, test_topic)
+        lo = self._make_lo(test_topic.id)
+        db_session.add(lo)
+        await db_session.flush()
+        db_session.add(SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=lo.id))
+        await db_session.commit()
+
+        with pytest.raises(IntegrityError):
+            await db_session.execute(delete(LearningObjective).where(LearningObjective.id == lo.id))
+        await db_session.rollback()
+
+    async def test_subtopic_tier_when_not_specified_then_defaults_to_both(
+        self,
+        db_session: AsyncSession,
+        test_curriculum: Curriculum,
+        test_subject: Subject,
+        test_grade: Grade,
+        test_topic: Topic,
+    ) -> None:
+        subtopic = await self._make_subtopic(db_session, test_curriculum, test_subject, test_grade, test_topic)
+        await db_session.refresh(subtopic)
+        assert subtopic.tier == "BOTH"
+
+    async def test_subtopic_tier_when_given_invalid_value_then_check_constraint_rejects(
+        self,
+        db_session: AsyncSession,
+        test_curriculum: Curriculum,
+        test_subject: Subject,
+        test_grade: Grade,
+        test_topic: Topic,
+    ) -> None:
+        subtopic = await self._make_subtopic(db_session, test_curriculum, test_subject, test_grade, test_topic)
+        subtopic.tier = "PREMIUM"
+        with pytest.raises(IntegrityError):
+            await db_session.commit()
+        await db_session.rollback()
+
+    async def test_question_when_bound_to_objective_only_then_null_subtopic_is_allowed(
+        self, db_session: AsyncSession, test_topic: Topic
+    ) -> None:
+        """The post-remap steady state: selection runs off the LO, not the subtopic."""
+        lo = self._make_lo(test_topic.id)
+        db_session.add(lo)
+        await db_session.flush()
+
+        question = QuestionBank(
+            id=uuid.uuid4(),
+            subtopic_id=None,
+            learning_objective_id=lo.id,
+            question_text="What is -3 + 5?",
+            question_type="MCQ",
+            options=[{"key": "A", "text": "2"}, {"key": "B", "text": "-8"}],
+            correct_answer="A",
+            canonical_form="-3+5",
+            problem_signature={"op": "add"},
+            difficulty_level=2.0,
+            source="bank",
+            is_active=True,
+        )
+        db_session.add(question)
+        await db_session.commit()
+
+        result = await db_session.execute(select(QuestionBank).where(QuestionBank.id == question.id))
+        fetched = result.scalar_one()
+        assert fetched.subtopic_id is None
+        assert fetched.learning_objective_id == lo.id

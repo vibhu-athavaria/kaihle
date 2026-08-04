@@ -19,6 +19,7 @@ from app.api.v1.routes import (
     gap_map,
     health,
     lesson_plans,
+    lo_review,
     onboarding,
     parent,
     platform,
@@ -102,6 +103,7 @@ app.include_router(gap_map.router, prefix="/api/v1")
 app.include_router(lesson_plans.router, prefix="/api/v1")
 app.include_router(parent.router, prefix="/api/v1")
 app.include_router(parent.parents_router, prefix="/api/v1")
+app.include_router(lo_review.router, prefix="/api/v1")
 app.include_router(platform.router, prefix="/api/v1")
 app.include_router(question_bank.router, prefix="/api/v1")
 app.include_router(question_management.router, prefix="/api/v1")

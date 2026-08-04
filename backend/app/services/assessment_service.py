@@ -55,6 +55,12 @@ from app.schemas.assessments import (
     TopicAvailability,
     TopicBreakdownItem,
 )
+from app.services.question_selection import (
+    StudentTier,
+    active_scope_filters,
+    join_questions_via_objectives,
+    tier_filter,
+)
 
 logger = structlog.get_logger()
 
@@ -694,6 +700,7 @@ class AssessmentService:
         curriculum_id: uuid.UUID,
         subject_id: uuid.UUID,
         grade_id: uuid.UUID,
+        tier: StudentTier | None = None,
     ) -> list[uuid.UUID]:
         """Select up to MAX_DIAGNOSTIC_POOL questions spread across curriculum topics.
 
@@ -706,25 +713,31 @@ class AssessmentService:
             curriculum_id: The curriculum UUID.
             subject_id: The subject UUID.
             grade_id: The grade UUID.
+            tier: IGCSE Core/Extended tier. None (the default) applies no tier
+                restriction, which is correct below IGCSE where tiering does not exist.
 
         Returns:
             Ordered list of question UUIDs to include in the assessment pool.
         """
         # Single query: fetch all active questions with their topic and difficulty,
-        # for this curriculum+subject+grade combination.
+        # for this curriculum+subject+grade combination. Resolution goes through
+        # learning objectives, never question_bank.subtopic_id — see
+        # app/services/question_selection.py for why.
+        # DISTINCT because a question reachable via two subtopics of the same topic
+        # would otherwise be counted twice and skew the difficulty distribution.
         rows = await self.db.execute(
-            select(QuestionBank.id, Subtopic.curriculum_topic_id, QuestionBank.difficulty_level)
-            .select_from(CurriculumTopic)
-            .join(Subtopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
-            .join(QuestionBank, QuestionBank.subtopic_id == Subtopic.id)
-            .where(
-                CurriculumTopic.curriculum_id == curriculum_id,
-                CurriculumTopic.subject_id == subject_id,
-                CurriculumTopic.grade_id == grade_id,
-                CurriculumTopic.is_active.is_(True),
-                Subtopic.is_active.is_(True),
-                QuestionBank.is_active.is_(True),
+            join_questions_via_objectives(
+                select(
+                    QuestionBank.id,
+                    Subtopic.curriculum_topic_id,
+                    QuestionBank.difficulty_level,
+                ).select_from(CurriculumTopic)
             )
+            .where(
+                *active_scope_filters(curriculum_id, subject_id, grade_id),
+                tier_filter(tier),
+            )
+            .distinct()
         )
 
         all_rows: list[tuple[uuid.UUID, uuid.UUID, float | None]] = [tuple(row) for row in rows.all()]

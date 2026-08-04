@@ -86,16 +86,25 @@ class TestComplete:
 
 
 class TestEmbed:
-    """Tests for the embed() function."""
+    """Tests for embed() and embed_batch()."""
+
+    @staticmethod
+    def _response(*vectors: list[float], with_index: bool = False) -> MagicMock:
+        mock_response = MagicMock()
+        if with_index:
+            mock_response.data = [{"embedding": v, "index": i} for i, v in enumerate(vectors)]
+        else:
+            mock_response.data = [{"embedding": v} for v in vectors]
+        return mock_response
 
     @pytest.mark.asyncio
     async def test_embed_when_called_then_returns_float_list(self) -> None:
         """Test that embed() returns a list of floats."""
-        mock_response = MagicMock()
-        mock_response.data = [{"embedding": [0.1, 0.2, 0.3]}]
-
-        with patch("litellm.aembedding", new_callable=AsyncMock) as mock_embedding:
-            mock_embedding.return_value = mock_response
+        with (
+            patch("litellm.aembedding", new_callable=AsyncMock) as mock_embedding,
+            patch("app.ai.providers.router.settings.llm_embeddings_dimensions", 3),
+        ):
+            mock_embedding.return_value = self._response([0.1, 0.2, 0.3])
 
             from app.ai.providers.router import embed
 
@@ -103,10 +112,104 @@ class TestEmbed:
 
             mock_embedding.assert_called_once()
             call_kwargs = mock_embedding.call_args.kwargs
-            assert call_kwargs["input"] == "Test text to embed"
+            # embed() delegates to embed_batch(), so the payload is always a list.
+            assert call_kwargs["input"] == ["Test text to embed"]
             assert result == [0.1, 0.2, 0.3]
-            assert isinstance(result, list)
             assert all(isinstance(x, float) for x in result)
+
+    @pytest.mark.asyncio
+    async def test_embed_when_dimensions_configured_then_passed_to_provider(self) -> None:
+        """The vector width must match the vector(N) columns, so it is requested explicitly."""
+        with (
+            patch("litellm.aembedding", new_callable=AsyncMock) as mock_embedding,
+            patch("app.ai.providers.router.settings.llm_embeddings_dimensions", 3),
+        ):
+            mock_embedding.return_value = self._response([0.1, 0.2, 0.3])
+
+            from app.ai.providers.router import embed
+
+            await embed("text")
+
+            assert mock_embedding.call_args.kwargs["dimensions"] == 3
+
+    @pytest.mark.asyncio
+    async def test_embed_when_dimensions_unset_then_omitted_from_request(self) -> None:
+        """Fixed-width models reject an unsupported dimensions argument."""
+        with (
+            patch("litellm.aembedding", new_callable=AsyncMock) as mock_embedding,
+            patch("app.ai.providers.router.settings.llm_embeddings_dimensions", None),
+        ):
+            mock_embedding.return_value = self._response([0.1, 0.2])
+
+            from app.ai.providers.router import embed
+
+            await embed("text")
+
+            assert "dimensions" not in mock_embedding.call_args.kwargs
+
+    @pytest.mark.asyncio
+    async def test_embed_when_provider_returns_wrong_width_then_raises(self) -> None:
+        """Catch the mismatch here — pgvector's own error is opaque, and a truncated
+        vector written silently would corrupt similarity search."""
+        with (
+            patch("litellm.aembedding", new_callable=AsyncMock) as mock_embedding,
+            patch("app.ai.providers.router.settings.llm_embeddings_dimensions", 768),
+        ):
+            mock_embedding.return_value = self._response([0.1, 0.2, 0.3])
+
+            from app.ai.providers.router import embed
+
+            with pytest.raises(ValueError, match="returned 3 dimensions, expected 768"):
+                await embed("text")
+
+    @pytest.mark.asyncio
+    async def test_embed_batch_when_given_texts_then_returns_vectors_in_input_order(self) -> None:
+        """Providers order results by an explicit index, not by position. A silent
+        misalignment would attach every embedding to the wrong objective."""
+        with (
+            patch("litellm.aembedding", new_callable=AsyncMock) as mock_embedding,
+            patch("app.ai.providers.router.settings.llm_embeddings_dimensions", 2),
+        ):
+            response = MagicMock()
+            response.data = [
+                {"embedding": [0.3, 0.3], "index": 2},
+                {"embedding": [0.1, 0.1], "index": 0},
+                {"embedding": [0.2, 0.2], "index": 1},
+            ]
+            mock_embedding.return_value = response
+
+            from app.ai.providers.router import embed_batch
+
+            result = await embed_batch(["a", "b", "c"])
+
+            assert result == [[0.1, 0.1], [0.2, 0.2], [0.3, 0.3]]
+
+    @pytest.mark.asyncio
+    async def test_embed_batch_when_provider_returns_wrong_count_then_raises(self) -> None:
+        with (
+            patch("litellm.aembedding", new_callable=AsyncMock) as mock_embedding,
+            patch("app.ai.providers.router.settings.llm_embeddings_dimensions", 2),
+        ):
+            mock_embedding.return_value = self._response([0.1, 0.1], with_index=True)
+
+            from app.ai.providers.router import embed_batch
+
+            with pytest.raises(ValueError, match="returned 1 vectors for 2 inputs"):
+                await embed_batch(["a", "b"])
+
+    @pytest.mark.asyncio
+    async def test_embed_batch_when_texts_empty_then_raises(self) -> None:
+        from app.ai.providers.router import embed_batch
+
+        with pytest.raises(ValueError, match="non-empty list"):
+            await embed_batch([])
+
+    @pytest.mark.asyncio
+    async def test_embed_batch_when_any_text_blank_then_raises(self) -> None:
+        from app.ai.providers.router import embed_batch
+
+        with pytest.raises(ValueError, match="non-empty string"):
+            await embed_batch(["valid", "   "])
 
 
 class TestTaskModelMap:

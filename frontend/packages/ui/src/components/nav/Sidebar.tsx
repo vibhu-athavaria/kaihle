@@ -1,5 +1,6 @@
 import { LucideIcon } from "lucide-react";
 import {
+  GitMerge,
   LayoutDashboard,
   Building2,
   Users,
@@ -118,6 +119,11 @@ const adminSections: NavSection[] = [
         label: "Curriculum",
         href: "/kaihle-admin/curriculum",
         icon: Library,
+      },
+      {
+        label: "Curriculum Mapping",
+        href: "/kaihle-admin/curriculum/mapping",
+        icon: GitMerge,
       },
       {
         label: "Grades",

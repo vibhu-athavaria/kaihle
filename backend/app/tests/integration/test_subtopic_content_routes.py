@@ -22,9 +22,11 @@ from app.models.curriculum import (
     Curriculum,
     CurriculumTopic,
     Grade,
+    LearningObjective,
     QuestionBank,
     Subject,
     Subtopic,
+    SubtopicObjective,
     Topic,
 )
 from app.models.interest_category import InterestCategory
@@ -80,6 +82,22 @@ async def _create_curriculum_tree(db: AsyncSession) -> tuple[Subject, Grade, Cur
         is_active=True,
     )
     db.add(st)
+    await db.flush()
+
+    # Every active subtopic has a learning objective in the real system —
+    # validate_curriculum_remap enforces it. Questions bind to the objective, so a
+    # subtopic without one cannot serve or publish any.
+    objective = LearningObjective(
+        id=uuid.uuid4(),
+        canonical_code=f"LO-{uuid.uuid4().hex[:10]}",
+        name="Solve linear equations",
+        learning_objective="Solve linear equations",
+        topic_id=topic.id,
+        is_active=True,
+    )
+    db.add(objective)
+    await db.flush()
+    db.add(SubtopicObjective(subtopic_id=st.id, learning_objective_id=objective.id))
     await db.flush()
 
     return subject, grade, curriculum, ct, st

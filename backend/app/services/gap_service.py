@@ -19,7 +19,15 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.curriculum import CurriculumTopic, Grade, Subject, Subtopic, Topic
+from app.models.curriculum import (
+    CurriculumTopic,
+    Grade,
+    QuestionBank,
+    Subject,
+    Subtopic,
+    SubtopicObjective,
+    Topic,
+)
 from app.models.gap import GapState
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User
@@ -163,7 +171,6 @@ class GapService:
             StudentAttempt,
             StudentResponse,
         )
-        from app.models.curriculum import QuestionBank
 
         attempt_id_str = str(attempt_id)
 
@@ -208,12 +215,65 @@ class GapService:
             logger.warning("calculate_gap_states_skipped_no_responses", attempt_id=attempt_id_str)
             return {"attempt_id": attempt_id_str, "subtopics_updated": 0}
 
-        # Step 4: Map question_id → subtopic_id
+        # Step 4: Map question_id → subtopic_id.
+        #
+        # Resolution goes through the learning objective, NOT question_bank.subtopic_id.
+        # After a curriculum remap subtopic_id is NULL for every remapped question, so
+        # keying on it drops those responses entirely and no mastery is ever recorded
+        # for the affected scope.
+        #
+        # An objective can be taught by several subtopics, so the join is scoped to the
+        # class's own curriculum/subject/grade: an attempt must only ever attribute
+        # mastery to subtopics in the curriculum the student is actually enrolled on.
         question_ids = [r.question_id for r in responses]
-        q_result = await self.db.execute(
-            select(QuestionBank.id, QuestionBank.subtopic_id).where(QuestionBank.id.in_(question_ids))
-        )
-        question_to_subtopic: dict[uuid.UUID, uuid.UUID] = {row[0]: row[1] for row in q_result.all()}
+
+        class_result = await self.db.execute(select(Class).where(Class.id == assessment.class_id))
+        klass: Class | None = class_result.scalar_one_or_none()
+        question_to_subtopic: dict[uuid.UUID, uuid.UUID] = {}
+
+        if klass is not None:
+            scoped_result = await self.db.execute(
+                select(QuestionBank.id, Subtopic.id)
+                .select_from(QuestionBank)
+                .join(
+                    SubtopicObjective,
+                    SubtopicObjective.learning_objective_id == QuestionBank.learning_objective_id,
+                )
+                .join(Subtopic, Subtopic.id == SubtopicObjective.subtopic_id)
+                .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+                .where(
+                    QuestionBank.id.in_(question_ids),
+                    CurriculumTopic.curriculum_id == klass.curriculum_id,
+                    CurriculumTopic.subject_id == klass.subject_id,
+                    CurriculumTopic.grade_id == klass.grade_id,
+                    Subtopic.is_active.is_(True),
+                )
+                # Deterministic pick when an objective has several placements in scope,
+                # so repeated runs attribute a question to the same subtopic every time.
+                .order_by(QuestionBank.id, Subtopic.sequence_order.nulls_last(), Subtopic.id)
+            )
+            for question_id, subtopic_id in scoped_result.all():
+                question_to_subtopic.setdefault(question_id, subtopic_id)
+        else:
+            logger.warning(
+                "calculate_gap_states_class_not_found_for_scoping",
+                attempt_id=attempt_id_str,
+                class_id=str(assessment.class_id),
+            )
+
+        # Fall back to the legacy column for anything the objective path did not
+        # resolve — untouched scopes still have subtopic_id populated and correct, and
+        # dropping those responses is the very failure this step guards against.
+        unresolved = [q for q in question_ids if q not in question_to_subtopic]
+        if unresolved:
+            legacy_result = await self.db.execute(
+                select(QuestionBank.id, QuestionBank.subtopic_id).where(
+                    QuestionBank.id.in_(unresolved),
+                    QuestionBank.subtopic_id.isnot(None),
+                )
+            )
+            for question_id, subtopic_id in legacy_result.all():
+                question_to_subtopic[question_id] = subtopic_id
 
         # Step 5: Group responses by subtopic, compute per-subtopic score
         subtopic_correct: dict[uuid.UUID, int] = defaultdict(int)

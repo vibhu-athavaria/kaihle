@@ -524,15 +524,20 @@ def _build_mock_db_for_calculate(
 ) -> MagicMock:
     """Build a mock AsyncSession for calculate_gap_states_for_attempt.
 
-    Call sequence:
+    Call sequence (positional — this mock is order-dependent on the service):
       1. Load attempt (scalar_one_or_none)
       2. Load assessment (scalar_one_or_none)
       3. Load responses (scalars().all())
-      4. Map question → subtopic (all())
+      4. Load class, for scoping attribution to its curriculum/subject/grade
+         (scalar_one_or_none)
+      5. Map question → subtopic via the learning objective, within that scope (all())
       Per subtopic:
-        5+. Historical scores query (all())
-        6+. Gap state upsert (execute with text)
-        7+. Insert subtopic score row (execute with text)
+        6+. Historical scores query (all())
+        7+. Gap state upsert (execute with text)
+        8+. Insert subtopic score row (execute with text)
+
+    Call 5 resolves every question here, so the service's legacy subtopic_id fallback
+    is not reached and issues no query.
     """
     call_count = [0]
 
@@ -547,7 +552,14 @@ def _build_mock_db_for_calculate(
             m.scalar_one_or_none.return_value = assessment
         elif c == 3:  # Load responses
             m.scalars.return_value.all.return_value = responses
-        elif c == 4:  # question → subtopic map
+        elif c == 4:  # Load class for scope
+            m.scalar_one_or_none.return_value = SimpleNamespace(
+                id=assessment.class_id,
+                curriculum_id=uuid.uuid4(),
+                subject_id=uuid.uuid4(),
+                grade_id=uuid.uuid4(),
+            )
+        elif c == 5:  # question → subtopic map, resolved via learning objective
             m.all.return_value = list(question_to_subtopic.items())
         else:
             # Historical score queries return empty; upserts return mock
@@ -715,8 +727,17 @@ class TestCalculateGapStatesForAttempt:
             elif c == 3:
                 m.scalars.return_value.all.return_value = responses
             elif c == 4:
-                m.all.return_value = [(q1, sub1)]
+                # Class load — attribution is scoped to the class's curriculum.
+                m.scalar_one_or_none.return_value = SimpleNamespace(
+                    id=assessment.class_id,
+                    curriculum_id=uuid.uuid4(),
+                    subject_id=uuid.uuid4(),
+                    grade_id=uuid.uuid4(),
+                )
             elif c == 5:
+                # question → subtopic, resolved via the learning objective
+                m.all.return_value = [(q1, sub1)]
+            elif c == 6:
                 m.all.return_value = []  # no history
             else:
                 if params and "new_mastery" in str(params):

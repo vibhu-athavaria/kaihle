@@ -332,11 +332,16 @@ def test_seed_subtopic_when_pre_gen_questions_exist_then_llm_not_called_for_quiz
 def test_seed_subtopic_when_llm_raises_then_skipped_not_failed():
     """LLM exceptions are absorbed by call_llm and counted as skipped, not errors.
     Errors only appear when something outside call_llm raises (e.g. build_record crash).
+
+    Videos are skipped deliberately: that path runs through search_youtube_videos and
+    the YouTube Data API, not the LLM, so patching litellm never affected it. Leaving
+    it enabled made this test hit the network and record an insert, which had nothing
+    to do with the LLM behaviour under test. Explanations are the LLM-driven path.
     """
     with patch("seed_subtopic_content.litellm.completion", side_effect=RuntimeError("boom")):
         with (
-            patch("seed_subtopic_content.SKIP_VIDEOS", False),
-            patch("seed_subtopic_content.SKIP_EXPLANATIONS", True),
+            patch("seed_subtopic_content.SKIP_VIDEOS", True),
+            patch("seed_subtopic_content.SKIP_EXPLANATIONS", False),
             patch("seed_subtopic_content.SKIP_QUIZZES", True),
         ):
             result = seed.seed_subtopic(MINIMAL_SUBTOPIC, {}, dry_run=True)
