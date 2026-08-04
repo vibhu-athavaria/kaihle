@@ -645,11 +645,30 @@ QUESTION TYPES — mix of MCQ and True/False:
 - "true_false": question_text MUST begin with "True or False: " (exactly this prefix).
     • correct_answer must be "TRUE" or "FALSE" (uppercase).
     • Do NOT include an "options" field for true_false questions.
-- Aim for roughly 70% MCQ, 30% True/False across the full set.
+- Target 75% MCQ and 25% True/False across the full set. True/False carries a 50%
+  guess rate, so it must never exceed a quarter of the questions, and every True/False
+  statement must hinge on a real misconception — not a definition a student can
+  recognise without understanding it.
 - Vary question stem formats within the same difficulty (what / which / how / why /
   calculate / describe / identify) — do not repeat the same opener for 3 questions.
 
 {guardrail}
+
+SELF-CONTAINMENT — APPLIES TO EVERY SUBJECT. This is the single most important rule.
+This is an ONLINE assessment. The student sees ONLY the words you write. There is no
+diagram, no figure, no image, no accompanying worksheet, and no textbook page.
+- NEVER write "the diagram below", "the figure shows", "refer to the graph",
+  "look at the shape", "in the table above", "the following image", or any phrase
+  that points at something you have not written out in full.
+- If a question needs a shape, describe it completely in words:
+    BAD:  "Find the area of the triangle shown below."
+    GOOD: "A triangle has a base of 8 cm and a perpendicular height of 5 cm.
+           Find its area."
+- If a question needs data, write the data into the question text:
+    BAD:  "Use the frequency table above to find the mode."
+    GOOD: "A class recorded shoe sizes: 5, 6, 6, 7, 6, 8, 7. Find the mode."
+- If a question cannot be made self-contained in plain text, DO NOT WRITE IT.
+  Choose a different question that assesses the same objective instead.
 
 ENG READING / LANGUAGE QUESTIONS — FOR ENGLISH LANGUAGE (ENG) ONLY:
 If you are generating a question that requires a text to reference (e.g. inference,
@@ -665,17 +684,39 @@ language analysis, author's intent), you MUST include a SHORT invented passage e
 QUALITY REQUIREMENTS:
 - Every question must DIRECTLY assess the learning objective stated above.
 - Questions at the same difficulty level must test DIFFERENT aspects of the subtopic.
+- PITCH TO THE GRADE, NOT BELOW IT. The commonest failure is writing questions a
+  student two years younger could answer. A grade {subtopic["grade_level"]} question
+  must require grade {subtopic["grade_level"]} reasoning.
+    TOO EASY (rejected): "Estimate the sum of 29 + 31." — single-step, no reasoning.
+    APPROPRIATE:         "A shop sells notebooks at $2.95 each. Estimate the cost of
+                          21 notebooks, and state whether your estimate is above or
+                          below the true cost."
+- Difficulty 1 means "straightforward for a student who has learned this topic",
+  NOT "trivial for anyone". Difficulty 5 must demand multi-step reasoning.
+- A question whose answer is obvious from the wording of the question itself is
+  invalid, whatever difficulty it claims.
 - Explanations must state WHY the correct answer is right AND why each wrong option is wrong.
 - Hints must scaffold thinking without revealing the answer. hint3 may strongly guide.
-- Do NOT include any HTML tags, markdown formatting, or special characters in text fields.
-  Use plain ASCII. Write mathematical expressions in plain text (e.g. "x squared" not "x²").
+RENDERING CONTRACT — the student app renders question_text and every option as PLAIN
+TEXT. There is no markdown parser, no LaTeX renderer, and no image support.
+- USE Unicode directly. These render correctly and make questions readable:
+    superscripts x² x³   fractions ½ ⅓ ¾   operators × ÷ ± ≈ ≠ ≤ ≥ √
+    units °C ° cm² m³    Greek π α β θ     arrows → ↔   money $ £ €
+- NEVER emit LaTeX ($x^2$, \\frac{{1}}{{2}}, \\times), markdown (**bold**, `code`, tables),
+  or HTML (<sub>, <br>). These appear literally on screen as broken text.
+- Write "x²" — NOT "x^2", NOT "x squared", NOT "$x^2$".
+- Keep each option on a single line. No line breaks inside options.
 
 SELF-VERIFICATION — Before including each question, verify:
   1. FACTUAL ACCURACY: Is the correct answer DEFINITELY correct? Re-solve if needed.
   2. DIFFICULTY: Does this question match the rubric for its labeled difficulty level?
+     Would a student one grade below still find it demanding? If not, raise it.
   3. SUBTOPIC: Does this question test the stated learning objective, not a different skill?
   4. DISTRACTORS: Are wrong answers truly plausible? No obviously wrong options.
-  5. CONTENT DOMAIN: (ENG only) Does this test a language skill, not factual recall?
+  5. SELF-CONTAINED: Does the question reference ANY diagram, figure, image, table or
+     text you did not write out in full? If yes, rewrite or discard it.
+  6. RENDERING: Does any field contain LaTeX, markdown, or HTML? Convert to Unicode.
+  7. CONTENT DOMAIN: (ENG only) Does this test a language skill, not factual recall?
 
 OUTPUT FORMAT — return ONLY valid JSON, no markdown fences, no trailing commas:
 {{
@@ -717,6 +758,34 @@ VALID_BLOOM = {"Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create
 VALID_QUESTION_TYPES = {"multiple_choice", "true_false"}
 
 # ENG: flag questions testing non-language factual content
+# Points at something the student cannot see. There is no image column on
+# question_bank and no upload path, so any such reference is unanswerable.
+_DANGLING_REFERENCE_RE = re.compile(
+    r"\b(?:"
+    r"(?:the|this|following|above|below)\s+(?:diagram|figure|graph|chart|image|picture|"
+    r"illustration|drawing|table|grid|net|shape\s+shown)"
+    r"|(?:diagram|figure|graph|chart|image|picture|table)\s+(?:above|below|shown)"
+    r"|refer\s+to\s+the\s+\w+"
+    r"|shown\s+(?:above|below|in\s+the)"
+    r"|as\s+shown"
+    r"|see\s+(?:the\s+)?(?:diagram|figure|graph|chart|image|table)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Renders literally on screen: question_text goes through JSX text interpolation with
+# no markdown or maths renderer. Unicode is safe; these markups are not.
+_UNRENDERABLE_RE = re.compile(
+    r"(?:\$[^$\n]{1,80}\$"  # $...$ LaTeX
+    r"|\\(?:frac|sqrt|times|div|leq|geq|neq|approx|pi|alpha|beta|theta|circ|degree)\b"
+    r"|\\\(|\\\)|\\\[|\\\]"  # \( \) \[ \] LaTeX delimiters
+    r"|\*\*[^*\n]+\*\*"  # **bold**
+    r"|<(?:sub|sup|br|b|i|em|strong|p|div)\b[^>]*>"  # HTML tags
+    r"|`[^`\n]+`"  # `code`
+    r"|\b[a-zA-Z]\^\d"  # x^2 ASCII exponent
+    r")",
+)
+
 _ENG_HISTORY_RE = re.compile(
     r"\b(world war|french revolution|treaty of versailles|league of nations|"
     r"marshall plan|magna carta|enlightenment|cold war|nazi|allied powers|"
@@ -772,6 +841,24 @@ def validate_question(q: dict[str, Any], subject_code: str) -> list[str]:
     q_text = q.get("question_text", "")
     if not q_text or not q_text.strip():
         errors.append("question_text is empty")
+
+    # Deterministic guards for the two failure modes an LLM reviewer misses most often.
+    # Checked across the stem and every option, since a dangling reference or a stray
+    # LaTeX fragment in an option is just as unanswerable as one in the stem.
+    option_values = list(q["options"].values()) if isinstance(q.get("options"), dict) else []
+    for field_name, text in [("question_text", q_text), *[(f"option {i}", v) for i, v in enumerate(option_values)]]:
+        if not isinstance(text, str):
+            continue
+        if match := _DANGLING_REFERENCE_RE.search(text):
+            errors.append(
+                f"{field_name} refers to {match.group(0)!r} but this is an online "
+                f"assessment with no images — the question must be self-contained"
+            )
+        if match := _UNRENDERABLE_RE.search(text):
+            errors.append(
+                f"{field_name} contains {match.group(0)!r}, which renders literally "
+                f"as broken text — use Unicode (x², ½, ×, ≤) instead"
+            )
 
     # ── MCQ-specific validation ───────────────────────────────────────────────
     if q_type == "multiple_choice":
@@ -954,13 +1041,23 @@ async def generate_for_subtopic(
                                 "You are an expert Cambridge curriculum assessment author. "
                                 "Output valid JSON only. "
                                 "No markdown fences. No text outside the JSON object. "
-                                "No HTML tags. No special Unicode characters."
+                                "No HTML tags, no LaTeX, no markdown inside string values. "
+                                "DO use Unicode maths characters (x² ½ × ÷ ≤ √ ° π) — the "
+                                "student app renders them correctly and they make questions "
+                                "readable."
                             ),
                         },
                         {"role": "user", "content": prompt},
                     ],
                     temperature=0.4,
-                    max_tokens=8000,
+                    # 15 fully-specified questions — stem, 4 options, explanation covering
+                    # every distractor, and 3 hints — runs well past 8000 tokens on a
+                    # capable model. Truncation lands mid-string, so the whole batch fails
+                    # JSON parsing and the subtopic yields nothing after three attempts.
+                    # Measured range on a Sonnet-class model: 11.7k-15.0k tokens, so the
+                    # headroom here is deliberate — a cap set near the observed maximum
+                    # fails only on the richest subtopics, which are the ones worth having.
+                    max_tokens=20000,
                 )
             except Exception as exc:
                 log.error(
@@ -1185,6 +1282,7 @@ async def run(
     resume_checkpoint: str | None,
     output_file: str | None,
     concurrency: int,
+    limit: int | None = None,
 ) -> int:
     engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
     async_session = async_sessionmaker(engine, expire_on_commit=False)
@@ -1213,6 +1311,13 @@ async def run(
 
         mode_label = "fill-gaps (thin coverage)" if fill_gaps else "zero-coverage"
         log.info("gap_subtopics_found", count=len(gap_subtopics), mode=mode_label)
+
+        # Trial runs: generate for a handful of subtopics so the output can be read and
+        # the prompt tuned before committing spend on the full scope. Truncating after
+        # the query keeps the selection identical to what a full run would process.
+        if limit is not None and limit < len(gap_subtopics):
+            log.info("limiting_scope_for_trial", requested=limit, available=len(gap_subtopics))
+            gap_subtopics = gap_subtopics[:limit]
 
         # Restore from checkpoint if requested
         completed_ids: list[str] = []
@@ -1408,6 +1513,7 @@ async def main(args: argparse.Namespace) -> int:
         resume_checkpoint=args.resume,
         output_file=args.output,
         concurrency=args.concurrency,
+        limit=args.limit,
     )
 
 
@@ -1472,6 +1578,15 @@ if __name__ == "__main__":
             "  docker compose exec db psql -U kaihle -d kaihle -c 'SELECT level, name FROM grades ORDER BY level;'\n"
             "\n"
             "Examples: --grade 9,10   --grade 6,7,8   --grade 11,12"
+        ),
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help=(
+            "Process at most N subtopics. For trial runs: read the output and tune the\n"
+            "prompt before committing spend on the full scope."
         ),
     )
     parser.add_argument(

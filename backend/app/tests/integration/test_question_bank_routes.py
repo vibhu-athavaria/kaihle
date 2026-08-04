@@ -14,9 +14,11 @@ from app.models.curriculum import (
     Curriculum,
     CurriculumTopic,
     Grade,
+    LearningObjective,
     QuestionBank,
     Subject,
     Subtopic,
+    SubtopicObjective,
     Topic,
 )
 from app.models.user import User, UserRole
@@ -74,6 +76,20 @@ async def curriculum_graph(db_session: AsyncSession):
     db_session.add(subtopic)
     await db_session.flush()
 
+    # Curriculum context is reached through the objective bridge, so a subtopic with
+    # no objective makes its questions invisible to both the browser and the selector.
+    # Production guarantees this link for every subtopic; the fixture must too.
+    objective = LearningObjective(
+        canonical_code=f"TEST-LO-{uuid.uuid4().hex[:12].upper()}",
+        name=subtopic.name,
+        learning_objective=subtopic.learning_objective,
+        topic_id=topic.id,
+    )
+    db_session.add(objective)
+    await db_session.flush()
+    db_session.add(SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=objective.id))
+    await db_session.flush()
+
     await db_session.commit()
 
     return {
@@ -83,6 +99,7 @@ async def curriculum_graph(db_session: AsyncSession):
         "topic": topic,
         "curriculum_topic": curriculum_topic,
         "subtopic": subtopic,
+        "objective": objective,
     }
 
 
@@ -115,6 +132,7 @@ async def sample_questions(db_session: AsyncSession, curriculum_graph) -> list[Q
             difficulty_level=1.0,
             is_active=True,
             subtopic_id=curriculum_graph["subtopic"].id,
+            learning_objective_id=curriculum_graph["objective"].id,
             canonical_form="What is 2 + 2?",
         ),
         QuestionBank(
@@ -125,6 +143,7 @@ async def sample_questions(db_session: AsyncSession, curriculum_graph) -> list[Q
             difficulty_level=3.0,
             is_active=True,
             subtopic_id=curriculum_graph["subtopic"].id,
+            learning_objective_id=curriculum_graph["objective"].id,
             canonical_form="What is 3 + 3?",
         ),
         QuestionBank(
@@ -135,6 +154,7 @@ async def sample_questions(db_session: AsyncSession, curriculum_graph) -> list[Q
             difficulty_level=4.5,
             is_active=False,
             subtopic_id=curriculum_graph["subtopic"].id,
+            learning_objective_id=curriculum_graph["objective"].id,
             canonical_form="Is the sky blue?",
         ),
     ]
