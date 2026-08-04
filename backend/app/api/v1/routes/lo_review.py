@@ -40,6 +40,9 @@ class ReviewItemResponse(BaseModel):
     subject_code: str | None
     grade_level: int | None
     question_count: int
+    # Questions in this item still without an objective. 0 on a SPLIT card means the
+    # split is genuinely finished; non-zero means work remains.
+    unbound_count: int = 0
     candidates: list[CandidateItem]
     llm_suggested_code: str | None
     llm_reason: str | None
@@ -91,6 +94,9 @@ class ObjectivePlacement(BaseModel):
     subject_code: str
     grade_level: int
     topic_name: str
+    # The subtopic is the narrowest curriculum unit — it is what tells a reviewer
+    # whether "Deriving and using formulae" here means the Grade 6 or Grade 7 one.
+    subtopic_name: str
 
 
 class ObjectiveSearchItem(BaseModel):

@@ -23,6 +23,8 @@ interface ReviewItem {
   subject_code: string | null;
   grade_level: number | null;
   question_count: number;
+  /** Questions in this item that still have no objective. 0 means genuinely done. */
+  unbound_count: number;
   candidates: Candidate[];
   llm_suggested_code: string | null;
   llm_reason: string | null;
@@ -66,6 +68,7 @@ interface ObjectivePlacement {
   subject_code: string;
   grade_level: number;
   topic_name: string;
+  subtopic_name: string;
 }
 
 interface ObjectiveSearchItem {
@@ -97,42 +100,164 @@ const CARD = "bg-white border border-[#eaecf0] rounded-lg";
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a5c38] focus-visible:ring-offset-2";
 
+interface GradeGroup {
+  key: string;
+  label: string;
+  /** The grade the question under review belongs to — sorted first and marked. */
+  isFocus: boolean;
+  rows: { result: ObjectiveSearchItem; contexts: string[] }[];
+}
+
 /**
  * Objectives are grade-agnostic by design — grade is a property of placement, not of
- * the concept. But a reviewer choosing where a Grade 6 question belongs must be able
- * to see that a match sits in Grade 9 Chemistry, or they will pick it by mistake.
- * Grades are collapsed per subject+topic so a genuinely cross-grade objective reads
- * "SCI · Grades 6, 7" rather than repeating itself.
+ * the concept. A reviewer, though, is always placing a question of a known grade, so
+ * grade is the axis they filter by mentally. Grouping by it does that work for them.
+ *
+ * An objective taught in several grades appears under each, showing that grade's own
+ * subtopic. That repetition is the point: "Deriving and using formulae" exists in both
+ * Grade 6 and Grade 7, and only the subtopic distinguishes them. Binding is still
+ * grade-agnostic — picking either row binds the same objective.
  */
-function PlacementChips({ placements }: { placements: ObjectivePlacement[] }) {
-  if (!placements || placements.length === 0) {
-    return (
-      <span className="text-[10px] text-[#b45309]">
-        Not placed in any curriculum
-      </span>
+function groupByGrade(
+  results: ObjectiveSearchItem[],
+  focusGrade?: number | null,
+): GradeGroup[] {
+  const byGrade = new Map<
+    number,
+    Map<string, { result: ObjectiveSearchItem; contexts: Set<string> }>
+  >();
+  const unplaced: ObjectiveSearchItem[] = [];
+
+  for (const r of results) {
+    if (!r.placements || r.placements.length === 0) {
+      unplaced.push(r);
+      continue;
+    }
+    for (const p of r.placements) {
+      let group = byGrade.get(p.grade_level);
+      if (!group) {
+        group = new Map();
+        byGrade.set(p.grade_level, group);
+      }
+      const entry = group.get(r.objective_id) ?? {
+        result: r,
+        contexts: new Set<string>(),
+      };
+      entry.contexts.add(
+        `${p.subject_code} · ${p.topic_name} · ${p.subtopic_name}`,
+      );
+      group.set(r.objective_id, entry);
+    }
+  }
+
+  const groups: GradeGroup[] = [...byGrade.entries()]
+    .map(([grade, entries]) => ({
+      key: `grade-${grade}`,
+      label: `Grade ${grade}`,
+      isFocus: grade === focusGrade,
+      rows: [...entries.values()].map((e) => ({
+        result: e.result,
+        contexts: [...e.contexts].sort(),
+      })),
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.isFocus) - Number(a.isFocus) ||
+        Number(a.key.slice(6)) - Number(b.key.slice(6)),
     );
+
+  // An unplaced objective is unreachable by any class and is a data defect, not a
+  // valid target — it sorts last and is styled as a warning, never hidden.
+  if (unplaced.length > 0) {
+    groups.push({
+      key: "unplaced",
+      label: "Not placed in any curriculum",
+      isFocus: false,
+      rows: unplaced.map((r) => ({ result: r, contexts: [] })),
+    });
   }
-  const grouped = new Map<string, number[]>();
-  for (const p of placements) {
-    const key = `${p.subject_code}|${p.topic_name}`;
-    grouped.set(key, [...(grouped.get(key) ?? []), p.grade_level]);
-  }
+  return groups;
+}
+
+/** The search result list, shared by all three places a reviewer picks an objective. */
+function ObjectiveResults({
+  results,
+  focusGrade,
+  selectedId,
+  disabled,
+  onSelect,
+}: {
+  results: ObjectiveSearchItem[];
+  focusGrade?: number | null;
+  selectedId?: string | null;
+  disabled?: boolean;
+  onSelect: (objectiveId: string) => void;
+}) {
+  if (results.length === 0) return null;
+  const groups = groupByGrade(results, focusGrade);
+
   return (
-    <span className="flex flex-wrap gap-1 mt-1">
-      {[...grouped.entries()].map(([key, grades]) => {
-        const [subject, topic] = key.split("|");
-        const sorted = [...new Set(grades)].sort((a, b) => a - b);
-        return (
-          <span
-            key={key}
-            className="text-[10px] text-[#374151] bg-[#f3f4f6] px-1.5 py-0.5 rounded"
-          >
-            {subject} · {sorted.length > 1 ? "Grades" : "Grade"}{" "}
-            {sorted.join(", ")} · {topic}
-          </span>
-        );
-      })}
-    </span>
+    <div className="mt-2 space-y-2">
+      {groups.map((group) => (
+        <div key={group.key}>
+          <div className="flex items-center gap-1.5 px-0.5 pb-1">
+            <span
+              className={`font-['Inter'] text-[10px] font-bold uppercase tracking-wide ${
+                group.key === "unplaced" ? "text-[#b45309]" : "text-[#6b7280]"
+              }`}
+            >
+              {group.label}
+            </span>
+            {group.isFocus && (
+              <span className="text-[9px] font-semibold text-[#1a5c38] bg-[#1a5c38]/10 px-1.5 py-0.5 rounded">
+                this question&rsquo;s grade
+              </span>
+            )}
+          </div>
+          <div className="space-y-1">
+            {group.rows.map(({ result, contexts }) => {
+              const selected = selectedId === result.objective_id;
+              return (
+                <button
+                  key={`${group.key}-${result.objective_id}`}
+                  disabled={disabled}
+                  onClick={() => onSelect(result.objective_id)}
+                  className={`w-full text-left p-2 rounded-md border text-xs transition-colors disabled:opacity-50 ${FOCUS} ${
+                    selected
+                      ? "border-[#1a5c38] bg-[#1a5c38]/5"
+                      : "border-[#eaecf0] hover:bg-[#fafafa]"
+                  }`}
+                >
+                  <span className="block text-[#111827]">
+                    {result.learning_objective}
+                  </span>
+                  <span className="block text-[10px] text-[#9ca3af] mt-0.5">
+                    {result.canonical_code}
+                    {result.match === "semantic" ? " · matched by meaning" : ""}
+                  </span>
+                  {contexts.length === 0 ? (
+                    <span className="block text-[10px] text-[#b45309] mt-1">
+                      No curriculum placement
+                    </span>
+                  ) : (
+                    <span className="flex flex-wrap gap-1 mt-1">
+                      {contexts.map((c) => (
+                        <span
+                          key={c}
+                          className="text-[10px] text-[#374151] bg-[#f3f4f6] px-1.5 py-0.5 rounded"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -428,11 +553,20 @@ export function AdminCurriculumMapping() {
                       <h2 className="text-sm font-semibold text-[#111827]">
                         {item.source_name ?? item.source_code}
                       </h2>
-                      {item.item_type === "QUESTION_REMAP_REMAINDER" && (
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#92400e] bg-[#fffbeb] border border-[#fde68a] px-1.5 py-0.5 rounded">
-                          Needs individual review
-                        </span>
-                      )}
+                      {/* A remainder item has no candidate objectives by construction,
+                          so it can never be group-approved — every question is assigned
+                          one at a time. Once that work is done the badge must stop
+                          demanding it, or it contradicts the "All assigned" state. */}
+                      {item.item_type === "QUESTION_REMAP_REMAINDER" &&
+                        (item.unbound_count > 0 ? (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#92400e] bg-[#fffbeb] border border-[#fde68a] px-1.5 py-0.5 rounded">
+                            Needs individual review
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6b7280] bg-[#f3f4f6] px-1.5 py-0.5 rounded">
+                            Assigned individually
+                          </span>
+                        ))}
                       {item.subject_code && (
                         <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6b7280] bg-[#f3f4f6] px-1.5 py-0.5 rounded">
                           {item.subject_code}
@@ -453,6 +587,18 @@ export function AdminCurriculumMapping() {
                       {item.question_count} question
                       {item.question_count === 1 ? "" : "s"}
                     </span>
+                    {/* A split is not finished just because it ran — the adjudicator
+                        declines on ambiguous questions. State what is left so a
+                        reviewer need not open every card to find out. */}
+                    {item.unbound_count > 0 ? (
+                      <span className="text-[10px] font-semibold text-[#b45309] bg-[#b45309]/10 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        {item.unbound_count} still unassigned
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-[#1a5c38] px-2 py-0.5 whitespace-nowrap">
+                        All assigned
+                      </span>
+                    )}
                     {item.status === "PENDING" &&
                     item.item_type !== "QUESTION_REMAP_REMAINDER" ? (
                       <Button
@@ -601,38 +747,14 @@ export function AdminCurriculumMapping() {
                     Search
                   </Button>
                 </div>
-                {searchResults.length > 0 && (
-                  <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-                    {searchResults.map((result) => {
-                      const selected =
-                        selectedObjectiveId === result.objective_id;
-                      return (
-                        <button
-                          key={result.objective_id}
-                          onClick={() =>
-                            setSelectedObjectiveId(result.objective_id)
-                          }
-                          className={`w-full text-left p-2 rounded-md border text-xs transition-colors ${FOCUS} ${
-                            selected
-                              ? "border-[#1a5c38] bg-[#1a5c38]/5"
-                              : "border-[#eaecf0] hover:bg-[#fafafa]"
-                          }`}
-                        >
-                          <span className="block text-[#111827]">
-                            {result.learning_objective}
-                          </span>
-                          <span className="block text-[10px] text-[#9ca3af] mt-0.5">
-                            {result.canonical_code}
-                            {result.match === "semantic"
-                              ? " · matched by meaning"
-                              : ""}
-                          </span>
-                          <PlacementChips placements={result.placements} />
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                <div className="max-h-64 overflow-y-auto">
+                  <ObjectiveResults
+                    results={searchResults}
+                    focusGrade={activeItem?.grade_level}
+                    selectedId={selectedObjectiveId}
+                    onSelect={setSelectedObjectiveId}
+                  />
+                </div>
               </div>
 
               <div>
@@ -825,28 +947,17 @@ export function AdminCurriculumMapping() {
                         Search
                       </Button>
                     </div>
-                    {searchResults.map((r) => (
-                      <button
-                        key={r.objective_id}
-                        disabled={rebind.isPending}
-                        onClick={() =>
-                          rebind.mutate({
-                            questionIds: [...selectedQuestions],
-                            objectiveId: r.objective_id,
-                          })
-                        }
-                        className={`w-full text-left p-2 rounded-md border border-[#eaecf0] bg-white hover:bg-[#fafafa] text-xs disabled:opacity-50 ${FOCUS}`}
-                      >
-                        {r.learning_objective}
-                        <span className="block text-[10px] text-[#9ca3af]">
-                          {r.canonical_code}
-                          {r.match === "semantic"
-                            ? " · matched by meaning"
-                            : ""}
-                        </span>
-                        <PlacementChips placements={r.placements} />
-                      </button>
-                    ))}
+                    <ObjectiveResults
+                      results={searchResults}
+                      focusGrade={inspecting?.grade_level}
+                      disabled={rebind.isPending}
+                      onSelect={(objectiveId) =>
+                        rebind.mutate({
+                          questionIds: [...selectedQuestions],
+                          objectiveId,
+                        })
+                      }
+                    />
                   </div>
                 )}
 
@@ -928,27 +1039,17 @@ export function AdminCurriculumMapping() {
                               Search
                             </Button>
                           </div>
-                          {searchResults.map((r) => (
-                            <button
-                              key={r.objective_id}
-                              onClick={() =>
-                                rebind.mutate({
-                                  questionIds: [q.question_id],
-                                  objectiveId: r.objective_id,
-                                })
-                              }
-                              className={`w-full text-left p-2 rounded-md border border-[#eaecf0] hover:bg-[#fafafa] text-xs ${FOCUS}`}
-                            >
-                              {r.learning_objective}
-                              <span className="block text-[10px] text-[#9ca3af]">
-                                {r.canonical_code}
-                                {r.match === "semantic"
-                                  ? " · matched by meaning"
-                                  : ""}
-                              </span>
-                              <PlacementChips placements={r.placements} />
-                            </button>
-                          ))}
+                          <ObjectiveResults
+                            results={searchResults}
+                            focusGrade={inspecting?.grade_level}
+                            disabled={rebind.isPending}
+                            onSelect={(objectiveId) =>
+                              rebind.mutate({
+                                questionIds: [q.question_id],
+                                objectiveId,
+                              })
+                            }
+                          />
                           {q.objective_code && (
                             <Button
                               variant="secondary"

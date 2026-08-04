@@ -5,11 +5,46 @@ skill it does not test, and nothing downstream detects it. Every failure mode mu
 therefore decline rather than guess, which is what these tests pin down.
 """
 
-from unittest.mock import AsyncMock, patch
+import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.lo_review_service import adjudicate_question
+from app.models.curriculum import LearningObjectiveReviewItem
+from app.services.lo_review_service import LoReviewService, adjudicate_question
+
+
+def _review_item(
+    question_ids: list[str] | None = None,
+    question_count: int | None = None,
+    candidates: list[dict] | None = None,
+) -> LearningObjectiveReviewItem:
+    """A real model instance rather than a stand-in.
+
+    Every attribute the code under test reads is set explicitly: SQLAlchemy applies
+    column defaults at flush, so an unsaved instance leaves them None and a fake would
+    quietly diverge from the real row shape.
+    """
+    ids = question_ids if question_ids is not None else []
+    return LearningObjectiveReviewItem(
+        id=uuid.uuid4(),
+        item_type="QUESTION_REMAP",
+        status="PENDING",
+        source_code="MATH-NUM-G6-04",
+        source_name="Ratio and Proportion",
+        source_learning_objective="Write and simplify ratios.",
+        subject_code="MATH",
+        grade_level=6,
+        question_count=question_count if question_count is not None else len(ids),
+        question_ids=ids,
+        candidates=candidates if candidates is not None else [],
+        llm_suggested_code=None,
+        llm_reason=None,
+        chosen_objective_id=None,
+        resolved_by=None,
+        resolved_at=None,
+        admin_note=None,
+    )
 
 
 def _question(text: str = "What is 3:4 simplified?") -> dict:
@@ -118,31 +153,11 @@ class TestSerialise:
     """The list payload the review screen renders."""
 
     @staticmethod
-    def _item() -> object:
-        from types import SimpleNamespace
-
-        return SimpleNamespace(
-            id="a",
-            item_type="QUESTION_REMAP",
-            status="PENDING",
-            source_code="MATH-NUM-G6-04",
-            source_name="Ratio and Proportion",
-            source_learning_objective="Write and simplify ratios.",
-            subject_code="MATH",
-            grade_level=6,
-            question_count=103,
-            candidates=[{"canonical_code": "MATH-X"}],
-            llm_suggested_code=None,
-            llm_reason=None,
-            chosen_objective_id=None,
-            admin_note=None,
-            resolved_at=None,
-        )
+    def _item() -> LearningObjectiveReviewItem:
+        return _review_item(question_count=103, candidates=[{"canonical_code": "MATH-X"}])
 
     def test_serialise_when_unresolved_then_ids_are_null_not_missing(self) -> None:
-        from app.services.lo_review_service import LoReviewService
-
-        payload = LoReviewService._serialise(self._item())  # type: ignore[arg-type]
+        payload = LoReviewService._serialise(self._item())
 
         # The client distinguishes "no decision yet" from "field absent"; emitting the
         # key with null keeps that unambiguous.
@@ -150,13 +165,186 @@ class TestSerialise:
         assert payload["resolved_at"] is None
 
     def test_serialise_when_called_then_carries_the_blast_radius(self) -> None:
-        from app.services.lo_review_service import LoReviewService
-
-        payload = LoReviewService._serialise(self._item())  # type: ignore[arg-type]
+        payload = LoReviewService._serialise(self._item())
 
         # question_count drives ordering and the confirm-button label.
         assert payload["question_count"] == 103
         assert payload["source_name"] == "Ratio and Proportion"
+
+
+@pytest.mark.asyncio
+class TestUnboundCounts:
+    """Drives the "N still unassigned" badge — the only way a reviewer can tell a
+    finished split from an unfinished one without opening every card."""
+
+    @staticmethod
+    def _service(unbound_ids: list[uuid.UUID]) -> LoReviewService:
+        rows = MagicMock()
+        rows.all.return_value = [(qid,) for qid in unbound_ids]
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=rows)
+        return LoReviewService(db)
+
+    async def test_counts_only_the_questions_still_unbound(self) -> None:
+        q1, q2, q3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        item = _review_item(question_ids=[str(q1), str(q2), str(q3)])
+        service = self._service([q1, q3])
+
+        counts = await service._unbound_counts([item])
+
+        assert counts[str(item.id)] == 2
+
+    async def test_when_all_bound_then_zero(self) -> None:
+        item = _review_item(question_ids=[str(uuid.uuid4())])
+        service = self._service([])
+
+        assert (await service._unbound_counts([item]))[str(item.id)] == 0
+
+    async def test_when_no_items_have_questions_then_no_query_is_issued(self) -> None:
+        db = MagicMock()
+        db.execute = AsyncMock()
+        service = LoReviewService(db)
+
+        assert await service._unbound_counts([_review_item(question_ids=[])]) == {}
+        db.execute.assert_not_awaited()
+
+    async def test_attributes_shared_questions_to_every_item_holding_them(self) -> None:
+        """A remainder item's questions also belong to its parent split group, so one
+        unbound question must be counted against both."""
+        shared = uuid.uuid4()
+        parent = _review_item(question_ids=[str(shared), str(uuid.uuid4())])
+        child = _review_item(question_ids=[str(shared)])
+        service = self._service([shared])
+
+        counts = await service._unbound_counts([parent, child])
+
+        assert counts[str(parent.id)] == 1
+        assert counts[str(child.id)] == 1
+
+
+@pytest.mark.asyncio
+class TestCountsByStatus:
+    async def test_absent_statuses_report_zero_not_missing(self) -> None:
+        """The tab badges read every key unconditionally; a missing one renders NaN."""
+        rows = MagicMock()
+        rows.all.return_value = [("PENDING", 7)]
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=rows)
+
+        counts = await LoReviewService(db).counts_by_status()
+
+        assert counts == {"PENDING": 7, "APPROVED": 0, "REJECTED": 0, "SPLIT": 0}
+
+
+@pytest.mark.asyncio
+class TestListItems:
+    @staticmethod
+    def _service(items: list[LearningObjectiveReviewItem], total: int, unbound_ids: list[uuid.UUID]) -> LoReviewService:
+        total_row = MagicMock()
+        total_row.scalar_one.return_value = total
+        item_rows = MagicMock()
+        item_rows.scalars.return_value.all.return_value = items
+        unbound_rows = MagicMock()
+        unbound_rows.all.return_value = [(qid,) for qid in unbound_ids]
+
+        db = MagicMock()
+        db.execute = AsyncMock(side_effect=[total_row, item_rows, unbound_rows])
+        return LoReviewService(db)
+
+    async def test_each_row_carries_its_unbound_count(self) -> None:
+        q1, q2 = uuid.uuid4(), uuid.uuid4()
+        item = _review_item(question_ids=[str(q1), str(q2)])
+        service = self._service([item], total=1, unbound_ids=[q2])
+
+        result = await service.list_items()
+
+        assert result["total"] == 1
+        assert result["items"][0]["unbound_count"] == 1
+
+    async def test_item_without_questions_reports_zero_unbound(self) -> None:
+        # _unbound_counts returns {} for these, so the lookup must default rather
+        # than KeyError — an empty item is a data defect, not a crash.
+        item = _review_item(question_ids=[])
+        service = self._service([item], total=1, unbound_ids=[])
+
+        result = await service.list_items(status_filter="SPLIT", item_type="QUESTION_REMAP")
+
+        assert result["items"][0]["unbound_count"] == 0
+
+
+@pytest.mark.asyncio
+class TestResolveCompletedItems:
+    """An item worked question-by-question must leave the queue on its own.
+
+    Before this existed, a reviewer could bind all 54 questions of a remainder item and
+    the card stayed PENDING forever — finished work was indistinguishable from
+    outstanding work without opening every card.
+    """
+
+    @staticmethod
+    def _service(item: LearningObjectiveReviewItem | None, bindings: list[tuple[object, ...]]) -> LoReviewService:
+        """Wire a db whose first execute() yields the item, second the bindings."""
+        candidates = MagicMock()
+        candidates.scalars.return_value.all.return_value = [item] if item else []
+        binding_rows = MagicMock()
+        binding_rows.all.return_value = bindings
+
+        db = MagicMock()
+        db.execute = AsyncMock(side_effect=[candidates, binding_rows])
+        return LoReviewService(db)
+
+    @staticmethod
+    def _item(question_count: int = 3) -> LearningObjectiveReviewItem:
+        return _review_item(question_ids=[str(uuid.uuid4()) for _ in range(question_count)])
+
+    async def test_when_all_bound_to_one_objective_then_marks_approved(self) -> None:
+        item = self._item(3)
+        one = uuid.uuid4()
+        service = self._service(item, [(one,), (one,), (one,)])
+
+        resolved = await service._resolve_completed_items([uuid.uuid4()], uuid.uuid4())
+
+        # A single objective across the whole group is an approval by another name.
+        assert item.status == "APPROVED"
+        assert resolved[0]["status"] == "APPROVED"
+
+    async def test_when_bound_across_several_objectives_then_marks_split(self) -> None:
+        item = self._item(3)
+        service = self._service(item, [(uuid.uuid4(),), (uuid.uuid4(),), (uuid.uuid4(),)])
+
+        await service._resolve_completed_items([uuid.uuid4()], uuid.uuid4())
+
+        # Recording SPLIT rather than APPROVED keeps the audit trail honest about how
+        # the group was actually resolved.
+        assert item.status == "SPLIT"
+
+    async def test_when_any_question_unbound_then_stays_pending(self) -> None:
+        item = self._item(3)
+        service = self._service(item, [(uuid.uuid4(),), (None,), (uuid.uuid4(),)])
+
+        assert await service._resolve_completed_items([uuid.uuid4()], uuid.uuid4()) == []
+        assert item.status == "PENDING"
+        assert item.resolved_at is None
+
+    async def test_when_item_has_no_questions_then_stays_pending(self) -> None:
+        """An empty item is a data defect, not a completed one."""
+        item = self._item(0)
+        service = self._service(item, [])
+
+        assert await service._resolve_completed_items([uuid.uuid4()], uuid.uuid4()) == []
+        assert item.status == "PENDING"
+
+    async def test_when_resolved_then_records_reviewer_and_time(self) -> None:
+        item = self._item(2)
+        one = uuid.uuid4()
+        reviewer = uuid.uuid4()
+        service = self._service(item, [(one,), (one,)])
+
+        await service._resolve_completed_items([uuid.uuid4()], reviewer)
+
+        assert item.resolved_by == reviewer
+        assert item.resolved_at is not None
+        assert "2 questions" in (item.admin_note or "")
 
 
 @pytest.mark.asyncio
@@ -165,10 +353,6 @@ class TestWithPlacements:
     Grade 12 one; every search return path must apply it."""
 
     async def test_attaches_placements_by_objective_id(self) -> None:
-        from unittest.mock import MagicMock
-
-        from app.services.lo_review_service import LoReviewService
-
         service = LoReviewService(MagicMock())
         with patch.object(
             service,
@@ -183,10 +367,6 @@ class TestWithPlacements:
         assert result[1]["placements"] == []
 
     async def test_when_no_results_then_returns_empty_without_querying(self) -> None:
-        from unittest.mock import MagicMock
-
-        from app.services.lo_review_service import LoReviewService
-
         service = LoReviewService(MagicMock())
         with patch.object(service, "_placements_for", AsyncMock(return_value={})) as mock:
             assert await service._with_placements([]) == []

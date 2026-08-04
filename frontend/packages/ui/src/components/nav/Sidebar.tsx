@@ -121,6 +121,11 @@ const adminSections: NavSection[] = [
         icon: Library,
       },
       {
+        label: "Curriculum Mapping",
+        href: "/kaihle-admin/curriculum/mapping",
+        icon: GitMerge,
+      },
+      {
         label: "Grades",
         href: "/kaihle-admin/grades",
         icon: GraduationCap,
@@ -129,11 +134,6 @@ const adminSections: NavSection[] = [
         label: "Assessment Questions",
         href: "/kaihle-admin/question-bank",
         icon: FileText,
-      },
-      {
-        label: "Curriculum Mapping",
-        href: "/kaihle-admin/curriculum/mapping",
-        icon: GitMerge,
       },
       {
         label: "Content Review",

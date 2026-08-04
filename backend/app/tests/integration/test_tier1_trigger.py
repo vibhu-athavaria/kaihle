@@ -24,9 +24,11 @@ from app.models.curriculum import (
     CurriculumSubject,
     CurriculumTopic,
     Grade,
+    LearningObjective,
     QuestionBank,
     Subject,
     Subtopic,
+    SubtopicObjective,
     Topic,
 )
 from app.models.school import Class, School
@@ -36,11 +38,38 @@ from app.services.assessment_service import AssessmentService
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
-async def _create_question(db: AsyncSession, subtopic_id: uuid.UUID) -> QuestionBank:
-    """Helper to create a question in the bank."""
+async def _create_objective(db: AsyncSession, subtopic: Subtopic, topic_id: uuid.UUID) -> LearningObjective:
+    """Give a subtopic an objective and bridge them.
+
+    Selection resolves curriculum_topics -> subtopics -> subtopic_objectives ->
+    question_bank.learning_objective_id, so a subtopic with no objective can reach no
+    questions at all. Production guarantees this link — every subtopic got an objective
+    from create_learning_objectives — so a fixture without it is not a valid state.
+    """
+    objective = LearningObjective(
+        id=uuid.uuid4(),
+        canonical_code=f"TEST-LO-{uuid.uuid4().hex[:12].upper()}",
+        name=subtopic.name,
+        learning_objective=subtopic.learning_objective,
+        topic_id=topic_id,
+    )
+    db.add(objective)
+    await db.flush()
+    db.add(SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=objective.id))
+    await db.flush()
+    return objective
+
+
+async def _create_question(db: AsyncSession, subtopic_id: uuid.UUID, learning_objective_id: uuid.UUID) -> QuestionBank:
+    """Helper to create a question in the bank.
+
+    learning_objective_id is what selection actually reads; subtopic_id is retained
+    for audit only and is never joined on.
+    """
     q = QuestionBank(
         id=uuid.uuid4(),
         subtopic_id=subtopic_id,
+        learning_objective_id=learning_objective_id,
         question_text="What is 2+2?",
         question_type="MCQ",
         options=[{"key": "A", "text": "4"}, {"key": "B", "text": "3"}],
@@ -116,8 +145,10 @@ async def _setup_full_class(
         db.add(subtopic)
         await db.flush()
 
+        objective = await _create_objective(db, subtopic, topic.id)
+
         for _ in range(questions_per_topic):
-            q = await _create_question(db, subtopic.id)
+            q = await _create_question(db, subtopic.id, objective.id)
             questions.append(q)
 
     await db.commit()

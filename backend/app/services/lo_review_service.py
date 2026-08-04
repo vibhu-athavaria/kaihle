@@ -23,7 +23,8 @@ from typing import Any, cast
 import structlog
 from fastapi import HTTPException, status
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import func, select, text, update
+from sqlalchemy import ARRAY, Text, func, select, text, update
+from sqlalchemy import cast as sa_cast
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -87,11 +88,36 @@ class LoReviewService:
             .offset(offset)
         )
         items = list(rows.scalars().all())
+        unbound = await self._unbound_counts(items)
 
-        return {
-            "total": int(total.scalar_one()),
-            "items": [self._serialise(item) for item in items],
+        payload = []
+        for item in items:
+            row = self._serialise(item)
+            row["unbound_count"] = unbound.get(str(item.id), 0)
+            payload.append(row)
+
+        return {"total": int(total.scalar_one()), "items": payload}
+
+    async def _unbound_counts(self, items: list[LearningObjectiveReviewItem]) -> dict[str, int]:
+        """How many of each item's questions still have no objective.
+
+        A SPLIT card is not self-evidently finished — the model declines on ambiguous
+        questions — so the card must say how much work is left rather than making the
+        reviewer open it to find out. One aggregate query for the whole page, never
+        one per card.
+        """
+        wanted: dict[str, list[uuid.UUID]] = {
+            str(item.id): [uuid.UUID(q) for q in item.question_ids] for item in items if item.question_ids
         }
+        if not wanted:
+            return {}
+
+        every_id = {qid for ids in wanted.values() for qid in ids}
+        rows = await self.db.execute(
+            select(QuestionBank.id).where(QuestionBank.id.in_(every_id), QuestionBank.learning_objective_id.is_(None))
+        )
+        still_unbound = {r[0] for r in rows.all()}
+        return {item_id: sum(1 for qid in ids if qid in still_unbound) for item_id, ids in wanted.items()}
 
     async def counts_by_status(self) -> dict[str, int]:
         """Queue summary for the admin dashboard badge."""
@@ -404,6 +430,7 @@ class LoReviewService:
             update(QuestionBank).where(QuestionBank.id.in_(question_ids)).values(learning_objective_id=objective_id)
         )
         updated = cast("CursorResult[Any]", result).rowcount or 0
+        resolved = await self._resolve_completed_items(question_ids, reviewer_id)
         await self.db.commit()
 
         logger.info(
@@ -411,9 +438,62 @@ class LoReviewService:
             requested=len(question_ids),
             updated=updated,
             new_objective_id=str(objective_id) if objective_id else None,
+            items_auto_resolved=len(resolved),
             reviewer_id=str(reviewer_id),
         )
-        return {"updated": updated, "objective_id": str(objective_id) if objective_id else None}
+        return {
+            "updated": updated,
+            "objective_id": str(objective_id) if objective_id else None,
+            "items_resolved": resolved,
+        }
+
+    async def _resolve_completed_items(
+        self, question_ids: list[uuid.UUID], reviewer_id: uuid.UUID
+    ) -> list[dict[str, str]]:
+        """Close any PENDING item whose last unbound question just got bound.
+
+        Without this, an item worked question-by-question never leaves the queue: the
+        reviewer binds all 54 of its questions and the card still reads PENDING, so the
+        only way to tell finished work from outstanding work is to open every card.
+
+        Deliberately one-way. Unbinding a question does NOT reopen a resolved item —
+        a parent SPLIT group shares questions with its remainder item, so reopening
+        would resurface a 103-question card because one question was unbound. Questions
+        left unbound are already reported by the coverage validation, which is the right
+        instrument for that.
+        """
+        touched = [str(qid) for qid in question_ids]
+        candidates = await self.db.execute(
+            select(LearningObjectiveReviewItem).where(
+                LearningObjectiveReviewItem.status == STATUS_PENDING,
+                # jsonb_exists_any: does question_ids share any element with `touched`?
+                # Spelled as a function rather than the `?|` operator because the
+                # right-hand side must bind as text[], and `?|` would coerce it to jsonb.
+                func.jsonb_exists_any(
+                    LearningObjectiveReviewItem.question_ids,
+                    sa_cast(touched, ARRAY(Text)),
+                ),
+            )
+        )
+        resolved: list[dict[str, str]] = []
+        for item in candidates.scalars().all():
+            ids = [uuid.UUID(qid) for qid in item.question_ids]
+            if not ids:
+                continue
+            rows = await self.db.execute(select(QuestionBank.learning_objective_id).where(QuestionBank.id.in_(ids)))
+            bindings = [r[0] for r in rows.all()]
+            if not bindings or any(b is None for b in bindings):
+                continue
+
+            # An item bound to a single objective was effectively an approval; one bound
+            # across several was a split. Recording which keeps the audit trail honest.
+            distinct = {str(b) for b in bindings}
+            item.status = STATUS_APPROVED if len(distinct) == 1 else STATUS_SPLIT
+            item.resolved_by = reviewer_id
+            item.resolved_at = datetime.now(UTC)
+            item.admin_note = f"Auto-resolved: all {len(ids)} questions assigned across {len(distinct)} objective(s)."
+            resolved.append({"item_id": str(item.id), "status": item.status})
+        return resolved
 
     async def search_objectives(self, query: str, limit: int = 20) -> list[dict[str, Any]]:
         """Find objectives by meaning, falling back to literal matching.
@@ -507,7 +587,7 @@ class LoReviewService:
         return results
 
     async def _placements_for(self, objective_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
-        """Where each objective sits in the curriculum: subject, grade, topic.
+        """Where each objective sits in the curriculum: subject, grade, topic, subtopic.
 
         Objectives are deliberately grade-agnostic — grade is a property of placement,
         not of the concept, which is why one objective can be taught in several grades.
@@ -521,7 +601,8 @@ class LoReviewService:
             text(
                 """
                 SELECT DISTINCT so.learning_objective_id::text AS objective_id,
-                                s.code AS subject_code, g.level AS grade_level, t.name AS topic_name
+                                s.code AS subject_code, g.level AS grade_level,
+                                t.name AS topic_name, sub.name AS subtopic_name
                 FROM subtopic_objectives so
                 JOIN subtopics sub        ON sub.id = so.subtopic_id
                 JOIN curriculum_topics ct ON ct.id = sub.curriculum_topic_id
@@ -529,7 +610,7 @@ class LoReviewService:
                 JOIN grades   g           ON g.id = ct.grade_id
                 JOIN topics   t           ON t.id = ct.topic_id
                 WHERE so.learning_objective_id = ANY(CAST(:ids AS uuid[]))
-                ORDER BY 2, 3, 4
+                ORDER BY 2, 3, 4, 5
                 """
             ),
             {"ids": objective_ids},
@@ -541,6 +622,7 @@ class LoReviewService:
                     "subject_code": row["subject_code"],
                     "grade_level": row["grade_level"],
                     "topic_name": row["topic_name"],
+                    "subtopic_name": row["subtopic_name"],
                 }
             )
         return placements

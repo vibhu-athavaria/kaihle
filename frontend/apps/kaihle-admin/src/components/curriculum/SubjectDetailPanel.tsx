@@ -75,9 +75,14 @@ function TopicRow({
   onAddSubtopic: (existingSubtopics: Subtopic[]) => void;
   onEditSubtopic: (subtopic: Subtopic) => void;
 }) {
+  // A topic row is a curriculum-topic *placement*, not a bare topic: "Sequences,
+  // expressions and formulae" is bound to several grades and carries different
+  // subtopics in each. Omitting grade_id here merges every grade's subtopics into
+  // whichever row you expand.
   const { data: subtopics = [], isLoading } = useSubtopics(
     topic.topic_id,
     curriculumId,
+    topic.grade_id ?? undefined,
   );
 
   return (
@@ -253,8 +258,8 @@ export function SubjectDetailPanel({
                 key={topic.curriculum_topic_id}
                 topic={topic}
                 curriculumId={curriculumId}
-                isExpanded={expandedTopics.has(topic.topic_id)}
-                onToggle={() => toggleTopic(topic.topic_id)}
+                isExpanded={expandedTopics.has(topic.curriculum_topic_id)}
+                onToggle={() => toggleTopic(topic.curriculum_topic_id)}
                 onEdit={() => onEditTopic(topic)}
                 onAddSubtopic={(existingSubtopics) =>
                   onAddSubtopic(

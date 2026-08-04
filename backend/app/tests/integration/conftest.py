@@ -13,10 +13,6 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import create_access_token, hash_password
-from app.models.school import School, SchoolCurriculum
-from app.models.user import User, UserRole
-
 # Set test environment variables BEFORE importing app modules
 # This is critical because app.core.database creates engine at import time
 # ruff: noqa: E402
@@ -45,9 +41,11 @@ import random
 from collections.abc import AsyncGenerator
 
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models import Base
 from app.models.assessment import Assessment
@@ -58,10 +56,19 @@ from app.models.curriculum import (
     Topic,
 )
 from app.models.onboarding import StudentLearningProfile
-from app.models.school import Class
+from app.models.school import Class, School, SchoolCurriculum
 from app.models.user import (
     StudentProfile,
+    User,
+    UserRole,
 )
+
+# bcrypt is deliberately slow — ~310ms a call at the configured cost factor — and every
+# user fixture hashed the same literal, which made it the single largest cost in the
+# suite. Hashing once keeps the value a genuine bcrypt digest (verify_password still
+# exercises the real algorithm) while paying for it once instead of hundreds of times.
+TEST_PASSWORD = "correct-password"
+TEST_PASSWORD_HASH = hash_password(TEST_PASSWORD)
 
 
 @pytest.fixture(autouse=True)
@@ -146,7 +153,7 @@ async def user(db_session: AsyncSession, school: School) -> User:
         id=uuid.uuid4(),
         school_id=school.id,
         email=f"user-{uuid.uuid4().hex[:8]}@test.com",
-        hashed_password=hash_password("correct-password"),
+        hashed_password=TEST_PASSWORD_HASH,
         first_name="Test",
         last_name="User",
         role=UserRole.TEACHER,
@@ -195,7 +202,7 @@ async def student_with_password(db_session: AsyncSession, school: School) -> Use
         id=uuid.uuid4(),
         school_id=school.id,
         email=f"student-pw-{uuid.uuid4().hex[:8]}@test.com",
-        hashed_password=hash_password("correct-password"),
+        hashed_password=TEST_PASSWORD_HASH,
         first_name="Test",
         last_name="Student",
         role=UserRole.STUDENT,
@@ -219,19 +226,67 @@ async def engine() -> AsyncGenerator[AsyncEngine, None]:
     await engine.dispose()
 
 
-@pytest_asyncio.fixture(scope="function")
-async def db_session(engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
-    """Create a fresh database session for each test."""
-    from sqlalchemy import text
+# One SELECT per table, unioned, naming only the tables that hold at least one row.
+# Built once per session from the live catalogue — which covers tables created outside
+# the model graph — and reused by every test. Each EXISTS on an empty table reads zero
+# pages, making this ~23ms against ~360ms to truncate all 52 unconditionally.
+_non_empty_probe_sql: str = ""
 
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def _schema() -> AsyncGenerator[None, None]:
+    """Build the schema once for the whole session.
+
+    This used to run per test — 52 tables and every index rebuilt 617 times, about
+    1.3s of pure DDL per test. Tests need a clean *dataset*, not a freshly created
+    *schema*, and TRUNCATE gives the first at a fraction of the cost.
+
+    Owns a short-lived engine of its own rather than sharing the function-scoped one:
+    asyncpg connections are bound to the event loop that opened them, and this fixture
+    runs on the session loop.
+    """
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False, poolclass=NullPool, connect_args={"ssl": False})
     async with engine.begin() as conn:
-        # Drop all with CASCADE to handle FK dependencies from tables outside
-        # the Python model graph (e.g. student_attempt_subtopic_scores from M1-4-T3).
+        # CASCADE because some tables live outside the Python model graph
+        # (e.g. student_attempt_subtopic_scores from M1-4-T3) and drop_all misses them.
         await conn.execute(text("DROP SCHEMA public CASCADE"))
         await conn.execute(text("CREATE SCHEMA public"))
-        # Restore pgvector extension (was in public schema, dropped with it)
+        # pgvector lived in public and went with it.
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)
+
+        rows = await conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
+        global _non_empty_probe_sql  # noqa: PLW0603
+        _non_empty_probe_sql = " UNION ALL ".join(
+            f"SELECT '{name}' AS tbl WHERE EXISTS (SELECT 1 FROM public.\"{name}\")"
+            for name in sorted(r[0] for r in rows.fetchall())
+        )
+    await engine.dispose()
+    yield
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_session(engine: AsyncEngine, _schema: None) -> AsyncGenerator[AsyncSession, None]:
+    """A session against an empty database, isolated from every other test.
+
+    Isolation is by TRUNCATE rather than by an outer transaction that rolls back:
+    services in this codebase call db.commit() directly, which would end such a
+    transaction and silently leak state into the next test.
+
+    Table names come from the live catalogue, not Base.metadata, so anything created
+    outside the model graph is still cleared. RESTART IDENTITY resets sequences, so
+    tests asserting on generated ids stay deterministic regardless of run order.
+    """
+    async with engine.begin() as conn:
+        # Truncating all 52 tables unconditionally costs ~360ms because TRUNCATE
+        # rewrites each table's file even when it is already empty. Asking which
+        # tables actually hold rows costs ~23ms, and a typical test dirties only a
+        # handful — so detect first, then truncate just those.
+        rows = await conn.execute(text(_non_empty_probe_sql))
+        dirty = [r[0] for r in rows.fetchall()]
+        if dirty:
+            quoted = ", ".join(f'public."{name}"' for name in dirty)
+            await conn.execute(text(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE"))  # noqa: S608
 
     async_session = async_sessionmaker(
         engine,
