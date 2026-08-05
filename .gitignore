@@ -59,6 +59,8 @@ node_modules/.vite.worktrees/
 .claude/**
 **pyrightconfig.json
 backend/validation_reports/
+# Per-subtopic resume state from generate_gap_questions — tens of MB per run.
+backend/checkpoints/
 
 # Database dumps and curriculum-remap archives — large, environment-specific,
 # and may contain student PII. Never commit.

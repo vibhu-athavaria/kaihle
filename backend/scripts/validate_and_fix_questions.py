@@ -321,9 +321,20 @@ VALIDATION PROCESS — for EACH question:
      a different skill/content area?
   4. Check distractor quality (MCQ only): are all 4 options non-empty,
      unique, and plausibly wrong? No obviously wrong distractors.
-  5. Check content-domain: (ENG only) does it test a language skill,
+  5. Check SELF-CONTAINMENT. This is an ONLINE assessment with no images and no
+     accompanying materials — the student sees only the text. FAIL the question if it
+     refers to anything not written out in full: "the diagram below", "the figure
+     shows", "refer to the graph", "the table above", "the shape shown", or similar.
+     A shape must be described in words ("a triangle with base 8 cm and height 5 cm");
+     data must be listed in the question text. Correct by rewriting the question to
+     carry its own context, or by replacing it with one testing the same objective.
+  6. Check RENDERING. question_text and every option render as PLAIN TEXT — no
+     markdown, no LaTeX, no HTML. FAIL and convert to Unicode if you find $x^2$,
+     \\frac, \\times, **bold**, backticks, <sub>, <br>, or ASCII substitutes like
+     "x^2" or "x squared". Correct form: x², ½, ×, ÷, ≤, √, °C, π.
+  7. Check content-domain: (ENG only) does it test a language skill,
      not historical/scientific factual recall?
-  6. If ANY check fails → generate a corrected version of the question.
+  8. If ANY check fails → generate a corrected version of the question.
 
 OUTPUT FORMAT — return ONLY valid JSON, no markdown fences, no trailing commas:
 {{
@@ -339,6 +350,8 @@ OUTPUT FORMAT — return ONLY valid JSON, no markdown fences, no trailing commas
         "difficulty_calibration": {{"pass": true, "note": "Appropriate for level {int(questions[0].get("difficulty_level") or 1) if questions else 1}"}},
         "subtopic_alignment": {{"pass": true, "note": "Directly tests the learning objective"}},
         "distractor_quality": {{"pass": true, "note": "All distractors are plausible misconceptions"}},
+        "self_contained": {{"pass": true, "note": "No reference to any diagram, figure or table"}},
+        "rendering_safe": {{"pass": true, "note": "Plain text with Unicode symbols only"}},
         "content_domain": {{"pass": true, "note": "No content-domain contamination"}}
       }},
       "corrected_question": null,
@@ -639,7 +652,11 @@ async def validate_subtopic_batch(
                         {"role": "user", "content": prompt},
                     ],
                     temperature=0.2,
-                    max_tokens=12000,
+                    # A verdict per question plus a full rewrite for each failure can
+                    # exceed the input batch several times over. The largest subtopics
+                    # (~7.2k tokens of questions) truncated at 12000 and failed to parse,
+                    # so those questions went unchecked while the run reported success.
+                    max_tokens=20000,
                 )
             except Exception as exc:
                 log.error(
@@ -688,11 +705,28 @@ async def validate_subtopic_batch(
                     for i in range(len(chunk_questions))
                 ]
 
-            q_results = result.get("questions", [])
-            # Re-index to global positions
+            # The model is asked for {"questions": [...]} but intermittently returns the
+            # bare list instead. Accept either: a shape variance in one response must not
+            # abort a run that has already validated hundreds of subtopics.
+            if isinstance(result, list):
+                q_results = result
+            elif isinstance(result, dict):
+                q_results = result.get("questions", [])
+            else:
+                q_results = []
+
+            if not isinstance(q_results, list):
+                log.warning("unexpected_validation_shape", got=type(q_results).__name__)
+                q_results = []
+
+            # Re-index to global positions, skipping anything that is not a result object.
+            out: list[dict[str, Any]] = []
             for qr in q_results:
+                if not isinstance(qr, dict):
+                    continue
                 qr["index"] = chunk_start_idx + qr.get("index", 0)
-            return q_results
+                out.append(qr)
+            return out
 
     # Split questions into chunks and validate each
     chunks = [questions[i : i + CHUNK_SIZE] for i in range(0, len(questions), CHUNK_SIZE)]
@@ -1348,11 +1382,40 @@ async def run_validate_generated(
     log.info("validation_start", groups=len(subtopic_groups), dry_run=dry_run)
 
     semaphore = asyncio.Semaphore(concurrency)
-    validation_results = await asyncio.gather(
-        *[validate_subtopic_batch(g, semaphore, dry_run=dry_run) for g in subtopic_groups]
+    # return_exceptions: a single malformed model response used to abort the whole run
+    # after hundreds of subtopics had already been validated, and this script has no
+    # resume. One failed subtopic is recorded and skipped; the rest still complete.
+    raw_results = await asyncio.gather(
+        *[validate_subtopic_batch(g, semaphore, dry_run=dry_run) for g in subtopic_groups],
+        return_exceptions=True,
     )
 
-    real_results = [r for r in validation_results if r.get("pass_rate") != "dry_run"]
+    validation_results = []
+    for group, outcome in zip(subtopic_groups, raw_results, strict=True):
+        if isinstance(outcome, BaseException):
+            log.error(
+                "subtopic_validation_failed",
+                subtopic=group.get("subtopic_name"),
+                subject=group.get("subject_code"),
+                grade=group.get("grade_level"),
+                error=str(outcome),
+            )
+            # Recorded as unvalidated rather than dropped: the corrected file must not
+            # silently present these questions as having been checked.
+            validation_results.append(
+                {
+                    "subtopic_name": group.get("subtopic_name"),
+                    "subject_code": group.get("subject_code"),
+                    "grade_level": group.get("grade_level"),
+                    "pass_rate": "error",
+                    "questions": [],
+                    "error": str(outcome),
+                }
+            )
+        else:
+            validation_results.append(outcome)
+
+    real_results = [r for r in validation_results if r.get("pass_rate") not in ("dry_run", "error")]
     if real_results:
         print_summary(real_results)
 
@@ -1367,7 +1430,22 @@ async def run_validate_generated(
     # Build corrected file
     corrected = build_corrected_generated_file(validation_results, subtopic_groups, original_data)
 
-    out_path = Path(file_path).with_suffix(".corrected.json")
+    # A run that checked only part of the file still emits every question, because the
+    # unchecked ones pass through untouched. Naming that ".corrected.json" invites an
+    # import of thousands of unvalidated questions on the strength of the filename, so
+    # a partial run gets a name that cannot be mistaken for a complete one.
+    errored = sum(1 for r in validation_results if r.get("pass_rate") == "error")
+    partial = bool(limit) or errored > 0
+    suffix = ".partial-validation.json" if partial else ".corrected.json"
+    out_path = Path(file_path).with_suffix(suffix)
+
+    corrected["_validation_coverage"] = {
+        "subtopics_in_file": len(subtopic_groups),
+        "subtopics_validated": len(real_results),
+        "subtopics_errored": errored,
+        "complete": not partial,
+    }
+
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(corrected, f, indent=2, ensure_ascii=False)
 
@@ -1377,7 +1455,16 @@ async def run_validate_generated(
         path=str(out_path),
         fixes_applied=fixes_applied,
         total_questions=len(corrected.get("questions", [])),
+        subtopics_validated=len(real_results),
+        subtopics_in_file=len(subtopic_groups),
+        complete=not partial,
     )
+    if partial:
+        print(
+            f"\n⚠  PARTIAL validation: {len(real_results)} of {len(subtopic_groups)} subtopics checked."
+            f"\n   Written to {out_path.name} — the unchecked questions are unmodified."
+            f"\n   Do not import this as a validated set."
+        )
 
     return 0
 

@@ -6,7 +6,9 @@ EXTENDED-only material.
 """
 
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from sqlalchemy import select
 
 from app.models.curriculum import CurriculumTopic, QuestionBank, Subtopic, SubtopicObjective
@@ -15,6 +17,7 @@ from app.services.question_selection import (
     active_scope_filters,
     join_questions_via_objectives,
     questions_for_subtopic,
+    resolve_objective_for_subtopic,
     tier_filter,
 )
 
@@ -134,3 +137,40 @@ class TestQuestionsForSubtopic:
 
     def test_query_when_built_then_excludes_inactive_questions(self) -> None:
         assert "is_active" in str(questions_for_subtopic(uuid.uuid4()))
+
+
+@pytest.mark.asyncio
+class TestResolveObjectiveForSubtopic:
+    """Every path that CREATES a question resolves its objective here.
+
+    A question written without one is unreachable: stored successfully, then never
+    served, because selection joins through the objective and never through
+    question_bank.subtopic_id. Both the KaihleAdmin create endpoint and the bulk
+    importer refuse to write when this returns None, so the None path is a contract.
+    """
+
+    @staticmethod
+    def _db(scalar: uuid.UUID | None) -> MagicMock:
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = scalar
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=result)
+        return db
+
+    async def test_when_subtopic_has_an_objective_then_returns_it(self) -> None:
+        objective_id = uuid.uuid4()
+        assert await resolve_objective_for_subtopic(self._db(objective_id), uuid.uuid4()) == objective_id
+
+    async def test_when_subtopic_has_no_objective_then_returns_none(self) -> None:
+        # A data defect the caller must surface, never a reason to write the row anyway.
+        assert await resolve_objective_for_subtopic(self._db(None), uuid.uuid4()) is None
+
+    async def test_when_called_then_selection_is_deterministic(self) -> None:
+        """A subtopic teaching several objectives must resolve the same one every time,
+        or two questions authored for one subtopic land on different objectives."""
+        db = self._db(uuid.uuid4())
+        await resolve_objective_for_subtopic(db, uuid.uuid4())
+
+        sql = str(db.execute.call_args.args[0]).upper()
+        assert "ORDER BY" in sql
+        assert "LIMIT" in sql

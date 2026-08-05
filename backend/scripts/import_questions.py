@@ -26,6 +26,7 @@ import difflib
 import hashlib
 import json
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +47,7 @@ from app.models.curriculum import (
     Subtopic,
     Topic,
 )
+from app.services.question_selection import resolve_objective_for_subtopic
 
 logger = structlog.get_logger("import_questions")
 
@@ -194,14 +196,27 @@ def normalize_hints(hints: Any) -> list[dict] | None:
     return None
 
 
-def build_insert_dict(question: dict, subtopic_id: str, question_type: str, options: list | None) -> dict:
-    """Shared helper to build the insert dict from a resolved question."""
+def build_insert_dict(
+    question: dict,
+    subtopic_id: str,
+    question_type: str,
+    options: list | None,
+    learning_objective_id: str,
+) -> dict:
+    """Shared helper to build the insert dict from a resolved question.
+
+    learning_objective_id is required, not optional. Selection resolves through the
+    objective — never through subtopic_id — so a row written without it is imported
+    successfully and then served to nobody. Callers resolve it via
+    resolve_objective_for_subtopic and skip the question if the subtopic has none.
+    """
     question_text = question.get("question_text", "")
     canonical_form = compute_canonical_form(question_text)
     bloom = question.get("bloom_taxonomy_level") or question.get("bloom_taxonomy")
 
     return {
         "subtopic_id": subtopic_id,
+        "learning_objective_id": learning_objective_id,
         "question_text": question_text,
         "question_type": question_type,
         "options": options,
@@ -470,7 +485,14 @@ async def process_question_task_format(session, question: dict, row_num: int) ->
     options_raw = question.get("options")
     options = normalize_options_for_mcq(options_raw) if question_type == "MCQ" else None
 
-    return build_insert_dict(question, subtopic_id, question_type, options), None
+    objective_id = await resolve_objective_for_subtopic(session, uuid.UUID(str(subtopic_id)))
+    if objective_id is None:
+        return None, (
+            f"Row {row_num}: Subtopic {subtopic_id} has no learning objective. Importing "
+            f"would write a question that selection can never reach."
+        )
+
+    return build_insert_dict(question, subtopic_id, question_type, options, str(objective_id)), None
 
 
 async def process_question_preresolved_format(session, question: dict, row_num: int) -> tuple[dict | None, str | None]:
@@ -495,7 +517,14 @@ async def process_question_preresolved_format(session, question: dict, row_num: 
     options_raw = question.get("options")
     options = normalize_options_for_mcq(options_raw) if question_type == "MCQ" else None
 
-    return build_insert_dict(question, subtopic_id, question_type, options), None
+    objective_id = await resolve_objective_for_subtopic(session, uuid.UUID(str(subtopic_id)))
+    if objective_id is None:
+        return None, (
+            f"Row {row_num}: Subtopic {subtopic_id} has no learning objective. Importing "
+            f"would write a question that selection can never reach."
+        )
+
+    return build_insert_dict(question, subtopic_id, question_type, options, str(objective_id)), None
 
 
 def load_subtopic_mapping(mapping_path: str | None) -> dict[str, str]:
@@ -651,7 +680,14 @@ async def process_question_reresolve_format(
             )
         fuzzy_log.append(f"Row {row_num}: fuzzy {match_note}")
 
-    return build_insert_dict(question, subtopic_id, question_type, options), None
+    objective_id = await resolve_objective_for_subtopic(session, uuid.UUID(str(subtopic_id)))
+    if objective_id is None:
+        return None, (
+            f"Row {row_num}: Subtopic {subtopic_id} has no learning objective. Importing "
+            f"would write a question that selection can never reach."
+        )
+
+    return build_insert_dict(question, subtopic_id, question_type, options, str(objective_id)), None
 
 
 # ---------------------------------------------------------------------------

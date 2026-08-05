@@ -20,6 +20,7 @@ from app.models.curriculum import (
     QuestionBank,
     Subject,
     Subtopic,
+    SubtopicObjective,
     Topic,
 )
 from app.models.user import UserRole
@@ -29,12 +30,33 @@ from app.schemas.question_bank import (
     QuestionBankResponse,
     QuestionBankUpdateRequest,
 )
+from app.services.question_selection import resolve_objective_for_subtopic
 
 router = APIRouter(prefix="/question-bank", tags=["question-bank"])
 
 
 def _base_query():
-    """SELECT with all joins for curriculum context."""
+    """SELECT with all joins for curriculum context.
+
+    Curriculum context is reached through the objective bridge, never through
+    QuestionBank.subtopic_id. That column is NULL for every question whose placement
+    was replaced by a remap — all 1401 MATH/SCI grade 6-8 questions after cambridge_v2 —
+    so the old inner join silently dropped them and the browser showed an empty bank
+    while the diagnostic selector was finding them without trouble.
+
+    A subtopic is chosen per question rather than joined across all of them: an
+    objective taught in several grades would otherwise repeat the question once per
+    placement, inflating totals and breaking the single-row get_question. Only 78 of
+    5702 questions have more than one placement, and the ordering here matches
+    resolve_objective_for_subtopic so the choice is stable between calls.
+    """
+    representative_subtopic = (
+        select(SubtopicObjective.subtopic_id)
+        .where(SubtopicObjective.learning_objective_id == QuestionBank.learning_objective_id)
+        .order_by(SubtopicObjective.subtopic_id)
+        .limit(1)
+        .scalar_subquery()
+    )
     return (
         select(
             QuestionBank,
@@ -49,7 +71,10 @@ def _base_query():
             Subtopic.name.label("subtopic_name"),
             CurriculumTopic.id.label("curriculum_topic_id"),
         )
-        .join(Subtopic, QuestionBank.subtopic_id == Subtopic.id)
+        # Explicit left side: the correlated subquery in the ON clause below otherwise
+        # leaves SQLAlchemy unable to infer which FROM to join from.
+        .select_from(QuestionBank)
+        .join(Subtopic, Subtopic.id == representative_subtopic)
         .join(CurriculumTopic, Subtopic.curriculum_topic_id == CurriculumTopic.id)
         .join(Curriculum, CurriculumTopic.curriculum_id == Curriculum.id)
         .join(Subject, CurriculumTopic.subject_id == Subject.id)
@@ -219,11 +244,25 @@ async def create_question(
             detail="subtopic_id does not exist",
         )
 
+    # Selection resolves through the objective, so a question stored with only a
+    # subtopic_id is unreachable: authored, saved, and never served to any student.
+    # Refuse rather than write a row that silently does nothing.
+    objective_id = await resolve_objective_for_subtopic(db, payload.subtopic_id)
+    if objective_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Subtopic has no learning objective, so a question created here could "
+                "never be selected. Add an objective to this subtopic first."
+            ),
+        )
+
     # SHA-256 of normalized text — matches compute_canonical_form in scripts/import_questions.py
     canonical_form = hashlib.sha256(payload.question_text.strip().lower().encode()).hexdigest()
 
     question = QuestionBank(
         subtopic_id=payload.subtopic_id,
+        learning_objective_id=objective_id,
         question_text=payload.question_text,
         question_type=payload.question_type,
         options=payload.options,
