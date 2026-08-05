@@ -372,6 +372,7 @@ class ClassService:
             StudentSummary(
                 id=row.User.id,
                 email=row.User.email,
+                username=row.User.username,
                 first_name=row.User.first_name,
                 last_name=row.User.last_name,
                 worst_mastery=worst_mastery_map.get(row.User.id),
@@ -459,6 +460,7 @@ class ClassService:
                 first_name=students[student_id].first_name,
                 last_name=students[student_id].last_name,
                 email=students[student_id].email,
+                username=students[student_id].username,
                 grade_name=data["grade_name"],
                 class_ids=data["class_ids"],
                 class_names=data["class_names"],

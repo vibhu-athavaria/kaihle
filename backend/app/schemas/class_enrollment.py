@@ -81,7 +81,8 @@ class StudentSummary(BaseModel):
     """Schema for student summary in class enrollment."""
 
     id: uuid.UUID
-    email: str
+    # NULL for username-based students registered without an email address.
+    email: str | None = None
     username: str | None = None
     first_name: str
     last_name: str
@@ -98,7 +99,8 @@ class TeacherStudentItem(BaseModel):
     id: uuid.UUID
     first_name: str
     last_name: str
-    email: str
+    # NULL for username-based students registered without an email address.
+    email: str | None = None
     username: str | None = None
     grade_name: str | None = None
     class_ids: list[uuid.UUID]

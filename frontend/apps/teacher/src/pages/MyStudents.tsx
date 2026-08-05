@@ -35,7 +35,8 @@ export function MyStudentsPage() {
     return teacherStudents.map((s: TeacherStudent) => ({
       id: s.id,
       name: `${s.first_name} ${s.last_name}`.trim(),
-      email: s.email,
+      // Username-based students have no email — show the username instead.
+      email: s.email ?? s.username ?? "",
       gradeName: s.grade_name ?? null,
       classIds: s.class_ids,
       classNames: s.class_names,

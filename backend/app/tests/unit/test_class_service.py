@@ -601,6 +601,36 @@ class TestGetClassStudents:
         assert result[1].first_name == "Alice"
 
     @pytest.mark.asyncio
+    async def test_get_class_students_when_student_has_no_email_then_returns_username(
+        self, class_service: ClassService, mock_db: MagicMock
+    ) -> None:
+        """Username-based students have email=NULL and must still serialise."""
+        class_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+        class_ = self._make_class(class_id, school_id)
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school_id,
+            email=None,
+            username="charlie01",
+            first_name="Charlie",
+            last_name="Brown",
+            role=UserRole.STUDENT,
+        )
+
+        mock_db.get = AsyncMock(return_value=class_)
+        mock_result = MagicMock()
+        mock_result.all.return_value = [self._make_row(student)]
+        mock_db.execute = AsyncMock(side_effect=[mock_result, MagicMock(all=MagicMock(return_value=[]))])
+
+        result = await class_service.get_class_students(class_id, school_id)
+
+        assert len(result) == 1
+        assert result[0].email is None
+        assert result[0].username == "charlie01"
+
+    @pytest.mark.asyncio
     async def test_get_class_students_when_diagnostic_completed_then_flag_is_true(
         self, class_service: ClassService, mock_db: MagicMock
     ) -> None:

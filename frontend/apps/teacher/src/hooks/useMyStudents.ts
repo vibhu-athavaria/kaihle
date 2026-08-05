@@ -14,7 +14,9 @@ export interface StudentRow {
 
 interface EnrollmentSummary {
   id: string;
-  email: string;
+  // null for username-based students registered without an email address
+  email: string | null;
+  username: string | null;
   first_name: string;
   last_name: string;
 }
@@ -168,7 +170,7 @@ export function useMyStudents(classIds: string[], subjectIds: string[]) {
       name: enrollment
         ? `${enrollment.first_name} ${enrollment.last_name}`.trim()
         : studentId,
-      email: enrollment?.email ?? "",
+      email: enrollment?.email ?? enrollment?.username ?? "",
       avgMastery,
       lastAssessedAt: latestDate,
       dominantModality,
