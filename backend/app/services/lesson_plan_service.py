@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import NamedTuple
 from uuid import UUID
 
 import structlog
@@ -10,7 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.curriculum import CurriculumTopic, Subtopic, Topic
+from app.models.curriculum import CurriculumTopic, Grade, Subtopic, Topic
 from app.models.lesson_plan import LessonPlan, LessonPlanStatus
 from app.models.school import Class
 from app.schemas.common import Page
@@ -18,6 +19,14 @@ from app.schemas.lesson_plans import LessonPlanEditRequest, LessonPlanResponse, 
 from app.tasks.lesson_plan_tasks import generate_lesson_plan_task
 
 logger = structlog.get_logger(__name__)
+
+
+class _ClassInfo(NamedTuple):
+    """Class display context needed to title a lesson plan."""
+
+    name: str
+    grade_name: str | None
+
 
 _ALLOWED_STATUS_TRANSITIONS: dict[str, set[str]] = {
     LessonPlanStatus.GENERATED: {LessonPlanStatus.USED, LessonPlanStatus.ARCHIVED},
@@ -105,13 +114,13 @@ async def list_class_lesson_plans(
     all_subtopic_ids = list({sid for p in plans for sid in p.focus_subtopic_ids})
     all_context = await _fetch_subtopic_context(all_subtopic_ids, db)
     context_by_id = {str(sc.subtopic_id): sc for sc in all_context}
-    class_names = await _fetch_class_names([class_id], db)
-    cls_name = class_names.get(str(class_id), "")
+    class_info = await _fetch_class_info([class_id], db)
+    cls_info = class_info.get(str(class_id), _ClassInfo("", None))
 
     return Page(
         data=[
             _to_response(
-                p, [context_by_id[str(sid)] for sid in p.focus_subtopic_ids if str(sid) in context_by_id], cls_name
+                p, [context_by_id[str(sid)] for sid in p.focus_subtopic_ids if str(sid) in context_by_id], cls_info
             )
             for p in plans
         ],
@@ -154,14 +163,14 @@ async def list_teacher_lesson_plans(
     all_context = await _fetch_subtopic_context(all_subtopic_ids, db)
     context_by_id = {str(sc.subtopic_id): sc for sc in all_context}
     all_class_ids = list({p.class_id for p in plans})
-    class_names = await _fetch_class_names(all_class_ids, db)
+    class_info = await _fetch_class_info(all_class_ids, db)
 
     return Page(
         data=[
             _to_response(
                 p,
                 [context_by_id[str(sid)] for sid in p.focus_subtopic_ids if str(sid) in context_by_id],
-                class_names.get(str(p.class_id), ""),
+                class_info.get(str(p.class_id), _ClassInfo("", None)),
             )
             for p in plans
         ],
@@ -171,6 +180,17 @@ async def list_teacher_lesson_plans(
     )
 
 
+async def build_lesson_plan_response(plan: LessonPlan, db: AsyncSession) -> LessonPlanResponse:
+    """Assemble the full response for an already-loaded plan (subtopic + class context).
+
+    Public because the generate route returns a freshly created plan that never
+    passes through the read paths below.
+    """
+    context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
+    class_info = await _fetch_class_info([plan.class_id], db)
+    return _to_response(plan, context, class_info.get(str(plan.class_id), _ClassInfo("", None)))
+
+
 async def get_lesson_plan(
     plan_id: UUID,
     teacher_id: UUID,
@@ -178,9 +198,7 @@ async def get_lesson_plan(
     db: AsyncSession,
 ) -> LessonPlanResponse:
     plan = await _require_plan(plan_id, teacher_id, school_id, db)
-    context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
-    class_names = await _fetch_class_names([plan.class_id], db)
-    return _to_response(plan, context, class_names.get(str(plan.class_id), ""))
+    return await build_lesson_plan_response(plan, db)
 
 
 async def edit_lesson_plan(
@@ -206,9 +224,7 @@ async def edit_lesson_plan(
     plan.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(plan)
-    context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
-    class_names = await _fetch_class_names([plan.class_id], db)
-    return _to_response(plan, context, class_names.get(str(plan.class_id), ""))
+    return await build_lesson_plan_response(plan, db)
 
 
 async def regenerate_lesson_plan(
@@ -237,9 +253,7 @@ async def regenerate_lesson_plan(
     )
     # Don't refresh — we know the committed state; a refresh risks returning GENERATED
     # if the task completes before this line executes.
-    context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
-    class_names = await _fetch_class_names([plan.class_id], db)
-    return _to_response(plan, context, class_names.get(str(plan.class_id), ""))
+    return await build_lesson_plan_response(plan, db)
 
 
 async def update_lesson_plan_status(
@@ -262,9 +276,7 @@ async def update_lesson_plan_status(
     plan.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(plan)
-    context = await _fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
-    class_names = await _fetch_class_names([plan.class_id], db)
-    return _to_response(plan, context, class_names.get(str(plan.class_id), ""))
+    return await build_lesson_plan_response(plan, db)
 
 
 # ---------------------------------------------------------------------------
@@ -331,18 +343,25 @@ async def _fetch_subtopic_context(
     return [SubtopicContext(subtopic_id=r.id, name=r.name, topic_name=r.topic_name) for r in results]
 
 
-async def _fetch_class_names(class_ids: list[UUID], db: AsyncSession) -> dict[str, str]:
-    """Batch-fetch class names for a list of class IDs. Returns {str(class_id): name}."""
+async def _fetch_class_info(class_ids: list[UUID], db: AsyncSession) -> dict[str, _ClassInfo]:
+    """Batch-fetch class name and grade name for a list of class IDs.
+
+    Returns {str(class_id): _ClassInfo}. grade_name is None when the class has no grade.
+    """
     if not class_ids:
         return {}
-    result = await db.execute(select(Class.id, Class.name).where(Class.id.in_(class_ids)))
-    return {str(row.id): row.name for row in result.all()}
+    result = await db.execute(
+        select(Class.id, Class.name, Grade.name.label("grade_name"))
+        .outerjoin(Grade, Grade.id == Class.grade_id)
+        .where(Class.id.in_(class_ids))
+    )
+    return {str(row.id): _ClassInfo(name=row.name, grade_name=row.grade_name) for row in result.all()}
 
 
 def _to_response(
     plan: LessonPlan,
     focus_subtopics: list[SubtopicContext],
-    class_name: str,
+    class_info: _ClassInfo,
 ) -> LessonPlanResponse:
     generated = dict(plan.generated_plan or {})
     if plan.teacher_edits:
@@ -351,7 +370,8 @@ def _to_response(
     return LessonPlanResponse(
         id=plan.id,
         class_id=plan.class_id,
-        class_name=class_name,
+        class_name=class_info.name,
+        grade_name=class_info.grade_name,
         week_start=plan.week_start,
         status=plan.status,
         duration_minutes=plan.duration_minutes,

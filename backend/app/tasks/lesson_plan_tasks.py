@@ -43,7 +43,9 @@ _CORRECTION_PROMPT = (
     "Your previous response could not be parsed as valid JSON matching the required schema.\n\n"
     "Error: {error}\n\n"
     "Previous response (first 500 chars):\n{previous_response}\n\n"
-    "Return ONLY valid JSON matching the exact schema. No markdown fences, no prose."
+    "Return ONLY valid JSON matching the exact schema. No markdown fences, no prose.\n"
+    "Every value must be real lesson content — never a placeholder token such as "
+    "<int>, <string>, REPLACE, or TBD. All *_minutes fields are bare integers."
 )
 
 
@@ -134,10 +136,30 @@ def _compute_class_context(profiles: list) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _extract_json_object(raw_text: str) -> str:
+    """Strip markdown fences and any prose surrounding the outermost JSON object.
+
+    Models are told to return bare JSON, but occasionally wrap it in ```json fences
+    or prepend a sentence. Recovering here is cheaper than burning a correction retry.
+    """
+    text = raw_text.strip()
+    if text.startswith("```"):
+        # Drop the opening fence line (```/```json) and anything after the closing fence.
+        text = text.split("\n", 1)[1] if "\n" in text else ""
+        if "```" in text:
+            text = text.rsplit("```", 1)[0]
+        text = text.strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end > start:
+        return text[start : end + 1]
+    return text
+
+
 def _try_validate(raw_text: str) -> tuple[dict | None, str]:
     """Parse and Pydantic-validate raw LLM text. Returns (parsed_dict, error_message)."""
     try:
-        parsed = json.loads(raw_text.strip())
+        parsed = json.loads(_extract_json_object(raw_text))
     except json.JSONDecodeError as exc:
         return None, f"JSON parse error: {exc}"
     try:

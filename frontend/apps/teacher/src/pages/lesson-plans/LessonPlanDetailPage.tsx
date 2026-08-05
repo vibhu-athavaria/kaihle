@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import {
   useLessonPlan,
+  type LessonPlan,
   type LessonPlanContent,
   type LessonPlanConcept,
   type ClassContextSnapshot,
@@ -402,6 +403,40 @@ function PhaseDivider({
   );
 }
 
+// ── Header title ───────────────────────────────────────────────────────────────
+
+/**
+ * Titles the plan by what it actually teaches: "Grade 7 — Forces" with the parent
+ * topic underneath. Falls back through grade → class name → generic label so a
+ * plan with no grade or no focus subtopics still gets a meaningful heading.
+ */
+function LessonPlanTitle({ plan }: { plan: LessonPlan }) {
+  const subtopics = plan.focus_subtopics ?? [];
+  const subtopicNames = subtopics.map((s) => s.name).filter(Boolean);
+  const topicNames = [
+    ...new Set(subtopics.map((s) => s.topic_name).filter(Boolean)),
+  ];
+
+  const scope = plan.grade_name ?? plan.class_name;
+  const heading =
+    subtopicNames.length > 0
+      ? `${scope} — ${subtopicNames.join(" · ")}`
+      : (scope ?? "Lesson Plan");
+
+  return (
+    <div className="min-w-0">
+      <h1 className="font-display font-bold text-2xl text-brand-ink truncate">
+        {heading}
+      </h1>
+      {topicNames.length > 0 && (
+        <p className="text-sm text-brand-body truncate">
+          {topicNames.join(" · ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export function LessonPlanDetailPage() {
@@ -436,16 +471,14 @@ export function LessonPlanDetailPage() {
       <div className="flex items-center gap-2 mb-6">
         <Link
           to={`/teacher/classes/${classId}/lesson-plans`}
-          className="text-brand-muted hover:text-brand-ink transition-colors"
+          className="text-brand-muted hover:text-brand-ink transition-colors flex-shrink-0"
           aria-label="Back to lesson plans"
         >
           <ChevronLeft className="w-5 h-5" aria-hidden="true" />
         </Link>
-        <h1 className="font-display font-bold text-2xl text-brand-ink">
-          Lesson Plan
-        </h1>
+        <LessonPlanTitle plan={plan} />
         {isGenerating && (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-amber-light text-brand-amber animate-pulse ml-2">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-brand-amber-light text-brand-amber animate-pulse ml-2 flex-shrink-0">
             Generating — you&apos;ll be emailed when ready
           </span>
         )}

@@ -484,3 +484,78 @@ async def test_generate_when_school_has_city_only_then_prompt_includes_city_with
     prompt_text = captured_calls[0]["messages"][0]["content"]
     assert "Jakarta" in prompt_text
     assert "None" not in prompt_text
+
+
+def test_prompt_skeleton_when_rendered_then_is_parseable_json() -> None:
+    """Regression: the output skeleton shown to the LLM must itself be valid JSON.
+
+    It previously used bare <int> placeholders, which models copied verbatim into
+    their response and which json.loads rejects with "Expecting value".
+    """
+    from app.tasks.lesson_plan_tasks import _extract_json_object, _jinja_env
+
+    rendered = _jinja_env.get_template("lesson_plan.jinja2").render(
+        class_name="Science Grade 7",
+        subject_name="Science",
+        grade_name="Grade 7",
+        student_count=20,
+        duration_minutes=60,
+        subtopics=[{"name": "Forces", "learning_objective": "Describe forces"}],
+        modality_distribution={"visual": 0.6, "auditory": 0.4},
+        top_interests=["football"],
+        school_location={"city": "Bangkok", "country": "Thailand"},
+    )
+
+    skeleton = json.loads(_extract_json_object(rendered))
+
+    assert skeleton["time_breakdown"]["starter_minutes"] == 6
+    assert skeleton["time_breakdown"]["activity_minutes"] == 30
+    assert isinstance(skeleton["key_concepts"][0]["duration_minutes"], int)
+
+
+def test_try_validate_when_response_is_bare_json_then_parses() -> None:
+    """Plain JSON with no wrapping is accepted."""
+    from app.tasks.lesson_plan_tasks import _try_validate
+
+    parsed, error = _try_validate(json.dumps(_make_valid_content()))
+
+    assert error == ""
+    assert parsed is not None
+    assert parsed["lesson_hook"] == "Test hook"
+
+
+def test_try_validate_when_response_is_fenced_then_parses() -> None:
+    """Markdown-fenced JSON is recovered instead of burning a correction retry."""
+    from app.tasks.lesson_plan_tasks import _try_validate
+
+    raw = "```json\n" + json.dumps(_make_valid_content()) + "\n```"
+
+    parsed, error = _try_validate(raw)
+
+    assert error == ""
+    assert parsed is not None
+
+
+def test_try_validate_when_response_has_surrounding_prose_then_parses() -> None:
+    """Prose before and after the object is stripped."""
+    from app.tasks.lesson_plan_tasks import _try_validate
+
+    raw = "Here is the plan:\n" + json.dumps(_make_valid_content()) + "\nLet me know if you want changes."
+
+    parsed, error = _try_validate(raw)
+
+    assert error == ""
+    assert parsed is not None
+
+
+def test_try_validate_when_response_has_placeholder_token_then_returns_parse_error() -> None:
+    """A bare <int> placeholder is still reported as a parse error, not silently accepted."""
+    from app.tasks.lesson_plan_tasks import _try_validate
+
+    content = _make_valid_content()
+    raw = json.dumps(content).replace('"starter_minutes": 6', '"starter_minutes": <int>')
+
+    parsed, error = _try_validate(raw)
+
+    assert parsed is None
+    assert "JSON parse error" in error

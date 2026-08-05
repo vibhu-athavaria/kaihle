@@ -72,57 +72,65 @@ The class will split into three groups during the main activity. Design differen
 - `prior_knowledge`: One sentence on assumed prior knowledge.
 - `homework`: Optional 15–20 min task, or null.
 
-Return ONLY valid JSON — no markdown fences, no prose before or after:
+## Output format
+
+Return ONLY valid JSON — no markdown fences, no prose before or after.
+
+Every value below is a placeholder you MUST replace with real lesson content.
+All `_minutes` fields are integers (no quotes, no units, no arithmetic).
+`transition_cue` on the last concept and `homework` may be `null`.
+Never emit a bare token such as `<int>`, `<string>`, `TBD`, or `...` — such output
+is not valid JSON and the plan will be rejected.
 
 {
-  "lesson_hook": "<string>",
+  "lesson_hook": "REPLACE: one compelling sentence",
   "time_breakdown": {
-    "starter_minutes": <int>,
-    "intro_minutes": <int>,
-    "activity_minutes": <int>,
-    "exit_ticket_minutes": <int>,
-    "plenary_minutes": <int>
+    "starter_minutes": {{ (duration_minutes * 0.10) | round | int }},
+    "intro_minutes": {{ (duration_minutes * 0.15) | round | int }},
+    "activity_minutes": {{ (duration_minutes * 0.50) | round | int }},
+    "exit_ticket_minutes": {{ (duration_minutes * 0.10) | round | int }},
+    "plenary_minutes": {{ (duration_minutes * 0.15) | round | int }}
   },
-  "learning_objectives": ["<string>"],
+  "learning_objectives": ["REPLACE: I can ..."],
   "key_concepts": [
     {
-      "name": "<string>",
-      "duration_minutes": <int>,
-      "teacher_does": "<string>",
-      "student_does": "<string>",
-      "check_question": "<string>",
+      "name": "REPLACE: concept name",
+      "duration_minutes": 8,
+      "teacher_does": "REPLACE",
+      "student_does": "REPLACE",
+      "check_question": "REPLACE",
       "misconception": {
-        "student_error": "<string>",
-        "trigger_phrase": "<string>",
-        "recovery_script": "<string>"
+        "student_error": "REPLACE",
+        "trigger_phrase": "REPLACE",
+        "recovery_script": "REPLACE"
       },
-      "transition_cue": "<string or null>"
+      "transition_cue": "REPLACE or null on the last concept"
     }
   ],
   "group_activities": {
-    "foundation": { "description": "<string>", "stuck_prompt": "<string>" },
-    "core":       { "description": "<string>", "stuck_prompt": "<string>" },
-    "extension":  { "description": "<string>", "stuck_prompt": "<string>" }
+    "foundation": { "description": "REPLACE", "stuck_prompt": "REPLACE" },
+    "core":       { "description": "REPLACE", "stuck_prompt": "REPLACE" },
+    "extension":  { "description": "REPLACE", "stuck_prompt": "REPLACE" }
   },
-  "resources_needed": ["<string>"],
+  "resources_needed": ["REPLACE: item · group"],
   "exit_ticket": {
     "questions": [
       {
         "label": "Q1 — core understanding",
-        "question_text": "<string>",
-        "good_answer": "<string>",
-        "pivot_if_wrong": "<string>"
+        "question_text": "REPLACE",
+        "good_answer": "REPLACE",
+        "pivot_if_wrong": "REPLACE"
       },
       {
         "label": "Q2 — application",
-        "question_text": "<string>",
-        "good_answer": "<string>",
-        "pivot_if_wrong": "<string>"
+        "question_text": "REPLACE",
+        "good_answer": "REPLACE",
+        "pivot_if_wrong": "REPLACE"
       }
     ]
   },
-  "starter": { "duration_minutes": <int>, "activity": "<string>" },
-  "plenary":  { "duration_minutes": <int>, "activity": "<string>" },
-  "prior_knowledge": "<string>",
-  "homework": "<string or null>"
+  "starter": { "duration_minutes": {{ (duration_minutes * 0.10) | round | int }}, "activity": "REPLACE" },
+  "plenary": { "duration_minutes": {{ (duration_minutes * 0.15) | round | int }}, "activity": "REPLACE" },
+  "prior_knowledge": "REPLACE: one sentence",
+  "homework": "REPLACE or null"
 }

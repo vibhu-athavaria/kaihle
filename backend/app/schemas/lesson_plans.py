@@ -17,6 +17,8 @@ class LessonPlanResponse(BaseModel):
     id: UUID
     class_id: UUID
     class_name: str
+    # NULL when the class has no grade assigned — the UI falls back to class_name.
+    grade_name: str | None = None
     week_start: date | None
     status: str  # "GENERATING" | "GENERATED" | "EDITED" | "USED" | "ARCHIVED"
     duration_minutes: int
