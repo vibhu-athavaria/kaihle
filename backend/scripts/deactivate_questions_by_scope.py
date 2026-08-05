@@ -64,6 +64,23 @@ WHERE s.code = ANY(CAST(:subjects AS varchar[]))
   AND q.is_active IS TRUE
 """
 
+# Questions orphaned by a remap have neither a learning objective nor a subtopic, so
+# no join reaches their curriculum scope. The review queue is the only remaining record
+# of where they came from — lo_review_items carries the subject and grade of the old
+# placement, and question_ids lists the questions it governs.
+#
+# Needed when a scope has been regenerated: the fresh questions supersede these, and
+# leaving them active keeps unreachable rows in the bank forever.
+_ORPHANED_SCOPE_SQL = """
+SELECT DISTINCT q.id::text AS id, i.subject_code, i.grade_level
+FROM question_bank q
+JOIN lo_review_items i ON i.question_ids ? q.id::text
+WHERE q.is_active IS TRUE
+  AND q.learning_objective_id IS NULL
+  AND i.subject_code = ANY(CAST(:subjects AS varchar[]))
+  AND i.grade_level  = ANY(CAST(:grades AS integer[]))
+"""
+
 _USAGE_SQL = """
 SELECT
   (SELECT count(*) FROM student_responses            WHERE question_id = ANY(CAST(:ids AS uuid[]))) AS responses,
@@ -71,10 +88,20 @@ SELECT
 """
 
 
-async def preview(subjects: list[str], grades: list[int]) -> list[dict[str, object]]:
+async def preview(subjects: list[str], grades: list[int], orphaned_only: bool = False) -> list[dict[str, object]]:
+    """Questions in scope. orphaned_only restricts to those with no objective.
+
+    The two modes are mutually exclusive by design. The scope query matches every
+    active question in the subject and grade, which after a regeneration includes the
+    freshly imported ones — combining the modes would deactivate the new bank along
+    with the orphans it was meant to clean up.
+    """
+    params = {"subjects": subjects, "grades": grades}
+    sql = _ORPHANED_SCOPE_SQL if orphaned_only else _SCOPE_SQL
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(text(_SCOPE_SQL), {"subjects": subjects, "grades": grades})).mappings().all()
+        rows = (await db.execute(text(sql), params)).mappings().all()
         found = [dict(r) for r in rows]
+
         if not found:
             return found
 
@@ -89,7 +116,8 @@ async def preview(subjects: list[str], grades: list[int]) -> list[dict[str, obje
     # yields the same question more than once, so the per-grade figures sum to more
     # than the number of questions. Report both rather than a misleading single total.
     distinct = len({r["id"] for r in found})
-    print(f"\n{distinct} distinct active questions in scope, by placement:")
+    label = "orphaned (no learning objective)" if orphaned_only else "active"
+    print(f"\n{distinct} distinct {label} questions in scope, by placement:")
     for key in sorted(breakdown):
         print(f"  {key:12} {breakdown[key]:5}")
     if sum(breakdown.values()) != distinct:
@@ -148,6 +176,15 @@ async def main() -> None:
     parser.add_argument("--subject", help="Comma-separated subject codes, e.g. MATH,SCI")
     parser.add_argument("--grade", help="Comma-separated grade levels, e.g. 6,7")
     parser.add_argument("--reactivate", type=Path, help="Undo using a record file written by --apply")
+    parser.add_argument(
+        "--orphaned-only",
+        action="store_true",
+        help=(
+            "Deactivate ONLY questions with no learning objective, located via the\n"
+            "review queue. Use AFTER regenerating a scope — the default mode would\n"
+            "match the freshly imported questions too and deactivate them."
+        ),
+    )
     parser.add_argument("--apply", action="store_true", help="Write. Without this, previews only.")
     parser.add_argument("--out", type=Path, help="Where to record affected ids (required with --apply)")
     args = parser.parse_args()
@@ -167,7 +204,7 @@ async def main() -> None:
     subjects = [s.strip().upper() for s in args.subject.split(",") if s.strip()]
     grades = [int(g.strip()) for g in args.grade.split(",") if g.strip()]
 
-    found = await preview(subjects, grades)
+    found = await preview(subjects, grades, orphaned_only=args.orphaned_only)
     if not found:
         print("Nothing to do — no active questions in this scope.")
         return
