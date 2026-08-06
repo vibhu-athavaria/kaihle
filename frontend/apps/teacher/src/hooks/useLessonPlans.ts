@@ -35,6 +35,8 @@ export interface LessonPlan {
   id: string;
   class_id: string;
   class_name: string;
+  /** null when the class has no grade assigned — fall back to class_name */
+  grade_name: string | null;
   week_start: string | null;
   status: LessonPlanStatus;
   duration_minutes: number;

@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { useParams, Link, useSearchParams } from "react-router-dom";
+import {
+  useParams,
+  Link,
+  useSearchParams,
+  useNavigate,
+} from "react-router-dom";
+import { Button } from "@kaihle/ui";
 import { getSubjectColor } from "@kaihle/types";
 import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { useClassEnrollments } from "../../hooks/useClassEnrollments";
@@ -18,6 +24,7 @@ import {
   Clock,
   ChevronDown,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 import { ClassSetupWizard } from "./ClassSetupWizard";
 import { TopicMiniCourseButton } from "../../components/topics/TopicMiniCourseButton";
@@ -25,6 +32,7 @@ import { ClassGapMapContent } from "../../components/gap-map/ClassGapMapContent"
 import { ClassLessonPlansContent } from "../../components/lesson-plans/ClassLessonPlansContent";
 import { SubtopicContentCard } from "../SubtopicContentCard";
 import { useTopicSubtopics } from "../../hooks/useSubtopicContent";
+import { useAssessmentWizard } from "../../hooks/useAssessmentWizard";
 
 type TabId = "gap-map" | "assessments" | "lesson-plans" | "topics" | "students";
 
@@ -122,6 +130,8 @@ const TABS: Array<{ id: TabId; label: string }> = [
 export function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const setWizardClass = useAssessmentWizard((s) => s.setClassId);
 
   const { data: cls, isLoading: classLoading } = useClass(classId);
   const { data: assessments, isLoading: assessmentsLoading } =
@@ -133,6 +143,10 @@ export function ClassDetailPage() {
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardInitialStep, setWizardInitialStep] = useState<1 | 2>(1);
+  // Mode is independent of the starting step: "Edit topics" starts at step 1 but
+  // must NOT offer the diagnostic step, while first-time setup starts at step 1
+  // and must continue into it.
+  const [wizardMode, setWizardMode] = useState<"setup" | "edit">("setup");
   const activeTab = (searchParams.get("tab") as TabId) ?? "topics";
 
   function setTab(tab: TabId) {
@@ -172,8 +186,28 @@ export function ClassDetailPage() {
     (a) => a.assessment_type === "DIAGNOSTIC",
   );
 
-  function openWizardAtStep(step: 1 | 2) {
+  /**
+   * Seed the assessment wizard with the class the teacher is already looking at,
+   * so step 1 opens with it selected instead of asking them to pick it again.
+   * NewAssessmentPage resets the wizard store on unmount, so this never leaks
+   * into a later visit that started from the Assessments page.
+   */
+  function startNewAssessment() {
+    // Narrowing from the loading guard above does not survive into this closure.
+    if (!cls) return;
+    setWizardClass(
+      cls.id,
+      cls.name,
+      cls.subject_id,
+      cls.grade_id,
+      cls.curriculum_id,
+    );
+    navigate("/teacher/assessments/new");
+  }
+
+  function openWizard(step: 1 | 2, mode: "setup" | "edit") {
     setWizardInitialStep(step);
+    setWizardMode(mode);
     setWizardOpen(true);
   }
 
@@ -229,7 +263,7 @@ export function ClassDetailPage() {
           </div>
           <button
             type="button"
-            onClick={() => openWizardAtStep(1)}
+            onClick={() => openWizard(1, "setup")}
             className="flex-shrink-0 ml-6 bg-brand-gold text-white rounded-full px-[18px] py-2 text-xs font-bold hover:bg-brand-gold-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
           >
             Set up class →
@@ -255,7 +289,7 @@ export function ClassDetailPage() {
           </div>
           <button
             type="button"
-            onClick={() => openWizardAtStep(2)}
+            onClick={() => openWizard(2, "setup")}
             className="flex-shrink-0 ml-6 bg-brand-gold text-white rounded-full px-[18px] py-2 text-xs font-bold hover:bg-brand-gold-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
           >
             Design diagnostic →
@@ -295,9 +329,20 @@ export function ClassDetailPage() {
       {/* ── Assessments tab ──────────────────────────────────────────────── */}
       {activeTab === "assessments" && (
         <div className="space-y-4">
-          <h2 className="font-display font-semibold text-lg text-brand-ink">
-            Assessments
-          </h2>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="font-display font-semibold text-lg text-brand-ink">
+              Assessments
+            </h2>
+            <Button
+              variant="primary"
+              size="sm"
+              className="bg-brand-gold hover:bg-brand-gold-dark"
+              icon={<Plus className="w-4 h-4" aria-hidden="true" />}
+              onClick={startNewAssessment}
+            >
+              New Assessment
+            </Button>
+          </div>
           {assessmentsLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -317,14 +362,16 @@ export function ClassDetailPage() {
                 No assessments yet
               </h3>
               <p className="text-sm text-brand-body">
-                Create your first assessment from the Assessments page.
+                Create your first assessment to see student progress.
               </p>
-              <Link
-                to={`/teacher/classes/${classId}/assessments`}
-                className="mt-4 inline-flex items-center gap-2 bg-brand-gold text-white rounded-full px-5 py-2 text-sm font-semibold hover:bg-brand-gold-dark transition-colors"
+              <button
+                type="button"
+                onClick={startNewAssessment}
+                className="mt-4 inline-flex items-center gap-2 bg-brand-gold text-white rounded-full px-5 py-2 text-sm font-semibold hover:bg-brand-gold-dark transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
               >
-                Go to Assessments
-              </Link>
+                <Plus className="w-4 h-4" aria-hidden="true" />
+                Create Assessment
+              </button>
             </div>
           ) : (
             <div className="bg-white rounded-xl border border-brand-border overflow-hidden">
@@ -403,7 +450,7 @@ export function ClassDetailPage() {
               </p>
               <button
                 type="button"
-                onClick={() => openWizardAtStep(1)}
+                onClick={() => openWizard(1, "setup")}
                 className="bg-brand-gold text-white rounded-full px-5 py-2 text-sm font-semibold hover:bg-brand-gold-dark transition-colors"
               >
                 Set up class →
@@ -424,7 +471,7 @@ export function ClassDetailPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => openWizardAtStep(1)}
+                  onClick={() => openWizard(1, "edit")}
                   className="text-xs font-semibold text-brand-gold hover:text-brand-gold-dark transition-colors"
                 >
                   Edit topics →
@@ -538,7 +585,7 @@ export function ClassDetailPage() {
           isOpen={wizardOpen}
           onClose={() => setWizardOpen(false)}
           initialStep={wizardInitialStep}
-          mode={wizardInitialStep === 1 ? "edit" : "setup"}
+          mode={wizardMode}
         />
       )}
     </div>

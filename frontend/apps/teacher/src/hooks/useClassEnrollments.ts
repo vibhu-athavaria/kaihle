@@ -3,7 +3,9 @@ import { apiClient } from "@kaihle/auth";
 
 export interface EnrolledStudent {
   id: string;
-  email: string;
+  // null for username-based students registered without an email address
+  email: string | null;
+  username: string | null;
   first_name: string;
   last_name: string;
   worst_mastery: number | null;

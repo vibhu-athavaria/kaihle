@@ -53,9 +53,7 @@ async def generate_lesson_plan(
         duration_minutes=body.duration_minutes,
         db=db,
     )
-    context = await lesson_plan_service._fetch_subtopic_context(list(plan.focus_subtopic_ids), db)
-    class_names = await lesson_plan_service._fetch_class_names([plan.class_id], db)
-    return lesson_plan_service._to_response(plan, context, class_names.get(str(plan.class_id), ""))
+    return await lesson_plan_service.build_lesson_plan_response(plan, db)
 
 
 @router.get("/classes/{class_id}/lesson-plans", response_model=Page[LessonPlanResponse])

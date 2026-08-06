@@ -29,12 +29,15 @@ import type { TopicWithAvailability } from "../../components/wizard/TopicRow";
 function PickerTopicRow({
   topic,
   mutating,
+  disabled = false,
   onAdd,
   curriculumId,
   gradeId,
 }: {
   topic: AvailableCurriculumTopic;
   mutating: string | null;
+  /** True while a bulk "Select all" is running — individual adds would race it. */
+  disabled?: boolean;
   onAdd: (t: AvailableCurriculumTopic) => void;
   curriculumId?: string;
   gradeId?: string;
@@ -78,7 +81,7 @@ function PickerTopicRow({
         </button>
         <button
           type="button"
-          disabled={mutating === topic.curriculum_topic_id}
+          disabled={disabled || mutating === topic.curriculum_topic_id}
           onClick={() => onAdd(topic)}
           aria-label={`Add ${topic.topic_name}`}
           className="flex-shrink-0 rounded-full bg-brand-primary/10 text-brand-primary hover:bg-brand-primary hover:text-white transition-all px-3 py-1 text-xs font-bold disabled:opacity-50"
@@ -302,6 +305,7 @@ function TopicListStep({
 
   const [showPicker, setShowPicker] = useState(false);
   const [mutating, setMutating] = useState<string | null>(null);
+  const [addingAll, setAddingAll] = useState(false);
 
   const sorted = useMemo(
     () => [...classTopics].sort((a, b) => a.sequence_order - b.sequence_order),
@@ -320,6 +324,25 @@ function TopicListStep({
       });
     } finally {
       setMutating(null);
+    }
+  }
+
+  async function handleAddAll() {
+    // Snapshot first: each add invalidates `available`, so iterating the live
+    // array would skip entries as it shrinks underneath us.
+    const toAdd = [...available];
+    setAddingAll(true);
+    try {
+      let order = sorted.length;
+      for (const topic of toAdd) {
+        await addTopic.mutateAsync({
+          curriculum_topic_id: topic.curriculum_topic_id,
+          sequence_order: order,
+        });
+        order += 1;
+      }
+    } finally {
+      setAddingAll(false);
     }
   }
 
@@ -454,7 +477,7 @@ function TopicListStep({
       {/* Expandable curriculum picker */}
       {showPicker && (
         <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
-          <div className="px-3 py-2.5 bg-gray-50 border-b border-[#e5e7eb]">
+          <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-gray-50 border-b border-[#e5e7eb]">
             <p className="text-[10px] font-bold uppercase tracking-wider text-brand-muted">
               Curriculum Topics
               {available.length > 0 && (
@@ -463,6 +486,19 @@ function TopicListStep({
                 </span>
               )}
             </p>
+            {available.length > 0 && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={addingAll}
+                onClick={handleAddAll}
+              >
+                {addingAll
+                  ? "Adding…"
+                  : `Select all ${available.length} topics`}
+              </Button>
+            )}
           </div>
           <div className="p-2 space-y-1 max-h-48 overflow-y-auto">
             {available.length === 0 ? (
@@ -475,6 +511,7 @@ function TopicListStep({
                   key={t.curriculum_topic_id}
                   topic={t}
                   mutating={mutating}
+                  disabled={addingAll}
                   onAdd={handleAdd}
                   curriculumId={cls?.curriculum_id}
                   gradeId={cls?.grade_id}
@@ -837,6 +874,17 @@ export function ClassSetupWizard({
 }: ClassSetupWizardProps) {
   const [step, setStep] = useState<Step>(initialStep);
   const [done, setDone] = useState(false);
+
+  // The wizard stays mounted while closed, so useState(initialStep) only ever
+  // applies on the page's first render. Without this sync, reopening at step 2
+  // ("Design diagnostic") would show the stale step 1 until the teacher clicked
+  // through manually.
+  useEffect(() => {
+    if (isOpen) {
+      setStep(initialStep);
+      setDone(false);
+    }
+  }, [isOpen, initialStep]);
 
   function handleClose() {
     setStep(initialStep);

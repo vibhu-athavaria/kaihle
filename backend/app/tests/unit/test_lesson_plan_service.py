@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.services.lesson_plan_service import (
+    _ClassInfo,
     _to_response,
     edit_lesson_plan,
     generate_lesson_plan,
@@ -50,7 +51,7 @@ def _make_plan(plan_id=None, class_id=None, teacher_id=None, status="GENERATED")
 
 
 def _rows(values):
-    """Mock db.execute result for queries returning .all() rows (used by _fetch_class_names)."""
+    """Mock db.execute result for queries returning .all() rows (used by _fetch_class_info)."""
     r = MagicMock()
     r.all.return_value = values
     return r
@@ -186,7 +187,7 @@ async def test_list_class_lesson_plans_when_valid_teacher_then_returns_page():
             _scalar_one(1),  # count
             _scalars([plan]),  # list
             _scalars([]),  # _fetch_subtopic_context
-            _rows([]),  # _fetch_class_names
+            _rows([]),  # _fetch_class_info
         ]
     )
 
@@ -222,7 +223,7 @@ async def test_get_lesson_plan_when_plan_exists_then_merges_edits():
             _scalar(plan),  # plan fetch
             _scalar(class_),  # class school check
             _scalars([]),  # _fetch_subtopic_context
-            _rows([]),  # _fetch_class_names
+            _rows([]),  # _fetch_class_info
         ]
     )
 
@@ -273,7 +274,7 @@ async def test_edit_lesson_plan_when_generated_then_stores_edits():
             _scalar(plan),
             _scalar(class_),
             _scalars([]),  # _fetch_subtopic_context
-            _rows([]),  # _fetch_class_names
+            _rows([]),  # _fetch_class_info
         ]
     )
     mock_db.commit = AsyncMock()
@@ -339,7 +340,7 @@ async def test_update_lesson_plan_status_when_generated_to_used_then_succeeds():
             _scalar(plan),
             _scalar(class_),
             _scalars([]),  # _fetch_subtopic_context
-            _rows([]),  # _fetch_class_names
+            _rows([]),  # _fetch_class_info
         ]
     )
     mock_db.commit = AsyncMock()
@@ -393,7 +394,7 @@ def test_to_response_when_teacher_edits_present_then_merges():
     plan.generated_plan = {"starter_10min": "original", "homework": "original hw"}
     plan.teacher_edits = {"starter_10min": "edited"}
 
-    response = _to_response(plan, focus_subtopics=[], class_name="")
+    response = _to_response(plan, focus_subtopics=[], class_info=_ClassInfo("Science Grade 7", "Grade 7"))
 
     assert response.generated_plan is not None
     assert response.generated_plan["starter_10min"] == "edited"
@@ -405,7 +406,7 @@ def test_to_response_when_no_content_then_generated_plan_is_none():
     plan.generated_plan = {}
     plan.teacher_edits = None
 
-    response = _to_response(plan, focus_subtopics=[], class_name="")
+    response = _to_response(plan, focus_subtopics=[], class_info=_ClassInfo("Science Grade 7", "Grade 7"))
 
     assert response.generated_plan is None
 
@@ -427,7 +428,7 @@ async def test_list_teacher_lesson_plans_when_no_class_filter_then_returns_all_p
             _scalar_one(2),  # count
             _scalars([plan1, plan2]),  # list
             _scalars([]),  # _fetch_subtopic_context
-            _rows([]),  # _fetch_class_names
+            _rows([]),  # _fetch_class_info
         ]
     )
 
@@ -492,7 +493,7 @@ async def test_regenerate_lesson_plan_when_plan_exists_then_resets_to_generating
             _scalar(plan),  # _require_plan
             _scalar(class_),  # class school check
             _scalars([]),  # _fetch_subtopic_context
-            _rows([]),  # _fetch_class_names
+            _rows([]),  # _fetch_class_info
         ]
     )
     mock_db.commit = AsyncMock()
@@ -574,7 +575,7 @@ async def test_require_plan_when_school_id_none_then_skips_school_check():
         side_effect=[
             _scalar(plan),  # _require_plan: plan found
             _scalars([]),  # _fetch_subtopic_context
-            _rows([]),  # _fetch_class_names
+            _rows([]),  # _fetch_class_info
         ]
     )
 
@@ -643,16 +644,35 @@ async def test_fetch_subtopic_context_when_empty_ids_then_returns_empty():
 
 
 # ---------------------------------------------------------------------------
-# _fetch_class_names — empty list
+# _fetch_class_info — empty list
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_fetch_class_names_when_empty_ids_then_returns_empty_dict():
+async def test_fetch_class_info_when_empty_ids_then_returns_empty_dict():
     """Returns {} immediately when class_ids is empty — no DB query."""
-    from app.services.lesson_plan_service import _fetch_class_names
+    from app.services.lesson_plan_service import _fetch_class_info
 
     mock_db = AsyncMock()
-    result = await _fetch_class_names([], mock_db)
+    result = await _fetch_class_info([], mock_db)
     assert result == {}
     mock_db.execute.assert_not_called()
+
+
+def test_to_response_when_class_has_grade_then_grade_name_is_exposed():
+    """grade_name reaches the response so the detail view can title the plan."""
+    plan = _make_plan()
+
+    response = _to_response(plan, focus_subtopics=[], class_info=_ClassInfo("Science Grade 7", "Grade 7"))
+
+    assert response.class_name == "Science Grade 7"
+    assert response.grade_name == "Grade 7"
+
+
+def test_to_response_when_class_has_no_grade_then_grade_name_is_none():
+    """A class with no grade assigned yields grade_name=None, not an error."""
+    plan = _make_plan()
+
+    response = _to_response(plan, focus_subtopics=[], class_info=_ClassInfo("Science Grade 7", None))
+
+    assert response.grade_name is None
