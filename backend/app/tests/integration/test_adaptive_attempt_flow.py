@@ -632,3 +632,22 @@ async def test_next_question_when_pool_smaller_than_question_count_then_reports_
     # The denominator reflects what the pool can actually serve, not the stale 99.
     assert payload["question_count"] == len(DIFFICULTIES)
     assert payload["complete"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_attempt_when_student_then_question_pool_is_withheld(
+    client: AsyncClient,
+    adaptive_attempt: dict[str, object],
+    student_user: User,
+) -> None:
+    """Students must not receive unserved questions — they would sit in the browser cache."""
+    attempt: StudentAttempt = adaptive_attempt["attempt"]  # type: ignore[assignment]
+
+    response = await client.get(f"/api/v1/attempts/{attempt.id}", headers=_auth(student_user))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["questions"] == []
+    # Metadata the page still needs must survive.
+    assert payload["num_questions"] == QUESTION_COUNT
+    assert payload["title"]

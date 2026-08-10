@@ -229,7 +229,11 @@ async def get_attempt(
         submitted_at=attempt.completed_at,
         score=attempt.overall_score,
         title=assessment_title,
-        questions=_questions_to_schema(questions),
+        # Students are served one adaptively-chosen question at a time via
+        # GET /attempts/{id}/next-question, so shipping the pool here would put every
+        # unserved question in the browser cache for anyone to read ahead. Teachers and
+        # admins still receive it — they legitimately review the whole pool.
+        questions=([] if current_user.role == UserRole.STUDENT else _questions_to_schema(questions)),
         num_questions=num_questions,
         responses=[
             {"question_id": r.question_id, "selected_key": r.answer_given, "is_correct": r.is_correct}

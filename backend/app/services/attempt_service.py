@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from typing import Protocol, cast
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import (
@@ -425,10 +425,6 @@ class AttemptService:
             question_count=question_count,
         )
 
-        if attempt.started_at is None:
-            attempt.started_at = datetime.now(UTC)
-            await self.db.flush()
-
         if chosen is None:
             logger.info(
                 "adaptive_attempt_complete",
@@ -442,6 +438,14 @@ class AttemptService:
         question = question_result.scalar_one_or_none()
         if question is None:
             raise ValueError(f"Selected question not found in question bank: {chosen.question_id}")
+
+        # Start the clock only once a question is certain to be served. Setting it
+        # earlier meant a failure below (missing question) raised, the route never
+        # reached its commit, and the whole transaction rolled back — discarding the
+        # timestamp that had already been flushed.
+        if attempt.started_at is None:
+            attempt.started_at = datetime.now(UTC)
+            await self.db.flush()
 
         # Detach so no later flush can touch this row. The answer is not blanked on
         # the ORM object because correct_answer is a non-nullable column; it never
@@ -562,6 +566,30 @@ class AttemptService:
                 assessment_id=str(assessment_id),
                 count=phantom_only,
                 configured_topics=len(configured_topics),
+            )
+
+        # The objective join is an INNER join on learning_objective_id, and SQL treats
+        # NULL = NULL as unknown rather than true — so a question that never got an
+        # objective binding (mid-remap, or an import that skipped it) vanishes from the
+        # pool with no error. Silently serving a shorter assessment is the worst
+        # outcome, so count the gap explicitly and say so.
+        selected_total = await self.db.scalar(
+            select(func.count())
+            .select_from(AssessmentSelectedQuestion)
+            .join(QuestionBank, QuestionBank.id == AssessmentSelectedQuestion.question_id)
+            .where(
+                AssessmentSelectedQuestion.assessment_id == assessment_id,
+                QuestionBank.is_active.is_(True),
+            )
+        )
+        unreachable = (selected_total or 0) - len(candidates)
+        if unreachable > 0:
+            logger.warning(
+                "adaptive_questions_unreachable_via_objective",
+                assessment_id=str(assessment_id),
+                selected_active=selected_total,
+                reachable=len(candidates),
+                dropped=unreachable,
             )
 
         return candidates, topic_by_question, subtopic_by_question

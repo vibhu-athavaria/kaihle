@@ -54,7 +54,9 @@ export interface AttemptResponse {
   started_at: string; // ISO 8601
   submitted_at: string | null;
   score: number | null; // 0.0–1.0 or null while IN_PROGRESS
-  questions: AttemptQuestion[]; // full pool for adaptive difficulty
+  // Empty for students: the pool is withheld so unserved questions never reach the
+  // browser cache. Populated for teachers/admins, who review the whole pool.
+  questions: AttemptQuestion[];
   num_questions: number; // configured count to ask (not pool size)
   responses: StudentResponseItem[]; // previously saved answers for resuming
   time_limit_minutes: number; // 0 = untimed

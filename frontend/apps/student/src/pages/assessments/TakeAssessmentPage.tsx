@@ -142,9 +142,9 @@ export function TakeAssessmentPage() {
   const layout = useStudentLayoutProps();
 
   // ── Attempt data ────────────────────────────────────────────
-  // The attempt query supplies metadata (title, timer, status) only. Questions
-  // arrive one at a time from the adaptive endpoint — the client never holds the
-  // unserved pool, so it cannot leak upcoming questions.
+  // The attempt query supplies metadata (title, timer, status) only — the backend
+  // returns an empty questions array for students. Questions arrive one at a time
+  // from the adaptive endpoint, so the unserved pool never reaches the browser.
   const { data: attempt, isLoading, isError } = useAttempt(attemptId);
   const {
     data: nextQuestionData,
@@ -232,10 +232,12 @@ export function TakeAssessmentPage() {
     async (questionId: string, key: string): Promise<boolean> => {
       // 0 means the open-timestamp effect has not run yet; report untracked
       // rather than the whole Unix epoch.
+      // Clamped at 0: a system clock that steps backwards mid-assessment would
+      // otherwise record a negative duration.
       const timeTakenMs =
         questionOpenedAt.current === 0
           ? undefined
-          : Date.now() - questionOpenedAt.current;
+          : Math.max(0, Date.now() - questionOpenedAt.current);
       setSaveState("saving");
       let attempts = 0;
       while (attempts < 2) {
