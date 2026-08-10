@@ -49,8 +49,6 @@ async def _create_curriculum_chain(
     school: School,
 ) -> tuple[Curriculum, Grade, Subject, CurriculumTopic, Subtopic]:
     """Create a minimal curriculum chain. Flushes after each model for FK constraints."""
-    import random
-
     curriculum = Curriculum(
         id=uuid.uuid4(),
         name=f"Test Curriculum {uuid.uuid4().hex[:6]}",
@@ -60,10 +58,20 @@ async def _create_curriculum_chain(
     db.add(curriculum)
     await db.flush()
 
+    # grades.level is globally UNIQUE with CHECK (level BETWEEN 1 AND 13) — only 13
+    # slots exist. This helper is called more than once per test, and drawing the level
+    # at random made two calls collide with probability 1/13, so the suite failed on
+    # roughly one CI seed in thirteen. Claim the lowest level not already taken instead:
+    # deterministic, and correct however many chains a test builds.
+    used_levels = set((await db.execute(select(Grade.level))).scalars().all())
+    free_level = next((lvl for lvl in range(1, 14) if lvl not in used_levels), None)
+    if free_level is None:
+        raise RuntimeError("No free grade level: all 13 are taken. Split the test or reuse a chain.")
+
     grade = Grade(
         id=uuid.uuid4(),
-        name=f"Grade {random.randint(1, 13)}",
-        level=random.randint(1, 13),
+        name=f"Grade {free_level}",
+        level=free_level,
         is_active=True,
     )
     db.add(grade)
