@@ -3,9 +3,10 @@
  * All API calls go through apiClient which auto-attaches the Bearer token.
  *
  * Endpoints exercised:
- *   GET  /api/v1/attempts/:attemptId          → fetch attempt + questions
- *   POST /api/v1/attempts/:attemptId/responses → save single answer
- *   POST /api/v1/attempts/:attemptId/submit    → submit entire attempt
+ *   GET  /api/v1/attempts/:attemptId               → fetch attempt metadata
+ *   GET  /api/v1/attempts/:attemptId/next-question → adaptively selected question
+ *   POST /api/v1/attempts/:attemptId/responses     → save single answer
+ *   POST /api/v1/attempts/:attemptId/submit        → submit entire attempt
  */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
@@ -125,6 +126,44 @@ export function useStartAssessment() {
   });
 }
 
+// ─── Adaptive next question ──────────────────────────────────
+
+/**
+ * Payload from GET /api/v1/attempts/:attemptId/next-question
+ * The backend picks the question by replaying the student's answers through a
+ * per-topic difficulty staircase, so the client never sees the unserved pool.
+ */
+export interface NextQuestionResponse {
+  question: AttemptQuestion | null; // null once the attempt is complete
+  answered_count: number;
+  question_count: number;
+  complete: boolean;
+}
+
+/**
+ * Fetches the next adaptively-selected question.
+ *
+ * The endpoint is idempotent — without an intervening answer it returns the same
+ * question — so a refetch after a dropped request never skips or burns a question.
+ * `staleTime: 0` keeps every refetch authoritative; `gcTime: 0` prevents a stale
+ * cached question flashing when the student returns to a resumed attempt.
+ */
+export function useNextQuestion(attemptId: string, enabled = true) {
+  return useQuery<NextQuestionResponse>({
+    queryKey: ["student", "attempt", attemptId, "next-question"],
+    queryFn: async () => {
+      const res = await apiClient.get<NextQuestionResponse>(
+        `/api/v1/attempts/${attemptId}/next-question`,
+      );
+      return res.data;
+    },
+    enabled: !!attemptId && enabled,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false, // don't disrupt mid-assessment
+  });
+}
+
 // ─── Save single answer ──────────────────────────────────────
 
 interface SubmitResponseVars {
@@ -134,23 +173,33 @@ interface SubmitResponseVars {
   timeTakenMs?: number; // milliseconds spent on this question
 }
 
+/** Scoring outcome returned by POST /responses. */
+export interface SubmitResponseResult {
+  scored: boolean;
+  is_correct: boolean;
+  next_question_available: boolean;
+}
+
 /**
- * Saves a single question response in the background.
- * Called automatically after the student selects an option and clicks Next.
- * Failures are surfaced via `isError` — they do NOT block page navigation.
+ * Saves a single question response and returns its scoring outcome.
+ * The adaptive flow depends on this result to decide whether to advance or finish.
  */
 export function useSubmitResponse() {
   const queryClient = useQueryClient();
-  return useMutation<void, Error, SubmitResponseVars>({
+  return useMutation<SubmitResponseResult, Error, SubmitResponseVars>({
     mutationFn: async ({ attemptId, questionId, selectedKey, timeTakenMs }) => {
-      await apiClient.post(`/api/v1/attempts/${attemptId}/responses`, {
-        question_id: questionId,
-        selected_key: selectedKey,
-        time_taken_ms: timeTakenMs ?? null,
-      });
+      const res = await apiClient.post<SubmitResponseResult>(
+        `/api/v1/attempts/${attemptId}/responses`,
+        {
+          question_id: questionId,
+          selected_key: selectedKey,
+          time_taken_ms: timeTakenMs ?? null,
+        },
+      );
+      return res.data;
     },
     onSuccess: (_, variables) => {
-      // Invalidate attempt query so fresh data is loaded on return
+      // Both the attempt record and the adaptive cursor move on every answer.
       queryClient.invalidateQueries({
         queryKey: ["student", "attempt", variables.attemptId],
       });

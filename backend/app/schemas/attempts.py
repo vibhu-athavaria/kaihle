@@ -31,6 +31,23 @@ class AttemptResponse(BaseModel):
     time_limit_minutes: int  # 0 = untimed
 
 
+class NextQuestionResponse(BaseModel):
+    """One adaptively-selected question, or completion when the pool is done."""
+
+    question: AssessmentQuestion | None  # None when the attempt is complete
+    answered_count: int  # questions already answered in this attempt
+    question_count: int  # total the student will be asked
+    complete: bool  # True when no further question will be served
+
+
+class AnswerSubmitResponse(BaseModel):
+    """Scoring outcome for a single answer — drives adaptive client flow."""
+
+    scored: bool  # False when scoring is deferred (LLM-scored short answer)
+    is_correct: bool
+    next_question_available: bool
+
+
 class AnswerSubmitRequest(BaseModel):
     question_id: UUID
     selected_key: str  # the option key the student chose

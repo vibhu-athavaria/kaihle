@@ -32,7 +32,7 @@ from app.models.assessment import (
     StudentAttempt,
     StudentResponse,
 )
-from app.models.curriculum import CurriculumTopic, QuestionBank, Subtopic, Topic
+from app.models.curriculum import CurriculumTopic, QuestionBank, Subtopic, SubtopicObjective, Topic
 from app.models.school import ClassEnrollment
 from app.models.user import UserRole
 from app.schemas.attempts import (
@@ -42,6 +42,7 @@ from app.schemas.attempts import (
     AttemptReviewResponse,
     QuestionDetailItem,
 )
+from app.services.adaptive_selector import DEFAULT_START_DIFFICULTY, Candidate, select_next
 
 logger = structlog.get_logger()
 
@@ -330,6 +331,181 @@ class AttemptService:
 
         return attempt, assessment, questions, responses
 
+    # ── Adaptive selection ───────────────────────────────────────────────
+
+    async def get_next_question(
+        self,
+        attempt_id: uuid.UUID,
+        student_id: uuid.UUID,
+        school_id: uuid.UUID,
+    ) -> tuple[QuestionBank | None, str, int, int]:
+        """Choose the next question for an adaptive attempt.
+
+        Difficulty is derived by replaying the attempt's response log through the
+        per-topic staircase in app/services/adaptive_selector.py. Nothing is
+        persisted, so repeated calls without an intervening answer return the same
+        question — safe under the retries a flaky mobile connection produces.
+
+        Args:
+            attempt_id: The StudentAttempt UUID.
+            student_id: The requesting student (ownership check).
+            school_id: The student's school (multi-tenancy guard).
+
+        Returns:
+            (question_without_correct_answer | None, subtopic_name, answered_count,
+            question_count). The question is None when the attempt is complete or
+            the pool is dry, in which case subtopic_name is "".
+
+        Raises:
+            ValueError: If attempt not found or belongs to a different student/school.
+            AttemptAlreadyCompletedError: If attempt.status == COMPLETED.
+        """
+        attempt = await self._load_and_verify_attempt(attempt_id, student_id, school_id)
+
+        if attempt.status == AttemptStatus.COMPLETED:
+            raise AttemptAlreadyCompletedError(f"Attempt {attempt_id} is already completed")
+
+        assessment_result = await self.db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
+        assessment = assessment_result.scalar_one_or_none()
+        if assessment is None:
+            raise ValueError(f"Assessment not found for attempt: {attempt_id}")
+
+        candidates, topic_by_question, subtopic_by_question = await self._load_adaptive_candidates(
+            attempt.assessment_id
+        )
+        if not candidates:
+            logger.warning(
+                "adaptive_pool_empty",
+                attempt_id=str(attempt_id),
+                assessment_id=str(attempt.assessment_id),
+            )
+            return None, "", 0, 0
+
+        # Replay order matters: the staircase is sequential, so responses must be
+        # ordered exactly as the student produced them.
+        responses_result = await self.db.execute(
+            select(StudentResponse)
+            .where(StudentResponse.attempt_id == attempt_id)
+            .order_by(StudentResponse.answered_at, StudentResponse.id)
+        )
+        responses = list(responses_result.scalars().all())
+
+        answered_ids: set[uuid.UUID] = set()
+        outcomes_by_topic: dict[uuid.UUID, list[bool]] = {}
+        for response in responses:
+            answered_ids.add(response.question_id)
+            topic_id = topic_by_question.get(response.question_id)
+            if topic_id is None:
+                continue  # question no longer resolvable to a topic — skip the ladder update
+            outcomes_by_topic.setdefault(topic_id, []).append(bool(response.is_correct))
+
+        question_count = assessment.question_count or len(candidates)
+
+        chosen = select_next(
+            candidates=candidates,
+            answered_question_ids=answered_ids,
+            outcomes_by_topic=outcomes_by_topic,
+            minimum_difficulty=assessment.minimum_difficulty,
+            maximum_difficulty=assessment.maximum_difficulty,
+            question_count=question_count,
+        )
+
+        if attempt.started_at is None:
+            attempt.started_at = datetime.now(UTC)
+            await self.db.flush()
+
+        if chosen is None:
+            logger.info(
+                "adaptive_attempt_complete",
+                attempt_id=str(attempt_id),
+                answered=len(answered_ids),
+                question_count=question_count,
+            )
+            return None, "", len(answered_ids), question_count
+
+        question_result = await self.db.execute(select(QuestionBank).where(QuestionBank.id == chosen.question_id))
+        question = question_result.scalar_one_or_none()
+        if question is None:
+            raise ValueError(f"Selected question not found in question bank: {chosen.question_id}")
+
+        # Detach so no later flush can touch this row. The answer is not blanked on
+        # the ORM object because correct_answer is a non-nullable column; it never
+        # reaches the student regardless, since AssessmentQuestion has no such field.
+        self.db.expunge(question)
+
+        logger.info(
+            "adaptive_question_served",
+            attempt_id=str(attempt_id),
+            question_id=str(chosen.question_id),
+            difficulty=chosen.difficulty_level,
+            answered=len(answered_ids),
+            question_count=question_count,
+        )
+        return question, subtopic_by_question.get(chosen.question_id, ""), len(answered_ids), question_count
+
+    async def _load_adaptive_candidates(
+        self,
+        assessment_id: uuid.UUID,
+    ) -> tuple[list[Candidate], dict[uuid.UUID, uuid.UUID], dict[uuid.UUID, str]]:
+        """Load the assessment pool as selector Candidates, plus question→topic/subtopic maps.
+
+        Topic resolution goes through the learning objective bridge, never
+        question_bank.subtopic_id, which is NULL for every remapped question — see
+        app/services/question_selection.py.
+
+        An objective can be taught by several subtopics, so one question can resolve
+        to more than one topic. The first row in order_index order wins, which keeps
+        the mapping stable across calls.
+
+        Args:
+            assessment_id: The assessment whose pool to load.
+
+        Returns:
+            (candidates ordered by order_index, question_id -> curriculum_topic_id,
+            question_id -> subtopic name for student-facing display).
+        """
+        rows = await self.db.execute(
+            select(
+                QuestionBank.id,
+                Subtopic.curriculum_topic_id,
+                QuestionBank.difficulty_level,
+                AssessmentSelectedQuestion.order_index,
+                Subtopic.name,
+            )
+            .select_from(AssessmentSelectedQuestion)
+            .join(QuestionBank, QuestionBank.id == AssessmentSelectedQuestion.question_id)
+            .join(
+                SubtopicObjective,
+                SubtopicObjective.learning_objective_id == QuestionBank.learning_objective_id,
+            )
+            .join(Subtopic, Subtopic.id == SubtopicObjective.subtopic_id)
+            .where(
+                AssessmentSelectedQuestion.assessment_id == assessment_id,
+                QuestionBank.is_active.is_(True),
+            )
+            .order_by(AssessmentSelectedQuestion.order_index)
+        )
+
+        candidates: list[Candidate] = []
+        topic_by_question: dict[uuid.UUID, uuid.UUID] = {}
+        subtopic_by_question: dict[uuid.UUID, str] = {}
+        for question_id, topic_id, difficulty, _order, subtopic_name in rows.all():
+            if question_id in topic_by_question:
+                continue  # already mapped via an earlier subtopic — keep the first
+            topic_by_question[question_id] = topic_id
+            subtopic_by_question[question_id] = subtopic_name or ""
+            candidates.append(
+                Candidate(
+                    question_id=question_id,
+                    curriculum_topic_id=topic_id,
+                    # difficulty_level is nullable in the bank; treat unset as mid-range
+                    # so an uncalibrated question does not distort the ladder.
+                    difficulty_level=int(difficulty) if difficulty is not None else DEFAULT_START_DIFFICULTY,
+                )
+            )
+
+        return candidates, topic_by_question, subtopic_by_question
+
     # ── Per-question response ────────────────────────────────────────────
 
     async def submit_response(
@@ -340,7 +516,7 @@ class AttemptService:
         question_id: uuid.UUID,
         selected_key: str,
         time_taken_ms: int | None = None,
-    ) -> None:
+    ) -> bool:
         """Record a single answer for an in-progress attempt.
 
         Scoring is deterministic: case-insensitive string comparison of the
@@ -353,6 +529,10 @@ class AttemptService:
             question_id: The question being answered.
             selected_key: The option key the student chose (e.g. "A").
             time_taken_ms: Milliseconds the student spent on this question (optional).
+
+        Returns:
+            Whether the answer was correct. The adaptive client needs this to render
+            immediate feedback; selection itself re-derives it from the response log.
 
         Raises:
             ValueError: If attempt not found or belongs to a different student/school.
@@ -428,6 +608,8 @@ class AttemptService:
             question_id=str(question_id),
             is_correct=is_correct,
         )
+
+        return is_correct
 
     # ── Bulk submit ──────────────────────────────────────────────────────
 
