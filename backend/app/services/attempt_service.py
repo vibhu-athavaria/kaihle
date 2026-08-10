@@ -26,6 +26,7 @@ from app.models.assessment import (
     Assessment,
     AssessmentSelectedQuestion,
     AssessmentStatus,
+    AssessmentTopicConfig,
     AssessmentType,
     AttemptStatus,
     ScoredBy,
@@ -399,7 +400,21 @@ class AttemptService:
                 continue  # question no longer resolvable to a topic — skip the ladder update
             outcomes_by_topic.setdefault(topic_id, []).append(bool(response.is_correct))
 
-        question_count = assessment.question_count or len(candidates)
+        # The pool can fall below question_count long after the assessment was built —
+        # questions get deactivated, or lose their objective binding in a remap, and
+        # question_count is never revised. Reporting the stale figure would leave the
+        # student's progress bar counting toward a total the pool cannot reach, then
+        # end the attempt early with no explanation. Serve what actually exists.
+        configured_count = assessment.question_count or len(candidates)
+        question_count = min(configured_count, len(candidates))
+        if question_count < configured_count:
+            logger.warning(
+                "adaptive_pool_below_question_count",
+                assessment_id=str(assessment.id),
+                attempt_id=str(attempt_id),
+                configured=configured_count,
+                available=len(candidates),
+            )
 
         chosen = select_next(
             candidates=candidates,
@@ -453,9 +468,17 @@ class AttemptService:
         question_bank.subtopic_id, which is NULL for every remapped question — see
         app/services/question_selection.py.
 
-        An objective can be taught by several subtopics, so one question can resolve
-        to more than one topic. The first row in order_index order wins, which keeps
-        the mapping stable across calls.
+        An objective can be taught by several subtopics ACROSS GRADES, so one question
+        resolves to several curriculum topics — including topics the teacher never
+        selected. Attributing a question to one of those "phantom" topics both inflates
+        the topic count and pulls the question out of its real topic's ladder. On a live
+        10-topic diagnostic this turned 10 topics into 17, dropping questions-per-topic
+        from 3.0 to 1.76 — below the two-consecutive-correct threshold, so the staircase
+        never moved at all.
+
+        Attribution therefore prefers the topics recorded in assessment_topic_config.
+        Assessments predating that table (no config rows) fall back to first-match
+        ordering, which is the previous behaviour.
 
         Args:
             assessment_id: The assessment whose pool to load.
@@ -464,6 +487,12 @@ class AttemptService:
             (candidates ordered by order_index, question_id -> curriculum_topic_id,
             question_id -> subtopic name for student-facing display).
         """
+        configured_rows = await self.db.execute(
+            select(AssessmentTopicConfig.curriculum_topic_id).where(
+                AssessmentTopicConfig.assessment_id == assessment_id
+            )
+        )
+        configured_topics: set[uuid.UUID] = set(configured_rows.scalars().all())
         rows = await self.db.execute(
             select(
                 QuestionBank.id,
@@ -486,22 +515,53 @@ class AttemptService:
             .order_by(AssessmentSelectedQuestion.order_index)
         )
 
+        # Collect every placement a question resolves to before choosing, so a
+        # configured topic can win even when a phantom one is seen first.
+        placements: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {}
+        difficulty_by_question: dict[uuid.UUID, int] = {}
+        order: list[uuid.UUID] = []
+        for question_id, topic_id, difficulty, _order, subtopic_name in rows.all():
+            if question_id not in placements:
+                placements[question_id] = []
+                order.append(question_id)
+                # difficulty_level is nullable in the bank; treat unset as mid-range
+                # so an uncalibrated question does not distort the ladder.
+                difficulty_by_question[question_id] = (
+                    int(difficulty) if difficulty is not None else DEFAULT_START_DIFFICULTY
+                )
+            placements[question_id].append((topic_id, subtopic_name or ""))
+
         candidates: list[Candidate] = []
         topic_by_question: dict[uuid.UUID, uuid.UUID] = {}
         subtopic_by_question: dict[uuid.UUID, str] = {}
-        for question_id, topic_id, difficulty, _order, subtopic_name in rows.all():
-            if question_id in topic_by_question:
-                continue  # already mapped via an earlier subtopic — keep the first
-            topic_by_question[question_id] = topic_id
-            subtopic_by_question[question_id] = subtopic_name or ""
+        phantom_only = 0
+        for question_id in order:
+            options = placements[question_id]
+            chosen = next((p for p in options if p[0] in configured_topics), None)
+            if chosen is None:
+                # No configured placement: either the assessment predates
+                # assessment_topic_config, or this question is only reachable through a
+                # topic outside the teacher's selection. Keep it — dropping it would
+                # shrink the pool below question_count — but count it for diagnostics.
+                chosen = options[0]
+                if configured_topics:
+                    phantom_only += 1
+            topic_by_question[question_id] = chosen[0]
+            subtopic_by_question[question_id] = chosen[1]
             candidates.append(
                 Candidate(
                     question_id=question_id,
-                    curriculum_topic_id=topic_id,
-                    # difficulty_level is nullable in the bank; treat unset as mid-range
-                    # so an uncalibrated question does not distort the ladder.
-                    difficulty_level=int(difficulty) if difficulty is not None else DEFAULT_START_DIFFICULTY,
+                    curriculum_topic_id=chosen[0],
+                    difficulty_level=difficulty_by_question[question_id],
                 )
+            )
+
+        if phantom_only:
+            logger.warning(
+                "adaptive_questions_outside_configured_topics",
+                assessment_id=str(assessment_id),
+                count=phantom_only,
+                configured_topics=len(configured_topics),
             )
 
         return candidates, topic_by_question, subtopic_by_question
