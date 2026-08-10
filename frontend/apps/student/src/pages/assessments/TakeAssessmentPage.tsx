@@ -8,10 +8,18 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, CheckCircle, Clock, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  CheckCircle,
+  Clock,
+  X,
+} from "lucide-react";
 import { StudentLayout, Modal, Skeleton } from "@kaihle/ui";
 import {
   useAttempt,
+  useNextQuestion,
   useSubmitResponse,
   useSubmitAttempt,
   type AttemptAnswer,
@@ -31,25 +39,21 @@ function useCountdown(
   startedAt: string | null,
   limitMinutes: number,
 ): number | null {
-  const computeRemaining = useCallback(() => {
-    if (!startedAt || limitMinutes === 0) return null;
-    const deadline = new Date(startedAt).getTime() + limitMinutes * 60 * 1000;
-    return Math.max(0, Math.floor((deadline - Date.now()) / 1000));
-  }, [startedAt, limitMinutes]);
-
-  const [seconds, setSeconds] = useState<number | null>(computeRemaining);
+  // The ticking clock is the only state; the remaining seconds are DERIVED from
+  // it during render. Storing the derived value instead would require a
+  // setState inside the effect to resync whenever startedAt arrives, which both
+  // triggers a cascading render and leaves a window where the two disagree.
+  const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
     if (!startedAt || limitMinutes === 0) return;
-    // Sync immediately in case stale state from previous render
-    setSeconds(computeRemaining());
-    const id = setInterval(() => {
-      setSeconds(computeRemaining());
-    }, 1000);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [startedAt, limitMinutes, computeRemaining]);
+  }, [startedAt, limitMinutes]);
 
-  return seconds;
+  if (!startedAt || limitMinutes === 0) return null;
+  const deadline = new Date(startedAt).getTime() + limitMinutes * 60 * 1000;
+  return Math.max(0, Math.floor((deadline - now) / 1000));
 }
 
 function formatCountdown(seconds: number): string {
@@ -138,10 +142,18 @@ export function TakeAssessmentPage() {
   const layout = useStudentLayoutProps();
 
   // ── Attempt data ────────────────────────────────────────────
+  // The attempt query supplies metadata (title, timer, status) only — the backend
+  // returns an empty questions array for students. Questions arrive one at a time
+  // from the adaptive endpoint, so the unserved pool never reaches the browser.
   const { data: attempt, isLoading, isError } = useAttempt(attemptId);
+  const {
+    data: nextQuestionData,
+    isLoading: isLoadingQuestion,
+    isError: isQuestionError,
+    refetch: refetchNextQuestion,
+  } = useNextQuestion(attemptId, attempt?.status !== "COMPLETED");
 
   // ── Local state ──────────────────────────────────────────────
-  const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [showLeaveModal, setShowLeaveModal] = useState(false);
@@ -149,8 +161,10 @@ export function TakeAssessmentPage() {
   const [showTimesUpModal, setShowTimesUpModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const hasAutoSubmitted = useRef(false);
-  // tracks when the current question was first shown — resets on navigation
-  const questionOpenedAt = useRef<number>(Date.now());
+  // Tracks when the current question was first shown, for time_taken_ms.
+  // Seeded to 0 rather than Date.now() because a ref initialiser runs during
+  // render, and render must stay pure. The effect below sets it on first paint.
+  const questionOpenedAt = useRef<number>(0);
 
   // ref to track if we've already redirected for COMPLETED attempts
   const hasRedirected = useRef(false);
@@ -159,10 +173,10 @@ export function TakeAssessmentPage() {
   const submitResponseMutation = useSubmitResponse();
   const submitAttemptMutation = useSubmitAttempt();
 
-  // Reset the per-question timer whenever the student moves to a new question
+  // Reset the per-question timer whenever a new question is served
   useEffect(() => {
     questionOpenedAt.current = Date.now();
-  }, [currentIndex]);
+  }, [nextQuestionData?.question?.question_id]);
 
   // ── Countdown timer ─────────────────────────────────────────
   const secondsRemaining = useCountdown(
@@ -178,38 +192,31 @@ export function TakeAssessmentPage() {
     }
   }, [attempt, attemptId, navigate]);
 
-  // ── Hydrate state from saved responses on load ─────────────────
+  // ── Hydrate saved answers on load ───────────────────────────
+  // Only the answers map is rehydrated, for the final bulk submit. The resume
+  // POSITION comes from the server: next-question replays the response log, so
+  // there is no client-side cursor to restore.
   const hasHydrated = useRef(false);
   useEffect(() => {
     if (!attempt || attempt.responses.length === 0 || hasHydrated.current)
       return;
     hasHydrated.current = true;
 
-    // Build answers map from saved responses
     const savedAnswers: Record<string, string> = {};
     for (const r of attempt.responses) {
       savedAnswers[r.question_id] = r.selected_key;
     }
     setAnswers(savedAnswers);
-
-    // Find the first unanswered question to resume from
-    const questions = attempt.questions;
-    for (let i = 0; i < questions.length; i++) {
-      if (!savedAnswers[questions[i].question_id]) {
-        setCurrentIndex(i);
-        return;
-      }
-    }
-    // All questions answered — stay on last one (student can submit)
-    setCurrentIndex(Math.min(attempt.num_questions, questions.length) - 1);
   }, [attempt]);
 
   // ── Derived values ───────────────────────────────────────────
-  const questions = (attempt?.questions ?? []).slice(0, attempt?.num_questions);
-  const currentQuestion = questions[currentIndex];
-  const totalQuestions = attempt?.num_questions ?? questions.length;
-  const answeredCount = Object.keys(answers).length;
-  const isLastQuestion = currentIndex === totalQuestions - 1;
+  const currentQuestion = nextQuestionData?.question ?? null;
+  const totalQuestions = nextQuestionData?.question_count ?? 0;
+  const answeredCount = nextQuestionData?.answered_count ?? 0;
+  // Adaptive tests have no fixed last index — the server says when it is done.
+  const isComplete = nextQuestionData?.complete ?? false;
+  const isLastQuestion =
+    totalQuestions > 0 && answeredCount === totalQuestions - 1;
   const selectedKey = currentQuestion
     ? (answers[currentQuestion.question_id] ?? null)
     : null;
@@ -219,9 +226,18 @@ export function TakeAssessmentPage() {
     totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
 
   // ── Auto-save on Next click ──────────────────────────────────
+  /** Returns true when the answer reached the server — the caller must not
+   *  advance otherwise, or the student's answer would be silently lost. */
   const saveCurrentAnswer = useCallback(
-    async (questionId: string, key: string) => {
-      const timeTakenMs = Date.now() - questionOpenedAt.current;
+    async (questionId: string, key: string): Promise<boolean> => {
+      // 0 means the open-timestamp effect has not run yet; report untracked
+      // rather than the whole Unix epoch.
+      // Clamped at 0: a system clock that steps backwards mid-assessment would
+      // otherwise record a negative duration.
+      const timeTakenMs =
+        questionOpenedAt.current === 0
+          ? undefined
+          : Math.max(0, Date.now() - questionOpenedAt.current);
       setSaveState("saving");
       let attempts = 0;
       while (attempts < 2) {
@@ -235,7 +251,7 @@ export function TakeAssessmentPage() {
           setSaveState("saved");
           // Reset to idle after 2 s
           setTimeout(() => setSaveState("idle"), 2000);
-          return;
+          return true;
         } catch {
           attempts++;
         }
@@ -243,6 +259,7 @@ export function TakeAssessmentPage() {
       // Both retries exhausted
       setSaveState("error");
       setTimeout(() => setSaveState("idle"), 4000);
+      return false;
     },
     [attemptId, submitResponseMutation],
   );
@@ -259,19 +276,26 @@ export function TakeAssessmentPage() {
     [currentQuestion],
   );
 
-  // ── Navigation helpers ───────────────────────────────────────
+  // ── Advance to the next adaptive question ────────────────────
+  // There is deliberately no "previous" counterpart: revisiting an answered
+  // question is meaningless in an adaptive test, because that answer has already
+  // moved the topic's difficulty ladder and chosen what came next.
+  const [isAdvancing, setIsAdvancing] = useState(false);
+
   const goToNext = useCallback(async () => {
     if (!currentQuestion) return;
     const key = answers[currentQuestion.question_id];
-    if (key) {
-      await saveCurrentAnswer(currentQuestion.question_id, key);
-    }
-    setCurrentIndex((i) => Math.min(i + 1, totalQuestions - 1));
-  }, [answers, currentQuestion, saveCurrentAnswer, totalQuestions]);
+    if (!key) return;
 
-  const goToPrev = useCallback(() => {
-    setCurrentIndex((i) => Math.max(i - 1, 0));
-  }, []);
+    setIsAdvancing(true);
+    const saved = await saveCurrentAnswer(currentQuestion.question_id, key);
+    if (saved) {
+      // Only refetch once the answer is durable; otherwise the server would
+      // replay an unchanged log and hand back the same question.
+      await refetchNextQuestion();
+    }
+    setIsAdvancing(false);
+  }, [answers, currentQuestion, saveCurrentAnswer, refetchNextQuestion]);
 
   // ── Timed-out auto-submit ────────────────────────────────────
   const doTimedOutSubmit = useCallback(async () => {
@@ -454,7 +478,8 @@ export function TakeAssessmentPage() {
             {/* Q X / total indicator */}
             {!isLoading && totalQuestions > 0 && (
               <span className="font-sans text-sm font-semibold text-brand-ink whitespace-nowrap">
-                Q{currentIndex + 1}&nbsp;/&nbsp;{totalQuestions}
+                Q{Math.min(answeredCount + 1, totalQuestions)}&nbsp;/&nbsp;
+                {totalQuestions}
               </span>
             )}
             {/* Cancel button */}
@@ -486,38 +511,62 @@ export function TakeAssessmentPage() {
         </div>
 
         {/* ── Question card ─────────────────────────────────── */}
-        {isLoading ? (
+        {isLoading || isLoadingQuestion ? (
           <QuestionSkeleton />
+        ) : isQuestionError ? (
+          <div className="text-center py-12">
+            <p className="font-sans text-sm text-brand-red mb-4">
+              We couldn&rsquo;t load your next question. Your saved answers are
+              safe.
+            </p>
+            <button
+              type="button"
+              onClick={() => void refetchNextQuestion()}
+              className="bg-brand-primary text-white px-5 py-2.5 rounded-full font-sans text-sm hover:bg-brand-dark transition-colors min-h-[44px] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+            >
+              Try again
+            </button>
+          </div>
+        ) : isComplete ? (
+          <div className="text-center py-16 px-6">
+            <div className="text-4xl mb-4" aria-hidden="true">
+              ✅
+            </div>
+            <h3 className="font-display font-bold text-xl text-brand-ink mb-2">
+              You&rsquo;ve answered every question
+            </h3>
+            <p className="text-brand-body text-sm max-w-sm mx-auto">
+              Submit when you&rsquo;re ready and we&rsquo;ll get your results
+              together.
+            </p>
+          </div>
         ) : currentQuestion ? (
           <div className="bg-white rounded-card border border-brand-border p-5 space-y-5 shadow-sm">
-            {/* Meta row: question type + difficulty */}
+            {/* Meta row: question type + subtopic being tested.
+                The difficulty badge is intentionally NOT rendered. In an adaptive
+                test the level is a readout of the student's own performance —
+                telling a struggling student their questions are "Easy" is
+                demoralising, and it exposes the selection logic. The subtopic
+                takes its place: it tells the student what is being tested, which
+                is useful orientation without revealing how they are doing. */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-green-pale text-brand-primary">
                 {currentQuestion.question_type === "TRUE_FALSE"
                   ? "True / False"
                   : "Multiple choice"}
               </span>
-              {currentQuestion.difficulty_level > 0 && (
-                <span
-                  className={[
-                    "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold",
-                    currentQuestion.difficulty_level >= 4
-                      ? "bg-red-50 text-red-700"
-                      : currentQuestion.difficulty_level >= 2
-                        ? "bg-amber-50 text-amber-700"
-                        : "bg-gray-100 text-brand-body",
-                  ].join(" ")}
-                >
-                  {currentQuestion.difficulty_level >= 4
-                    ? "Hard"
-                    : currentQuestion.difficulty_level >= 2
-                      ? "Medium"
-                      : "Easy"}
-                </span>
-              )}
               {currentQuestion.subtopic_name && (
-                <span className="text-xs text-brand-muted truncate">
-                  {currentQuestion.subtopic_name}
+                <span
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-gold/20 text-brand-ink max-w-[16rem]"
+                  title={currentQuestion.subtopic_name}
+                >
+                  <BookOpen
+                    className="w-3 h-3 flex-shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">
+                    {currentQuestion.subtopic_name}
+                  </span>
                 </span>
               )}
             </div>
@@ -535,7 +584,7 @@ export function TakeAssessmentPage() {
                   : "grid grid-cols-1 sm:grid-cols-2 gap-3"
               }
               role="radiogroup"
-              aria-label={`Options for question ${currentIndex + 1}`}
+              aria-label={`Options for question ${answeredCount + 1}`}
             >
               {currentQuestion.options.map((opt) => (
                 <MCQOption
@@ -555,23 +604,11 @@ export function TakeAssessmentPage() {
         )}
 
         {/* ── Navigation buttons ────────────────────────────── */}
-        {!isLoading && totalQuestions > 0 && (
+        {!isLoading && !isLoadingQuestion && totalQuestions > 0 && (
           <div className="flex items-center justify-between pt-2">
-            <button
-              type="button"
-              onClick={goToPrev}
-              disabled={currentIndex === 0}
-              className={[
-                "flex items-center gap-1.5 px-5 py-2.5 rounded-full font-sans text-sm transition-colors min-h-[44px]",
-                "border border-role-student-border",
-                currentIndex === 0
-                  ? "text-brand-muted cursor-not-allowed opacity-50"
-                  : "text-brand-ink hover:bg-gray-50",
-              ].join(" ")}
-            >
-              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-              Back
-            </button>
+            {/* No "previous" control: an answered question has already moved the
+                difficulty ladder, so going back would be meaningless. */}
+            <span aria-hidden="true" />
 
             {/* Save indicator — always rendered to avoid layout shift */}
             <p
@@ -599,7 +636,7 @@ export function TakeAssessmentPage() {
               {saveState === "error" && "Save failed"}
             </p>
 
-            {isLastQuestion ? (
+            {isComplete ? (
               <button
                 type="button"
                 onClick={handleSubmitRequest}
@@ -611,11 +648,23 @@ export function TakeAssessmentPage() {
               <button
                 type="button"
                 onClick={goToNext}
-                disabled={!selectedKey}
+                disabled={!selectedKey || isAdvancing}
                 className="flex items-center gap-1.5 bg-brand-primary text-white px-5 py-2.5 rounded-full font-sans text-sm hover:bg-brand-dark transition-colors min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Next
-                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                {isAdvancing ? (
+                  <>
+                    <span
+                      className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+                      aria-hidden="true"
+                    />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    {isLastQuestion ? "Finish" : "Next"}
+                    <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                  </>
+                )}
               </button>
             )}
           </div>

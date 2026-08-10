@@ -37,6 +37,18 @@ if not _test_db_name.endswith("_test"):
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-integration-tests")
 
+# Celery is constructed at import time from settings.celery_broker_url. When that is
+# unset the client falls back to amqp://localhost, and every endpoint that enqueues a
+# task fails with "Connection refused" — turning routing and permission assertions
+# into broker failures (enrollment and subtopic-content routes hit this).
+#
+# kombu's in-memory transport accepts publishes without a server, so .delay() succeeds
+# and the request completes. Tasks are deliberately NOT run eagerly: these tests assert
+# HTTP behaviour, and executing real tasks would pull in LLM calls and other side
+# effects. Tests that care about task dispatch patch the task directly.
+os.environ.setdefault("CELERY_BROKER_URL", "memory://")
+os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
+
 import random
 from collections.abc import AsyncGenerator
 

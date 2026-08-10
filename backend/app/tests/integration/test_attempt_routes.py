@@ -389,7 +389,7 @@ class TestSubmitResponseReal:
     """POST /api/v1/attempts/{attempt_id}/responses — real DB."""
 
     @pytest.mark.asyncio
-    async def test_submit_response_when_valid_then_204(
+    async def test_submit_response_when_valid_then_returns_scoring_result(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -398,7 +398,7 @@ class TestSubmitResponseReal:
         active_assessment_with_question: Assessment,
         question: QuestionBank,
     ) -> None:
-        """Valid answer for a question in the assessment → 204."""
+        """Valid answer → 200 with the scoring outcome the adaptive client needs."""
         body = {
             "question_id": str(question.id),
             "selected_key": "A",
@@ -410,10 +410,14 @@ class TestSubmitResponseReal:
             json=body,
         )
 
-        assert response.status_code == 204
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["scored"] is True
+        assert payload["is_correct"] is True
+        assert "next_question_available" in payload
 
     @pytest.mark.asyncio
-    async def test_submit_response_when_duplicate_then_upserts_and_returns_204(
+    async def test_submit_response_when_duplicate_then_upserts_and_returns_200(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -437,7 +441,8 @@ class TestSubmitResponseReal:
             headers=_auth(student_user),
             json=first_body,
         )
-        assert r1.status_code == 204
+        assert r1.status_code == 200
+        assert r1.json()["is_correct"] is True
 
         # Second submission with a different answer — should succeed (upsert)
         r2 = await client.post(
@@ -445,7 +450,9 @@ class TestSubmitResponseReal:
             headers=_auth(student_user),
             json=second_body,
         )
-        assert r2.status_code == 204
+        assert r2.status_code == 200
+        # The upsert re-scores: "B" is wrong, so the stored result must flip.
+        assert r2.json()["is_correct"] is False
 
 
 class TestSubmitAttemptReal:

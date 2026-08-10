@@ -24,11 +24,13 @@ from app.models.user import ParentStudent, User, UserRole
 from app.schemas.assessments import AssessmentQuestion, QuestionOption
 from app.schemas.attempts import (
     AnswerSubmitRequest,
+    AnswerSubmitResponse,
     AttemptDetailResponse,
     AttemptResponse,
     AttemptResultResponse,
     AttemptReviewResponse,
     AttemptSubmitRequest,
+    NextQuestionResponse,
     StudentAttemptHistoryItem,
 )
 from app.schemas.common import Page
@@ -45,11 +47,22 @@ from app.services.onboarding_service import OnboardingService
 router = APIRouter(tags=["attempts"])
 
 
-def _questions_to_schema(questions: list[QuestionBank]) -> list[AssessmentQuestion]:
+def _questions_to_schema(
+    questions: list[QuestionBank],
+    subtopic_names: dict[UUID, str] | None = None,
+) -> list[AssessmentQuestion]:
     """Convert QuestionBank rows to student-facing AssessmentQuestion schema.
 
     Correct answers are expected to already be stripped (None) by the service.
+
+    Args:
+        questions: Rows to convert.
+        subtopic_names: Optional question_id -> subtopic name. QuestionBank has no
+            usable subtopic relation for this purpose (subtopic_id is NULL for
+            remapped questions), so callers that resolved names via the objective
+            path pass them in. Omitted names fall back to "".
     """
+    names = subtopic_names or {}
     result = []
     for q in questions:
         options: list[QuestionOption] = []
@@ -75,6 +88,7 @@ def _questions_to_schema(questions: list[QuestionBank]) -> list[AssessmentQuesti
                 question_type=q.question_type,
                 options=options,
                 difficulty_level=int(q.difficulty_level) if q.difficulty_level is not None else 0,
+                subtopic_name=names.get(q.id, ""),
             )
         )
     return result
@@ -215,7 +229,11 @@ async def get_attempt(
         submitted_at=attempt.completed_at,
         score=attempt.overall_score,
         title=assessment_title,
-        questions=_questions_to_schema(questions),
+        # Students are served one adaptively-chosen question at a time via
+        # GET /attempts/{id}/next-question, so shipping the pool here would put every
+        # unserved question in the browser cache for anyone to read ahead. Teachers and
+        # admins still receive it — they legitimately review the whole pool.
+        questions=([] if current_user.role == UserRole.STUDENT else _questions_to_schema(questions)),
         num_questions=num_questions,
         responses=[
             {"question_id": r.question_id, "selected_key": r.answer_given, "is_correct": r.is_correct}
@@ -225,22 +243,60 @@ async def get_attempt(
     )
 
 
-@router.post("/attempts/{attempt_id}/responses", status_code=status.HTTP_204_NO_CONTENT)
+@router.get("/attempts/{attempt_id}/next-question", response_model=NextQuestionResponse)
+async def get_next_question(
+    attempt_id: UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.STUDENT)),
+    db: AsyncSession = Depends(get_db),
+) -> NextQuestionResponse:
+    """Serve the next adaptively-selected question for the student's own attempt.
+
+    Difficulty adapts per curriculum topic via a 1-up/2-down staircase. The call is
+    idempotent: without an intervening answer it returns the same question, so a
+    retry on a dropped connection never burns a question.
+    """
+    assert current_user.school_id is not None, "Student must belong to a school"
+    service = AttemptService(db)
+    try:
+        question, subtopic_name, answered_count, question_count = await service.get_next_question(
+            attempt_id=attempt_id,
+            student_id=current_user.id,
+            school_id=current_user.school_id,
+        )
+        await db.commit()
+    except AttemptAlreadyCompletedError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        # _load_and_verify_attempt raises ValueError for both "not found" and
+        # ownership/school mismatch. Cross-tenant access must be 403, not 404.
+        if "Access denied" in str(exc):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    return NextQuestionResponse(
+        question=(_questions_to_schema([question], {question.id: subtopic_name})[0] if question is not None else None),
+        answered_count=answered_count,
+        question_count=question_count,
+        complete=question is None,
+    )
+
+
+@router.post("/attempts/{attempt_id}/responses", response_model=AnswerSubmitResponse)
 async def submit_response(
     attempt_id: UUID,
     body: AnswerSubmitRequest,
     current_user: CurrentUser = Depends(require_role(UserRole.STUDENT)),
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> AnswerSubmitResponse:
     """Record a single answer for an in-progress attempt.
 
-    Returns 204 No Content on success. Idempotent within an attempt —
-    submitting the same question twice returns 409.
+    Returns the scoring outcome so an adaptive client can render feedback and know
+    whether another question follows. Submitting the same question twice upserts.
     """
     assert current_user.school_id is not None, "Student must belong to a school"
     service = AttemptService(db)
     try:
-        await service.submit_response(
+        is_correct = await service.submit_response(
             attempt_id=attempt_id,
             student_id=current_user.id,
             school_id=current_user.school_id,
@@ -257,7 +313,18 @@ async def submit_response(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    return None
+
+    # Determine whether another question follows, so the client makes one call not two.
+    next_question, _subtopic, _answered, _count = await service.get_next_question(
+        attempt_id=attempt_id,
+        student_id=current_user.id,
+        school_id=current_user.school_id,
+    )
+    return AnswerSubmitResponse(
+        scored=True,
+        is_correct=is_correct,
+        next_question_available=next_question is not None,
+    )
 
 
 @router.post("/attempts/{attempt_id}/submit", response_model=AttemptResultResponse)

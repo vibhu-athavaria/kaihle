@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "@kaihle/auth";
 import { Button, Badge, Skeleton, Modal } from "@kaihle/ui";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import {
   useAssessmentWizard,
   type PreviewQuestion,
@@ -249,6 +249,26 @@ export function Step4Preview() {
             </p>
           </div>
         </div>
+        {/* Explains why the pool is larger than the per-attempt count: the pool is
+            the range adaptive selection draws from, not what any one student sees. */}
+        <div className="flex items-start gap-2.5 bg-[#fffbeb] border border-[#fde68a] rounded-xl p-3">
+          <Sparkles
+            className="w-4 h-4 text-brand-gold flex-shrink-0 mt-0.5"
+            aria-hidden="true"
+          />
+          <p className="text-xs font-sans text-brand-body leading-relaxed">
+            <span className="font-bold text-brand-ink">
+              This assessment adapts.
+            </span>{" "}
+            Each student answers {questionCount} of the {localQuestions.length}{" "}
+            questions in the pool. The first question in each subtopic starts
+            mid-difficulty; after that, two correct answers in a row move that
+            subtopic up a level and one wrong answer moves it down. Every
+            subtopic adapts on its own, so a student can be stretched in one and
+            supported in another within the same attempt.
+          </p>
+        </div>
+
         <div className="flex justify-end">
           <button
             type="button"
@@ -424,7 +444,9 @@ export function Step4Preview() {
           if (!open) setAttemptOpen(false);
         }}
         title="Try assessment"
-        description="Preview only — no answers are stored."
+        // Teachers browse the pool freely here; students do not. Saying so avoids
+        // the impression that the real attempt is a fixed, back-navigable list.
+        description="Preview only — no answers are stored. You can browse the whole pool in any order; students are served one adaptively chosen question at a time and cannot go back."
       >
         {(() => {
           const currentQ = localQuestions[attemptIndex];
