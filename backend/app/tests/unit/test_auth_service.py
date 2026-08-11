@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -1569,3 +1570,31 @@ class TestRedeemImpersonation:
 
         assert row.used_at is not None
         mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_act_claim_malformed_then_raises_invalid_token(
+        self, auth_service: AuthService, mock_db: MagicMock, student_user: User
+    ) -> None:
+        """A non-UUID `act` must surface as 401, not an uncaught ValueError (500).
+
+        Only reachable with a compromised signing key, since start_impersonation
+        always writes str(uuid) and the signature blocks forgery — but the failure
+        mode must still be a predictable response.
+        """
+        now = datetime.now(UTC)
+        forged = jwt.encode(
+            {
+                "sub": str(student_user.id),
+                "act": "not-a-uuid",
+                "iat": now,
+                "exp": now + timedelta(seconds=60),
+                "type": "impersonation_handoff",
+            },
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        mock_db.scalar = AsyncMock(return_value=self._auth_token_row(student_user))
+        mock_db.get = AsyncMock(side_effect=[student_user, None])
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(forged)

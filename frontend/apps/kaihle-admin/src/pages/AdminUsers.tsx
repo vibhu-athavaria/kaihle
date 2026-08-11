@@ -195,6 +195,16 @@ export function AdminUsers() {
       tab.close();
       return;
     }
+
+    // The admin can close the tab while the token is being minted. Navigating a
+    // closed window throws in some browsers, and the token is spent either way,
+    // so say so rather than failing silently.
+    if (tab.closed) {
+      toast.error(
+        `That tab was closed before the session opened. The link is spent — try ${user.first_name} again.`,
+      );
+      return;
+    }
     tab.location.replace(result.redirect_url);
   };
 

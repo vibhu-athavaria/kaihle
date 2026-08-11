@@ -449,8 +449,17 @@ class AuthService:
         if not target.is_active or target.role == UserRole.KAIHLE_ADMIN:
             raise InvalidTokenError("This user can no longer be impersonated")
 
+        # `act` is only ever written by start_impersonation as str(uuid) and the
+        # signature blocks forgery, so a malformed value implies a compromised
+        # signing key. Handle it anyway: an unparseable claim must surface as 401,
+        # not as an uncaught ValueError the route would turn into a 500.
         impersonator_id = payload.get("act")
-        impersonator = await self.db.get(User, uuid.UUID(impersonator_id)) if impersonator_id else None
+        try:
+            impersonator_uuid = uuid.UUID(str(impersonator_id)) if impersonator_id else None
+        except ValueError as e:
+            raise InvalidTokenError("Impersonation token has a malformed acting admin id") from e
+
+        impersonator = await self.db.get(User, impersonator_uuid) if impersonator_uuid else None
         if not impersonator or impersonator.role != UserRole.KAIHLE_ADMIN or not impersonator.is_active:
             raise InvalidTokenError("Impersonating admin is no longer authorised")
 

@@ -254,14 +254,20 @@ export function PlatformUserTable({
                             e.stopPropagation();
                             onImpersonate(user);
                           }}
+                          // Disabled while ANY row is minting, not just this one.
+                          // Two impersonations of the same role land on the same
+                          // origin and share its localStorage, so the second
+                          // would silently replace the first.
                           disabled={
                             !canImpersonate(user) ||
-                            impersonatingUserId === user.id
+                            Boolean(impersonatingUserId)
                           }
                           title={
-                            canImpersonate(user)
-                              ? `Open a session as ${user.first_name}`
-                              : impersonateDisabledReason(user)
+                            !canImpersonate(user)
+                              ? impersonateDisabledReason(user)
+                              : Boolean(impersonatingUserId)
+                                ? "Another session is being opened"
+                                : `Open a session as ${user.first_name}`
                           }
                           className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 font-['Inter'] text-sm font-medium text-brand-primary transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[36px]"
                         >
@@ -283,8 +289,9 @@ export function PlatformUserTable({
                             e.stopPropagation();
                             onCopyImpersonateLink(user);
                           }}
+                          disabled={Boolean(impersonatingUserId)}
                           title="Copy a link to paste into a private window"
-                          className="font-['Inter'] text-sm text-gray-500 underline-offset-2 transition-colors hover:text-brand-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                          className="font-['Inter'] text-sm text-gray-500 underline-offset-2 transition-colors hover:text-brand-primary hover:underline disabled:cursor-not-allowed disabled:text-gray-300 disabled:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
                         >
                           Copy link
                         </button>

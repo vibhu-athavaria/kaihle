@@ -123,4 +123,28 @@ describe("PlatformUserTable impersonation action", () => {
       screen.queryByRole("button", { name: /log in as/i }),
     ).not.toBeInTheDocument();
   });
+  it("disables every impersonate action while any row is minting", () => {
+    // Two sessions for the same role share one origin's localStorage, so the
+    // second would silently replace the first.
+    renderTable([student, inactiveTeacher], {
+      onImpersonate: jest.fn(),
+      onCopyImpersonateLink: jest.fn(),
+      impersonatingUserId: "some-other-user",
+    });
+
+    expect(loginAsButtonFor(student.email)).toBeDisabled();
+    expect(screen.getByRole("button", { name: /copy link/i })).toBeDisabled();
+  });
+
+  it("does not call onImpersonate for a row disabled by an in-flight mint", () => {
+    const onImpersonate = jest.fn();
+    renderTable([student], {
+      onImpersonate,
+      impersonatingUserId: "some-other-user",
+    });
+
+    fireEvent.click(loginAsButtonFor(student.email));
+
+    expect(onImpersonate).not.toHaveBeenCalled();
+  });
 });
