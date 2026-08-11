@@ -18,6 +18,10 @@ export { Badge } from "./components/Badge";
 export { Input } from "./components/Input";
 export { Skeleton, SkeletonCard } from "./components/Skeleton";
 export { EmptyState } from "./components/EmptyState";
+export {
+  ImpersonationBanner,
+  type ImpersonationBannerProps,
+} from "./components/ImpersonationBanner";
 export { ProgressBar } from "./components/ProgressBar";
 
 export { ScoreRing } from "./components/ScoreRing";

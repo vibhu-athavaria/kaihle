@@ -12,6 +12,7 @@ from app.core.security import InvalidTokenError
 from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
+    ImpersonationRedeemRequest,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -94,6 +95,26 @@ async def verify_magic_link(token: str, db: AsyncSession = Depends(get_db)) -> M
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Magic link is invalid or has expired",
         )
+
+
+@router.post("/impersonate/redeem", response_model=LoginResponse)
+async def redeem_impersonation(
+    body: ImpersonationRedeemRequest,
+    db: AsyncSession = Depends(get_db),
+) -> LoginResponse:
+    """Exchange a Kaihle Admin impersonation handoff token for a session.
+
+    Unauthenticated by design — the single-use token IS the credential, exactly
+    as with magic link verification. The token is minted only by
+    POST /api/v1/platform/users/{user_id}/impersonate, which is KAIHLE_ADMIN-only.
+
+    The returned session has no refresh token and expires on its own.
+    """
+    service = AuthService(db)
+    try:
+        return await service.redeem_impersonation(body.token)
+    except InvalidTokenError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 
 @router.post("/refresh", response_model=TokenResponse)

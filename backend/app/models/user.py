@@ -47,6 +47,7 @@ class AuthTokenType:
     MAGIC_LINK = "MAGIC_LINK"
     REFRESH = "REFRESH"
     PASSWORD_RESET = "PASSWORD_RESET"
+    IMPERSONATION = "IMPERSONATION"
 
 
 class User(Base, TimestampMixin):
@@ -175,6 +176,7 @@ class AuthToken(Base):
             AuthTokenType.MAGIC_LINK,
             AuthTokenType.REFRESH,
             AuthTokenType.PASSWORD_RESET,
+            AuthTokenType.IMPERSONATION,
             name="auth_token_type",
         ),
         nullable=False,

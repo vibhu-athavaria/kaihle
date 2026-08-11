@@ -5,6 +5,8 @@ import {
   PasswordSetupRoute,
   ResetPasswordRoute,
   ForgotPasswordRoute,
+  ImpersonateRoute,
+  ImpersonationBar,
 } from "@kaihle/auth";
 import { ErrorBoundary } from "@kaihle/ui";
 import { UserRole } from "@kaihle/types";
@@ -28,6 +30,10 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
         <Route path="/reset-password" element={<ResetPasswordRoute />} />
+        <Route
+          path="/impersonate"
+          element={<ImpersonateRoute homePath="/school-admin/dashboard" />}
+        />
 
         {/* Password setup — required before any other school-admin route */}
         <Route
@@ -80,6 +86,7 @@ export default function App() {
                         element={<Navigate to="dashboard" replace />}
                       />
                     </Routes>
+                    <ImpersonationBar />
                   </ErrorBoundary>
                 </RoleRoute>
               </PasswordSetupRoute>

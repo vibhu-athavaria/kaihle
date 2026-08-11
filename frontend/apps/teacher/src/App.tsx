@@ -11,6 +11,8 @@ import {
   RoleRoute,
   ResetPasswordRoute,
   ForgotPasswordRoute,
+  ImpersonateRoute,
+  ImpersonationBar,
   useAuth,
   useAuthStore,
 } from "@kaihle/auth";
@@ -164,6 +166,10 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
         <Route path="/reset-password" element={<ResetPasswordRoute />} />
         <Route
+          path="/impersonate"
+          element={<ImpersonateRoute homePath="/teacher/dashboard" />}
+        />
+        <Route
           path="/teacher/change-password"
           element={
             <PrivateRoute>
@@ -299,6 +305,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      <ImpersonationBar />
     </BrowserRouter>
   );
 }

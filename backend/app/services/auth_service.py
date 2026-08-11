@@ -8,29 +8,65 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.security import (
     InvalidTokenError,
     create_access_token,
+    create_impersonation_handoff_token,
     create_magic_link_token,
     decode_token,
     generate_refresh_token,
     hash_password,
     hash_token,
+    store_impersonation_token,
     store_magic_link_token,
     store_password_reset_token,
     store_refresh_token,
     verify_password,
 )
 from app.models.school import School
-from app.models.user import AuthToken, AuthTokenType, User
-from app.schemas.auth import LoginResponse, RegisterResponse, TokenResponse
+from app.models.user import AuthToken, AuthTokenType, User, UserRole
+from app.schemas.auth import (
+    ImpersonationStartResponse,
+    LoginResponse,
+    RegisterResponse,
+    TokenResponse,
+)
 from app.services.email_service import EmailService
 
 logger = structlog.get_logger()
 
 
+def app_url_for_role(role: str) -> str:
+    """Return the frontend app base URL that serves the given role.
+
+    Each role has exactly one app (CONSTITUTION §6). Used to build both password
+    reset links and impersonation handoff links.
+    """
+    role_url_map: dict[str, str] = {
+        UserRole.TEACHER.value: settings.teacher_app_url,
+        UserRole.STUDENT.value: settings.student_app_url,
+        UserRole.PARENT.value: settings.parent_app_url,
+        UserRole.SCHOOL_ADMIN.value: settings.school_admin_app_url,
+        UserRole.KAIHLE_ADMIN.value: settings.kaihle_admin_app_url,
+    }
+    return role_url_map.get(role, settings.school_admin_app_url)
+
+
 class SchoolNotFoundError(Exception):
     """Raised when a school is not found."""
+
+    pass
+
+
+class ImpersonationNotAllowedError(Exception):
+    """Raised when a user may not be impersonated (inactive, or a Kaihle Admin)."""
+
+    pass
+
+
+class UserNotFoundError(Exception):
+    """Raised when a target user does not exist."""
 
     pass
 
@@ -324,6 +360,135 @@ class AuthService:
         new_access = create_access_token(user.id, user.school_id, user.role)
         return TokenResponse(access_token=new_access)
 
+    async def start_impersonation(
+        self,
+        impersonator: User,
+        target_user_id: uuid.UUID,
+    ) -> ImpersonationStartResponse:
+        """Mint a single-use handoff link that opens a session as target_user_id.
+
+        Caller must already be authorised as KAIHLE_ADMIN (enforced at the route).
+
+        Raises UserNotFoundError if the target does not exist, and
+        ImpersonationNotAllowedError if the target is inactive, is the caller, or
+        is another KAIHLE_ADMIN — one platform admin acting as another would be
+        indistinguishable in the audit trail.
+        """
+        target = await self.db.get(User, target_user_id)
+        if not target:
+            raise UserNotFoundError("User not found")
+        if target.id == impersonator.id:
+            raise ImpersonationNotAllowedError("You are already signed in as this user")
+        if not target.is_active:
+            raise ImpersonationNotAllowedError("Cannot impersonate an inactive user")
+        if target.role == UserRole.KAIHLE_ADMIN:
+            raise ImpersonationNotAllowedError("Cannot impersonate another Kaihle Admin")
+
+        raw_token = create_impersonation_handoff_token(target.id, impersonator.id)
+        await store_impersonation_token(self.db, target.id, hash_token(raw_token))
+
+        app_url = app_url_for_role(target.role)
+
+        logger.info(
+            "impersonation.started",
+            impersonator_id=str(impersonator.id),
+            target_user_id=str(target.id),
+            target_role=target.role,
+            target_school_id=str(target.school_id) if target.school_id else None,
+        )
+
+        return ImpersonationStartResponse(
+            redirect_url=f"{app_url}/impersonate?token={raw_token}",
+            target_app_url=app_url,
+            target_user_id=target.id,
+            target_role=target.role,
+            expires_in_seconds=settings.impersonation_handoff_seconds,
+        )
+
+    async def redeem_impersonation(self, raw_token: str) -> LoginResponse:
+        """Exchange a handoff token for an impersonated session.
+
+        Returns a LoginResponse whose access token carries `act` (the acting
+        admin's id) and no refresh token — see LoginResponse.refresh_token for why.
+
+        Raises InvalidTokenError if the token is malformed, expired, already used,
+        or if the target is no longer impersonable.
+        """
+        payload = decode_token(raw_token)
+        if payload.get("type") != "impersonation_handoff":
+            raise InvalidTokenError("Not an impersonation token")
+
+        token_hash = hash_token(raw_token)
+        auth_token = await self.db.scalar(
+            select(AuthToken).where(
+                AuthToken.token_hash == token_hash,
+                AuthToken.type == AuthTokenType.IMPERSONATION,
+                AuthToken.used_at.is_(None),
+                AuthToken.expires_at > datetime.now(UTC),
+            )
+        )
+        if not auth_token:
+            raise InvalidTokenError("Impersonation link is invalid, expired, or already used")
+
+        # Single-use: burn it before issuing the session.
+        auth_token.used_at = datetime.now(UTC)
+
+        target = await self.db.get(User, auth_token.user_id)
+        if not target:
+            raise InvalidTokenError("User not found")
+
+        # Re-check authorisation at redemption — the target could have been
+        # deactivated or promoted to KAIHLE_ADMIN since the token was minted.
+        if not target.is_active or target.role == UserRole.KAIHLE_ADMIN:
+            raise InvalidTokenError("This user can no longer be impersonated")
+
+        impersonator_id = payload.get("act")
+        impersonator = await self.db.get(User, uuid.UUID(impersonator_id)) if impersonator_id else None
+        if not impersonator or impersonator.role != UserRole.KAIHLE_ADMIN or not impersonator.is_active:
+            raise InvalidTokenError("Impersonating admin is no longer authorised")
+
+        await self.db.flush()
+
+        # Deliberately does NOT set target.last_login_at — that column reflects
+        # the real user's own activity and must not be polluted by support access.
+        access_token = create_access_token(
+            target.id,
+            target.school_id,
+            target.role,
+            expires_in=settings.impersonation_session_minutes,
+            extra_claims={"act": str(impersonator.id), "impersonated": True},
+        )
+
+        logger.info(
+            "impersonation.redeemed",
+            impersonator_id=str(impersonator.id),
+            target_user_id=str(target.id),
+            target_role=target.role,
+            target_school_id=str(target.school_id) if target.school_id else None,
+        )
+
+        return LoginResponse(
+            access_token=access_token,
+            refresh_token=None,
+            token_type="bearer",
+            # Never force a password change inside an impersonated session — the
+            # admin does not know the user's password and must not set one.
+            must_change_password=False,
+            user={
+                "id": str(target.id),
+                "email": target.email or "",
+                "username": target.username or "",
+                "first_name": target.first_name,
+                "role": target.role,
+                "school_id": str(target.school_id) if target.school_id else None,
+                "permissions": target.permissions,
+            },
+            impersonator={
+                "id": str(impersonator.id),
+                "name": f"{impersonator.first_name} {impersonator.last_name}".strip(),
+            },
+        )
+
     async def logout(self, raw_refresh_token: str) -> None:
         """Mark refresh token as used (invalidate session)."""
         token_hash = hash_token(raw_refresh_token)
@@ -391,25 +556,13 @@ class AuthService:
 
         Always returns silently — never reveals whether the email exists.
         """
-        from app.core.config import settings
-
         user: User | None = await self.db.scalar(select(User).where(User.email == email, User.is_active.is_(True)))
         if not user:
             return
 
-        from app.core.security import generate_refresh_token
-
         raw_token, token_hash = generate_refresh_token()
 
-        role_url_map: dict[str, str] = {
-            "TEACHER": settings.teacher_app_url,
-            "STUDENT": settings.student_app_url,
-            "PARENT": settings.parent_app_url,
-            "SCHOOL_ADMIN": settings.school_admin_app_url,
-            "KAIHLE_ADMIN": settings.kaihle_admin_app_url,
-        }
-        app_url = role_url_map.get(user.role, settings.school_admin_app_url)
-        reset_url = f"{app_url}/reset-password?token={raw_token}"
+        reset_url = f"{app_url_for_role(user.role)}/reset-password?token={raw_token}"
 
         # Send email before persisting the token — if email fails the token never
         # enters the DB, so the user isn't left with an unusable dead token.

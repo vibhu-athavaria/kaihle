@@ -4,6 +4,10 @@
     "types": ["jest", "@testing-library/jest-dom"],
     "module": "CommonJS",
     "moduleResolution": "node",
+    // Required for CommonJS test builds: packages/ui uses `import React from
+    // "react"`, which resolves to undefined without interop. Vite handles this
+    // for the app build, so this is needed only under jest.
+    "esModuleInterop": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
