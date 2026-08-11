@@ -1517,3 +1517,55 @@ class TestRedeemImpersonation:
 
         with pytest.raises(InvalidTokenError):
             await auth_service.redeem_impersonation(token)
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_token_valid_then_commits_the_burn(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """The burn is committed, not merely flushed."""
+        token = self._valid_token(student_user, admin_user)
+        mock_db.scalar = AsyncMock(return_value=self._auth_token_row(student_user))
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        await auth_service.redeem_impersonation(token)
+
+        mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_post_burn_check_fails_then_burn_is_still_committed(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """A rejected redemption must still spend the token.
+
+        get_db rolls back on exception, so a burn that was only flushed would be
+        discarded and the link would stay redeemable for the rest of its TTL.
+        One attempt spends the token whether or not it succeeds.
+        """
+        token = self._valid_token(student_user, admin_user)
+        row = self._auth_token_row(student_user)
+        student_user.is_active = False  # rejected AFTER the burn
+        mock_db.scalar = AsyncMock(return_value=row)
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(token)
+
+        assert row.used_at is not None
+        mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_impersonator_rejected_then_burn_is_still_committed(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """Same guarantee on the impersonator-authorisation path."""
+        token = self._valid_token(student_user, admin_user)
+        row = self._auth_token_row(student_user)
+        admin_user.role = "TEACHER"
+        mock_db.scalar = AsyncMock(return_value=row)
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(token)
+
+        assert row.used_at is not None
+        mock_db.commit.assert_awaited()

@@ -430,8 +430,15 @@ class AuthService:
         if not auth_token:
             raise InvalidTokenError("Impersonation link is invalid, expired, or already used")
 
-        # Single-use: burn it before issuing the session.
+        # Single-use: burn it on the FIRST attempt, and commit that immediately.
+        # The checks below raise InvalidTokenError, which get_db turns into a
+        # rollback — so a burn that was merely flushed would be discarded and the
+        # link would stay redeemable for the rest of its TTL. Committing here
+        # makes consumption unconditional: one attempt, success or not, spends
+        # the token. This is the only write in this method, so nothing else is
+        # prematurely committed.
         auth_token.used_at = datetime.now(UTC)
+        await self.db.commit()
 
         target = await self.db.get(User, auth_token.user_id)
         if not target:
@@ -446,8 +453,6 @@ class AuthService:
         impersonator = await self.db.get(User, uuid.UUID(impersonator_id)) if impersonator_id else None
         if not impersonator or impersonator.role != UserRole.KAIHLE_ADMIN or not impersonator.is_active:
             raise InvalidTokenError("Impersonating admin is no longer authorised")
-
-        await self.db.flush()
 
         # Deliberately does NOT set target.last_login_at — that column reflects
         # the real user's own activity and must not be polluted by support access.
