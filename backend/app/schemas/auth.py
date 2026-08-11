@@ -36,14 +36,34 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     access_token: str
-    refresh_token: str
+    # None for impersonated sessions only. Those are deliberately not refreshable:
+    # refresh_access_token rebuilds the token from the User row and would drop the
+    # `act` claim, laundering an impersonated session into an unmarked one.
+    refresh_token: str | None
     token_type: str
     must_change_password: bool = False
     user: dict[str, Any]
+    # Present only when this session was started by a Kaihle Admin impersonating
+    # the user. Drives the persistent banner in the target app.
+    impersonator: dict[str, Any] | None = None
 
 
 class TokenResponse(BaseModel):
     access_token: str
+
+
+class ImpersonationStartResponse(BaseModel):
+    """Response from POST /api/v1/platform/users/{user_id}/impersonate."""
+
+    redirect_url: str
+    target_app_url: str
+    target_user_id: uuid.UUID
+    target_role: str
+    expires_in_seconds: int
+
+
+class ImpersonationRedeemRequest(BaseModel):
+    token: str = Field(min_length=1)
 
 
 class MagicLinkRequest(BaseModel):

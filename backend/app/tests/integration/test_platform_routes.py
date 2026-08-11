@@ -1,6 +1,7 @@
 """Integration tests for platform endpoints."""
 
 import os
+import uuid
 from collections.abc import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -251,3 +252,68 @@ class TestPlatformLogging:
             call_args = mock_logger.info.call_args
             assert call_args is not None
             assert call_args[0][0] == "platform.users.requested"
+
+
+class TestImpersonateAuth:
+    """Tests for POST /platform/users/{user_id}/impersonate authorization.
+
+    Impersonation is the highest-privilege action in the platform, so the role
+    guard is verified independently of the service logic.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _cleanup_overrides(self) -> Generator[None, None, None]:
+        yield
+        app.dependency_overrides.clear()
+
+    @pytest.mark.asyncio
+    async def test_impersonate_when_no_auth_token_then_401(self, client: AsyncClient) -> None:
+        """Impersonation requires authentication."""
+        response = await client.post(f"/api/v1/platform/users/{uuid.uuid4()}/impersonate")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_impersonate_when_teacher_role_then_403(self, client: AsyncClient) -> None:
+        """A teacher must never be able to mint a session as another user."""
+        app.dependency_overrides[get_current_user] = _make_teacher_user
+
+        response = await client.post(
+            f"/api/v1/platform/users/{uuid.uuid4()}/impersonate",
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_impersonate_when_school_admin_role_then_403(self, client: AsyncClient) -> None:
+        """School admins manage their own school but cannot impersonate."""
+        app.dependency_overrides[get_current_user] = _make_school_admin_user
+
+        response = await client.post(
+            f"/api/v1/platform/users/{uuid.uuid4()}/impersonate",
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_impersonate_when_admin_and_target_missing_then_404(self, client: AsyncClient) -> None:
+        """A KAIHLE_ADMIN passes the role guard and reaches the service."""
+        app.dependency_overrides[get_current_user] = _make_admin_user
+
+        response = await client.post(
+            f"/api/v1/platform/users/{uuid.uuid4()}/impersonate",
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        assert response.status_code == 404
+
+
+class TestImpersonateRedeem:
+    """Tests for POST /auth/impersonate/redeem."""
+
+    @pytest.mark.asyncio
+    async def test_redeem_when_token_garbage_then_401(self, client: AsyncClient) -> None:
+        """The endpoint is unauthenticated, so a bad token must not 500."""
+        response = await client.post(
+            "/api/v1/auth/impersonate/redeem",
+            json={"token": "not-a-jwt"},
+        )
+        assert response.status_code == 401

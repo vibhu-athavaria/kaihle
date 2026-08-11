@@ -122,7 +122,8 @@ CREATE TYPE user_role AS ENUM (
 CREATE TYPE auth_token_type AS ENUM (
     'MAGIC_LINK',
     'REFRESH',
-    'PASSWORD_RESET'   -- v2.2: added for password reset flow
+    'PASSWORD_RESET',  -- v2.2: added for password reset flow
+    'IMPERSONATION'    -- Kaihle Admin "log in as user" handoff link; single-use, 60s TTL
 );
 
 CREATE TYPE onboarding_status AS ENUM (
@@ -1582,6 +1583,7 @@ CREATE TABLE alembic_version (
 --
 -- ENUM MODIFIED:
 --   auth_token_type             PASSWORD_RESET value added
+--   auth_token_type             IMPERSONATION value added (Kaihle Admin log-in-as)
 --   lesson_plan_status          GENERATING value added
 --
 -- COLUMN ADDED — users:

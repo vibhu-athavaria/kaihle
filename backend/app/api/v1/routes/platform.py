@@ -1,7 +1,9 @@
 """Platform-level endpoints for Kaihle Admin operations."""
 
+import uuid
+
 import structlog
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +11,12 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models.user import UserRole
+from app.schemas.auth import ImpersonationStartResponse
+from app.services.auth_service import (
+    AuthService,
+    ImpersonationNotAllowedError,
+    UserNotFoundError,
+)
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/platform", tags=["platform"])
@@ -68,6 +76,27 @@ async def get_platform_stats(
         rate_limit_requests_per_minute=settings.platform_rate_limit_requests_per_minute,
         rate_limit_concurrent_users=settings.platform_rate_limit_concurrent_users,
     )
+
+
+@router.post("/users/{user_id}/impersonate", response_model=ImpersonationStartResponse)
+async def impersonate_user(
+    user_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> ImpersonationStartResponse:
+    """Mint a single-use link that opens a session as the given user.
+
+    KAIHLE_ADMIN only. The link points at the app that serves the target's role
+    and is redeemed by POST /api/v1/auth/impersonate/redeem.
+    Returns 404 if the user does not exist, 403 if they may not be impersonated.
+    """
+    service = AuthService(db)
+    try:
+        return await service.start_impersonation(current_user, user_id)
+    except UserNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ImpersonationNotAllowedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
 
 @router.get("/users")

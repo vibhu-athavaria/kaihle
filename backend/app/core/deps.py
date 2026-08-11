@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from structlog.contextvars import bind_contextvars
 
 from app.core.database import get_db
 from app.core.security import InvalidTokenError, decode_token, get_token_scope
@@ -108,6 +109,13 @@ async def get_current_user(
             detail="Inactive user",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # If this is a Kaihle Admin impersonation session, bind the acting admin into
+    # the log context so EVERY request made during the session — including writes
+    # — is attributable to a real person, not just to the impersonated user.
+    impersonator_id = payload.get("act")
+    if impersonator_id:
+        bind_contextvars(impersonator_id=str(impersonator_id), impersonated_user_id=str(user.id))
 
     return user
 

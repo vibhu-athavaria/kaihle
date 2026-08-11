@@ -5,12 +5,25 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import InvalidTokenError, hash_password
-from app.models.user import AuthToken, User
+from app.core.config import settings
+from app.core.security import (
+    InvalidTokenError,
+    create_impersonation_handoff_token,
+    create_magic_link_token,
+    decode_token,
+    hash_password,
+    hash_token,
+)
+from app.models.user import AuthToken, AuthTokenType, User
 from app.schemas.auth import LoginResponse, RegisterResponse, TokenResponse
-from app.services.auth_service import AuthService
+from app.services.auth_service import (
+    AuthService,
+    ImpersonationNotAllowedError,
+    UserNotFoundError,
+)
 
 
 @pytest.fixture
@@ -1240,3 +1253,348 @@ class TestResetPassword:
 
         with pytest.raises(InvalidTokenError):
             await auth_service.reset_password("unknown_token", "NewPassword1!")
+
+
+# ---------------------------------------------------------------------------
+# Impersonation — Kaihle Admin "log in as user"
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def admin_user() -> User:
+    """An active KAIHLE_ADMIN — the only role permitted to impersonate."""
+    return User(
+        id=uuid.uuid4(),
+        school_id=None,
+        email="admin@kaihle.com",
+        hashed_password="hashed_password",
+        first_name="Ada",
+        last_name="Admin",
+        role="KAIHLE_ADMIN",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def student_user() -> User:
+    """An active STUDENT — a valid impersonation target."""
+    return User(
+        id=uuid.uuid4(),
+        school_id=uuid.uuid4(),
+        email="student@example.com",
+        hashed_password="hashed_password",
+        first_name="Sam",
+        last_name="Student",
+        role="STUDENT",
+        is_active=True,
+    )
+
+
+class TestStartImpersonation:
+    """Tests for AuthService.start_impersonation."""
+
+    @pytest.mark.asyncio
+    async def test_start_impersonation_when_target_missing_then_raises_user_not_found(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User
+    ) -> None:
+        mock_db.get = AsyncMock(return_value=None)
+
+        with pytest.raises(UserNotFoundError):
+            await auth_service.start_impersonation(admin_user, uuid.uuid4())
+
+    @pytest.mark.asyncio
+    async def test_start_impersonation_when_target_is_kaihle_admin_then_raises_not_allowed(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User
+    ) -> None:
+        """One platform admin acting as another would be unattributable — refuse it."""
+        other_admin = User(
+            id=uuid.uuid4(),
+            school_id=None,
+            email="other@kaihle.com",
+            hashed_password="x",
+            first_name="Otto",
+            last_name="Other",
+            role="KAIHLE_ADMIN",
+            is_active=True,
+        )
+        mock_db.get = AsyncMock(return_value=other_admin)
+
+        with pytest.raises(ImpersonationNotAllowedError):
+            await auth_service.start_impersonation(admin_user, other_admin.id)
+
+    @pytest.mark.asyncio
+    async def test_start_impersonation_when_target_inactive_then_raises_not_allowed(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        student_user.is_active = False
+        mock_db.get = AsyncMock(return_value=student_user)
+
+        with pytest.raises(ImpersonationNotAllowedError):
+            await auth_service.start_impersonation(admin_user, student_user.id)
+
+    @pytest.mark.asyncio
+    async def test_start_impersonation_when_target_is_self_then_raises_not_allowed(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User
+    ) -> None:
+        mock_db.get = AsyncMock(return_value=admin_user)
+
+        with pytest.raises(ImpersonationNotAllowedError):
+            await auth_service.start_impersonation(admin_user, admin_user.id)
+
+    @pytest.mark.asyncio
+    async def test_start_impersonation_when_valid_target_then_returns_role_specific_url(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """The link must point at the app that serves the target's role, not the admin's."""
+        mock_db.get = AsyncMock(return_value=student_user)
+
+        result = await auth_service.start_impersonation(admin_user, student_user.id)
+
+        assert result.target_app_url == settings.student_app_url
+        assert result.redirect_url.startswith(f"{settings.student_app_url}/impersonate?token=")
+        assert result.target_user_id == student_user.id
+        assert result.target_role == "STUDENT"
+
+    @pytest.mark.asyncio
+    async def test_start_impersonation_when_valid_target_then_stores_single_use_token(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """The token hash is persisted so redemption can burn it exactly once."""
+        mock_db.get = AsyncMock(return_value=student_user)
+
+        result = await auth_service.start_impersonation(admin_user, student_user.id)
+
+        stored = [c.args[0] for c in mock_db.add.call_args_list if isinstance(c.args[0], AuthToken)]
+        assert len(stored) == 1
+        assert stored[0].type == AuthTokenType.IMPERSONATION
+        assert stored[0].user_id == student_user.id
+        assert stored[0].used_at is None
+        raw = result.redirect_url.split("token=")[1]
+        assert stored[0].token_hash == hash_token(raw)
+
+    @pytest.mark.asyncio
+    async def test_start_impersonation_when_valid_target_then_token_carries_impersonator(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        mock_db.get = AsyncMock(return_value=student_user)
+
+        result = await auth_service.start_impersonation(admin_user, student_user.id)
+
+        payload = decode_token(result.redirect_url.split("token=")[1])
+        assert payload["sub"] == str(student_user.id)
+        assert payload["act"] == str(admin_user.id)
+        assert payload["type"] == "impersonation_handoff"
+
+
+class TestRedeemImpersonation:
+    """Tests for AuthService.redeem_impersonation."""
+
+    @staticmethod
+    def _valid_token(target: User, admin: User) -> str:
+        return create_impersonation_handoff_token(target.id, admin.id)
+
+    @staticmethod
+    def _auth_token_row(target: User) -> AuthToken:
+        return AuthToken(
+            id=uuid.uuid4(),
+            user_id=target.id,
+            token_hash="hash",
+            type=AuthTokenType.IMPERSONATION,
+            expires_at=datetime.now(UTC) + timedelta(seconds=60),
+            used_at=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_token_valid_then_access_token_carries_act_claim(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """The acting admin must remain visible on the session, or writes are unattributable."""
+        token = self._valid_token(student_user, admin_user)
+        mock_db.scalar = AsyncMock(return_value=self._auth_token_row(student_user))
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        result = await auth_service.redeem_impersonation(token)
+
+        payload = decode_token(result.access_token)
+        assert payload["sub"] == str(student_user.id)
+        assert payload["act"] == str(admin_user.id)
+        assert payload["impersonated"] is True
+        assert payload["role"] == "STUDENT"
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_token_valid_then_returns_no_refresh_token(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """A refresh would rebuild the token from the User row and drop the act claim."""
+        token = self._valid_token(student_user, admin_user)
+        mock_db.scalar = AsyncMock(return_value=self._auth_token_row(student_user))
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        result = await auth_service.redeem_impersonation(token)
+
+        assert result.refresh_token is None
+        assert result.impersonator is not None
+        assert result.impersonator["id"] == str(admin_user.id)
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_token_valid_then_marks_token_used(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        token = self._valid_token(student_user, admin_user)
+        row = self._auth_token_row(student_user)
+        mock_db.scalar = AsyncMock(return_value=row)
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        await auth_service.redeem_impersonation(token)
+
+        assert row.used_at is not None
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_called_then_last_login_at_unchanged(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """last_login_at reflects the real user's activity — support access must not pollute it."""
+        student_user.last_login_at = None
+        token = self._valid_token(student_user, admin_user)
+        mock_db.scalar = AsyncMock(return_value=self._auth_token_row(student_user))
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        await auth_service.redeem_impersonation(token)
+
+        assert student_user.last_login_at is None
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_token_reused_then_raises_invalid_token(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """Used tokens are excluded by the query, so the second redemption finds nothing."""
+        token = self._valid_token(student_user, admin_user)
+        mock_db.scalar = AsyncMock(return_value=None)
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(token)
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_token_expired_then_raises_invalid_token(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        expired = create_impersonation_handoff_token(student_user.id, admin_user.id, expires_in_seconds=-1)
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(expired)
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_wrong_token_type_then_raises_invalid_token(
+        self, auth_service: AuthService, mock_db: MagicMock, student_user: User
+    ) -> None:
+        """A password-setup magic link must not be redeemable as an impersonation grant."""
+        magic = create_magic_link_token(student_user.id)
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(magic)
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_target_deactivated_after_mint_then_raises_invalid_token(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """Authorisation is re-checked at redemption, not just at mint time."""
+        token = self._valid_token(student_user, admin_user)
+        student_user.is_active = False
+        mock_db.scalar = AsyncMock(return_value=self._auth_token_row(student_user))
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(token)
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_impersonator_no_longer_admin_then_raises_invalid_token(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """A demoted admin's outstanding link must stop working."""
+        token = self._valid_token(student_user, admin_user)
+        admin_user.role = "TEACHER"
+        mock_db.scalar = AsyncMock(return_value=self._auth_token_row(student_user))
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(token)
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_token_valid_then_commits_the_burn(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """The burn is committed, not merely flushed."""
+        token = self._valid_token(student_user, admin_user)
+        mock_db.scalar = AsyncMock(return_value=self._auth_token_row(student_user))
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        await auth_service.redeem_impersonation(token)
+
+        mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_post_burn_check_fails_then_burn_is_still_committed(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """A rejected redemption must still spend the token.
+
+        get_db rolls back on exception, so a burn that was only flushed would be
+        discarded and the link would stay redeemable for the rest of its TTL.
+        One attempt spends the token whether or not it succeeds.
+        """
+        token = self._valid_token(student_user, admin_user)
+        row = self._auth_token_row(student_user)
+        student_user.is_active = False  # rejected AFTER the burn
+        mock_db.scalar = AsyncMock(return_value=row)
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(token)
+
+        assert row.used_at is not None
+        mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_impersonator_rejected_then_burn_is_still_committed(
+        self, auth_service: AuthService, mock_db: MagicMock, admin_user: User, student_user: User
+    ) -> None:
+        """Same guarantee on the impersonator-authorisation path."""
+        token = self._valid_token(student_user, admin_user)
+        row = self._auth_token_row(student_user)
+        admin_user.role = "TEACHER"
+        mock_db.scalar = AsyncMock(return_value=row)
+        mock_db.get = AsyncMock(side_effect=[student_user, admin_user])
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(token)
+
+        assert row.used_at is not None
+        mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_redeem_impersonation_when_act_claim_malformed_then_raises_invalid_token(
+        self, auth_service: AuthService, mock_db: MagicMock, student_user: User
+    ) -> None:
+        """A non-UUID `act` must surface as 401, not an uncaught ValueError (500).
+
+        Only reachable with a compromised signing key, since start_impersonation
+        always writes str(uuid) and the signature blocks forgery — but the failure
+        mode must still be a predictable response.
+        """
+        now = datetime.now(UTC)
+        forged = jwt.encode(
+            {
+                "sub": str(student_user.id),
+                "act": "not-a-uuid",
+                "iat": now,
+                "exp": now + timedelta(seconds=60),
+                "type": "impersonation_handoff",
+            },
+            settings.jwt_secret_key,
+            algorithm=settings.jwt_algorithm,
+        )
+        mock_db.scalar = AsyncMock(return_value=self._auth_token_row(student_user))
+        mock_db.get = AsyncMock(side_effect=[student_user, None])
+
+        with pytest.raises(InvalidTokenError):
+            await auth_service.redeem_impersonation(forged)

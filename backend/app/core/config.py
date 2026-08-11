@@ -98,6 +98,13 @@ class Settings(BaseSettings):
     school_admin_app_url: str = "http://localhost:3004"
     kaihle_admin_app_url: str = "http://localhost:3005"
 
+    # Kaihle Admin impersonation ("log in as user")
+    # Handoff token travels in a URL, so it is deliberately very short-lived and
+    # single-use. The resulting session is bounded because impersonated sessions
+    # are issued no refresh token — see AuthService.redeem_impersonation.
+    impersonation_handoff_seconds: int = 60
+    impersonation_session_minutes: int = 60
+
     @model_validator(mode="after")
     def _validate_llm_models(self) -> "Settings":
         """Fail fast if any task-critical LLM model is unconfigured outside test environments."""

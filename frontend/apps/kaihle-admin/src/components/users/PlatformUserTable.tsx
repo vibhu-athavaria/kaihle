@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { LogIn } from "lucide-react";
 import { Skeleton } from "@kaihle/ui";
 
 export type UserRole =
@@ -28,9 +29,28 @@ interface PlatformUserTableProps {
   onSearchChange: (query: string) => void;
   onRoleFilterChange: (role: UserRole | "ALL") => void;
   onRowClick?: (user: PlatformUser) => void;
+  /** Opens a session as this user in a new tab. */
+  onImpersonate?: (user: PlatformUser) => void;
+  /** Copies the impersonation link so it can be pasted into a private window. */
+  onCopyImpersonateLink?: (user: PlatformUser) => void;
+  /** id of the user whose link is currently being minted. */
+  impersonatingUserId?: string | null;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+}
+
+/**
+ * Mirrors the backend rule in AuthService.start_impersonation so the button is
+ * never offered in a state that would come back 403.
+ */
+export function canImpersonate(user: PlatformUser): boolean {
+  return user.is_active && user.role !== "KAIHLE_ADMIN";
+}
+
+function impersonateDisabledReason(user: PlatformUser): string {
+  if (!user.is_active) return "Inactive users cannot be impersonated";
+  return "Kaihle Admins cannot be impersonated";
 }
 
 const roleBadgeStyles: Record<UserRole, string> = {
@@ -63,6 +83,9 @@ export function PlatformUserTable({
   onSearchChange,
   onRoleFilterChange,
   onRowClick,
+  onImpersonate,
+  onCopyImpersonateLink,
+  impersonatingUserId,
   currentPage,
   totalPages,
   onPageChange,
@@ -221,11 +244,64 @@ export function PlatformUserTable({
                     </span>
                   </td>
                   <td className="py-3 px-4">
-                    {onRowClick && (
-                      <span className="text-brand-primary text-sm font-medium font-['Inter']">
-                        Edit →
-                      </span>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {onImpersonate && (
+                        <button
+                          type="button"
+                          // The row opens the edit drawer — without this the
+                          // drawer would fly open behind the new tab.
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onImpersonate(user);
+                          }}
+                          // Disabled while ANY row is minting, not just this one.
+                          // Two impersonations of the same role land on the same
+                          // origin and share its localStorage, so the second
+                          // would silently replace the first.
+                          disabled={
+                            !canImpersonate(user) ||
+                            Boolean(impersonatingUserId)
+                          }
+                          title={
+                            !canImpersonate(user)
+                              ? impersonateDisabledReason(user)
+                              : Boolean(impersonatingUserId)
+                                ? "Another session is being opened"
+                                : `Open a session as ${user.first_name}`
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 font-['Inter'] text-sm font-medium text-brand-primary transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 min-h-[36px]"
+                        >
+                          {impersonatingUserId === user.id ? (
+                            <span
+                              className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <LogIn className="h-4 w-4" aria-hidden="true" />
+                          )}
+                          Log in as
+                        </button>
+                      )}
+                      {onCopyImpersonateLink && canImpersonate(user) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCopyImpersonateLink(user);
+                          }}
+                          disabled={Boolean(impersonatingUserId)}
+                          title="Copy a link to paste into a private window"
+                          className="font-['Inter'] text-sm text-gray-500 underline-offset-2 transition-colors hover:text-brand-primary hover:underline disabled:cursor-not-allowed disabled:text-gray-300 disabled:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
+                        >
+                          Copy link
+                        </button>
+                      )}
+                      {onRowClick && (
+                        <span className="font-['Inter'] text-sm font-medium text-brand-primary">
+                          Edit →
+                        </span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))

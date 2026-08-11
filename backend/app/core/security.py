@@ -119,6 +119,35 @@ def create_magic_link_token(
     return result
 
 
+def create_impersonation_handoff_token(
+    target_user_id: uuid.UUID,
+    impersonator_id: uuid.UUID,
+    expires_in_seconds: int = settings.impersonation_handoff_seconds,
+) -> str:
+    """
+    Create a one-time handoff JWT that a Kaihle Admin trades for a session as
+    another user.
+
+    This token is NOT a session token. It exists only to carry the grant across
+    an origin boundary in a URL (the admin app and the target app are different
+    origins), so it is deliberately short-lived and single-use — a URL ends up in
+    browser history and proxy logs. It is redeemed over POST via
+    /api/v1/auth/impersonate/redeem, which returns the actual session.
+
+    Stored as a hash in auth_tokens with type IMPERSONATION.
+    """
+    now = datetime.now(UTC)
+    payload: dict[str, Any] = {
+        "sub": str(target_user_id),
+        "act": str(impersonator_id),
+        "iat": now,
+        "exp": now + timedelta(seconds=expires_in_seconds),
+        "type": "impersonation_handoff",
+    }
+    result: str = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return result
+
+
 def get_token_scope(payload: dict[str, Any]) -> str | None:
     """Return the scope claim from a decoded JWT payload, or None if absent."""
     return payload.get("scope")
@@ -194,6 +223,31 @@ async def store_magic_link_token(
         user_id=user_id,
         token_hash=token_hash,
         type="MAGIC_LINK",
+        expires_at=expires_at,
+        used_at=None,
+    )
+    db.add(auth_token)
+    await db.flush()
+    return auth_token
+
+
+async def store_impersonation_token(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    token_hash: str,
+    expires_seconds: int = settings.impersonation_handoff_seconds,
+) -> AuthToken:
+    """Store an impersonation handoff token hash in auth_tokens.
+
+    user_id is the *target* user (the one being impersonated), matching the
+    token's `sub` claim. The acting admin is recorded in the token's `act` claim
+    and in the structured logs.
+    """
+    expires_at = datetime.now(UTC) + timedelta(seconds=expires_seconds)
+    auth_token = AuthToken(
+        user_id=user_id,
+        token_hash=token_hash,
+        type=AuthTokenType.IMPERSONATION,
         expires_at=expires_at,
         used_at=None,
     )

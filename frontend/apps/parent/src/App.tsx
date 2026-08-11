@@ -4,6 +4,8 @@ import {
   RoleRoute,
   ResetPasswordRoute,
   ForgotPasswordRoute,
+  ImpersonateRoute,
+  ImpersonationBar,
   useAuthStore,
 } from "@kaihle/auth";
 import { ParentLayout } from "@kaihle/ui";
@@ -35,6 +37,10 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
         <Route path="/reset-password" element={<ResetPasswordRoute />} />
+        <Route
+          path="/impersonate"
+          element={<ImpersonateRoute homePath="/parent/dashboard" />}
+        />
         <Route
           path="/parent/change-password"
           element={
@@ -71,6 +77,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+      <ImpersonationBar />
     </BrowserRouter>
   );
 }
