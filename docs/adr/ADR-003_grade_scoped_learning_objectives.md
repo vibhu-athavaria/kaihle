@@ -4,7 +4,6 @@
 **Authors:** Vibhu (problem framing) + Kramer (technical) + Vidhya (curriculum)
 **Supersedes:** Nothing. Amends the design intent recorded in `LearningObjective`'s
 model docstring (`backend/app/models/curriculum.py`).
-**Referenced in:** CONSTITUTION.md §13, `backend/app/services/question_selection.py`
 
 ---
 
@@ -57,6 +56,28 @@ Measured on the dev database (August 2026):
 | Objectives reused across curricula at the same grade | **0** |
 | Subtopic→objective links total | 1253 |
 
+These are point-in-time counts from the dev database, not invariants. Re-run them before
+implementing: the migration plan gates on the spanning count being exactly 12, and a different
+number means the data has moved and the split step needs re-planning. (Re-verified 2026-08-12:
+all five figures still hold exactly.)
+
+**Read the 0 with care — it is structurally forced, not an observation.** Four curricula are
+loaded, and they occupy strictly disjoint grade bands:
+
+| Curriculum | Grade levels | Subtopics |
+|---|---|---|
+| `cambridge_primary` | 5 | 58 |
+| `cambridge_lower` | 6–8 | 508 |
+| `igcse` | 9–10 | 325 |
+| `cambridge_as_level` | 11–12 | 362 |
+
+No grade level is served by more than one curriculum, so "reused across curricula **at the
+same grade**" had no opportunity to be anything but 0. The row establishes that nothing is
+being broken today; it is not evidence that the capability is unwanted. The argument for
+preserving cross-curriculum reuse rests on the design comparison below, not on this row — and
+it stays prospective until a curriculum overlapping an existing grade band lands (see ADR-002,
+IB curriculum roadmap).
+
 The decisive product fact, confirmed by Vibhu: **a question can be appropriate for Year 6
 and inappropriate for Year 8, even when both teach the same objective.** The original design
 assumed the opposite — that one objective implies one interchangeable question pool. Under
@@ -68,9 +89,11 @@ demand difference *between* grades.
 ### Why this blocks the migration
 
 `question_selection.py` declares the objective path canonical and `subtopic_id` deprecated.
-In practice only **one** call site has migrated (`_select_diagnostic_pool`); roughly 13 still
-join `question_bank.subtopic_id`. Those cannot migrate while grade is underivable, and they
-are already failing where the remap has run:
+In practice only **four** call sites have migrated — `_select_questions_for_diagnostic`
+(`assessment_service.py:698`), `_load_adaptive_candidates` (`attempt_service.py:465`),
+`calculate_gap_states_for_attempt` (`gap_service.py:155`), and `_fetch_check_questions`
+(`mini_course_service.py:600`). Roughly **13** still join `question_bank.subtopic_id`. Those
+cannot migrate while grade is underivable, and they are already failing where the remap has run:
 
 | Scope | Questions via objectives | % NULL `subtopic_id` | Usable by legacy query |
 |---|---|---|---|
@@ -94,7 +117,8 @@ none, so any query still joining it silently returns zero rows.
 3. Re-key de-duplication in `create_learning_objectives.py` from `topic_id` to
    `(topic_id, grade_id)`, on both sides of the comparison.
 4. Split the existing 12 spanning objectives; re-point their questions using surviving
-   `subtopic_id` provenance.
+   `subtopic_id` provenance where it exists, and route the remainder to human review rather
+   than defaulting them to a grade (see Consequences).
 5. Only then migrate the remaining selection sites off `subtopic_id`.
 
 Grade then reaches a question as a derived property:
@@ -132,11 +156,15 @@ Secondary Year 7 and IB MYP Year 2 both sit at level 7 but differ in expected de
 tagging a question "level 7" would not make it appropriate for both. It looks
 curriculum-agnostic while silently assuming curricular equivalence.
 
-### B. Bind questions to `subtopic_objective_id` instead of `learning_objective_id`
+### B. Bind questions to the `subtopic_objectives` bridge row instead of `learning_objective_id`
 **Rejected.** It does express grade precisely (a subtopic pins one `curriculum_topic`).
-But `subtopic_objectives.subtopic_id` is `ON DELETE CASCADE`, and `wipe_curriculum.py`
-deletes subtopic rows during a remap — so the bridge rows cascade away and questions are
-orphaned. This is the exact failure that motivated abandoning `subtopic_id`.
+
+Two problems. First, the bridge has no surrogate key to bind to — `SubtopicObjective` is a
+plain `Base` with a composite primary key `(subtopic_id, learning_objective_id)` and no `id`
+column, so this would require adding one. Second and decisively:
+`subtopic_objectives.subtopic_id` is `ON DELETE CASCADE`, and `wipe_curriculum.py` deletes
+subtopic rows during a remap — so the bridge rows cascade away and questions are orphaned.
+This is the exact failure that motivated abandoning `subtopic_id`.
 
 ### C. Split the 12 spanning objectives by renaming canonical codes (`-G6`, `-G7`)
 **Rejected as a complete solution; retained as a data-migration step.** It repairs today's
@@ -168,21 +196,43 @@ uses it per-topic.
 - Cross-curriculum objective reuse is preserved.
 
 ### Negative
-- **Cross-grade objective reuse is foreclosed permanently.** This is a deliberate narrowing.
-  It has never occurred in practice (0 cross-curriculum reuse observed; all 12 sharing
-  instances are cross-grade), but the capability is given up by design.
-- Objective count grows 1239 → ~1252. Re-key touches 25 of 1253 links (2%) and creates
-  **13** new objectives.
+- **Cross-grade objective reuse is foreclosed permanently.** This is a deliberate narrowing:
+  all 12 observed sharing instances are cross-grade, and every one of them is a defect rather
+  than a use case. The capability is given up by design. Note that the companion "0
+  cross-curriculum reuse" figure carries no weight as evidence here — the four loaded curricula
+  sit in disjoint grade bands, so same-grade cross-curriculum reuse was never possible to
+  observe.
+- Objective count grows 1239 → 1252. Re-key touches 25 of 1253 links (2%) and creates
+  **13** new objectives. (Verified 2026-08-12.)
+- **78 questions cannot be assigned a grade mechanically and need human review.** Of the 388
+  questions on the 12 spanning objectives, 310 re-point cleanly via surviving `subtopic_id`
+  provenance; 78 have none — concentrated in `SCI-PARTICLE-THEORY-ARRANGEMENT` (39),
+  `MATH-CALCULATE-MEAN-MEDIAN` (21) and `MATH-ADD-SUBTRACT-FRACTIONS` (12). Defaulting them to
+  the surviving objective's lowest grade would assign grade by accident of the split
+  algorithm — the exact error this ADR exists to prevent. They go to `lo_review_items`
+  as `PENDING` instead, which is a real cost: the split is not fully automatic.
 - **Year 8 content gaps become visible.** Integrated Science Y8 has lost `subtopic_id`
   provenance entirely (121/121 NULL), so its share of the split lands with **zero questions**.
   This is not a regression — it exposes a real gap that the shared-objective model was
   hiding by serving Year 7 questions to Year 8 students. It requires authoring, not migration.
 - The `LearningObjective` docstring — *"deliberately carries neither a difficulty range
   nor a grade range"* — becomes wrong for grade and must be updated in the same change.
+- **The canonical schema does not describe the table this ADR modifies.**
+  `docs/kaihle_v2_1_schema.sql` (header: v2.2, updated 2026-05-15) contains no
+  `learning_objectives` and no `subtopic_objectives` table — the whole objective layer
+  arrived later via migration `3670a6fac36d` and was never back-written. CONSTITUTION Rule 8
+  makes that file authoritative, so adding `grade_id` and a UNIQUE constraint to it is not
+  currently possible without first restoring the tables they belong to. Back-writing
+  `learning_objectives`, `subtopic_objectives`, `question_bank.learning_objective_id` and
+  `lo_review_items` into that file is therefore a prerequisite of this work, not a follow-up.
+  This is pre-existing drift that ADR-003 surfaces rather than causes.
 
 ### Neutral
 - `learning_objectives.topic_id` still points at `topics`. Nothing the objective depends on
   is deleted by a curriculum wipe, so remap durability is unchanged.
+- `question_selection.py`'s module docstring is the natural home for a pointer to this ADR,
+  but does not cite it today. Add the reference when `grade_id` lands, not before — the
+  docstring should describe the code as it is.
 
 ---
 
