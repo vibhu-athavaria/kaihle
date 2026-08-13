@@ -44,9 +44,7 @@ Usage (from backend/):
 import argparse
 import asyncio
 import json
-import re
 import sys
-import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -62,7 +60,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-from app.ai.similarity import cosine_similarity, embed_all, parse_vector  # noqa: E402
+from app.ai.similarity import cosine_similarity, embed_all, normalise_text, parse_vector  # noqa: E402
 from app.core.config import settings  # noqa: E402
 
 structlog.configure(
@@ -140,19 +138,6 @@ class Stats:
             questions_bound=self.questions_bound,
             needs_review=len(self.review_items),
         )
-
-
-def normalise_text(value: str) -> str:
-    """Fold an objective to a comparison key: casing, accents, punctuation, spacing.
-
-    Used for the exact-text de-duplication stage, which catches the common case of
-    the same objective being restated verbatim at a different grade.
-    """
-    decomposed = unicodedata.normalize("NFKD", value)
-    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
-    lowered = stripped.lower()
-    without_punct = re.sub(r"[^a-z0-9\s]", " ", lowered)
-    return re.sub(r"\s+", " ", without_punct).strip()
 
 
 def build_canonical_code(subject_code: str, objective_text: str, taken: set[str]) -> str:
