@@ -25,7 +25,9 @@ interface AssessmentWizardState {
   curriculumId: string | null;
   assessmentType: AssessmentType | null;
   topicIds: string[];
-  questionCount: number;
+  /** Questions sampled PER SELECTED TOPIC — matches the API's questions_per_topic.
+   *  Total question count is this multiplied by the number of selected topics. */
+  questionsPerTopic: number;
   difficultyMin: number;
   difficultyMax: number;
   deadline: string | null;
@@ -42,7 +44,7 @@ interface AssessmentWizardState {
   ) => void;
   setAssessmentType: (type: AssessmentType) => void;
   setTopicIds: (ids: string[]) => void;
-  setQuestionCount: (n: number) => void;
+  setQuestionsPerTopic: (n: number) => void;
   setDifficulty: (min: number, max: number) => void;
   setDeadline: (date: string | null) => void;
   setDraftAssessment: (id: string, questions: PreviewQuestion[]) => void;
@@ -58,7 +60,7 @@ const initialState = {
   curriculumId: null,
   assessmentType: null,
   topicIds: [],
-  questionCount: 10,
+  questionsPerTopic: 5,
   difficultyMin: 1.0,
   difficultyMax: 5.0,
   deadline: null,
@@ -78,7 +80,7 @@ export const useAssessmentWizard = create<AssessmentWizardState>((set) => ({
 
   setTopicIds: (ids) => set({ topicIds: ids }),
 
-  setQuestionCount: (n) => set({ questionCount: n }),
+  setQuestionsPerTopic: (n) => set({ questionsPerTopic: n }),
 
   setDifficulty: (min, max) => set({ difficultyMin: min, difficultyMax: max }),
 

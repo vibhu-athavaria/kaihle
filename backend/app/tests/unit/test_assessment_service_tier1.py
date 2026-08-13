@@ -16,6 +16,7 @@ from app.schemas.assessments import DesignTier1DiagnosticRequest
 from app.services.assessment_service import (
     AssessmentService,
     TeacherNotClassOwnerError,
+    TopicGradeOutOfRangeError,
 )
 
 
@@ -302,8 +303,11 @@ async def test_design_tier1_when_previous_grade_topic_included_then_accepted() -
 
 
 @pytest.mark.asyncio
-async def test_design_tier1_when_topic_from_wrong_grade_then_raises_value_error() -> None:
-    """Topics from grades other than current or current-1 must raise ValueError."""
+async def test_design_tier1_when_topic_from_wrong_grade_then_raises_topic_grade_out_of_range() -> None:
+    """Topics outside {current, current-1} raise TopicGradeOutOfRangeError, which routes map to 422.
+
+    The topic exists — the selection is invalid — so this must not be a 404.
+    """
     db = _make_db()
     school_id = uuid.uuid4()
     teacher_id = uuid.uuid4()
@@ -327,13 +331,16 @@ async def test_design_tier1_when_topic_from_wrong_grade_then_raises_value_error(
     service = AssessmentService(db)
     body = DesignTier1DiagnosticRequest(topic_ids=[wrong_grade_topic_id])
 
-    with pytest.raises(ValueError, match=str(wrong_grade_topic_id)):
+    with pytest.raises(TopicGradeOutOfRangeError, match=str(wrong_grade_topic_id)) as exc_info:
         await service.design_tier1_diagnostic(
             class_id=fake_class.id,
             school_id=school_id,
             teacher_id=teacher_id,
             body=body,
         )
+
+    assert exc_info.value.topic_grade_level == 6
+    assert exc_info.value.class_grade_level == 8
 
 
 @pytest.mark.asyncio

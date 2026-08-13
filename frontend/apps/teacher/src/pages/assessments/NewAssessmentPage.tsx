@@ -19,19 +19,16 @@ type StepNumber = (typeof STEPS)[number]["number"];
 function StepIndicator({
   steps,
   currentStep,
-  skipsStep2,
 }: {
   steps: typeof STEPS;
   currentStep: StepNumber;
-  skipsStep2: boolean;
 }) {
   return (
     <nav aria-label="Assessment creation steps" className="mb-8">
       <ol className="flex items-center gap-0">
         {steps.map((step, idx) => {
-          const isSkipped = skipsStep2 && step.number === 2;
           const isActive = step.number === currentStep;
-          const isCompleted = step.number < currentStep && !isSkipped;
+          const isCompleted = step.number < currentStep;
 
           return (
             <li key={step.number} className="flex items-center flex-1">
@@ -39,9 +36,7 @@ function StepIndicator({
                 <div
                   className={[
                     "h-px flex-1 mx-2",
-                    isCompleted || (isSkipped && step.number < currentStep)
-                      ? "bg-brand-gold"
-                      : "bg-brand-border",
+                    isCompleted ? "bg-brand-gold" : "bg-brand-border",
                   ].join(" ")}
                   aria-hidden="true"
                 />
@@ -54,9 +49,7 @@ function StepIndicator({
                       ? "bg-brand-gold text-white"
                       : isCompleted
                         ? "bg-brand-gold-light text-brand-gold-dark border border-brand-gold-mid"
-                        : isSkipped
-                          ? "bg-brand-border-soft text-brand-muted border border-brand-border"
-                          : "bg-white text-brand-muted border border-brand-border",
+                        : "bg-white text-brand-muted border border-brand-border",
                   ].join(" ")}
                   aria-current={isActive ? "step" : undefined}
                 >
@@ -67,9 +60,7 @@ function StepIndicator({
                     "mt-1 text-[10px] font-sans hidden sm:block",
                     isActive
                       ? "text-brand-gold-dark font-bold"
-                      : isSkipped
-                        ? "text-brand-muted line-through"
-                        : "text-brand-muted",
+                      : "text-brand-muted",
                   ].join(" ")}
                 >
                   {step.label}
@@ -99,7 +90,7 @@ function renderStep(step: StepNumber) {
 }
 
 export function NewAssessmentPage() {
-  const { currentStep, assessmentType, reset } = useAssessmentWizard();
+  const { currentStep, reset } = useAssessmentWizard();
 
   // Reset wizard on unmount so stale state doesn't persist
   useEffect(() => {
@@ -108,9 +99,6 @@ export function NewAssessmentPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const skipsStep2 =
-    assessmentType === "DIAGNOSTIC" || assessmentType === "FINAL";
 
   const stepTitles: Record<StepNumber, string> = {
     1: "Choose Class & Type",
@@ -127,11 +115,7 @@ export function NewAssessmentPage() {
           New Assessment
         </h1>
 
-        <StepIndicator
-          steps={STEPS}
-          currentStep={currentStep}
-          skipsStep2={skipsStep2}
-        />
+        <StepIndicator steps={STEPS} currentStep={currentStep} />
 
         <div className="bg-white rounded-2xl border border-brand-border p-6 shadow-card">
           <h2 className="font-display font-semibold text-lg text-brand-ink mb-6">

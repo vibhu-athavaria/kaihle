@@ -84,8 +84,19 @@ class AssessmentWithClassResponse(BaseModel):
 
 
 class AssessmentCreateRequest(BaseModel):
+    """Request body for a teacher-created assessment.
+
+    Topics must come from the class's current grade or the previous grade (level - 1);
+    the service validates that window and rejects anything outside it.
+    """
+
     title: str | None = None
-    topic_ids: list[UUID]
+    # At least one topic, matching DesignTier1DiagnosticRequest and
+    # TopicAvailabilityRequest. An empty list used to mean "any topic at the class's
+    # grade", which wrote zero assessment_topic_config rows and silently degraded
+    # attempt attribution to first-match ordering. The wizard now pre-selects topics
+    # for the types that previously skipped selection, so scope is always explicit.
+    topic_ids: list[UUID] = Field(..., min_length=1, description="Curriculum topic IDs to include")
     questions_per_topic: int = Field(2, ge=1, le=20)
     assessment_type: str = "PROGRESS_CHECK"
     minimum_difficulty: int = Field(1, ge=1, le=5)

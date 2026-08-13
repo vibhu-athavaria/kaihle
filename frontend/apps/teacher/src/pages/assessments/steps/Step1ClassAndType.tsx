@@ -155,7 +155,8 @@ export function Step1ClassAndType() {
         </div>
         {(assessmentType === "DIAGNOSTIC" || assessmentType === "FINAL") && (
           <p className="mt-2 text-xs font-sans text-brand-muted italic">
-            Topic selection is not required for this assessment type.
+            Topics will be pre-selected for you on the next step — adjust them
+            if needed.
           </p>
         )}
       </div>

@@ -14,7 +14,7 @@ export function Step4Preview() {
     classId,
     assessmentType,
     topicIds,
-    questionCount,
+    questionsPerTopic,
     difficultyMin,
     difficultyMax,
     deadline,
@@ -50,14 +50,16 @@ export function Step4Preview() {
       setServerError(null);
 
       try {
+        // Field names must match AssessmentCreateRequest exactly. Pydantic ignores
+        // unknown keys, so a misspelt field is silently dropped and the server
+        // quietly falls back to its default rather than erroring.
         const payload: Record<string, unknown> = {
           assessment_type: assessmentType,
-          question_count: questionCount,
-          difficulty_min: difficultyMin,
-          difficulty_max: difficultyMax,
-          topic_ids: topicIds.length > 0 ? topicIds : undefined,
+          questions_per_topic: questionsPerTopic,
+          minimum_difficulty: Math.round(difficultyMin),
+          maximum_difficulty: Math.round(difficultyMax),
+          topic_ids: topicIds,
           deadline: deadline ?? undefined,
-          is_system_generated: false,
         };
 
         const res = await apiClient.post(
@@ -208,6 +210,10 @@ export function Step4Preview() {
   const diffMax =
     difficultyLevels.length > 0 ? Math.max(...difficultyLevels) : difficultyMax;
 
+  // What one student actually answers. The pool the server returns is larger —
+  // adaptive selection draws from it — so this is derived, not pool length.
+  const totalQuestions = questionsPerTopic * topicIds.length;
+
   const totalPages = Math.max(1, Math.ceil(localQuestions.length / PAGE_SIZE));
   const pageQuestions = localQuestions.slice(
     (currentPage - 1) * PAGE_SIZE,
@@ -228,7 +234,7 @@ export function Step4Preview() {
           </div>
           <div className="bg-[#fffbeb] border border-brand-border rounded-xl p-3 text-center">
             <p className="font-sans font-extrabold text-2xl text-brand-gold leading-none">
-              {questionCount}
+              {totalQuestions}
             </p>
             <p className="text-xs font-sans text-brand-muted mt-1">
               per attempt
@@ -260,7 +266,7 @@ export function Step4Preview() {
             <span className="font-bold text-brand-ink">
               This assessment adapts.
             </span>{" "}
-            Each student answers {questionCount} of the {localQuestions.length}{" "}
+            Each student answers {totalQuestions} of the {localQuestions.length}{" "}
             questions in the pool. The first question in each subtopic starts
             mid-difficulty; after that, two correct answers in a row move that
             subtopic up a level and one wrong answer moves it down. Every

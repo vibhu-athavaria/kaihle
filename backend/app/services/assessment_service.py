@@ -104,6 +104,30 @@ class TeacherNotClassOwnerError(Exception):
     """Raised when a teacher tries to create an assessment for a class they do not teach."""
 
 
+class TopicGradeOutOfRangeError(Exception):
+    """Raised when a selected topic sits outside the class's current-or-previous grade.
+
+    Distinct from a missing topic: the topic exists, it is just not permissible for
+    this class. Routes map it to 422 rather than 404, because the resource was found
+    and the request was invalid.
+
+    Args:
+        topic_id: The offending curriculum_topic.
+        topic_grade_level: The grade level that topic belongs to.
+        class_grade_level: The class's own grade level; the allowed window is
+            {class_grade_level, class_grade_level - 1}.
+    """
+
+    def __init__(self, topic_id: uuid.UUID, topic_grade_level: int, class_grade_level: int) -> None:
+        self.topic_id = topic_id
+        self.topic_grade_level = topic_grade_level
+        self.class_grade_level = class_grade_level
+        super().__init__(
+            f"Topic {topic_id} belongs to grade level {topic_grade_level}, which is not the "
+            f"current grade ({class_grade_level}) or previous grade ({class_grade_level - 1})"
+        )
+
+
 # Total questions selected into assessment_selected_questions at class creation.
 # This is the pool from which adaptive question selection draws at attempt time.
 MAX_DIAGNOSTIC_POOL = 60
@@ -334,6 +358,76 @@ class AssessmentService:
         )
         return assessment
 
+    async def _resolve_and_validate_topic_grades(
+        self,
+        class_id: uuid.UUID,
+        class_grade_id: uuid.UUID,
+        topic_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, tuple[int, uuid.UUID]]:
+        """Resolve each curriculum topic's grade and reject any outside the class's window.
+
+        Topics may come from the class's current grade or the previous grade (level - 1).
+        Probing the prior grade is how a diagnostic finds gaps that predate the current
+        year, so it is deliberate rather than a tolerance.
+
+        This is the ONLY grade constraint applied once topic_ids are supplied. Callers
+        must not additionally filter their question query on the class's grade: a
+        curriculum_topic already pins exactly one grade, so combining the two predicates
+        yields an empty set for every prior-grade topic.
+
+        Args:
+            class_id: The class, used only for error messages.
+            class_grade_id: The class's grade, whose level defines the window.
+            topic_ids: curriculum_topics.id values to validate. Empty is allowed and
+                returns an empty map without querying.
+
+        Returns:
+            Map of curriculum_topic_id -> (grade_level, grade_id).
+
+        Raises:
+            ValueError: If the class grade is missing or a topic does not exist.
+            TopicGradeOutOfRangeError: If a topic exists but sits outside the window.
+        """
+        if not topic_ids:
+            return {}
+
+        class_grade_level: int | None = (
+            await self.db.execute(select(Grade.level).where(Grade.id == class_grade_id))
+        ).scalar_one_or_none()
+        if class_grade_level is None:
+            raise ValueError(f"Grade not found for class_id={class_id}")
+        allowed_levels = {class_grade_level, class_grade_level - 1}
+
+        # Bulk query to avoid N+1
+        topic_grade_rows = (
+            await self.db.execute(
+                select(
+                    CurriculumTopic.id.label("curriculum_topic_id"),
+                    Grade.level.label("grade_level"),
+                    Grade.id.label("grade_id"),
+                )
+                .join(Grade, Grade.id == CurriculumTopic.grade_id)
+                .where(CurriculumTopic.id.in_(topic_ids))
+            )
+        ).all()
+
+        topic_grade_map: dict[uuid.UUID, tuple[int, uuid.UUID]] = {}
+        for row in topic_grade_rows:
+            topic_grade_map[row.curriculum_topic_id] = (row.grade_level, row.grade_id)
+
+        for topic_id in topic_ids:
+            if topic_id not in topic_grade_map:
+                raise ValueError(f"Topic {topic_id} not found")
+            grade_level, _ = topic_grade_map[topic_id]
+            if grade_level not in allowed_levels:
+                raise TopicGradeOutOfRangeError(
+                    topic_id=topic_id,
+                    topic_grade_level=grade_level,
+                    class_grade_level=class_grade_level,
+                )
+
+        return topic_grade_map
+
     async def design_tier1_diagnostic(
         self,
         class_id: uuid.UUID,
@@ -384,40 +478,11 @@ class AssessmentService:
             await self.db.delete(existing)
             await self.db.flush()
 
-        # Resolve the class grade level (single query)
-        class_grade_level: int | None = (
-            await self.db.execute(select(Grade.level).where(Grade.id == class_.grade_id))
-        ).scalar_one_or_none()
-        if class_grade_level is None:
-            raise ValueError(f"Grade not found for class_id={class_id}")
-        allowed_levels = {class_grade_level, class_grade_level - 1}
-
-        # Validate topic grades — bulk query to avoid N+1
-        topic_grade_rows = (
-            await self.db.execute(
-                select(
-                    CurriculumTopic.id.label("curriculum_topic_id"),
-                    Grade.level.label("grade_level"),
-                    Grade.id.label("grade_id"),
-                )
-                .join(Grade, Grade.id == CurriculumTopic.grade_id)
-                .where(CurriculumTopic.id.in_(body.topic_ids))
-            )
-        ).all()
-
-        topic_grade_map: dict[uuid.UUID, tuple[int, uuid.UUID]] = {}
-        for row in topic_grade_rows:
-            topic_grade_map[row.curriculum_topic_id] = (row.grade_level, row.grade_id)
-
-        for topic_id in body.topic_ids:
-            if topic_id not in topic_grade_map:
-                raise ValueError(f"Topic {topic_id} not found")
-            grade_level, _ = topic_grade_map[topic_id]
-            if grade_level not in allowed_levels:
-                raise ValueError(
-                    f"Topic {topic_id} belongs to grade level {grade_level}, "
-                    f"which is not the current grade ({class_grade_level}) or previous grade ({class_grade_level - 1})"
-                )
+        topic_grade_map = await self._resolve_and_validate_topic_grades(
+            class_id=class_id,
+            class_grade_id=class_.grade_id,
+            topic_ids=body.topic_ids,
+        )
 
         # Sample questions: body.questions_per_topic per difficulty level per topic
         q = (
@@ -801,24 +866,34 @@ class AssessmentService:
         if class_.teacher_id != teacher_id:
             raise TeacherNotClassOwnerError(f"Teacher {teacher_id} does not own class {class_id}")
 
-        # Step 2 — Build question filter via Subtopic join (QuestionBank has no direct topic FK)
-        total_questions = body.questions_per_topic * max(len(body.topic_ids), 1)
+        # Step 2 — Validate the selected topics sit in the class's grade window.
+        # topic_ids is guaranteed non-empty by the schema (min_length=1).
+        topic_grade_map = await self._resolve_and_validate_topic_grades(
+            class_id=class_id,
+            class_grade_id=class_.grade_id,
+            topic_ids=body.topic_ids,
+        )
+
+        # Step 3 — Build question filter via Subtopic join (QuestionBank has no direct topic FK).
+        # Grade is constrained by the selected topics alone: each curriculum_topic pins
+        # exactly one grade and Step 2 has already checked it is in range. Adding
+        # CurriculumTopic.grade_id == class_.grade_id here would contradict every
+        # prior-grade topic and return zero rows.
+        total_questions = body.questions_per_topic * len(body.topic_ids)
         q = (
             select(QuestionBank.id, Subtopic.curriculum_topic_id, QuestionBank.difficulty_level)
             .join(Subtopic, Subtopic.id == QuestionBank.subtopic_id)
             .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
             .where(
+                CurriculumTopic.id.in_(body.topic_ids),
                 CurriculumTopic.subject_id == class_.subject_id,
-                CurriculumTopic.grade_id == class_.grade_id,
                 QuestionBank.is_active.is_(True),
                 QuestionBank.difficulty_level.between(body.minimum_difficulty, body.maximum_difficulty),
                 QuestionBank.question_type.in_(body.question_types),
             )
         )
-        if body.topic_ids:
-            q = q.where(CurriculumTopic.id.in_(body.topic_ids))
 
-        # Step 3 — Sample a pool distributed across difficulty levels.
+        # Step 4 — Sample a pool distributed across difficulty levels.
         rows = (await self.db.execute(q)).all()
         if len(rows) < total_questions:
             raise InsufficientQuestionsError(
@@ -850,7 +925,7 @@ class AssessmentService:
             rng,
         )
 
-        # Step 4 — Resolve title (auto-generate when not provided)
+        # Step 5 — Resolve title (auto-generate when not provided)
         if body.title:
             title = body.title
         else:
@@ -858,7 +933,7 @@ class AssessmentService:
             subject_name = subject_result.scalar_one_or_none() or "Unknown Subject"
             title = _generate_title(body, class_.name, subject_name)
 
-        # Step 5 — Create Assessment in DRAFT status
+        # Step 6 — Create Assessment in DRAFT status
         assessment = Assessment(
             id=uuid.uuid4(),
             school_id=school_id,
@@ -878,7 +953,7 @@ class AssessmentService:
         self.db.add(assessment)
         await self.db.flush()  # get assessment.id without committing
 
-        # Step 6 — Create bridge rows
+        # Step 7 — Create bridge rows
         bridge_rows = [
             AssessmentSelectedQuestion(
                 assessment_id=assessment.id,
@@ -889,13 +964,16 @@ class AssessmentService:
         ]
         self.db.add_all(bridge_rows)
 
-        # Step 7 — Create assessment_topic_config rows (grade = class grade)
+        # Step 8 — Create assessment_topic_config rows.
+        # Grade comes from the topic itself, not the class: a prior-grade topic must be
+        # recorded at its own grade or the config misreports what the assessment covers.
         for topic_id in body.topic_ids:
+            _, topic_grade_id = topic_grade_map[topic_id]
             self.db.add(
                 AssessmentTopicConfig(
                     assessment_id=assessment.id,
                     curriculum_topic_id=topic_id,
-                    grade_id=class_.grade_id,
+                    grade_id=topic_grade_id,
                 )
             )
 
