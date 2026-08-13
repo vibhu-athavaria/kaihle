@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.similarity import normalise_text
 from app.models.curriculum import (
     Curriculum,
     CurriculumTopic,
@@ -153,9 +154,15 @@ class TestLearningObjectiveCreation:
             )
             assert len(links.scalars().all()) == 1
 
-    async def test_new_tree_when_objective_text_identical_then_shares_one_lo(self, db_session: AsyncSession) -> None:
-        """The same concept taught in two grades must resolve to a single objective —
-        this is the property that makes the bank curriculum-agnostic."""
+    async def test_dedup_when_same_text_different_grades_then_creates_two_objectives(
+        self, db_session: AsyncSession
+    ) -> None:
+        """ADR-003 reversal: identical text at two grades is TWO objectives, not one.
+
+        This test previously asserted the opposite. Merging them makes a question's
+        grade underivable, and a question appropriate for Year 6 may be inappropriate
+        for Year 7 even though both teach the same objective.
+        """
         curriculum, subject, subtopics = await self._scope(
             db_session,
             [("Ordering decimals G6", "Order decimals by size."), ("Ordering decimals G7", "Order decimals by size.")],
@@ -163,6 +170,35 @@ class TestLearningObjectiveCreation:
         )
 
         stats = await self._run_new_tree(db_session, curriculum, subject, [6, 7], _ORTHOGONAL[:2])
+
+        assert stats.created == 2
+        assert stats.linked_by_text == 0
+
+        rows = await db_session.execute(
+            select(SubtopicObjective.learning_objective_id).where(
+                SubtopicObjective.subtopic_id.in_([s.id for s in subtopics])
+            )
+        )
+        objective_ids = {r[0] for r in rows}
+        assert len(objective_ids) == 2
+
+        # Each carries its own grade, and the two differ.
+        grade_rows = await db_session.execute(
+            select(LearningObjective.grade_id).where(LearningObjective.id.in_(objective_ids))
+        )
+        grade_ids = [r[0] for r in grade_rows]
+        assert all(g is not None for g in grade_ids)
+        assert len(set(grade_ids)) == 2
+
+    async def test_dedup_when_same_text_same_grade_then_links_existing(self, db_session: AsyncSession) -> None:
+        """Within one grade, restating the same objective still resolves to one row."""
+        curriculum, subject, subtopics = await self._scope(
+            db_session,
+            [("Ordering decimals A", "Order decimals by size."), ("Ordering decimals B", "Order decimals by size.")],
+            grade_levels=[6, 6],
+        )
+
+        stats = await self._run_new_tree(db_session, curriculum, subject, [6], _ORTHOGONAL[:2])
 
         assert stats.created == 1
         assert stats.linked_by_text == 1
@@ -178,11 +214,13 @@ class TestLearningObjectiveCreation:
         curriculum, subject, _ = await self._scope(
             db_session,
             [("A", "Order decimals by size."), ("B", "Put decimals in order of size.")],
-            grade_levels=[6, 7],
+            # Same grade: cosine comparison is scoped to (topic, grade), so a
+            # cross-grade pair would never be compared at all.
+            grade_levels=[6, 6],
         )
 
         # Identical vectors -> similarity 1.0, above the 0.90 auto-link threshold.
-        stats = await self._run_new_tree(db_session, curriculum, subject, [6, 7], [vec(1.0), vec(1.0)])
+        stats = await self._run_new_tree(db_session, curriculum, subject, [6], [vec(1.0), vec(1.0)])
 
         assert stats.created == 1
         assert stats.linked_by_similarity == 1
@@ -195,11 +233,11 @@ class TestLearningObjectiveCreation:
         curriculum, subject, _ = await self._scope(
             db_session,
             [("A", "Order decimals by size."), ("B", "Compare decimal quantities.")],
-            grade_levels=[6, 7],
+            grade_levels=[6, 6],
         )
 
         # cos ~= 0.857 — inside 0.80-0.89.
-        stats = await self._run_new_tree(db_session, curriculum, subject, [6, 7], [vec(1.0), vec(0.857, 0.515)])
+        stats = await self._run_new_tree(db_session, curriculum, subject, [6], [vec(1.0), vec(0.857, 0.515)])
 
         assert stats.created == 2
         assert stats.linked_by_similarity == 0
@@ -212,10 +250,10 @@ class TestLearningObjectiveCreation:
         curriculum, subject, _ = await self._scope(
             db_session,
             [("A", "Order decimals by size."), ("B", "Name the parts of a plant cell.")],
-            grade_levels=[6, 7],
+            grade_levels=[6, 6],
         )
 
-        stats = await self._run_new_tree(db_session, curriculum, subject, [6, 7], _ORTHOGONAL[:2])
+        stats = await self._run_new_tree(db_session, curriculum, subject, [6], _ORTHOGONAL[:2])
 
         assert stats.created == 2
         assert stats.review_items == []
@@ -310,3 +348,108 @@ class TestLearningObjectiveCreation:
         rows = await db_session.execute(select(LearningObjective.canonical_code))
         codes = [r[0] for r in rows]
         assert len(codes) == len(set(codes))
+
+    async def test_dedup_when_same_text_same_grade_different_curricula_then_links_one_objective(
+        self, db_session: AsyncSession
+    ) -> None:
+        """Cross-curriculum reuse must survive the ADR-003 re-key. Regression guard.
+
+        This is why the key is (topic_id, grade_id) and not curriculum_topic_id.
+        curriculum_topic_id is the 4-tuple (curriculum, subject, grade, topic), so
+        keying on it would also separate Cambridge Y7 from MYP Y7 — destroying the
+        reuse this test protects. `grades` is a global, curriculum-agnostic table, so
+        grade_id adds grade precision without importing a curriculum dependency.
+        """
+        subject = Subject(id=uuid.uuid4(), name=f"S {uuid.uuid4().hex[:8]}", code=f"X{uuid.uuid4().hex[:5]}")
+        topic = Topic(id=uuid.uuid4(), name="Number", canonical_code=f"T{uuid.uuid4().hex[:6]}")
+        grade = Grade(id=uuid.uuid4(), name="Grade 7", level=7)
+        db_session.add_all([subject, topic, grade])
+        await db_session.flush()
+
+        objective_text = "Order decimals by size."
+        curricula: list[Curriculum] = []
+        for _ in range(2):
+            curriculum = Curriculum(
+                id=uuid.uuid4(), name=f"C {uuid.uuid4().hex[:8]}", code=f"cur{uuid.uuid4().hex[:6]}"
+            )
+            db_session.add(curriculum)
+            await db_session.flush()
+            ct = CurriculumTopic(
+                id=uuid.uuid4(),
+                curriculum_id=curriculum.id,
+                subject_id=subject.id,
+                grade_id=grade.id,
+                topic_id=topic.id,
+                sequence_order=1,
+            )
+            db_session.add(ct)
+            await db_session.flush()
+            db_session.add(
+                Subtopic(
+                    id=uuid.uuid4(),
+                    curriculum_topic_id=ct.id,
+                    name=f"Decimals {curriculum.code}",
+                    canonical_code=f"ST-{uuid.uuid4().hex[:8]}",
+                    learning_objective=objective_text,
+                    is_active=True,
+                )
+            )
+            curricula.append(curriculum)
+        await db_session.commit()
+
+        # Same topic + same grade, two curricula: the first run creates the objective,
+        # the second must link to it rather than duplicate.
+        first = await self._run_new_tree(db_session, curricula[0], subject, [7], [vec(1.0)])
+        second = await self._run_new_tree(db_session, curricula[1], subject, [7], [vec(1.0)])
+
+        assert first.created == 1
+        assert second.created == 0
+        assert second.linked_by_text == 1
+
+        rows = await db_session.execute(select(LearningObjective).where(LearningObjective.topic_id == topic.id))
+        objectives = list(rows.scalars().all())
+        assert len(objectives) == 1
+        assert objectives[0].grade_id == grade.id
+
+    async def test_new_objective_when_created_then_grade_id_and_normalised_objective_are_set(
+        self, db_session: AsyncSession
+    ) -> None:
+        """T4 will make both NOT NULL, so every writer must populate them now."""
+        curriculum, subject, _ = await self._scope(
+            db_session,
+            [("Decimals", "Order  DECIMALS, by size!")],
+            grade_levels=[7],
+        )
+
+        await self._run_new_tree(db_session, curriculum, subject, [7], [vec(1.0)])
+
+        objective = (
+            await db_session.execute(select(LearningObjective).where(LearningObjective.name == "Decimals"))
+        ).scalar_one()
+        assert objective.grade_id is not None
+        assert objective.normalised_objective == normalise_text("Order  DECIMALS, by size!")
+        assert objective.normalised_objective == "order decimals by size"
+
+    async def test_legacy_backfill_when_run_then_sets_grade_id_and_normalised_objective(
+        self, db_session: AsyncSession
+    ) -> None:
+        """legacy-backfill mirrors a subtopic 1:1, so grade is its placement — no ambiguity."""
+        _, _, subtopics = await self._scope(
+            db_session,
+            [("Cells", "Name the parts of a plant cell.")],
+            grade_levels=[8],
+        )
+        stats = Stats()
+
+        await run_legacy_backfill(db_session, stats, dry_run=False)
+        await db_session.commit()
+
+        link_row = await db_session.execute(
+            select(SubtopicObjective.learning_objective_id).where(SubtopicObjective.subtopic_id == subtopics[0].id)
+        )
+        objective = (
+            await db_session.execute(select(LearningObjective).where(LearningObjective.id == link_row.scalar_one()))
+        ).scalar_one()
+
+        assert objective.grade_id is not None
+        assert objective.normalised_objective == "name the parts of a plant cell"

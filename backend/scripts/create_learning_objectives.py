@@ -9,27 +9,42 @@ Two modes, both idempotent:
 
 --mode new-tree
     For freshly seeded subtopics in a given scope. Runs staged de-duplication so the
-    same concept appearing at several placements (e.g. "Ordering decimals" in both
-    grade 6 and grade 7) resolves to ONE objective rather than two:
-      1. exact normalised objective text within the topic -> link
-      2. cosine similarity within the same topic:
+    same concept restated at several placements WITHIN ONE GRADE resolves to ONE
+    objective rather than several:
+      1. exact normalised objective text within the (topic, grade) -> link
+      2. cosine similarity within the same (topic, grade):
            >= 0.90   -> link automatically
            0.80-0.89 -> create a new LO and record the pair for human review
            <  0.80   -> create a new LO
     Both thresholds are calibrated to this embedding model (see the constants below)
     and overridable with --auto-link-threshold / --review-threshold.
 
+    De-duplication is keyed on (topic_id, grade_id) per ADR-003. The same concept at
+    two grades is deliberately TWO objectives: "Ordering decimals" in grade 6 and in
+    grade 7 must not merge, because a question appropriate for one may be
+    inappropriate for the other, and merging them makes a question's grade
+    underivable. This is a reversal — earlier versions merged across grades on
+    purpose. No similarity threshold can substitute: the two texts are near-identical
+    precisely BECAUSE the concept is the same; only the expected demand differs, and
+    embeddings cannot see that.
+
+    Grade does NOT enter the key via curriculum_topic_id, which would also separate
+    Cambridge Y7 from MYP Y7 and destroy cross-curriculum reuse. grades is a global,
+    curriculum-agnostic table, so (topic_id, grade_id) adds grade precision without
+    importing a curriculum dependency.
+
     (Curriculum data supplies subtopic codes, not objective codes, so objective
     canonical codes are generated here and de-duplication never keys on them.)
-    Semantic comparison is scoped to a single topic. Across topics, near-identical
-    wording routinely means genuinely different concepts.
+    Semantic comparison is scoped to a single topic and grade. Across topics,
+    near-identical wording routinely means genuinely different concepts.
 
 --mode legacy-backfill
     For scopes that were NOT remapped (ENG grades 6-8, all of grades 9-12). Purely
     deterministic: mirror each existing subtopic 1:1 into an objective using its own
     learning_objective text, link it, then set question_bank.learning_objective_id
     through the still-valid subtopic_id. No similarity, no review, no embeddings
-    required for correctness.
+    required for correctness. grade_id comes straight from the subtopic's placement,
+    so this mode never produces a grade-spanning objective.
 
     This mode is what lets Phase 7 use a SINGLE selection query for every scope. Skip
     it and the service layer needs an old-path/new-path branch forever.
@@ -199,7 +214,8 @@ async def fetch_subtopics(
         text(
             f"""
             SELECT sub.id, sub.name, sub.learning_objective, sub.bloom_taxonomy_level,
-                   ct.topic_id, s.code AS subject_code, g.level AS grade_level
+                   ct.topic_id, s.code AS subject_code,
+                   g.level AS grade_level, g.id AS grade_id
             FROM subtopics sub
             JOIN curriculum_topics ct ON ct.id = sub.curriculum_topic_id
             {_SCOPE_FILTER}
@@ -212,30 +228,38 @@ async def fetch_subtopics(
     return [dict(row) for row in result.mappings()]
 
 
-async def load_existing_objectives(db: AsyncSession, topic_ids: set[uuid.UUID]) -> dict[uuid.UUID, list[dict]]:
-    """Load objectives for the given topics, indexed by topic.
+async def load_existing_objectives(
+    db: AsyncSession, topic_ids: set[uuid.UUID]
+) -> dict[tuple[uuid.UUID, uuid.UUID | None], list[dict]]:
+    """Load objectives for the given topics, indexed by (topic_id, grade_id).
 
     Re-runs must link to what already exists rather than duplicating it, so this
     covers objectives created by an earlier invocation as well as by this one.
+
+    Keyed on grade too, per ADR-003: the same concept at two grades is two
+    objectives, so a Year 7 subtopic must not match a Year 6 objective. Objectives
+    still awaiting a grade (grade_id NULL, pending the T3 split) get their own
+    bucket and therefore never match a graded subtopic — which is correct, since
+    their grade is exactly what is unknown.
     """
     if not topic_ids:
         return {}
     result = await db.execute(
         text(
             """
-            SELECT id, canonical_code, learning_objective, topic_id, embedding
+            SELECT id, canonical_code, learning_objective, topic_id, grade_id, embedding
             FROM learning_objectives
             WHERE topic_id = ANY(:topic_ids) AND is_active = TRUE
             """
         ),
         {"topic_ids": list(topic_ids)},
     )
-    by_topic: dict[uuid.UUID, list[dict]] = {}
+    by_topic_grade: dict[tuple[uuid.UUID, uuid.UUID | None], list[dict]] = {}
     for row in result.mappings():
         item = dict(row)
         item["embedding"] = parse_vector(item.get("embedding"))
-        by_topic.setdefault(item["topic_id"], []).append(item)
-    return by_topic
+        by_topic_grade.setdefault((item["topic_id"], item["grade_id"]), []).append(item)
+    return by_topic_grade
 
 
 async def run_new_tree(
@@ -262,27 +286,33 @@ async def run_new_tree(
         row[0]
         for row in await db.execute(text("SELECT canonical_code FROM learning_objectives"))  # noqa: RUF015
     }
-    by_topic = await load_existing_objectives(db, {s["topic_id"] for s in subtopics})
-    by_norm_text: dict[tuple[uuid.UUID, str], uuid.UUID] = {
-        (lo["topic_id"], normalise_text(lo["learning_objective"])): lo["id"] for los in by_topic.values() for lo in los
+    by_topic_grade = await load_existing_objectives(db, {s["topic_id"] for s in subtopics})
+    by_norm_text: dict[tuple[uuid.UUID, uuid.UUID | None, str], uuid.UUID] = {
+        (lo["topic_id"], lo["grade_id"], normalise_text(lo["learning_objective"])): lo["id"]
+        for los in by_topic_grade.values()
+        for lo in los
     }
 
     for subtopic, vector in zip(subtopics, vectors, strict=True):
         topic_id = subtopic["topic_id"]
+        grade_id = subtopic["grade_id"]
         objective_text = subtopic["learning_objective"]
         norm = normalise_text(objective_text)
 
-        # Stage 2: exact normalised text within the same topic.
-        matched_id = by_norm_text.get((topic_id, norm))
+        # Stage 2: exact normalised text within the same topic AND grade.
+        matched_id = by_norm_text.get((topic_id, grade_id, norm))
         if matched_id is not None:
             stats.linked_by_text += 1
             await link(db, subtopic["id"], matched_id, dry_run)
             continue
 
-        # Stage 3: semantic, scoped to the topic.
+        # Stage 3: semantic, scoped to the topic and grade. Narrowing the candidate
+        # pool this way is the point of ADR-003 — Y6 and Y7 "Ordering decimals" have
+        # near-identical text because the concept IS the same, so no similarity
+        # threshold could ever separate them. Only the grade key can.
         best_id: uuid.UUID | None = None
         best_score = 0.0
-        for candidate in by_topic.get(topic_id, []):
+        for candidate in by_topic_grade.get((topic_id, grade_id), []):
             if candidate["embedding"] is None:
                 continue
             score = cosine_similarity(vector, candidate["embedding"])
@@ -301,9 +331,10 @@ async def run_new_tree(
                 text(
                     """
                     INSERT INTO learning_objectives
-                        (id, canonical_code, name, learning_objective, topic_id,
-                         bloom_taxonomy_level, embedding, is_active, created_at)
-                    VALUES (:id, :code, :name, :lo, :topic_id, :bloom, :embedding, TRUE, now())
+                        (id, canonical_code, name, learning_objective, topic_id, grade_id,
+                         normalised_objective, bloom_taxonomy_level, embedding, is_active, created_at)
+                    VALUES (:id, :code, :name, :lo, :topic_id, :grade_id, :norm,
+                            :bloom, :embedding, TRUE, now())
                     """
                 ),
                 {
@@ -312,6 +343,8 @@ async def run_new_tree(
                     "name": subtopic["name"],
                     "lo": objective_text,
                     "topic_id": topic_id,
+                    "grade_id": grade_id,
+                    "norm": norm,
                     "bloom": subtopic["bloom_taxonomy_level"],
                     "embedding": str(vector),
                 },
@@ -319,11 +352,18 @@ async def run_new_tree(
         stats.created += 1
         await link(db, subtopic["id"], new_id, dry_run)
 
-        # Make it visible to later subtopics in this same run.
-        by_topic.setdefault(topic_id, []).append(
-            {"id": new_id, "learning_objective": objective_text, "topic_id": topic_id, "embedding": vector}
+        # Make it visible to later subtopics in this same run — same (topic, grade)
+        # bucket, so a second Year 7 subtopic links to it but a Year 6 one does not.
+        by_topic_grade.setdefault((topic_id, grade_id), []).append(
+            {
+                "id": new_id,
+                "learning_objective": objective_text,
+                "topic_id": topic_id,
+                "grade_id": grade_id,
+                "embedding": vector,
+            }
         )
-        by_norm_text[(topic_id, norm)] = new_id
+        by_norm_text[(topic_id, grade_id, norm)] = new_id
 
         # A near-miss is not an error — it is a judgement call, so record it for a
         # human instead of guessing in either direction.
@@ -362,9 +402,10 @@ async def run_legacy_backfill(db: AsyncSession, stats: Stats, dry_run: bool) -> 
                 text(
                     """
                     INSERT INTO learning_objectives
-                        (id, canonical_code, name, learning_objective, topic_id,
-                         bloom_taxonomy_level, embedding, is_active, created_at)
-                    VALUES (:id, :code, :name, :lo, :topic_id, :bloom, NULL, TRUE, now())
+                        (id, canonical_code, name, learning_objective, topic_id, grade_id,
+                         normalised_objective, bloom_taxonomy_level, embedding, is_active, created_at)
+                    VALUES (:id, :code, :name, :lo, :topic_id, :grade_id, :norm,
+                            :bloom, NULL, TRUE, now())
                     """
                 ),
                 {
@@ -373,6 +414,10 @@ async def run_legacy_backfill(db: AsyncSession, stats: Stats, dry_run: bool) -> 
                     "name": subtopic["name"],
                     "lo": subtopic["learning_objective"],
                     "topic_id": subtopic["topic_id"],
+                    # 1:1 mirror of a subtopic, so grade is simply the subtopic's own
+                    # placement — no ambiguity to resolve here.
+                    "grade_id": subtopic["grade_id"],
+                    "norm": normalise_text(subtopic["learning_objective"]),
                     "bloom": subtopic["bloom_taxonomy_level"],
                 },
             )
