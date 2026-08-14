@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class QuestionOption(BaseModel):
@@ -83,6 +83,23 @@ class AssessmentWithClassResponse(BaseModel):
     deadline: datetime | None
 
 
+def _dedupe_topic_ids(value: list[UUID]) -> list[UUID]:
+    """Collapse repeated topic ids, preserving the caller's order.
+
+    assessment_topic_config has composite PK (assessment_id, curriculum_topic_id), so a
+    duplicated topic raises IntegrityError — a 500, from a request whose intent is
+    unambiguous. It also inflates questions_per_topic * len(topic_ids), demanding more
+    questions than the selection can supply. Sending a topic twice plainly means once.
+    """
+    seen: set[UUID] = set()
+    unique: list[UUID] = []
+    for topic_id in value:
+        if topic_id not in seen:
+            seen.add(topic_id)
+            unique.append(topic_id)
+    return unique
+
+
 class AssessmentCreateRequest(BaseModel):
     """Request body for a teacher-created assessment.
 
@@ -105,6 +122,8 @@ class AssessmentCreateRequest(BaseModel):
     time_limit_minutes: int | None = Field(None, ge=1, le=300)
     deadline: datetime | None = None
 
+    _dedupe = field_validator("topic_ids")(_dedupe_topic_ids)
+
 
 class DesignTier1DiagnosticRequest(BaseModel):
     """Request body for teacher-designed Tier 1 diagnostic.
@@ -120,6 +139,8 @@ class DesignTier1DiagnosticRequest(BaseModel):
     minimum_difficulty: int = Field(1, ge=1, le=5)
     maximum_difficulty: int = Field(5, ge=1, le=5)
     deadline: datetime | None = None
+
+    _dedupe = field_validator("topic_ids")(_dedupe_topic_ids)
 
 
 class TopicAvailability(BaseModel):

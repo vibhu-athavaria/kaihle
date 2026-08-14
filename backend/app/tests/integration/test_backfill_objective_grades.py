@@ -201,6 +201,42 @@ async def test_backfill_when_objective_has_no_placement_then_left_null(db_sessio
 
 
 @pytest.mark.asyncio
+async def test_describe_unresolved_when_objective_unplaced_then_still_reported(
+    db_session: AsyncSession,
+) -> None:
+    """count_unresolved and describe_unresolved must cover the same set.
+
+    Two things leave grade_id NULL: grade-spanning objectives (what T3 splits) and
+    objectives no subtopic links at all, e.g. after a wipe cascaded their bridge rows.
+    An inner join reported only the first, so the count guard could fail on a number
+    the report could not account for — "found 14, expected 12" with twelve rows listed.
+    """
+    topic = Topic(id=uuid.uuid4(), name="Orphan", canonical_code=f"T{uuid.uuid4().hex[:6]}")
+    db_session.add(topic)
+    await db_session.flush()
+    orphan_code = f"LO-{uuid.uuid4().hex[:10]}"
+    db_session.add(
+        LearningObjective(
+            id=uuid.uuid4(),
+            canonical_code=orphan_code,
+            name="Unplaced",
+            learning_objective="Never taught anywhere",
+            topic_id=topic.id,
+            is_active=True,
+        )
+    )
+    await db_session.flush()
+
+    await backfill_grade_ids(db_session)
+
+    described = dict(await describe_unresolved(db_session))
+    assert orphan_code in described
+    assert described[orphan_code] == "none"
+    # The two diagnostics agree, so the count guard can always explain its number.
+    assert await count_unresolved(db_session) == len(described)
+
+
+@pytest.mark.asyncio
 async def test_canonical_code_accepts_grade_suffix_beyond_50_chars(db_session: AsyncSession) -> None:
     """T3 suffixes codes with -G{level}; the column was widened to 64 to allow it."""
     topic = Topic(id=uuid.uuid4(), name="Number", canonical_code=f"T{uuid.uuid4().hex[:6]}")

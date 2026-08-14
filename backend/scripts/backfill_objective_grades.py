@@ -115,17 +115,32 @@ async def count_unresolved(db: AsyncSession) -> int:
 
 
 async def describe_unresolved(db: AsyncSession) -> list[tuple[str, str]]:
-    """(canonical_code, comma-separated grade levels) for each unresolved objective."""
+    """(canonical_code, grade levels) for EVERY objective left without a grade.
+
+    LEFT JOIN, not JOIN. Two different things leave grade_id NULL:
+
+      - grade-spanning objectives, reachable from several grades (what T3 splits), and
+      - objectives reachable from NO subtopic at all, e.g. after a curriculum wipe
+        cascaded their bridge rows away.
+
+    An inner join reports only the first kind, so the count guard in main() could fail
+    on a number this function could not account for — leaving an operator staring at
+    "found 14, expected 12" with twelve rows listed and no hint about the other two.
+    Unplaced objectives are reported with levels "none".
+    """
     rows = (
         await db.execute(
             text("""
                 SELECT lo.canonical_code,
-                       string_agg(DISTINCT g.level::text, ',' ORDER BY g.level::text) AS levels
+                       coalesce(
+                           string_agg(DISTINCT g.level::text, ',' ORDER BY g.level::text),
+                           'none'
+                       ) AS levels
                 FROM learning_objectives lo
-                JOIN subtopic_objectives so ON so.learning_objective_id = lo.id
-                JOIN subtopics st ON st.id = so.subtopic_id
-                JOIN curriculum_topics ct ON ct.id = st.curriculum_topic_id
-                JOIN grades g ON g.id = ct.grade_id
+                LEFT JOIN subtopic_objectives so ON so.learning_objective_id = lo.id
+                LEFT JOIN subtopics st ON st.id = so.subtopic_id
+                LEFT JOIN curriculum_topics ct ON ct.id = st.curriculum_topic_id
+                LEFT JOIN grades g ON g.id = ct.grade_id
                 WHERE lo.grade_id IS NULL
                 GROUP BY lo.canonical_code
                 ORDER BY lo.canonical_code
@@ -155,7 +170,10 @@ async def main(dry_run: bool, expected_null: int) -> int:
                 dry_run=dry_run,
             )
             for code, levels in spanning:
-                log.info("spanning_objective", canonical_code=code, grades=levels)
+                if levels == "none":
+                    log.warning("unplaced_objective", canonical_code=code, hint="no subtopic links it")
+                else:
+                    log.info("spanning_objective", canonical_code=code, grades=levels)
 
             if unresolved != expected_null:
                 # Not a warning. T3's split is planned against a specific set of
@@ -164,6 +182,9 @@ async def main(dry_run: bool, expected_null: int) -> int:
                     "unresolved_count_mismatch",
                     found=unresolved,
                     expected=expected_null,
+                    described=len(spanning),
+                    spanning=sum(1 for _, levels in spanning if levels != "none"),
+                    unplaced=sum(1 for _, levels in spanning if levels == "none"),
                     hint="data has moved since ADR-003 was measured — re-verify T3 before running it",
                 )
                 await db.rollback()

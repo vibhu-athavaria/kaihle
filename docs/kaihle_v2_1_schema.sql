@@ -588,7 +588,11 @@ COMMENT ON TABLE question_bank IS
 
 CREATE INDEX idx_qb_subtopic   ON question_bank (subtopic_id);
 CREATE INDEX ix_question_bank_learning_objective_id ON question_bank (learning_objective_id);
-CREATE INDEX ix_question_bank_replaces_question_id   ON question_bank (replaces_question_id);
+-- Partial: only source='llm-correction' rows populate replaces_question_id, so the
+-- vast majority are NULL and indexing them wastes space for no lookup benefit.
+-- Created CONCURRENTLY in migration 3aa9ab53e687.
+CREATE INDEX ix_question_bank_replaces_question_id   ON question_bank (replaces_question_id)
+    WHERE replaces_question_id IS NOT NULL;
 CREATE INDEX idx_qb_type       ON question_bank (question_type);
 CREATE INDEX idx_qb_difficulty ON question_bank (difficulty_level);
 CREATE INDEX idx_qb_active     ON question_bank (is_active);

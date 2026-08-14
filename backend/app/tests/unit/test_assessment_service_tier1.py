@@ -19,6 +19,11 @@ from app.services.assessment_service import (
     TopicGradeOutOfRangeError,
 )
 
+# The grade-window validator also checks subject, so every class and topic mock in
+# this file must agree on one subject. Foreign-subject rejection is covered in
+# test_assessment_service.py rather than by diverging these fixtures.
+_TEST_SUBJECT_ID = uuid.UUID("11111111-2222-3333-4444-555555555555")
+
 
 def _make_db() -> AsyncMock:
     db = AsyncMock()
@@ -35,6 +40,7 @@ def _make_class(school_id: uuid.UUID, teacher_id: uuid.UUID) -> MagicMock:
     cls.school_id = school_id
     cls.teacher_id = teacher_id
     cls.name = "Math 7A"
+    cls.subject_id = _TEST_SUBJECT_ID
     return cls
 
 
@@ -114,7 +120,14 @@ def _make_grade_and_topic_mocks(topic_id: uuid.UUID, grade_level: int = 8) -> tu
     """Return (result_class_grade, result_topic_grades) mocks for the two new queries."""
     result_class_grade = MagicMock()
     result_class_grade.scalar_one_or_none.return_value = grade_level
-    topic_rows = [SimpleNamespace(curriculum_topic_id=topic_id, grade_level=grade_level, grade_id=uuid.uuid4())]
+    topic_rows = [
+        SimpleNamespace(
+            curriculum_topic_id=topic_id,
+            grade_level=grade_level,
+            grade_id=uuid.uuid4(),
+            subject_id=_TEST_SUBJECT_ID,
+        )
+    ]
     result_topic_grades = MagicMock()
     result_topic_grades.all.return_value = topic_rows
     return result_class_grade, result_topic_grades
@@ -243,6 +256,7 @@ def _make_class_with_grade(
     cls.teacher_id = teacher_id
     cls.name = f"Math Grade {grade_level}"
     cls.grade_id = uuid.uuid4()
+    cls.subject_id = _TEST_SUBJECT_ID
     return cls
 
 
@@ -252,6 +266,7 @@ def _make_topic_row(topic_id: uuid.UUID, grade_level: int) -> SimpleNamespace:
         curriculum_topic_id=topic_id,
         grade_level=grade_level,
         grade_id=uuid.uuid4(),
+        subject_id=_TEST_SUBJECT_ID,
     )
 
 
@@ -274,8 +289,12 @@ async def test_design_tier1_when_previous_grade_topic_included_then_accepted() -
     result_class_grade = MagicMock()
     result_class_grade.scalar_one_or_none.return_value = 8
     topic_rows = [
-        SimpleNamespace(curriculum_topic_id=current_topic_id, grade_level=8, grade_id=uuid.uuid4()),
-        SimpleNamespace(curriculum_topic_id=previous_topic_id, grade_level=7, grade_id=uuid.uuid4()),
+        SimpleNamespace(
+            curriculum_topic_id=current_topic_id, grade_level=8, grade_id=uuid.uuid4(), subject_id=_TEST_SUBJECT_ID
+        ),
+        SimpleNamespace(
+            curriculum_topic_id=previous_topic_id, grade_level=7, grade_id=uuid.uuid4(), subject_id=_TEST_SUBJECT_ID
+        ),
     ]
     result_topics = MagicMock()
     result_topics.all.return_value = topic_rows
@@ -321,7 +340,9 @@ async def test_design_tier1_when_topic_from_wrong_grade_then_raises_topic_grade_
     result_class_grade = MagicMock()
     result_class_grade.scalar_one_or_none.return_value = 8
     topic_rows = [
-        SimpleNamespace(curriculum_topic_id=wrong_grade_topic_id, grade_level=6, grade_id=uuid.uuid4()),
+        SimpleNamespace(
+            curriculum_topic_id=wrong_grade_topic_id, grade_level=6, grade_id=uuid.uuid4(), subject_id=_TEST_SUBJECT_ID
+        ),
     ]
     result_topics = MagicMock()
     result_topics.all.return_value = topic_rows
@@ -360,7 +381,8 @@ async def test_design_tier1_when_bank_has_2_per_difficulty_then_selects_2_per_di
     result_class_grade = MagicMock()
     result_class_grade.scalar_one_or_none.return_value = 8
     topic_grade_rows = [
-        SimpleNamespace(curriculum_topic_id=tid, grade_level=8, grade_id=uuid.uuid4()) for tid in topic_ids
+        SimpleNamespace(curriculum_topic_id=tid, grade_level=8, grade_id=uuid.uuid4(), subject_id=_TEST_SUBJECT_ID)
+        for tid in topic_ids
     ]
     result_topics = MagicMock()
     result_topics.all.return_value = topic_grade_rows
@@ -416,7 +438,7 @@ async def test_design_tier1_when_bank_short_on_difficulty_then_uses_available() 
     result_class_grade.scalar_one_or_none.return_value = 8
     result_topics = MagicMock()
     result_topics.all.return_value = [
-        SimpleNamespace(curriculum_topic_id=topic_id, grade_level=8, grade_id=uuid.uuid4())
+        SimpleNamespace(curriculum_topic_id=topic_id, grade_level=8, grade_id=uuid.uuid4(), subject_id=_TEST_SUBJECT_ID)
     ]
     # Difficulty 3 has only 1 question; all others have 2
     question_rows = []

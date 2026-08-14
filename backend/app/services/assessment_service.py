@@ -362,13 +362,21 @@ class AssessmentService:
         self,
         class_id: uuid.UUID,
         class_grade_id: uuid.UUID,
+        class_subject_id: uuid.UUID,
         topic_ids: list[uuid.UUID],
     ) -> dict[uuid.UUID, tuple[int, uuid.UUID]]:
-        """Resolve each curriculum topic's grade and reject any outside the class's window.
+        """Resolve each topic's grade and reject any outside the class's grade or subject.
 
         Topics may come from the class's current grade or the previous grade (level - 1).
         Probing the prior grade is how a diagnostic finds gaps that predate the current
         year, so it is deliberate rather than a tolerance.
+
+        Subject is checked here rather than left to the question query. A foreign-subject
+        topic otherwise slips through: create_assessment's query filters on subject so it
+        contributes no questions, but Step 8 still writes it an assessment_topic_config
+        row, and attempt attribution trusts that table. design_tier1_diagnostic's query
+        does not filter subject at all, so it would sample the foreign subject's questions
+        outright.
 
         This is the ONLY grade constraint applied once topic_ids are supplied. Callers
         must not additionally filter their question query on the class's grade: a
@@ -378,6 +386,7 @@ class AssessmentService:
         Args:
             class_id: The class, used only for error messages.
             class_grade_id: The class's grade, whose level defines the window.
+            class_subject_id: The class's subject; topics from any other are rejected.
             topic_ids: curriculum_topics.id values to validate. Empty is allowed and
                 returns an empty map without querying.
 
@@ -385,7 +394,8 @@ class AssessmentService:
             Map of curriculum_topic_id -> (grade_level, grade_id).
 
         Raises:
-            ValueError: If the class grade is missing or a topic does not exist.
+            ValueError: If the class grade is missing, a topic does not exist, or a topic
+                belongs to a different subject.
             TopicGradeOutOfRangeError: If a topic exists but sits outside the window.
         """
         if not topic_ids:
@@ -405,6 +415,7 @@ class AssessmentService:
                     CurriculumTopic.id.label("curriculum_topic_id"),
                     Grade.level.label("grade_level"),
                     Grade.id.label("grade_id"),
+                    CurriculumTopic.subject_id.label("subject_id"),
                 )
                 .join(Grade, Grade.id == CurriculumTopic.grade_id)
                 .where(CurriculumTopic.id.in_(topic_ids))
@@ -412,12 +423,16 @@ class AssessmentService:
         ).all()
 
         topic_grade_map: dict[uuid.UUID, tuple[int, uuid.UUID]] = {}
+        topic_subject: dict[uuid.UUID, uuid.UUID] = {}
         for row in topic_grade_rows:
             topic_grade_map[row.curriculum_topic_id] = (row.grade_level, row.grade_id)
+            topic_subject[row.curriculum_topic_id] = row.subject_id
 
         for topic_id in topic_ids:
             if topic_id not in topic_grade_map:
                 raise ValueError(f"Topic {topic_id} not found")
+            if topic_subject[topic_id] != class_subject_id:
+                raise ValueError(f"Topic {topic_id} belongs to a different subject than this class")
             grade_level, _ = topic_grade_map[topic_id]
             if grade_level not in allowed_levels:
                 raise TopicGradeOutOfRangeError(
@@ -481,6 +496,7 @@ class AssessmentService:
         topic_grade_map = await self._resolve_and_validate_topic_grades(
             class_id=class_id,
             class_grade_id=class_.grade_id,
+            class_subject_id=class_.subject_id,
             topic_ids=body.topic_ids,
         )
 
@@ -871,6 +887,7 @@ class AssessmentService:
         topic_grade_map = await self._resolve_and_validate_topic_grades(
             class_id=class_id,
             class_grade_id=class_.grade_id,
+            class_subject_id=class_.subject_id,
             topic_ids=body.topic_ids,
         )
 

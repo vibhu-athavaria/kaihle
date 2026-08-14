@@ -3,7 +3,6 @@ import { useAssessmentWizard } from "../../../hooks/useAssessmentWizard";
 
 export function Step3Configure() {
   const {
-    assessmentType,
     questionsPerTopic,
     difficultyMin,
     difficultyMax,
@@ -13,9 +12,6 @@ export function Step3Configure() {
     setDeadline,
     setStep,
   } = useAssessmentWizard();
-
-  const skipsTopics =
-    assessmentType === "DIAGNOSTIC" || assessmentType === "FINAL";
 
   function handleDifficultyMinChange(value: number) {
     const clamped = Math.min(value, difficultyMax);
@@ -149,10 +145,7 @@ export function Step3Configure() {
 
       {/* Footer */}
       <div className="flex justify-between pt-2">
-        <Button
-          variant="secondary"
-          onClick={() => setStep(skipsTopics ? 1 : 2)}
-        >
+        <Button variant="secondary" onClick={() => setStep(2)}>
           Back
         </Button>
         <Button

@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import AssessmentStatus, AssessmentType
 from app.models.user import UserRole
-from app.schemas.assessments import AssessmentCreateRequest
+from app.schemas.assessments import AssessmentCreateRequest, DesignTier1DiagnosticRequest
 from app.services.assessment_service import (
     AssessmentService,
     InsufficientQuestionsError,
@@ -92,6 +92,8 @@ def _grade_validation_results(
     topic_ids: list[uuid.UUID],
     class_level: int = 7,
     topic_levels: dict[uuid.UUID, int] | None = None,
+    subject_id: uuid.UUID | None = None,
+    topic_subjects: dict[uuid.UUID, uuid.UUID] | None = None,
 ) -> list[MagicMock]:
     """Mock the two DB calls _resolve_and_validate_topic_grades makes.
 
@@ -104,6 +106,7 @@ def _grade_validation_results(
     topic_levels defaults every topic to the class's own grade level.
     """
     levels = topic_levels or {}
+    subjects = topic_subjects or {}
 
     class_level_result = MagicMock()
     class_level_result.scalar_one_or_none.return_value = class_level
@@ -115,6 +118,9 @@ def _grade_validation_results(
             grade_level=levels.get(tid, class_level),
             # Distinct per level so a test can assert which grade got recorded.
             grade_id=uuid.uuid5(uuid.NAMESPACE_OID, f"grade-{levels.get(tid, class_level)}"),
+            # Defaults to the class's own subject, so only tests that opt in exercise
+            # the foreign-subject rejection.
+            subject_id=subjects.get(tid, subject_id),
         )
         for tid in topic_ids
     ]
@@ -147,7 +153,7 @@ class TestCreateAssessment:
         mock_db.execute = AsyncMock(
             side_effect=[
                 mock_class_result,
-                *_grade_validation_results(body.topic_ids),
+                *_grade_validation_results(body.topic_ids, subject_id=class_.subject_id),
                 mock_questions_result,
             ]
         )
@@ -216,7 +222,7 @@ class TestCreateAssessment:
         mock_db.execute = AsyncMock(
             side_effect=[
                 mock_class_result,
-                *_grade_validation_results(body.topic_ids),
+                *_grade_validation_results(body.topic_ids, subject_id=class_.subject_id),
                 mock_questions_result,
             ]
         )
@@ -260,7 +266,7 @@ class TestCreateAssessment:
         mock_db.execute = AsyncMock(
             side_effect=[
                 mock_class_result,
-                *_grade_validation_results(body.topic_ids),
+                *_grade_validation_results(body.topic_ids, subject_id=class_.subject_id),
                 mock_questions_result,
             ]
         )
@@ -305,7 +311,7 @@ class TestCreateAssessment:
         mock_db.execute = AsyncMock(
             side_effect=[
                 mock_class_result,
-                *_grade_validation_results(body.topic_ids),
+                *_grade_validation_results(body.topic_ids, subject_id=class_.subject_id),
                 mock_questions_result,
                 MagicMock(),
             ]
@@ -348,7 +354,12 @@ class TestCreateAssessmentGradeWindow:
         mock_db.execute = AsyncMock(
             side_effect=[
                 mock_class_result,
-                *_grade_validation_results(body.topic_ids, class_level=7, topic_levels={prior_topic: 6}),
+                *_grade_validation_results(
+                    body.topic_ids,
+                    class_level=7,
+                    topic_levels={prior_topic: 6},
+                    subject_id=class_.subject_id,
+                ),
                 mock_questions_result,
             ]
         )
@@ -379,7 +390,12 @@ class TestCreateAssessmentGradeWindow:
         mock_db.execute = AsyncMock(
             side_effect=[
                 mock_class_result,
-                *_grade_validation_results(body.topic_ids, class_level=7, topic_levels={prior_topic: 6}),
+                *_grade_validation_results(
+                    body.topic_ids,
+                    class_level=7,
+                    topic_levels={prior_topic: 6},
+                    subject_id=class_.subject_id,
+                ),
                 mock_questions_result,
             ]
         )
@@ -408,7 +424,12 @@ class TestCreateAssessmentGradeWindow:
         mock_db.execute = AsyncMock(
             side_effect=[
                 mock_class_result,
-                *_grade_validation_results(body.topic_ids, class_level=7, topic_levels={old_topic: 5}),
+                *_grade_validation_results(
+                    body.topic_ids,
+                    class_level=7,
+                    topic_levels={old_topic: 5},
+                    subject_id=class_.subject_id,
+                ),
             ]
         )
 
@@ -433,7 +454,12 @@ class TestCreateAssessmentGradeWindow:
         mock_db.execute = AsyncMock(
             side_effect=[
                 mock_class_result,
-                *_grade_validation_results(body.topic_ids, class_level=7, topic_levels={future_topic: 8}),
+                *_grade_validation_results(
+                    body.topic_ids,
+                    class_level=7,
+                    topic_levels={future_topic: 8},
+                    subject_id=class_.subject_id,
+                ),
             ]
         )
 
@@ -455,7 +481,9 @@ class TestCreateAssessmentGradeWindow:
         mock_class_result = MagicMock()
         mock_class_result.scalar_one_or_none.return_value = class_
         # Validation query returns no row for the requested topic.
-        mock_db.execute = AsyncMock(side_effect=[mock_class_result, *_grade_validation_results([], class_level=7)])
+        mock_db.execute = AsyncMock(
+            side_effect=[mock_class_result, *_grade_validation_results([], class_level=7, subject_id=class_.subject_id)]
+        )
 
         with pytest.raises(ValueError, match="not found"):
             await service.create_assessment(school_id, teacher_id, class_id, body)
@@ -479,7 +507,12 @@ class TestCreateAssessmentGradeWindow:
         mock_db.execute = AsyncMock(
             side_effect=[
                 mock_class_result,
-                *_grade_validation_results(body.topic_ids, class_level=7, topic_levels={topic: 7}),
+                *_grade_validation_results(
+                    body.topic_ids,
+                    class_level=7,
+                    topic_levels={topic: 7},
+                    subject_id=class_.subject_id,
+                ),
                 mock_questions_result,
             ]
         )
@@ -510,6 +543,27 @@ class TestCreateAssessmentGradeWindow:
 
         assert any(e["loc"] == ("topic_ids",) for e in exc_info.value.errors())
 
+    def test_create_assessment_when_topic_ids_duplicated_then_collapsed_in_order(self) -> None:
+        """assessment_topic_config has PK (assessment_id, curriculum_topic_id).
+
+        A duplicate would raise IntegrityError — a 500 from a request whose intent is
+        unambiguous — and would also inflate questions_per_topic * len(topic_ids),
+        demanding more questions than the selection can supply.
+        """
+        first, second = uuid.uuid4(), uuid.uuid4()
+
+        body = AssessmentCreateRequest.model_validate({"topic_ids": [str(first), str(second), str(first), str(first)]})
+
+        assert body.topic_ids == [first, second]
+
+    def test_design_tier1_when_topic_ids_duplicated_then_collapsed(self) -> None:
+        """The diagnostic path writes the same config rows, so it needs the same guard."""
+        topic = uuid.uuid4()
+
+        body = DesignTier1DiagnosticRequest.model_validate({"topic_ids": [str(topic), str(topic)]})
+
+        assert body.topic_ids == [topic]
+
 
 # ---------------------------------------------------------------------------
 # _resolve_and_validate_topic_grades — shared by create_assessment and
@@ -532,11 +586,42 @@ class TestResolveAndValidateTopicGrades:
         result = await service._resolve_and_validate_topic_grades(
             class_id=uuid.uuid4(),
             class_grade_id=uuid.uuid4(),
+            class_subject_id=uuid.uuid4(),
             topic_ids=[],
         )
 
         assert result == {}
         mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_resolve_topic_grades_when_topic_from_other_subject_then_raises_value_error(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """A foreign-subject topic at an allowed grade must still be rejected.
+
+        create_assessment's question query filters on subject, so such a topic yields no
+        questions — but Step 8 still writes it an assessment_topic_config row, which
+        attempt attribution trusts. design_tier1_diagnostic's query does not filter
+        subject at all, so it would sample the other subject's questions outright.
+        """
+        class_subject_id, foreign_topic = uuid.uuid4(), uuid.uuid4()
+
+        mock_db.execute = AsyncMock(
+            side_effect=_grade_validation_results(
+                [foreign_topic],
+                class_level=7,
+                subject_id=class_subject_id,
+                topic_subjects={foreign_topic: uuid.uuid4()},  # different subject
+            )
+        )
+
+        with pytest.raises(ValueError, match="different subject"):
+            await service._resolve_and_validate_topic_grades(
+                class_id=uuid.uuid4(),
+                class_grade_id=uuid.uuid4(),
+                class_subject_id=class_subject_id,
+                topic_ids=[foreign_topic],
+            )
 
     @pytest.mark.asyncio
     async def test_resolve_topic_grades_when_class_grade_missing_then_raises_value_error(
@@ -555,6 +640,7 @@ class TestResolveAndValidateTopicGrades:
             await service._resolve_and_validate_topic_grades(
                 class_id=uuid.uuid4(),
                 class_grade_id=uuid.uuid4(),
+                class_subject_id=uuid.uuid4(),
                 topic_ids=[uuid.uuid4()],
             )
 
@@ -1121,6 +1207,7 @@ class TestDesignTier1DiagnosticClosedUnlock:
             curriculum_topic_id=topic_id,
             grade_level=9,
             grade_id=grade_id,
+            subject_id=class_ns.subject_id,
         )
 
         mock_db.execute = AsyncMock(
