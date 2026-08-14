@@ -10,7 +10,10 @@ interface Candidate {
   objective_id: string;
   canonical_code: string;
   learning_objective: string;
-  similarity: number | null;
+  /** Absent on grade-split candidates — they are one objective, not competing ones. */
+  similarity?: number | null;
+  /** Set only on OBJECTIVE_GRADE_SPLIT, where the grade IS the choice being made. */
+  grade_level?: number | null;
 }
 
 interface ReviewItem {
@@ -23,7 +26,11 @@ interface ReviewItem {
   subject_code: string | null;
   grade_level: number | null;
   question_count: number;
-  /** Questions in this item that still have no objective. 0 means genuinely done. */
+  /**
+   * Questions in this item still awaiting a decision. 0 means genuinely done.
+   * For OBJECTIVE_GRADE_SPLIT this is the whole group while pending: those questions
+   * are already bound, to a placeholder grade, so counting bindings would say "done".
+   */
   unbound_count: number;
   candidates: Candidate[];
   llm_suggested_code: string | null;
@@ -567,6 +574,14 @@ export function AdminCurriculumMapping() {
                             Assigned individually
                           </span>
                         ))}
+                      {/* These questions ARE bound — to the lowest grade, as a
+                          placeholder the split had to pick. Saying so up front stops a
+                          reviewer reading the binding as a decision already made. */}
+                      {item.item_type === "OBJECTIVE_GRADE_SPLIT" && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#92400e] bg-[#fffbeb] border border-[#fde68a] px-1.5 py-0.5 rounded">
+                          Grade undecided
+                        </span>
+                      )}
                       {item.subject_code && (
                         <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6b7280] bg-[#f3f4f6] px-1.5 py-0.5 rounded">
                           {item.subject_code}
@@ -592,7 +607,12 @@ export function AdminCurriculumMapping() {
                         reviewer need not open every card to find out. */}
                     {item.unbound_count > 0 ? (
                       <span className="text-[10px] font-semibold text-[#b45309] bg-[#b45309]/10 px-2 py-0.5 rounded-full whitespace-nowrap">
-                        {item.unbound_count} still unassigned
+                        {item.unbound_count}
+                        {/* "Unassigned" would be untrue here — they have an objective,
+                            just not a confirmed grade. */}
+                        {item.item_type === "OBJECTIVE_GRADE_SPLIT"
+                          ? " awaiting grade"
+                          : " still unassigned"}
                       </span>
                     ) : (
                       <span className="text-[10px] font-semibold text-[#1a5c38] px-2 py-0.5 whitespace-nowrap">
@@ -705,12 +725,20 @@ export function AdminCurriculumMapping() {
                           }
                         />
                         <span className="min-w-0">
+                          {/* Grade-split candidates are the SAME objective text at
+                              different grades, so the text alone distinguishes nothing.
+                              Lead with the grade — it is the entire decision. */}
+                          {candidate.grade_level != null && (
+                            <span className="block text-sm font-semibold text-[#111827]">
+                              Grade {candidate.grade_level}
+                            </span>
+                          )}
                           <span className="block text-sm text-[#111827] leading-relaxed">
                             {candidate.learning_objective}
                           </span>
                           <span className="block text-[10px] text-[#9ca3af] mt-1">
                             {candidate.canonical_code}
-                            {candidate.similarity !== null
+                            {candidate.similarity != null
                               ? ` · ${similarityLabel(candidate.similarity)}`
                               : ""}
                           </span>
@@ -779,37 +807,38 @@ export function AdminCurriculumMapping() {
                 </p>
               )}
 
-              {activeItem.candidates.length > 1 && (
-                /*
-                 * An old subtopic could be broader than any single new objective —
-                 * "Ratio and Proportion" covers simplifying ratios, dividing a
-                 * quantity, AND the unitary method, which are now three objectives.
-                 * Binding all its questions to one of them mis-targets most of them.
-                 */
-                <div className="bg-[#fffbeb] border border-[#fde68a] rounded-md p-3">
-                  <p className="text-xs text-[#92400e] leading-relaxed mb-2">
-                    If these questions do not all test the same skill, assign
-                    them individually instead. Each question is judged on its
-                    own; anything unclear is left unbound for you rather than
-                    guessed.
-                  </p>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    loading={split.isPending}
-                    onClick={() => split.mutate()}
-                    icon={<Split className="w-4 h-4" aria-hidden="true" />}
-                  >
-                    Assign each question separately
-                  </Button>
-                  {split.isPending && (
-                    <p className="text-[11px] text-[#92400e] mt-2">
-                      Reviewing {activeItem.question_count} questions — this can
-                      take a minute.
+              {activeItem.candidates.length > 1 &&
+                activeItem.item_type !== "OBJECTIVE_GRADE_SPLIT" && (
+                  /*
+                   * An old subtopic could be broader than any single new objective —
+                   * "Ratio and Proportion" covers simplifying ratios, dividing a
+                   * quantity, AND the unitary method, which are now three objectives.
+                   * Binding all its questions to one of them mis-targets most of them.
+                   */
+                  <div className="bg-[#fffbeb] border border-[#fde68a] rounded-md p-3">
+                    <p className="text-xs text-[#92400e] leading-relaxed mb-2">
+                      If these questions do not all test the same skill, assign
+                      them individually instead. Each question is judged on its
+                      own; anything unclear is left unbound for you rather than
+                      guessed.
                     </p>
-                  )}
-                </div>
-              )}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      loading={split.isPending}
+                      onClick={() => split.mutate()}
+                      icon={<Split className="w-4 h-4" aria-hidden="true" />}
+                    >
+                      Assign each question separately
+                    </Button>
+                    {split.isPending && (
+                      <p className="text-[11px] text-[#92400e] mt-2">
+                        Reviewing {activeItem.question_count} questions — this
+                        can take a minute.
+                      </p>
+                    )}
+                  </div>
+                )}
 
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-[#eaecf0]">
                 <Button

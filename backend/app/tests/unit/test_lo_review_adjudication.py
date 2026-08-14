@@ -9,9 +9,10 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from app.models.curriculum import LearningObjectiveReviewItem
-from app.services.lo_review_service import LoReviewService, adjudicate_question
+from app.services.lo_review_service import ITEM_TYPE_GRADE_SPLIT, LoReviewService, adjudicate_question
 
 
 def _review_item(
@@ -371,3 +372,150 @@ class TestWithPlacements:
         with patch.object(service, "_placements_for", AsyncMock(return_value={})) as mock:
             assert await service._with_placements([]) == []
         mock.assert_awaited_once_with([])
+
+
+def _grade_split_item(
+    question_ids: list[str] | None = None,
+    status: str = "PENDING",
+    candidates: list[dict] | None = None,
+) -> LearningObjectiveReviewItem:
+    """An OBJECTIVE_GRADE_SPLIT item — the type whose questions are already bound."""
+    ids = question_ids if question_ids is not None else []
+    return LearningObjectiveReviewItem(
+        id=uuid.uuid4(),
+        item_type=ITEM_TYPE_GRADE_SPLIT,
+        status=status,
+        source_code="MATH-ORDER-SET-DECIMAL",
+        source_name="Ordering decimals — taught at grades 6, 7",
+        source_learning_objective="Order a set of decimal numbers.",
+        subject_code="MATH",
+        # No single grade: which grade it is IS the open question.
+        grade_level=None,
+        question_count=len(ids),
+        question_ids=ids,
+        candidates=candidates if candidates is not None else [],
+        llm_suggested_code=None,
+        llm_reason=None,
+        chosen_objective_id=None,
+        resolved_by=None,
+        resolved_at=None,
+        admin_note=None,
+    )
+
+
+class TestGradeSplitOutstandingCount:
+    """Grade-split items are counted by status, not by NULL bindings.
+
+    Their questions are bound to the lowest-grade copy of the objective, which the T3
+    split assigned as a placeholder because it had to bind them to something. Counting
+    NULL bindings would return 0 for every one of them and print "All assigned" on a card
+    whose entire reason for existing is that the grade is undecided.
+    """
+
+    @pytest.mark.asyncio
+    async def test_unbound_counts_when_only_grade_split_items_then_no_query_issued(self) -> None:
+        """The whole group is outstanding, and no binding lookup is needed to know it."""
+        db = MagicMock()
+        db.execute = AsyncMock()
+        item = _grade_split_item([str(uuid.uuid4()) for _ in range(4)])
+
+        counts = await LoReviewService(db)._unbound_counts([item])
+
+        assert counts == {str(item.id): 4}
+        db.execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_unbound_counts_when_grade_split_resolved_then_zero_outstanding(self) -> None:
+        db = MagicMock()
+        db.execute = AsyncMock()
+        item = _grade_split_item([str(uuid.uuid4()) for _ in range(3)], status="APPROVED")
+
+        counts = await LoReviewService(db)._unbound_counts([item])
+
+        assert counts == {str(item.id): 0}
+
+    @pytest.mark.asyncio
+    async def test_unbound_counts_when_mixed_types_then_each_counted_its_own_way(self) -> None:
+        """A page holding both kinds must not apply one rule to the other."""
+        still_null = uuid.uuid4()
+        already_bound = uuid.uuid4()
+        remap = _review_item([str(still_null), str(already_bound)])
+        grade_split = _grade_split_item([str(uuid.uuid4()) for _ in range(2)])
+
+        db = MagicMock()
+        rows = MagicMock()
+        rows.all.return_value = [(still_null,)]
+        db.execute = AsyncMock(return_value=rows)
+
+        counts = await LoReviewService(db)._unbound_counts([remap, grade_split])
+
+        assert counts[str(remap.id)] == 1  # only the one still NULL
+        assert counts[str(grade_split.id)] == 2  # the whole group, bound or not
+
+
+class TestGradeSplitCannotAutoSplit:
+    @pytest.mark.asyncio
+    async def test_split_item_when_grade_split_then_409_before_any_model_call(self) -> None:
+        """Auto-split shortlists by embedding similarity to judge which CONCEPT a
+        question tests. Every candidate here is one objective at different grades, so the
+        embeddings are identical and the model would be picking between indistinguishable
+        strings. Refuse before spending a provider call on a coin toss."""
+        item = _grade_split_item(
+            [str(uuid.uuid4())],
+            candidates=[{"objective_id": str(uuid.uuid4()), "canonical_code": "X"} for _ in range(2)],
+        )
+        service = LoReviewService(MagicMock())
+
+        with (
+            patch.object(LoReviewService, "_get_pending", AsyncMock(return_value=item)),
+            patch("app.services.lo_review_service.adjudicate_question", new=AsyncMock()) as adjudicate,
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await service.split_item(item.id, uuid.uuid4())
+
+        assert exc.value.status_code == 409
+        adjudicate.assert_not_awaited()
+
+
+class TestGradeSplitApproval:
+    @pytest.mark.asyncio
+    async def test_approve_when_grade_split_then_binding_scope_includes_candidates(self) -> None:
+        """The regression this branch exists to prevent.
+
+        Every other item type governs questions with learning_objective_id IS NULL, so
+        approve filters on exactly that. A grade-split item's questions are already bound;
+        under that filter the UPDATE matches nothing and the item still closes APPROVED —
+        the reviewer is told their decision was applied when nothing moved. The predicate
+        must therefore admit the item's own candidate objectives too.
+        """
+        lowest = uuid.uuid4()
+        higher = uuid.uuid4()
+        item = _grade_split_item(
+            [str(uuid.uuid4()) for _ in range(3)],
+            candidates=[
+                {"objective_id": str(lowest), "canonical_code": "MATH-ORDER-SET-DECIMAL", "grade_level": 6},
+                {"objective_id": str(higher), "canonical_code": "MATH-ORDER-SET-DECIMAL-G7", "grade_level": 7},
+            ],
+        )
+
+        objective_lookup = MagicMock()
+        objective_lookup.scalar_one_or_none.return_value = MagicMock()
+        update_result = MagicMock()
+        update_result.rowcount = 3
+
+        db = MagicMock()
+        db.execute = AsyncMock(side_effect=[objective_lookup, update_result])
+        db.commit = AsyncMock()
+
+        with patch.object(LoReviewService, "_get_pending", AsyncMock(return_value=item)):
+            result = await LoReviewService(db).approve_item(item.id, higher, uuid.uuid4())
+
+        assert result["questions_bound"] == 3
+        # Both candidate ids appear in the predicate, so questions parked on the lowest
+        # grade are in scope; a question moved anywhere else still is not. Compare on
+        # .hex — Postgres renders a bound UUID undashed.
+        rendered = str(db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True}))
+        assert lowest.hex in rendered
+        assert higher.hex in rendered
+        # And the original fill-NULL clause survives: an unbound question is still bindable.
+        assert "IS NULL" in rendered

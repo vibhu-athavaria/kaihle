@@ -20,7 +20,7 @@ split plan needs revisiting before it runs.
 Usage (from backend/):
     python -m scripts.backfill_objective_grades --dry-run
     python -m scripts.backfill_objective_grades
-    python -m scripts.backfill_objective_grades --expected-null 12
+    python -m scripts.backfill_objective_grades --expected-null 12   # before T3 ran
 """
 
 import argparse
@@ -52,8 +52,11 @@ structlog.configure(
 )
 log = structlog.get_logger()
 
-# ADR-003 measured 12 grade-spanning objectives on the dev database (2026-08-12).
-DEFAULT_EXPECTED_NULL = 12
+# 0, not 12. ADR-003 measured 12 grade-spanning objectives on 2026-08-12 and this
+# defaulted to 12 while they existed; T3 has since split all of them, so anything left
+# without a grade is now drift. Run with --expected-null 12 to reproduce the pre-split
+# state on an environment where T3 has not run yet.
+DEFAULT_EXPECTED_NULL = 0
 
 
 async def backfill_grade_ids(db: AsyncSession) -> int:

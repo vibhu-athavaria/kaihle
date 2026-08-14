@@ -23,10 +23,11 @@ from typing import Any, cast
 import structlog
 from fastapi import HTTPException, status
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import ARRAY, Text, func, select, text, update
+from sqlalchemy import ARRAY, Text, func, or_, select, text, update
 from sqlalchemy import cast as sa_cast
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.ai.providers.router import complete
 from app.ai.similarity import cosine_similarity, embed_all, parse_vector
@@ -36,6 +37,11 @@ logger = structlog.get_logger()
 
 ITEM_TYPE_QUESTION_REMAP = "QUESTION_REMAP"
 ITEM_TYPE_REMAINDER = "QUESTION_REMAP_REMAINDER"
+# ADR-003 T3. Unlike every other item type, these questions arrive ALREADY BOUND — the
+# open question is which grade's copy of one objective they belong to, not which
+# objective. Paths that assume "unresolved means learning_objective_id IS NULL" have to
+# know about this type or they silently do nothing.
+ITEM_TYPE_GRADE_SPLIT = "OBJECTIVE_GRADE_SPLIT"
 STATUS_PENDING = "PENDING"
 STATUS_APPROVED = "APPROVED"
 STATUS_REJECTED = "REJECTED"
@@ -99,25 +105,39 @@ class LoReviewService:
         return {"total": int(total.scalar_one()), "items": payload}
 
     async def _unbound_counts(self, items: list[LearningObjectiveReviewItem]) -> dict[str, int]:
-        """How many of each item's questions still have no objective.
+        """How many of each item's questions still await a decision.
 
         A SPLIT card is not self-evidently finished — the model declines on ambiguous
         questions — so the card must say how much work is left rather than making the
         reviewer open it to find out. One aggregate query for the whole page, never
         one per card.
+
+        Grade-split items are counted differently because their questions are already
+        bound: to the lowest-grade copy of the objective, which the split assigned as a
+        placeholder rather than as a judgement. Counting NULL bindings would return 0
+        and render "All assigned" on a card whose entire reason for existing is that the
+        grade is undecided. For this type the outstanding work is the whole group until
+        a reviewer closes it.
         """
+        outstanding = {
+            str(item.id): item.question_count if item.status == STATUS_PENDING else 0
+            for item in items
+            if item.item_type == ITEM_TYPE_GRADE_SPLIT
+        }
         wanted: dict[str, list[uuid.UUID]] = {
-            str(item.id): [uuid.UUID(q) for q in item.question_ids] for item in items if item.question_ids
+            str(item.id): [uuid.UUID(q) for q in item.question_ids]
+            for item in items
+            if item.question_ids and item.item_type != ITEM_TYPE_GRADE_SPLIT
         }
         if not wanted:
-            return {}
+            return outstanding
 
         every_id = {qid for ids in wanted.values() for qid in ids}
         rows = await self.db.execute(
             select(QuestionBank.id).where(QuestionBank.id.in_(every_id), QuestionBank.learning_objective_id.is_(None))
         )
         still_unbound = {r[0] for r in rows.all()}
-        return {item_id: sum(1 for qid in ids if qid in still_unbound) for item_id, ids in wanted.items()}
+        return outstanding | {item_id: sum(1 for qid in ids if qid in still_unbound) for item_id, ids in wanted.items()}
 
     async def counts_by_status(self) -> dict[str, int]:
         """Queue summary for the admin dashboard badge."""
@@ -155,12 +175,20 @@ class LoReviewService:
         if item.question_ids:
             # Only fill NULLs. If a question was bound by some other route in the
             # meantime, that binding stands rather than being silently overwritten.
+            binding_scope: ColumnElement[bool] = QuestionBank.learning_objective_id.is_(None)
+            if item.item_type == ITEM_TYPE_GRADE_SPLIT:
+                # A grade-split item's questions are never NULL — the fill-NULL rule
+                # would bind nothing and still close the item APPROVED, telling the
+                # reviewer their decision was applied when it was not. Re-binding is the
+                # point here. It stays bounded to the item's own candidates, which are
+                # the grade copies of one objective, so a question moved elsewhere by
+                # another route is still left alone.
+                candidate_ids = [uuid.UUID(c["objective_id"]) for c in item.candidates if c.get("objective_id")]
+                if candidate_ids:
+                    binding_scope = or_(binding_scope, QuestionBank.learning_objective_id.in_(candidate_ids))
             result = await self.db.execute(
                 update(QuestionBank)
-                .where(
-                    QuestionBank.id.in_([uuid.UUID(q) for q in item.question_ids]),
-                    QuestionBank.learning_objective_id.is_(None),
-                )
+                .where(QuestionBank.id.in_([uuid.UUID(q) for q in item.question_ids]), binding_scope)
                 .values(learning_objective_id=objective_id)
             )
             bound = cast("CursorResult[Any]", result).rowcount or 0
@@ -200,6 +228,21 @@ class LoReviewService:
         group's majority objective.
         """
         item = await self._get_pending(item_id)
+        if item.item_type == ITEM_TYPE_GRADE_SPLIT:
+            # This path adjudicates which CONCEPT a question assesses, shortlisting by
+            # embedding similarity across the subject. A grade-split item's candidates
+            # are the same objective text at different grades, so every embedding is
+            # identical and the model would be asked to choose between indistinguishable
+            # strings. Judging grade means judging demand, which is a different question
+            # and a different prompt. Refuse rather than return a coin toss.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Grade-split items cannot be auto-split: the candidates are one objective "
+                    "at several grades, not different objectives. Approve a grade for the whole "
+                    "group, or assign questions individually."
+                ),
+            )
         if not item.candidates:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
