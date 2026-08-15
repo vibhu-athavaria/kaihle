@@ -56,7 +56,10 @@ structlog.configure(
 )
 log = structlog.get_logger()
 
-ARTIFACT_VERSION = 1
+# 2 adds grade_level and normalised_objective to each objective. ADR-003 T4 makes both
+# NOT NULL, so a v1 artifact can no longer be inserted as-is; the importer still reads v1
+# by deriving both, but only where the derivation is unambiguous.
+ARTIFACT_VERSION = 2
 
 
 class ExportError(Exception):
@@ -69,14 +72,22 @@ async def export_objectives(db: AsyncSession, params: dict[str, Any]) -> list[di
     The embedding is exported too, so the target environment does not need to call an
     embedding provider — and gets byte-identical vectors rather than ones that merely
     resemble the originals.
+
+    grade_level, not grade_id: nothing in this artifact may be keyed on a UUID, and
+    grades.level is UNIQUE, so the level is the natural key every environment resolves
+    against its own grades table. It comes from lo.grade_id — the objective's own grade,
+    which ADR-003 makes part of its identity — not from the placement it happens to be
+    reached through.
     """
     result = await db.execute(
         text(
             """
             SELECT DISTINCT lo.canonical_code, lo.name, lo.learning_objective,
-                            lo.bloom_taxonomy_level, lo.embedding, t.canonical_code AS topic_code
+                            lo.bloom_taxonomy_level, lo.embedding, lo.normalised_objective,
+                            gl.level AS grade_level, t.canonical_code AS topic_code
             FROM learning_objectives lo
             JOIN topics t                ON t.id = lo.topic_id
+            JOIN grades gl               ON gl.id = lo.grade_id
             JOIN subtopic_objectives so  ON so.learning_objective_id = lo.id
             JOIN subtopics sub           ON sub.id = so.subtopic_id
             JOIN curriculum_topics ct    ON ct.id = sub.curriculum_topic_id

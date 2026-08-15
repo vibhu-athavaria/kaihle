@@ -18,6 +18,12 @@ Step 5 must precede step 6: the artifact's canonical codes are fixed, and the ba
 generates its own with collision suffixes. Running the backfill first would let it
 claim a code the artifact needs.
 
+Artifact versions: v2 carries grade_level and normalised_objective per objective, both of
+which ADR-003 T4 makes NOT NULL. v1 predates that and carries neither, so it is still
+readable but only where grade can be recovered unambiguously from its own placements — an
+objective placed at several grades is rejected rather than guessed at, because choosing
+its grade is exactly what T3's review queue exists to decide. See resolve_grades().
+
 Idempotent throughout — objectives upsert on canonical_code, placements do nothing on
 conflict, and question binding only ever fills a NULL. Re-running changes nothing.
 
@@ -49,6 +55,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
+from app.ai.similarity import normalise_text  # noqa: E402
 from app.core.config import settings  # noqa: E402
 
 structlog.configure(
@@ -59,19 +66,109 @@ structlog.configure(
 )
 log = structlog.get_logger()
 
-SUPPORTED_ARTIFACT_VERSION = 1
+# v2 carries grade_level and normalised_objective per objective; v1 predates ADR-003 and
+# carries neither. Both are readable — see resolve_grades() for how v1 recovers grade.
+SUPPORTED_ARTIFACT_VERSIONS = (1, 2)
 
 
 class ImportError_(Exception):
     """Raised when the artifact cannot be applied to this environment."""
 
 
-async def import_objectives(db: AsyncSession, objectives: list[dict[str, Any]], dry_run: bool) -> dict[str, int]:
+async def resolve_grades(
+    db: AsyncSession,
+    artifact: dict[str, Any],
+) -> dict[str, uuid.UUID]:
+    """objective canonical_code -> this environment's grades.id.
+
+    v2 states the grade outright as a level, which resolves against the local grades
+    table. v1 predates ADR-003 and does not carry grade at all, so it is recovered from
+    the artifact's own placements: each placement names a subtopic, and a subtopic sits
+    at exactly one grade. That is the same derivation T1's backfill performs.
+
+    A v1 objective whose placements span several grades cannot be recovered — recording
+    which grade each of its questions belongs to is precisely what T3 exists to decide,
+    and inferring it here would make that decision a second time, in a second place,
+    with no reviewer. Such an artifact is rejected with instructions to re-export as v2
+    from an environment where the split has run.
+    """
+    objectives = artifact["learning_objectives"]
+
+    if artifact["artifact_version"] >= 2:
+        resolved: dict[str, uuid.UUID] = {}
+        for objective in objectives:
+            row = await db.execute(
+                text("SELECT id FROM grades WHERE level = :level"),
+                {"level": objective["grade_level"]},
+            )
+            grade_id = row.scalar_one_or_none()
+            if grade_id is None:
+                raise ImportError_(
+                    f"Objective {objective['canonical_code']!r} is at grade level "
+                    f"{objective['grade_level']}, which this environment has no grades row for."
+                )
+            resolved[objective["canonical_code"]] = cast("uuid.UUID", grade_id)
+        return resolved
+
+    # v1: derive from placements.
+    subtopic_codes_by_objective: dict[str, set[str]] = defaultdict(set)
+    for placement in artifact["placements"]:
+        subtopic_codes_by_objective[placement["objective_code"]].add(placement["subtopic_code"])
+
+    resolved = {}
+    spanning: list[str] = []
+    unplaced: list[str] = []
+    for objective in objectives:
+        code = objective["canonical_code"]
+        subtopic_codes = sorted(subtopic_codes_by_objective.get(code, set()))
+        if not subtopic_codes:
+            unplaced.append(code)
+            continue
+
+        rows = await db.execute(
+            text("""
+                SELECT DISTINCT ct.grade_id
+                FROM subtopics st
+                JOIN curriculum_topics ct ON ct.id = st.curriculum_topic_id
+                WHERE st.canonical_code = ANY(:codes)
+            """),
+            {"codes": subtopic_codes},
+        )
+        grade_ids = [r[0] for r in rows.all()]
+        if len(grade_ids) == 1:
+            resolved[code] = cast("uuid.UUID", grade_ids[0])
+        elif len(grade_ids) > 1:
+            spanning.append(code)
+        else:
+            unplaced.append(code)
+
+    if spanning or unplaced:
+        raise ImportError_(
+            f"This v1 artifact carries {len(spanning)} grade-spanning and {len(unplaced)} unplaced "
+            f"objectives, and v1 does not record grade. Re-export as v{SUPPORTED_ARTIFACT_VERSIONS[-1]} "
+            f"from an environment where ADR-003 T3 has run. "
+            f"Spanning: {', '.join(spanning[:5])}{' ...' if len(spanning) > 5 else ''}. "
+            f"Unplaced: {', '.join(unplaced[:5])}{' ...' if len(unplaced) > 5 else ''}."
+        )
+    return resolved
+
+
+async def import_objectives(
+    db: AsyncSession,
+    objectives: list[dict[str, Any]],
+    grade_by_code: dict[str, uuid.UUID],
+    dry_run: bool,
+) -> dict[str, int]:
     """Upsert objectives, resolving topics by canonical_code.
 
     A missing topic aborts the run rather than skipping: it means the curriculum seed
     did not complete, and continuing would produce a partial curriculum that still
     reports success.
+
+    grade_id and normalised_objective are both NOT NULL since ADR-003 T4. Grade comes
+    from resolve_grades(); normalised_objective is recomputed with the same helper the
+    de-duplicator uses rather than trusted from a v1 artifact that never had it, so the
+    stored key can never disagree with what the de-duplicator considers a duplicate.
     """
     created = 0
     existing = 0
@@ -101,9 +198,10 @@ async def import_objectives(db: AsyncSession, objectives: list[dict[str, Any]], 
                 text(
                     """
                     INSERT INTO learning_objectives
-                        (id, canonical_code, name, learning_objective, topic_id,
-                         bloom_taxonomy_level, embedding, is_active, created_at)
-                    VALUES (:id, :code, :name, :lo, :topic_id, :bloom, :embedding, TRUE, now())
+                        (id, canonical_code, name, learning_objective, topic_id, grade_id,
+                         normalised_objective, bloom_taxonomy_level, embedding, is_active, created_at)
+                    VALUES (:id, :code, :name, :lo, :topic_id, :grade_id, :norm,
+                            :bloom, :embedding, TRUE, now())
                     """
                 ),
                 {
@@ -112,6 +210,8 @@ async def import_objectives(db: AsyncSession, objectives: list[dict[str, Any]], 
                     "name": objective["name"],
                     "lo": objective["learning_objective"],
                     "topic_id": topic_id,
+                    "grade_id": grade_by_code[objective["canonical_code"]],
+                    "norm": normalise_text(objective["learning_objective"]),
                     "bloom": objective["bloom_taxonomy_level"],
                     "embedding": objective["embedding"],
                 },
@@ -293,11 +393,17 @@ async def main(artifact_path: Path, snapshot_path: Path, dry_run: bool, force: b
 
     artifact = json.loads(artifact_path.read_text())
     version = artifact.get("artifact_version")
-    if version != SUPPORTED_ARTIFACT_VERSION:
-        log.error("unsupported_artifact_version", found=version, supported=SUPPORTED_ARTIFACT_VERSION)
+    if version not in SUPPORTED_ARTIFACT_VERSIONS:
+        log.error("unsupported_artifact_version", found=version, supported=list(SUPPORTED_ARTIFACT_VERSIONS))
         return 1
 
-    log.info("artifact_loaded", scope=artifact["scope"], generated_at=artifact.get("generated_at"))
+    log.info(
+        "artifact_loaded",
+        version=version,
+        scope=artifact["scope"],
+        generated_at=artifact.get("generated_at"),
+        grade_source="artifact" if version >= 2 else "derived from placements (v1)",
+    )
 
     engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
     async_session = async_sessionmaker(engine, expire_on_commit=False)
@@ -316,7 +422,10 @@ async def main(artifact_path: Path, snapshot_path: Path, dry_run: bool, force: b
                 return 1
 
             try:
-                objectives = await import_objectives(db, artifact["learning_objectives"], dry_run)
+                # Before anything is written: a v1 artifact that cannot yield a grade for
+                # every objective must abort here, not part-way through the insert loop.
+                grade_by_code = await resolve_grades(db, artifact)
+                objectives = await import_objectives(db, artifact["learning_objectives"], grade_by_code, dry_run)
                 placements = await import_placements(db, artifact["placements"], dry_run)
                 questions = await apply_question_mapping(db, artifact["question_mapping"], snapshot_path, dry_run)
 

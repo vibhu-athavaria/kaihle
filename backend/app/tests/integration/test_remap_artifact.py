@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.similarity import normalise_text
 from app.models.curriculum import (
     Curriculum,
     CurriculumTopic,
@@ -29,10 +30,12 @@ from app.models.curriculum import (
     Topic,
 )
 from scripts.import_remap_artifact import (
+    ImportError_,
     already_applied,
     apply_question_mapping,
     import_objectives,
     import_placements,
+    resolve_grades,
 )
 
 
@@ -78,13 +81,29 @@ class TestArtifactImport:
             # Exported as pgvector's text form; the importer must pass it through.
             "embedding": "[" + ",".join(["0.01"] * 768) + "]",
             "topic_code": topic_code,
+            # v2 field. ADR-003 T4 makes grade_id NOT NULL, and nothing in an artifact
+            # may be keyed on a UUID, so grade travels as a level and each environment
+            # resolves it against its own grades table.
+            "grade_level": 6,
         }
+
+    async def _grade_map(self, db: AsyncSession, payload: list[dict]) -> dict[str, uuid.UUID]:
+        """Resolve every payload objective to this environment's Grade 6.
+
+        import_objectives takes a pre-resolved map rather than deriving grade itself, so
+        that a v1 artifact which cannot yield one aborts before anything is written.
+        These tests are about topic and code resolution, so they all use the single grade
+        _tree() creates; the grade-specific behaviour is covered by TestArtifactGrades.
+        """
+        grade_id = (await db.execute(select(Grade.id).where(Grade.level == 6))).scalar_one()
+        return {objective["canonical_code"]: grade_id for objective in payload}
 
     async def test_import_objectives_when_topic_resolves_then_creates_objective(self, db_session: AsyncSession) -> None:
         topic, _ = await self._tree(db_session)
         code = f"LO-{uuid.uuid4().hex[:10]}"
+        payload = [self._objective_payload(topic.canonical_code, code)]
 
-        result = await import_objectives(db_session, [self._objective_payload(topic.canonical_code, code)], False)
+        result = await import_objectives(db_session, payload, await self._grade_map(db_session, payload), False)
         await db_session.commit()
 
         assert result == {"created": 1, "already_present": 0}
@@ -97,10 +116,11 @@ class TestArtifactImport:
     async def test_import_objectives_when_run_twice_then_second_creates_nothing(self, db_session: AsyncSession) -> None:
         topic, _ = await self._tree(db_session)
         payload = [self._objective_payload(topic.canonical_code, f"LO-{uuid.uuid4().hex[:10]}")]
+        grades = await self._grade_map(db_session, payload)
 
-        await import_objectives(db_session, payload, False)
+        await import_objectives(db_session, payload, grades, False)
         await db_session.commit()
-        second = await import_objectives(db_session, payload, False)
+        second = await import_objectives(db_session, payload, grades, False)
         await db_session.commit()
 
         assert second == {"created": 0, "already_present": 1}
@@ -108,19 +128,19 @@ class TestArtifactImport:
     async def test_import_objectives_when_topic_missing_then_aborts(self, db_session: AsyncSession) -> None:
         """A missing topic means the curriculum seed did not complete. Continuing would
         produce a partial curriculum that still reported success."""
-        from scripts.import_remap_artifact import ImportError_
-
+        await self._tree(db_session)
         payload = [self._objective_payload("TOPIC-DOES-NOT-EXIST", f"LO-{uuid.uuid4().hex[:10]}")]
 
         with pytest.raises(ImportError_, match="not found"):
-            await import_objectives(db_session, payload, False)
+            await import_objectives(db_session, payload, await self._grade_map(db_session, payload), False)
         await db_session.rollback()
 
     async def test_import_objectives_when_dry_run_then_writes_nothing(self, db_session: AsyncSession) -> None:
         topic, _ = await self._tree(db_session)
         code = f"LO-{uuid.uuid4().hex[:10]}"
+        payload = [self._objective_payload(topic.canonical_code, code)]
 
-        result = await import_objectives(db_session, [self._objective_payload(topic.canonical_code, code)], True)
+        result = await import_objectives(db_session, payload, await self._grade_map(db_session, payload), True)
         await db_session.rollback()
 
         assert result["created"] == 1
@@ -130,7 +150,8 @@ class TestArtifactImport:
     async def test_import_placements_when_both_resolve_then_links_them(self, db_session: AsyncSession) -> None:
         topic, subtopic = await self._tree(db_session)
         code = f"LO-{uuid.uuid4().hex[:10]}"
-        await import_objectives(db_session, [self._objective_payload(topic.canonical_code, code)], False)
+        payload = [self._objective_payload(topic.canonical_code, code)]
+        await import_objectives(db_session, payload, await self._grade_map(db_session, payload), False)
         await db_session.flush()
 
         # canonical_code is nullable on the model but always set by the seeder, and the
@@ -152,7 +173,8 @@ class TestArtifactImport:
         reported, not fatal — the rest of the artifact still applies."""
         topic, _ = await self._tree(db_session)
         code = f"LO-{uuid.uuid4().hex[:10]}"
-        await import_objectives(db_session, [self._objective_payload(topic.canonical_code, code)], False)
+        payload = [self._objective_payload(topic.canonical_code, code)]
+        await import_objectives(db_session, payload, await self._grade_map(db_session, payload), False)
         await db_session.flush()
 
         result = await import_placements(db_session, [{"subtopic_code": "ST-NOT-HERE", "objective_code": code}], False)
@@ -166,7 +188,8 @@ class TestArtifactImport:
         artifact — which is what lets the artifact apply where question rows differ."""
         topic, _ = await self._tree(db_session)
         code = f"LO-{uuid.uuid4().hex[:10]}"
-        await import_objectives(db_session, [self._objective_payload(topic.canonical_code, code)], False)
+        payload = [self._objective_payload(topic.canonical_code, code)]
+        await import_objectives(db_session, payload, await self._grade_map(db_session, payload), False)
         await db_session.flush()
 
         question = QuestionBank(
@@ -256,3 +279,186 @@ class TestArtifactImport:
         assert prior is not None
         assert prior["objectives_created"] == 5
         assert prior["questions_bound"] == 7
+
+
+@pytest.mark.asyncio
+class TestArtifactGrades:
+    """Grade resolution across artifact versions (ADR-003 T4).
+
+    T4 makes learning_objectives.grade_id NOT NULL. The importer's INSERT omitted it, so
+    T4 would have broken every future artifact import — and production has a
+    curriculum_migrations row, so that path is live, not hypothetical.
+
+    v2 carries the grade as a LEVEL, never a UUID, because grades.id differs per
+    environment while grades.level is a stable natural key. v1 predates ADR-003 and
+    carries no grade at all; it is recovered from the artifact's own placements, but only
+    where that derivation is unambiguous.
+    """
+
+    async def _tree_at(self, db: AsyncSession, levels: list[int]) -> tuple[Topic, dict[int, str]]:
+        """One topic placed at each given grade, keyed to that grade's subtopic CODE.
+
+        Codes rather than Subtopic rows: the artifact joins on canonical_code and never
+        on a UUID, so the code is the only field these tests need — and returning it as
+        str keeps the model's nullable column out of every call site.
+        """
+        curriculum = Curriculum(id=uuid.uuid4(), name=f"C {uuid.uuid4().hex[:8]}", code=f"cur{uuid.uuid4().hex[:6]}")
+        subject = Subject(id=uuid.uuid4(), name=f"S {uuid.uuid4().hex[:8]}", code=f"X{uuid.uuid4().hex[:5]}")
+        topic = Topic(id=uuid.uuid4(), name="Number", canonical_code=f"TOPIC-{uuid.uuid4().hex[:8]}")
+        db.add_all([curriculum, subject, topic])
+        await db.flush()
+
+        subtopic_codes: dict[int, str] = {}
+        for level in levels:
+            grade = Grade(id=uuid.uuid4(), name=f"Grade {level}", level=level)
+            db.add(grade)
+            await db.flush()
+            ct = CurriculumTopic(
+                id=uuid.uuid4(),
+                curriculum_id=curriculum.id,
+                subject_id=subject.id,
+                grade_id=grade.id,
+                topic_id=topic.id,
+                sequence_order=1,
+            )
+            db.add(ct)
+            await db.flush()
+            code = f"ST-{uuid.uuid4().hex[:8]}"
+            db.add(
+                Subtopic(
+                    id=uuid.uuid4(),
+                    curriculum_topic_id=ct.id,
+                    name=f"Sub G{level}",
+                    canonical_code=code,
+                    learning_objective="Do the thing.",
+                    is_active=True,
+                )
+            )
+            await db.flush()
+            subtopic_codes[level] = code
+
+        await db.commit()
+        return topic, subtopic_codes
+
+    @staticmethod
+    def _artifact(
+        version: int,
+        topic_code: str,
+        code: str,
+        placements: list[dict[str, str]],
+        grade_level: int | None = None,
+    ) -> dict:
+        objective: dict = {
+            "canonical_code": code,
+            "name": "Imported objective",
+            "learning_objective": "Order  NEGATIVE integers, on a number line!",
+            "bloom_taxonomy_level": "Apply",
+            "embedding": None,
+            "topic_code": topic_code,
+        }
+        if version >= 2:
+            objective["grade_level"] = grade_level
+            objective["normalised_objective"] = normalise_text(objective["learning_objective"])
+        return {
+            "artifact_version": version,
+            "scope": {"curriculum": "c", "subjects": ["X"], "grades": [6, 7]},
+            "learning_objectives": [objective],
+            "placements": placements,
+            "question_mapping": [],
+        }
+
+    async def test_resolve_grades_when_v2_then_maps_level_to_local_grade_id(self, db_session: AsyncSession) -> None:
+        """v2 states the grade; the importer resolves the LEVEL against local grades."""
+        topic, subtopic_codes = await self._tree_at(db_session, [6, 7])
+        code = f"LO-{uuid.uuid4().hex[:10]}"
+        artifact = self._artifact(2, topic.canonical_code, code, placements=[], grade_level=7)
+
+        resolved = await resolve_grades(db_session, artifact)
+
+        expected = (await db_session.execute(select(Grade.id).where(Grade.level == 7))).scalar_one()
+        assert resolved == {code: expected}
+        assert subtopic_codes[7]  # placements existed but were not needed
+
+    async def test_resolve_grades_when_v2_level_absent_locally_then_aborts(self, db_session: AsyncSession) -> None:
+        topic, _ = await self._tree_at(db_session, [6])
+        code = f"LO-{uuid.uuid4().hex[:10]}"
+        artifact = self._artifact(2, topic.canonical_code, code, placements=[], grade_level=11)
+
+        with pytest.raises(ImportError_, match="grade level 11"):
+            await resolve_grades(db_session, artifact)
+
+    async def test_resolve_grades_when_v1_single_placement_then_derives_grade(self, db_session: AsyncSession) -> None:
+        """v1 carries no grade, so it is recovered the same way T1's backfill does."""
+        topic, subtopic_codes = await self._tree_at(db_session, [6, 7])
+        code = f"LO-{uuid.uuid4().hex[:10]}"
+        artifact = self._artifact(
+            1,
+            topic.canonical_code,
+            code,
+            placements=[{"subtopic_code": subtopic_codes[7], "objective_code": code}],
+        )
+
+        resolved = await resolve_grades(db_session, artifact)
+
+        expected = (await db_session.execute(select(Grade.id).where(Grade.level == 7))).scalar_one()
+        assert resolved == {code: expected}
+
+    async def test_resolve_grades_when_v1_spans_grades_then_aborts_rather_than_guessing(
+        self, db_session: AsyncSession
+    ) -> None:
+        """The decision this refuses to make is exactly what T3's review queue exists for.
+
+        Picking a grade here would repeat that decision in a second place, with no
+        reviewer and no record — the failure ADR-003 was written to prevent.
+        """
+        topic, subtopic_codes = await self._tree_at(db_session, [6, 7])
+        code = f"LO-{uuid.uuid4().hex[:10]}"
+        artifact = self._artifact(
+            1,
+            topic.canonical_code,
+            code,
+            placements=[
+                {"subtopic_code": subtopic_codes[6], "objective_code": code},
+                {"subtopic_code": subtopic_codes[7], "objective_code": code},
+            ],
+        )
+
+        with pytest.raises(ImportError_, match="grade-spanning"):
+            await resolve_grades(db_session, artifact)
+
+    async def test_resolve_grades_when_v1_objective_unplaced_then_aborts(self, db_session: AsyncSession) -> None:
+        topic, _ = await self._tree_at(db_session, [6])
+        code = f"LO-{uuid.uuid4().hex[:10]}"
+        artifact = self._artifact(1, topic.canonical_code, code, placements=[])
+
+        with pytest.raises(ImportError_, match="unplaced"):
+            await resolve_grades(db_session, artifact)
+
+    async def test_import_objectives_when_applied_then_normalised_objective_matches_helper(
+        self, db_session: AsyncSession
+    ) -> None:
+        """Recomputed, never trusted from the artifact.
+
+        A v1 artifact has no normalised_objective at all, and T4's UNIQUE constrains on
+        it. Computing it with the same helper the de-duplicator uses is what stops the
+        stored key from disagreeing with what the de-duplicator calls a duplicate.
+        """
+        topic, subtopic_codes = await self._tree_at(db_session, [6])
+        code = f"LO-{uuid.uuid4().hex[:10]}"
+        artifact = self._artifact(
+            1,
+            topic.canonical_code,
+            code,
+            placements=[{"subtopic_code": subtopic_codes[6], "objective_code": code}],
+        )
+
+        grades = await resolve_grades(db_session, artifact)
+        await import_objectives(db_session, artifact["learning_objectives"], grades, False)
+        await db_session.commit()
+
+        stored = (
+            await db_session.execute(select(LearningObjective).where(LearningObjective.canonical_code == code))
+        ).scalar_one()
+        assert stored.normalised_objective == normalise_text("Order  NEGATIVE integers, on a number line!")
+        assert stored.normalised_objective == "order negative integers on a number line"
+        assert stored.grade_id is not None
