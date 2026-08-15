@@ -382,7 +382,18 @@ async def run_new_tree(
 
 
 async def run_legacy_backfill(db: AsyncSession, stats: Stats, dry_run: bool) -> None:
-    """Mirror untouched subtopics 1:1 into objectives. Deterministic, no embeddings."""
+    """Mirror untouched subtopics into objectives. Deterministic, no embeddings.
+
+    Not strictly 1:1. Since ADR-003 T4 the database enforces
+    UNIQUE (topic_id, grade_id, normalised_objective), and a literal 1:1 mirror violates
+    it the moment two subtopics under one topic and grade carry the same objective text
+    — which is precisely the duplication ADR-003 exists to collapse. Such subtopics share
+    one objective instead; subtopic_objectives is many-to-many exactly so several
+    placements can point at one concept.
+
+    Text is compared normalised, not verbatim, so trailing whitespace or a stray comma
+    does not buy a second row the constraint would reject anyway.
+    """
     subtopics = await fetch_subtopics(db, None, None, None)
     stats.subtopics_seen = len(subtopics)
     if not subtopics:
@@ -393,8 +404,25 @@ async def run_legacy_backfill(db: AsyncSession, stats: Stats, dry_run: bool) -> 
         row[0]
         for row in await db.execute(text("SELECT canonical_code FROM learning_objectives"))  # noqa: RUF015
     }
+    # Seeded from what is already stored, then extended as this run creates rows, so a
+    # duplicate is caught whether its twin predates the run or appears within it.
+    by_identity: dict[tuple[uuid.UUID, uuid.UUID, str], uuid.UUID] = {
+        (row.topic_id, row.grade_id, row.normalised_objective): row.id
+        for row in (
+            await db.execute(text("SELECT id, topic_id, grade_id, normalised_objective FROM learning_objectives"))
+        ).all()
+    }
 
     for subtopic in subtopics:
+        norm = normalise_text(subtopic["learning_objective"])
+        identity = (subtopic["topic_id"], subtopic["grade_id"], norm)
+
+        existing_id = by_identity.get(identity)
+        if existing_id is not None:
+            stats.linked_by_text += 1
+            await link(db, subtopic["id"], existing_id, dry_run)
+            continue
+
         code = build_canonical_code(subtopic["subject_code"], subtopic["learning_objective"], taken_codes)
         new_id = uuid.uuid4()
         if not dry_run:
@@ -414,13 +442,16 @@ async def run_legacy_backfill(db: AsyncSession, stats: Stats, dry_run: bool) -> 
                     "name": subtopic["name"],
                     "lo": subtopic["learning_objective"],
                     "topic_id": subtopic["topic_id"],
-                    # 1:1 mirror of a subtopic, so grade is simply the subtopic's own
+                    # Mirrored from a subtopic, so grade is simply the subtopic's own
                     # placement — no ambiguity to resolve here.
                     "grade_id": subtopic["grade_id"],
-                    "norm": normalise_text(subtopic["learning_objective"]),
+                    "norm": norm,
                     "bloom": subtopic["bloom_taxonomy_level"],
                 },
             )
+        # Recorded even on a dry run, so the preview reports the same created/linked
+        # split the real run would produce rather than counting every subtopic as new.
+        by_identity[identity] = new_id
         stats.created += 1
         await link(db, subtopic["id"], new_id, dry_run)
 

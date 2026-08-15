@@ -335,10 +335,19 @@ class TestLearningObjectiveCreation:
         assert stats.created >= 1
 
     async def test_canonical_codes_when_many_objectives_then_all_unique(self, db_session: AsyncSession) -> None:
-        """canonical_code is UNIQUE; a generator collision would abort the whole run."""
+        """canonical_code is UNIQUE; a generator collision would abort the whole run.
+
+        The twelve texts are DISTINCT but share their first three significant words,
+        which is all build_canonical_code uses — so every one of them wants the same
+        base code and the numeric-suffix path is what makes them unique.
+
+        They must be distinct: twelve identical texts would now collapse into a single
+        objective under ADR-003 T4's identity, and the assertion below would pass while
+        exercising no collision handling at all.
+        """
         await self._scope(
             db_session,
-            [(f"S{i}", "Order and use negative numbers in context.") for i in range(12)],
+            [(f"S{i}", f"Order and use negative numbers in context number {i}.") for i in range(12)],
         )
         stats = Stats()
 
@@ -347,7 +356,54 @@ class TestLearningObjectiveCreation:
 
         rows = await db_session.execute(select(LearningObjective.canonical_code))
         codes = [r[0] for r in rows]
+        assert len(codes) == 12  # the collision path ran, rather than de-duplicating
         assert len(codes) == len(set(codes))
+
+    async def test_legacy_backfill_when_two_subtopics_share_text_at_one_grade_then_one_objective(
+        self, db_session: AsyncSession
+    ) -> None:
+        """A literal 1:1 mirror would violate ADR-003 T4's identity constraint.
+
+        Two subtopics under one topic and grade carrying the same objective text is the
+        duplication ADR-003 exists to collapse, and since T4 the database rejects it
+        outright — so the backfill has to link both placements to one objective rather
+        than insert a second row and abort the run.
+        """
+        await self._scope(
+            db_session,
+            [("Adding fractions", "Add and subtract fractions."), ("Fraction sums", "Add and subtract fractions.")],
+        )
+        stats = Stats()
+
+        await run_legacy_backfill(db_session, stats, dry_run=False)
+        await db_session.commit()
+
+        assert stats.created == 1
+        assert stats.linked_by_text == 1
+        objectives = (await db_session.execute(select(LearningObjective))).scalars().all()
+        assert len(objectives) == 1
+        links = (await db_session.execute(select(SubtopicObjective))).scalars().all()
+        assert len(links) == 2  # both placements reach the one concept
+
+    async def test_legacy_backfill_when_text_differs_only_in_punctuation_then_still_one_objective(
+        self, db_session: AsyncSession
+    ) -> None:
+        """Comparison is on the normalised text, matching what the constraint indexes.
+
+        Comparing verbatim would create a second row that the database then rejects —
+        the run would abort on a difference that is not a difference.
+        """
+        await self._scope(
+            db_session,
+            [("A", "Add and subtract fractions."), ("B", "  ADD and  subtract, fractions!  ")],
+        )
+        stats = Stats()
+
+        await run_legacy_backfill(db_session, stats, dry_run=False)
+        await db_session.commit()
+
+        assert stats.created == 1
+        assert stats.linked_by_text == 1
 
     async def test_dedup_when_same_text_same_grade_different_curricula_then_links_one_objective(
         self, db_session: AsyncSession
