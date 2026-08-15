@@ -394,21 +394,24 @@ class TestLearningObjective:
         cols = set(LearningObjective.__table__.c.keys())
         assert cols.isdisjoint({"grade_level", "difficulty_level", "tier"})
 
-    def test_grade_id_when_declared_then_nullable_and_restrict_on_delete(self) -> None:
-        """Nullable only until ADR-003 T3 splits grade-spanning objectives; T4 sets NOT NULL.
+    def test_grade_id_when_declared_then_not_null_and_restrict_on_delete(self) -> None:
+        """NOT NULL since ADR-003 T4 — grade is part of objective identity.
+
+        That is what makes a question's grade derivable from its objective alone, rather
+        than from a subtopic_id a curriculum remap can NULL.
 
         RESTRICT matches topic_id: grades are global and shared, so deleting one that
         still owns objectives must be a hard error rather than a silent cascade.
         """
         grade_col = LearningObjective.__table__.c.grade_id
-        assert grade_col.nullable is True
+        assert grade_col.nullable is False
         assert grade_col.index is True
 
         fk = next(iter(grade_col.foreign_keys))
         assert fk.column.table.name == "grades"
         assert fk.ondelete == "RESTRICT"
 
-    def test_normalised_objective_when_declared_then_nullable_text(self) -> None:
+    def test_normalised_objective_when_declared_then_not_null_text(self) -> None:
         """The stored de-duplication key T4 constrains on.
 
         Stored rather than generated: the normalisation folds accents via NFKD, which
@@ -416,7 +419,19 @@ class TestLearningObjective:
         it is rejected in generated columns and index expressions alike.
         """
         col = LearningObjective.__table__.c.normalised_objective
-        assert col.nullable is True
+        assert col.nullable is False
+
+    def test_identity_when_declared_then_unique_on_topic_grade_normalised_text(self) -> None:
+        """ADR-003's identity, enforced by the database rather than by convention.
+
+        Deliberately NOT (topic_id, grade_id, canonical_code): that permits the same
+        concept twice under two different codes, which is the exact duplication ADR-003
+        exists to prevent and which canonical_code cannot detect.
+        """
+        constraint = next(
+            c for c in LearningObjective.__table__.constraints if c.name == "uq_learning_objective_topic_grade_text"
+        )
+        assert {c.name for c in constraint.columns} == {"topic_id", "grade_id", "normalised_objective"}
 
     def test_canonical_code_when_declared_then_wide_enough_for_grade_suffix(self) -> None:
         # ADR-003 T3 suffixes split objectives with -G{level}; '-G10'..'-G13' would
@@ -425,17 +440,21 @@ class TestLearningObjective:
 
     def test_instantiation_when_given_required_fields_then_sets_attributes(self) -> None:
         topic_id = uuid.uuid4()
+        grade_id = uuid.uuid4()
         lo = LearningObjective(
             id=uuid.uuid4(),
             canonical_code="MATH-NEGATIVE-NUMBERS",
             name="Using negative numbers",
             learning_objective="Order and use negative numbers in practical contexts.",
             topic_id=topic_id,
+            grade_id=grade_id,
+            normalised_objective="order and use negative numbers in practical contexts",
             bloom_taxonomy_level="Apply",
             is_active=True,
         )
         assert lo.canonical_code == "MATH-NEGATIVE-NUMBERS"
         assert lo.topic_id == topic_id
+        assert lo.grade_id == grade_id
         assert lo.is_active is True
 
 

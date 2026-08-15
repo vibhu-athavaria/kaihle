@@ -324,34 +324,53 @@ class LearningObjective(Base, UUIDMixin, TimestampMixin):
         nullable=False,
         index=True,
     )
-    # NULL = grade not yet resolved. Nullable only until ADR-003 T3 splits the
-    # objectives that currently resolve to more than one grade; T4 sets NOT NULL.
+    # Part of the objective's identity (ADR-003). NOT NULL since T4 — every objective
+    # resolves to exactly one grade, so a question's grade is derivable from its
+    # objective alone and no longer depends on subtopic_id surviving a remap.
     # RESTRICT matches topic_id: grades are global and shared, so deleting one that
     # still owns objectives must be a hard error.
-    grade_id: Mapped[uuid.UUID | None] = mapped_column(
+    grade_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("grades.id", ondelete="RESTRICT"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
     # normalise_text(learning_objective) — the comparison key for de-duplication,
     # stored rather than generated because the Python normalisation folds accents via
     # NFKD and Postgres can only do that through unaccent(), which is not IMMUTABLE
     # and is therefore rejected in generated columns and index expressions.
-    # Written by scripts/create_learning_objectives.py; NULL until backfilled (T1).
-    normalised_objective: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Every writer must set it: scripts/create_learning_objectives.py,
+    # scripts/split_spanning_objectives.py, scripts/import_remap_artifact.py.
+    normalised_objective: Mapped[str] = mapped_column(Text, nullable=False)
     bloom_taxonomy_level: Mapped[str | None] = mapped_column(String(50))
     embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     topic: Mapped["Topic"] = relationship("Topic")
-    grade: Mapped["Grade | None"] = relationship("Grade")
+    grade: Mapped["Grade"] = relationship("Grade")
     subtopics: Mapped[list["Subtopic"]] = relationship(
         "Subtopic",
         secondary="subtopic_objectives",
         back_populates="learning_objectives",
     )
     questions: Mapped[list["QuestionBank"]] = relationship("QuestionBank", back_populates="learning_objective")
+
+    __table_args__ = (
+        # The ADR-003 identity, enforced by the database rather than by convention.
+        # Deliberately NOT (topic_id, grade_id, canonical_code): that would permit the
+        # same concept twice under two different codes, which is the exact duplication
+        # ADR-003 exists to prevent. normalised_objective is the concept.
+        #
+        # Grade is in the key, so one objective text may legitimately exist at several
+        # grades — that is what T3's split produces, and why the copies share
+        # normalised_objective without colliding.
+        UniqueConstraint(
+            "topic_id",
+            "grade_id",
+            "normalised_objective",
+            name="uq_learning_objective_topic_grade_text",
+        ),
+    )
 
 
 class SubtopicObjective(Base):

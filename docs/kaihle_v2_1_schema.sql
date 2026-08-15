@@ -454,23 +454,29 @@ CREATE TABLE learning_objectives (
     topic_id             UUID        NOT NULL
                              REFERENCES topics (id) ON DELETE RESTRICT,
     -- ADR-003: grade is part of objective identity, because a question can suit
-    -- Year 6 and not Year 8 even when both teach the same objective.
-    -- NULL = grade not yet resolved. Nullable only until T3 splits the objectives
-    -- that resolve to more than one grade; T4 sets NOT NULL.
-    grade_id             UUID        REFERENCES grades (id) ON DELETE RESTRICT,
+    -- Year 6 and not Year 8 even when both teach the same objective. NOT NULL since
+    -- T4, which is what makes a question's grade derivable from its objective alone
+    -- rather than from a subtopic_id a curriculum remap can NULL.
+    grade_id             UUID        NOT NULL
+                             REFERENCES grades (id) ON DELETE RESTRICT,
     -- normalise_text(learning_objective) from app/ai/similarity.py — the comparison
-    -- key for de-duplication, and the third column of T4's uniqueness constraint.
+    -- key for de-duplication, and the third column of the uniqueness constraint.
     -- STORED, not generated: the normalisation folds accents via NFKD, which Postgres
     -- can only reach through unaccent(), and unaccent() is not IMMUTABLE so it is
     -- rejected in both generated columns and index expressions.
-    normalised_objective TEXT,
+    normalised_objective TEXT        NOT NULL,
     bloom_taxonomy_level VARCHAR(50),
     embedding            VECTOR(768),            -- de-duplication only; not used for RAG
     is_active            BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMPTZ,
-    CONSTRAINT uq_learning_objectives_canonical_code UNIQUE (canonical_code)
-    -- ADR-003 T4 adds: UNIQUE (topic_id, grade_id, normalised_objective)
+    CONSTRAINT uq_learning_objectives_canonical_code UNIQUE (canonical_code),
+    -- ADR-003 T4: the objective's identity. NOT (topic_id, grade_id, canonical_code) —
+    -- that permits the same concept twice under two different codes, the exact
+    -- duplication ADR-003 exists to prevent. Grade is in the key so one concept may
+    -- legitimately exist at several grades, which is what T3's split produces.
+    CONSTRAINT uq_learning_objective_topic_grade_text
+        UNIQUE (topic_id, grade_id, normalised_objective)
 );
 
 COMMENT ON TABLE learning_objectives IS

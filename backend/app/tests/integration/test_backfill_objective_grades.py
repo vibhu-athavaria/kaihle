@@ -36,6 +36,11 @@ from scripts.backfill_objective_grades import (
     describe_unresolved,
 )
 
+# This module's whole subject is objectives with a NULL grade, which ADR-003 T4 forbids.
+# There is no way to test "the backfill fills NULLs" against a column that cannot hold
+# one, so the constraint is relaxed for these tests and restored on teardown.
+pytestmark = pytest.mark.usefixtures("ungraded_objectives_allowed")
+
 
 async def _objective_placed_at(
     db: AsyncSession,

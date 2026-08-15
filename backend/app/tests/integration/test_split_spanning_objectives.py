@@ -36,6 +36,10 @@ from scripts.split_spanning_objectives import find_spanning, split_objective, ve
 
 OBJECTIVE_TEXT = "Order a set of decimal numbers"
 
+# The split's input is an objective with a NULL grade, which ADR-003 T4 forbids once the
+# split has done its job. Relaxed here and restored on teardown — see the fixture.
+pytestmark = pytest.mark.usefixtures("ungraded_objectives_allowed")
+
 
 class SpanningFixture:
     """A grade-spanning objective plus one subtopic per grade, built in the database."""
