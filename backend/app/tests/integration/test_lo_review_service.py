@@ -39,12 +39,23 @@ class TestLoReviewQueue:
         topic = Topic(id=uuid.uuid4(), name="T", canonical_code=f"T{uuid.uuid4().hex[:8]}")
         db.add(topic)
         await db.flush()
+        # grade_id is NOT NULL since ADR-003 T4. Reused rather than created per call:
+        # grades.level is globally UNIQUE, so a second Grade 7 in one test collides.
+        # Sharing it is safe here because each call makes its own topic, and identity is
+        # (topic_id, grade_id, normalised_objective).
+        grade = (await db.execute(select(Grade).where(Grade.level == 7))).scalar_one_or_none()
+        if grade is None:
+            grade = Grade(id=uuid.uuid4(), name="Grade 7", level=7)
+            db.add(grade)
+            await db.flush()
         objective = LearningObjective(
             id=uuid.uuid4(),
             canonical_code=f"LO-{code_suffix}{uuid.uuid4().hex[:8]}",
             name="Objective",
             learning_objective="Order negative integers.",
+            normalised_objective="order negative integers",
             topic_id=topic.id,
+            grade_id=grade.id,
             is_active=True,
         )
         db.add(objective)
@@ -322,6 +333,7 @@ class TestGradeSplitItems:
             canonical_code=f"LO-G{level}-{uuid.uuid4().hex[:8]}",
             name="Objective",
             learning_objective="Order a set of decimal numbers",
+            normalised_objective="order a set of decimal numbers",
             topic_id=topic_id,
             grade_id=grade.id,
             is_active=True,

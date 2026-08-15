@@ -40,7 +40,6 @@ from app.models.curriculum import (
 )
 from app.models.school import Class, School
 from app.models.user import User, UserRole
-from app.services.attempt_service import AttemptService
 
 QUESTION_COUNT = 6
 DIFFICULTIES = [1, 2, 3, 4, 5]
@@ -97,7 +96,9 @@ async def adaptive_scope(db_session: AsyncSession) -> dict[str, object]:
             canonical_code=f"ADP-{uuid.uuid4().hex[:10]}",
             name=f"Adaptive Objective {topic_index}",
             learning_objective="Adapt to difficulty",
+            normalised_objective="adapt to difficulty",
             topic_id=topic.id,
+            grade_id=grade.id,
         )
         db_session.add(objective)
         await db_session.flush()
@@ -479,12 +480,12 @@ async def test_next_question_when_attempt_completed_then_returns_409(
 
 
 # ---------------------------------------------------------------------------
-# Topic attribution — questions must be credited to the CONFIGURED topic
+# Small-pool behaviour — the served count must reflect what the pool can supply
 # ---------------------------------------------------------------------------
 
 
 @pytest_asyncio.fixture
-async def shared_objective_assessment(
+async def small_pool_assessment(
     db_session: AsyncSession,
     adaptive_scope: dict[str, object],
     test_school_obj: School,
@@ -492,64 +493,63 @@ async def shared_objective_assessment(
     student_user: User,
     class_obj: Class,
 ) -> dict[str, object]:
-    """One objective bridged to subtopics in TWO curriculum topics, one configured.
+    """An assessment whose question_count can be raised beyond its actual pool.
 
-    This is the production shape that broke adaptivity: a learning objective taught
-    at several grades makes its questions reachable from curriculum topics the
-    teacher never selected.
+    Previously this fixture also bridged one objective to curriculum topics at TWO
+    grades, to prove attribution picked the configured topic rather than first-match.
+    ADR-003 removed that shape from the product: grade is part of objective identity,
+    T3 split every grade-spanning objective into one per grade, and the split's own
+    verify() fails if any remain. The test guarding it was deleted with this change —
+    see the commit message.
     """
     curriculum: Curriculum = adaptive_scope["curriculum"]  # type: ignore[assignment]
     subject: Subject = adaptive_scope["subject"]  # type: ignore[assignment]
     configured_grade: Grade = adaptive_scope["grade"]  # type: ignore[assignment]
 
-    phantom_grade = Grade(id=uuid.uuid4(), name="Phantom Grade 8", level=8)
-    topic = Topic(id=uuid.uuid4(), name="Shared Topic")
-    db_session.add_all([phantom_grade, topic])
+    topic = Topic(id=uuid.uuid4(), name="Small Pool Topic")
+    db_session.add(topic)
     await db_session.flush()
 
-    made: dict[str, CurriculumTopic] = {}
-    for label, grade in (("configured", configured_grade), ("phantom", phantom_grade)):
-        ct = CurriculumTopic(
-            id=uuid.uuid4(),
-            curriculum_id=curriculum.id,
-            subject_id=subject.id,
-            grade_id=grade.id,
-            topic_id=topic.id,
-            is_active=True,
-        )
-        db_session.add(ct)
-        made[label] = ct
+    curriculum_topic = CurriculumTopic(
+        id=uuid.uuid4(),
+        curriculum_id=curriculum.id,
+        subject_id=subject.id,
+        grade_id=configured_grade.id,
+        topic_id=topic.id,
+        is_active=True,
+    )
+    db_session.add(curriculum_topic)
     await db_session.flush()
 
     objective = LearningObjective(
         id=uuid.uuid4(),
-        canonical_code=f"SHARED-{uuid.uuid4().hex[:10]}",
-        name="Shared Objective",
-        learning_objective="Taught at two grades",
+        canonical_code=f"SMALLPOOL-{uuid.uuid4().hex[:10]}",
+        name="Small Pool Objective",
+        learning_objective="Taught at one grade",
+        normalised_objective="taught at one grade",
         topic_id=topic.id,
+        grade_id=configured_grade.id,
     )
     db_session.add(objective)
     await db_session.flush()
 
-    # Phantom subtopic added FIRST so first-match ordering would pick the wrong one.
-    for label in ("phantom", "configured"):
-        st = Subtopic(
-            id=uuid.uuid4(),
-            curriculum_topic_id=made[label].id,
-            name=f"{label} subtopic",
-            learning_objective="Shared",
-            is_active=True,
-        )
-        db_session.add(st)
-        await db_session.flush()
-        db_session.add(SubtopicObjective(subtopic_id=st.id, learning_objective_id=objective.id))
+    subtopic = Subtopic(
+        id=uuid.uuid4(),
+        curriculum_topic_id=curriculum_topic.id,
+        name="Small pool subtopic",
+        learning_objective="Taught at one grade",
+        is_active=True,
+    )
+    db_session.add(subtopic)
+    await db_session.flush()
+    db_session.add(SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=objective.id))
 
     assessment = Assessment(
         id=uuid.uuid4(),
         school_id=test_school_obj.id,
         class_id=class_obj.id,
         created_by=teacher_user.id,
-        title="Shared Objective Diagnostic",
+        title="Small Pool Diagnostic",
         assessment_type="DIAGNOSTIC",
         status=AssessmentStatus.ACTIVE,
         question_count=4,
@@ -562,7 +562,7 @@ async def shared_objective_assessment(
     db_session.add(
         AssessmentTopicConfig(
             assessment_id=assessment.id,
-            curriculum_topic_id=made["configured"].id,
+            curriculum_topic_id=curriculum_topic.id,
             grade_id=configured_grade.id,
         )
     )
@@ -571,12 +571,12 @@ async def shared_objective_assessment(
         q = QuestionBank(
             id=uuid.uuid4(),
             learning_objective_id=objective.id,
-            question_text=f"Shared D{difficulty}: pick A",
+            question_text=f"Small pool D{difficulty}: pick A",
             question_type="MCQ",
             options=[{"key": "A", "text": "right"}, {"key": "B", "text": "wrong"}],
             correct_answer="A",
             difficulty_level=difficulty,
-            canonical_form=f"shared{difficulty}",
+            canonical_form=f"smallpool{difficulty}",
             problem_signature={},
             source="bank",
             is_active=True,
@@ -593,36 +593,19 @@ async def shared_objective_assessment(
     )
     db_session.add(attempt)
     await db_session.commit()
-    return {"assessment": assessment, "attempt": attempt, "configured_topic": made["configured"]}
-
-
-@pytest.mark.asyncio
-async def test_candidates_when_objective_spans_topics_then_attributed_to_configured_topic(
-    db_session: AsyncSession,
-    shared_objective_assessment: dict[str, object],
-) -> None:
-    assessment: Assessment = shared_objective_assessment["assessment"]  # type: ignore[assignment]
-    configured: CurriculumTopic = shared_objective_assessment["configured_topic"]  # type: ignore[assignment]
-
-    service = AttemptService(db_session)
-    candidates, topic_by_question, _ = await service._load_adaptive_candidates(assessment.id)
-
-    assert len(candidates) == len(DIFFICULTIES)
-    # Every question lands on the teacher's topic, never the phantom one.
-    assert {c.curriculum_topic_id for c in candidates} == {configured.id}
-    assert set(topic_by_question.values()) == {configured.id}
+    return {"assessment": assessment, "attempt": attempt, "configured_topic": curriculum_topic}
 
 
 @pytest.mark.asyncio
 async def test_next_question_when_pool_smaller_than_question_count_then_reports_available_total(
     client: AsyncClient,
     db_session: AsyncSession,
-    shared_objective_assessment: dict[str, object],
+    small_pool_assessment: dict[str, object],
     student_user: User,
 ) -> None:
     """question_count says 4 but only 5 questions exist; raise it beyond the pool."""
-    assessment: Assessment = shared_objective_assessment["assessment"]  # type: ignore[assignment]
-    attempt: StudentAttempt = shared_objective_assessment["attempt"]  # type: ignore[assignment]
+    assessment: Assessment = small_pool_assessment["assessment"]  # type: ignore[assignment]
+    attempt: StudentAttempt = small_pool_assessment["attempt"]  # type: ignore[assignment]
     assessment.question_count = 99
     db_session.add(assessment)
     await db_session.commit()

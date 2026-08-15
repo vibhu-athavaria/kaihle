@@ -12,6 +12,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.similarity import normalise_text
 from app.core.security import create_access_token
 from app.models.curriculum import (
     Curriculum,
@@ -87,7 +88,9 @@ async def _create_curriculum_subtopic(db: AsyncSession) -> tuple[Subtopic, Topic
         canonical_code=f"LO-{uuid.uuid4().hex[:10]}",
         name="Solve linear equations",
         learning_objective="Solve linear equations",
+        normalised_objective=normalise_text("Solve linear equations"),
         topic_id=topic.id,
+        grade_id=grade.id,
         is_active=True,
     )
     db.add(objective)

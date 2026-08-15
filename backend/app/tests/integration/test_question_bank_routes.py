@@ -10,6 +10,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.similarity import normalise_text
 from app.models.curriculum import (
     Curriculum,
     CurriculumTopic,
@@ -83,7 +84,9 @@ async def curriculum_graph(db_session: AsyncSession):
         canonical_code=f"TEST-LO-{uuid.uuid4().hex[:12].upper()}",
         name=subtopic.name,
         learning_objective=subtopic.learning_objective,
+        normalised_objective=normalise_text(subtopic.learning_objective),
         topic_id=topic.id,
+        grade_id=grade.id,
     )
     db_session.add(objective)
     await db_session.flush()
