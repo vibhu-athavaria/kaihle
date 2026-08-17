@@ -383,27 +383,78 @@ class TestLearningObjective:
         # Must match subtopics.embedding so the two can be compared directly.
         assert LearningObjective.__table__.c.embedding.type.dim == 768
 
-    def test_model_when_no_grade_or_difficulty_columns_then_stays_curriculum_agnostic(
-        self,
-    ) -> None:
-        # Difficulty is a per-question property; grade is a placement property.
-        # Neither may leak onto the objective or the LO layer stops being reusable.
+    def test_model_when_no_difficulty_columns_then_stays_reusable(self) -> None:
+        # Difficulty stays off the objective: it is a per-question property, and
+        # difficulty_level expresses difficulty WITHIN a grade, never demand BETWEEN
+        # grades. Tier likewise lives on subtopics alone.
+        #
+        # grade_id is deliberately NOT in this set — ADR-003 made grade part of
+        # objective identity, because a question can suit Year 6 and not Year 8 even
+        # when both teach the same objective. See test_grade_id_* below.
         cols = set(LearningObjective.__table__.c.keys())
-        assert cols.isdisjoint({"grade_id", "grade_level", "difficulty_level", "tier"})
+        assert cols.isdisjoint({"grade_level", "difficulty_level", "tier"})
+
+    def test_grade_id_when_declared_then_not_null_and_restrict_on_delete(self) -> None:
+        """NOT NULL since ADR-003 T4 — grade is part of objective identity.
+
+        That is what makes a question's grade derivable from its objective alone, rather
+        than from a subtopic_id a curriculum remap can NULL.
+
+        RESTRICT matches topic_id: grades are global and shared, so deleting one that
+        still owns objectives must be a hard error rather than a silent cascade.
+        """
+        grade_col = LearningObjective.__table__.c.grade_id
+        assert grade_col.nullable is False
+        assert grade_col.index is True
+
+        fk = next(iter(grade_col.foreign_keys))
+        assert fk.column.table.name == "grades"
+        assert fk.ondelete == "RESTRICT"
+
+    def test_normalised_objective_when_declared_then_not_null_text(self) -> None:
+        """The stored de-duplication key T4 constrains on.
+
+        Stored rather than generated: the normalisation folds accents via NFKD, which
+        Postgres can only reach through unaccent(), and unaccent() is not IMMUTABLE so
+        it is rejected in generated columns and index expressions alike.
+        """
+        col = LearningObjective.__table__.c.normalised_objective
+        assert col.nullable is False
+
+    def test_identity_when_declared_then_unique_on_topic_grade_normalised_text(self) -> None:
+        """ADR-003's identity, enforced by the database rather than by convention.
+
+        Deliberately NOT (topic_id, grade_id, canonical_code): that permits the same
+        concept twice under two different codes, which is the exact duplication ADR-003
+        exists to prevent and which canonical_code cannot detect.
+        """
+        constraint = next(
+            c for c in LearningObjective.__table__.constraints if c.name == "uq_learning_objective_topic_grade_text"
+        )
+        assert {c.name for c in constraint.columns} == {"topic_id", "grade_id", "normalised_objective"}
+
+    def test_canonical_code_when_declared_then_wide_enough_for_grade_suffix(self) -> None:
+        # ADR-003 T3 suffixes split objectives with -G{level}; '-G10'..'-G13' would
+        # land exactly on the old 50-char limit.
+        assert LearningObjective.__table__.c.canonical_code.type.length == 64
 
     def test_instantiation_when_given_required_fields_then_sets_attributes(self) -> None:
         topic_id = uuid.uuid4()
+        grade_id = uuid.uuid4()
         lo = LearningObjective(
             id=uuid.uuid4(),
             canonical_code="MATH-NEGATIVE-NUMBERS",
             name="Using negative numbers",
             learning_objective="Order and use negative numbers in practical contexts.",
             topic_id=topic_id,
+            grade_id=grade_id,
+            normalised_objective="order and use negative numbers in practical contexts",
             bloom_taxonomy_level="Apply",
             is_active=True,
         )
         assert lo.canonical_code == "MATH-NEGATIVE-NUMBERS"
         assert lo.topic_id == topic_id
+        assert lo.grade_id == grade_id
         assert lo.is_active is True
 
 

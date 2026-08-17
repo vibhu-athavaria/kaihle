@@ -12,14 +12,17 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment import AssessmentStatus, AssessmentType
-from app.schemas.assessments import AssessmentCreateRequest
+from app.models.user import UserRole
+from app.schemas.assessments import AssessmentCreateRequest, DesignTier1DiagnosticRequest
 from app.services.assessment_service import (
     AssessmentService,
     InsufficientQuestionsError,
     TeacherNotClassOwnerError,
+    TopicGradeOutOfRangeError,
     _sample_with_topic_distribution,
 )
 
@@ -66,7 +69,9 @@ def _make_request(
 ) -> AssessmentCreateRequest:
     return AssessmentCreateRequest(
         title=title,
-        topic_ids=topic_ids or [uuid.uuid4()],
+        # `or` would collapse an explicit [] into a random topic, hiding the schema's
+        # min_length=1 rejection from any test that means to exercise it.
+        topic_ids=[uuid.uuid4()] if topic_ids is None else topic_ids,
         questions_per_topic=questions_per_topic,
         assessment_type=assessment_type,
         minimum_difficulty=minimum_difficulty,
@@ -81,6 +86,45 @@ def _make_question_rows(
     """Make fake (question_id, curriculum_topic_id, difficulty_level) rows."""
     topic_id = curriculum_topic_id or uuid.uuid4()
     return [(uuid.uuid4(), topic_id, 3.0) for _ in range(count)]
+
+
+def _grade_validation_results(
+    topic_ids: list[uuid.UUID],
+    class_level: int = 7,
+    topic_levels: dict[uuid.UUID, int] | None = None,
+    subject_id: uuid.UUID | None = None,
+    topic_subjects: dict[uuid.UUID, uuid.UUID] | None = None,
+) -> list[MagicMock]:
+    """Mock the two DB calls _resolve_and_validate_topic_grades makes.
+
+    create_assessment and design_tier1_diagnostic both validate that selected topics
+    sit in the class's grade window before querying questions, which costs a grade-level
+    lookup and a bulk topic-grade lookup. Returns them in call order so a test can
+    splice them into mock_db.execute's side_effect between the class lookup and the
+    question query.
+
+    topic_levels defaults every topic to the class's own grade level.
+    """
+    levels = topic_levels or {}
+    subjects = topic_subjects or {}
+
+    class_level_result = MagicMock()
+    class_level_result.scalar_one_or_none.return_value = class_level
+
+    topic_rows_result = MagicMock()
+    topic_rows_result.all.return_value = [
+        SimpleNamespace(
+            curriculum_topic_id=tid,
+            grade_level=levels.get(tid, class_level),
+            # Distinct per level so a test can assert which grade got recorded.
+            grade_id=uuid.uuid5(uuid.NAMESPACE_OID, f"grade-{levels.get(tid, class_level)}"),
+            # Defaults to the class's own subject, so only tests that opt in exercise
+            # the foreign-subject rejection.
+            subject_id=subjects.get(tid, subject_id),
+        )
+        for tid in topic_ids
+    ]
+    return [class_level_result, topic_rows_result]
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +150,13 @@ class TestCreateAssessment:
         mock_class_result.scalar_one_or_none.return_value = class_
         mock_questions_result = MagicMock()
         mock_questions_result.all.return_value = rows
-        mock_db.execute = AsyncMock(side_effect=[mock_class_result, mock_questions_result])
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                mock_class_result,
+                *_grade_validation_results(body.topic_ids, subject_id=class_.subject_id),
+                mock_questions_result,
+            ]
+        )
 
         assessment = await service.create_assessment(school_id, teacher_id, class_id, body)
 
@@ -169,7 +219,13 @@ class TestCreateAssessment:
         mock_class_result.scalar_one_or_none.return_value = class_
         mock_questions_result = MagicMock()
         mock_questions_result.all.return_value = rows
-        mock_db.execute = AsyncMock(side_effect=[mock_class_result, mock_questions_result])
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                mock_class_result,
+                *_grade_validation_results(body.topic_ids, subject_id=class_.subject_id),
+                mock_questions_result,
+            ]
+        )
 
         with pytest.raises(InsufficientQuestionsError) as exc_info:
             await service.create_assessment(school_id, teacher_id, class_id, body)
@@ -207,7 +263,13 @@ class TestCreateAssessment:
         mock_class_result.scalar_one_or_none.return_value = class_
         mock_questions_result = MagicMock()
         mock_questions_result.all.return_value = rows
-        mock_db.execute = AsyncMock(side_effect=[mock_class_result, mock_questions_result])
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                mock_class_result,
+                *_grade_validation_results(body.topic_ids, subject_id=class_.subject_id),
+                mock_questions_result,
+            ]
+        )
 
         # Capture the rows passed to _sample_pool_with_difficulty_distribution
         captured_rows: list = []
@@ -246,13 +308,588 @@ class TestCreateAssessment:
         mock_class_result.scalar_one_or_none.return_value = class_
         mock_questions_result = MagicMock()
         mock_questions_result.all.return_value = rows
-        mock_db.execute = AsyncMock(side_effect=[mock_class_result, mock_questions_result, MagicMock()])
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                mock_class_result,
+                *_grade_validation_results(body.topic_ids, subject_id=class_.subject_id),
+                mock_questions_result,
+                MagicMock(),
+            ]
+        )
 
         assessment = await service.create_assessment(school_id, teacher_id, class_id, body)
 
-        # Two execute calls: class lookup + question query (+ optional subject title)
-        assert mock_db.execute.call_count >= 2
+        # class lookup + grade validation (2) + question query (+ optional subject title)
+        assert mock_db.execute.call_count >= 4
         assert assessment.question_count == 3  # questions_per_topic=3, 1 topic
+
+
+# ---------------------------------------------------------------------------
+# create_assessment — grade window (ADR-003 T0)
+#
+# create_assessment used to apply CurriculumTopic.grade_id == class_.grade_id AND
+# intersect it with teacher-selected topic_ids, which are themselves
+# curriculum_topics.id and already grade-pinned. The two predicates are mutually
+# exclusive for any prior-grade topic, so those assessments returned zero questions.
+# ---------------------------------------------------------------------------
+
+
+class TestCreateAssessmentGradeWindow:
+    @pytest.mark.asyncio
+    async def test_create_assessment_when_prior_grade_topics_then_returns_questions(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """A Year 7 class must be able to build an assessment from Year 6 topics."""
+        school_id, teacher_id, class_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        class_ = _make_class(school_id, teacher_id)
+        class_.id = class_id
+
+        prior_topic = uuid.uuid4()
+        body = _make_request(topic_ids=[prior_topic], questions_per_topic=3)
+
+        mock_class_result = MagicMock()
+        mock_class_result.scalar_one_or_none.return_value = class_
+        mock_questions_result = MagicMock()
+        mock_questions_result.all.return_value = _make_question_rows(10, prior_topic)
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                mock_class_result,
+                *_grade_validation_results(
+                    body.topic_ids,
+                    class_level=7,
+                    topic_levels={prior_topic: 6},
+                    subject_id=class_.subject_id,
+                ),
+                mock_questions_result,
+            ]
+        )
+
+        assessment = await service.create_assessment(school_id, teacher_id, class_id, body)
+
+        assert assessment.question_count == 3
+
+    @pytest.mark.asyncio
+    async def test_create_assessment_when_prior_grade_topic_then_config_records_topic_grade(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """assessment_topic_config must record the TOPIC's grade, not the class's.
+
+        Recording the class grade would misreport a Year 6 topic as Year 7 content.
+        """
+        school_id, teacher_id, class_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        class_ = _make_class(school_id, teacher_id)
+        class_.id = class_id
+
+        prior_topic = uuid.uuid4()
+        body = _make_request(topic_ids=[prior_topic], questions_per_topic=3)
+
+        mock_class_result = MagicMock()
+        mock_class_result.scalar_one_or_none.return_value = class_
+        mock_questions_result = MagicMock()
+        mock_questions_result.all.return_value = _make_question_rows(10, prior_topic)
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                mock_class_result,
+                *_grade_validation_results(
+                    body.topic_ids,
+                    class_level=7,
+                    topic_levels={prior_topic: 6},
+                    subject_id=class_.subject_id,
+                ),
+                mock_questions_result,
+            ]
+        )
+
+        await service.create_assessment(school_id, teacher_id, class_id, body)
+
+        expected_grade_id = uuid.uuid5(uuid.NAMESPACE_OID, "grade-6")
+        configs = [c.args[0] for c in mock_db.add.call_args_list if type(c.args[0]).__name__ == "AssessmentTopicConfig"]
+        assert configs, "no AssessmentTopicConfig rows were created"
+        assert all(c.grade_id == expected_grade_id for c in configs)
+        assert all(c.grade_id != class_.grade_id for c in configs)
+
+    @pytest.mark.asyncio
+    async def test_create_assessment_when_two_grades_back_then_raises_value_error(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        school_id, teacher_id, class_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        class_ = _make_class(school_id, teacher_id)
+        class_.id = class_id
+
+        old_topic = uuid.uuid4()
+        body = _make_request(topic_ids=[old_topic])
+
+        mock_class_result = MagicMock()
+        mock_class_result.scalar_one_or_none.return_value = class_
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                mock_class_result,
+                *_grade_validation_results(
+                    body.topic_ids,
+                    class_level=7,
+                    topic_levels={old_topic: 5},
+                    subject_id=class_.subject_id,
+                ),
+            ]
+        )
+
+        with pytest.raises(TopicGradeOutOfRangeError, match="grade level 5"):
+            await service.create_assessment(school_id, teacher_id, class_id, body)
+
+        mock_db.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_assessment_when_higher_grade_topic_then_raises_value_error(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        school_id, teacher_id, class_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        class_ = _make_class(school_id, teacher_id)
+        class_.id = class_id
+
+        future_topic = uuid.uuid4()
+        body = _make_request(topic_ids=[future_topic])
+
+        mock_class_result = MagicMock()
+        mock_class_result.scalar_one_or_none.return_value = class_
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                mock_class_result,
+                *_grade_validation_results(
+                    body.topic_ids,
+                    class_level=7,
+                    topic_levels={future_topic: 8},
+                    subject_id=class_.subject_id,
+                ),
+            ]
+        )
+
+        with pytest.raises(TopicGradeOutOfRangeError, match="grade level 8"):
+            await service.create_assessment(school_id, teacher_id, class_id, body)
+
+        mock_db.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_assessment_when_topic_not_found_then_raises_value_error(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        school_id, teacher_id, class_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        class_ = _make_class(school_id, teacher_id)
+        class_.id = class_id
+
+        body = _make_request(topic_ids=[uuid.uuid4()])
+
+        mock_class_result = MagicMock()
+        mock_class_result.scalar_one_or_none.return_value = class_
+        # Validation query returns no row for the requested topic.
+        mock_db.execute = AsyncMock(
+            side_effect=[mock_class_result, *_grade_validation_results([], class_level=7, subject_id=class_.subject_id)]
+        )
+
+        with pytest.raises(ValueError, match="not found"):
+            await service.create_assessment(school_id, teacher_id, class_id, body)
+
+    @pytest.mark.asyncio
+    async def test_create_assessment_when_current_grade_topics_then_unchanged_behaviour(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """The common path must be untouched by the grade-window change."""
+        school_id, teacher_id, class_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        class_ = _make_class(school_id, teacher_id)
+        class_.id = class_id
+
+        topic = uuid.uuid4()
+        body = _make_request(topic_ids=[topic], questions_per_topic=4)
+
+        mock_class_result = MagicMock()
+        mock_class_result.scalar_one_or_none.return_value = class_
+        mock_questions_result = MagicMock()
+        mock_questions_result.all.return_value = _make_question_rows(12, topic)
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                mock_class_result,
+                *_grade_validation_results(
+                    body.topic_ids,
+                    class_level=7,
+                    topic_levels={topic: 7},
+                    subject_id=class_.subject_id,
+                ),
+                mock_questions_result,
+            ]
+        )
+
+        assessment = await service.create_assessment(school_id, teacher_id, class_id, body)
+
+        assert assessment.status == AssessmentStatus.DRAFT
+        assert assessment.question_count == 4
+
+    def test_create_assessment_when_topic_ids_empty_then_schema_rejects(self) -> None:
+        """An empty selection can no longer reach the service at all.
+
+        It used to mean "any topic at the class's grade", which wrote zero
+        assessment_topic_config rows and silently degraded attempt attribution to
+        first-match ordering. The wizard now pre-selects topics for the types that
+        previously skipped selection, so scope is always explicit.
+        """
+        # model_validate mirrors how FastAPI builds the body from JSON, and lets the
+        # omitted-field case below be expressed without tripping mypy's call-arg check.
+        with pytest.raises(ValidationError) as exc_info:
+            AssessmentCreateRequest.model_validate({"topic_ids": []})
+
+        assert any(e["loc"] == ("topic_ids",) for e in exc_info.value.errors())
+
+    def test_create_assessment_when_topic_ids_omitted_then_schema_rejects(self) -> None:
+        with pytest.raises(ValidationError) as exc_info:
+            AssessmentCreateRequest.model_validate({"questions_per_topic": 5})
+
+        assert any(e["loc"] == ("topic_ids",) for e in exc_info.value.errors())
+
+    def test_create_assessment_when_topic_ids_duplicated_then_collapsed_in_order(self) -> None:
+        """assessment_topic_config has PK (assessment_id, curriculum_topic_id).
+
+        A duplicate would raise IntegrityError — a 500 from a request whose intent is
+        unambiguous — and would also inflate questions_per_topic * len(topic_ids),
+        demanding more questions than the selection can supply.
+        """
+        first, second = uuid.uuid4(), uuid.uuid4()
+
+        body = AssessmentCreateRequest.model_validate({"topic_ids": [str(first), str(second), str(first), str(first)]})
+
+        assert body.topic_ids == [first, second]
+
+    def test_design_tier1_when_topic_ids_duplicated_then_collapsed(self) -> None:
+        """The diagnostic path writes the same config rows, so it needs the same guard."""
+        topic = uuid.uuid4()
+
+        body = DesignTier1DiagnosticRequest.model_validate({"topic_ids": [str(topic), str(topic)]})
+
+        assert body.topic_ids == [topic]
+
+
+# ---------------------------------------------------------------------------
+# _resolve_and_validate_topic_grades — shared by create_assessment and
+# design_tier1_diagnostic
+# ---------------------------------------------------------------------------
+
+
+class TestResolveAndValidateTopicGrades:
+    @pytest.mark.asyncio
+    async def test_resolve_topic_grades_when_no_topics_then_returns_empty_without_querying(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """Both callers now guarantee a non-empty list, but the guard stays.
+
+        Querying with an empty IN () clause is wasted work, and the helper is shared —
+        a future caller without a min_length=1 schema must not pay for it.
+        """
+        mock_db.execute = AsyncMock()
+
+        result = await service._resolve_and_validate_topic_grades(
+            class_id=uuid.uuid4(),
+            class_grade_id=uuid.uuid4(),
+            class_subject_id=uuid.uuid4(),
+            topic_ids=[],
+        )
+
+        assert result == {}
+        mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_resolve_topic_grades_when_topic_from_other_subject_then_raises_value_error(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """A foreign-subject topic at an allowed grade must still be rejected.
+
+        create_assessment's question query filters on subject, so such a topic yields no
+        questions — but Step 8 still writes it an assessment_topic_config row, which
+        attempt attribution trusts. design_tier1_diagnostic's query does not filter
+        subject at all, so it would sample the other subject's questions outright.
+        """
+        class_subject_id, foreign_topic = uuid.uuid4(), uuid.uuid4()
+
+        mock_db.execute = AsyncMock(
+            side_effect=_grade_validation_results(
+                [foreign_topic],
+                class_level=7,
+                subject_id=class_subject_id,
+                topic_subjects={foreign_topic: uuid.uuid4()},  # different subject
+            )
+        )
+
+        with pytest.raises(ValueError, match="different subject"):
+            await service._resolve_and_validate_topic_grades(
+                class_id=uuid.uuid4(),
+                class_grade_id=uuid.uuid4(),
+                class_subject_id=class_subject_id,
+                topic_ids=[foreign_topic],
+            )
+
+    @pytest.mark.asyncio
+    async def test_resolve_topic_grades_when_class_grade_missing_then_raises_value_error(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """A class pointing at a non-existent grade is a data defect, not a bad request.
+
+        ValueError (→ 404), not TopicGradeOutOfRangeError (→ 422): the failure is the
+        class's own grade, not the teacher's topic selection.
+        """
+        grade_result = MagicMock()
+        grade_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=grade_result)
+
+        with pytest.raises(ValueError, match="Grade not found"):
+            await service._resolve_and_validate_topic_grades(
+                class_id=uuid.uuid4(),
+                class_grade_id=uuid.uuid4(),
+                class_subject_id=uuid.uuid4(),
+                topic_ids=[uuid.uuid4()],
+            )
+
+
+# ---------------------------------------------------------------------------
+# list_class_assessments — role-based visibility (CONSTITUTION Rules 3 and 12)
+# ---------------------------------------------------------------------------
+
+
+def _list_results(
+    items: list[SimpleNamespace],
+    total: int,
+    attempt_counts: list[SimpleNamespace] | None = None,
+) -> list[MagicMock]:
+    """Mock the count query, the page query, and the attempt-count roll-up."""
+    count_result = MagicMock()
+    count_result.scalar.return_value = total
+
+    items_result = MagicMock()
+    items_result.scalars.return_value.all.return_value = items
+
+    counts_result = MagicMock()
+    counts_result.all.return_value = attempt_counts or []
+
+    return [count_result, items_result, counts_result]
+
+
+def _make_assessment_row(status: str = AssessmentStatus.ACTIVE) -> SimpleNamespace:
+    return SimpleNamespace(id=uuid.uuid4(), status=status)
+
+
+class TestListClassAssessments:
+    @pytest.mark.asyncio
+    async def test_list_when_teacher_owns_class_then_returns_items_and_attempt_counts(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        school_id, teacher_id, class_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        class_ = _make_class(school_id, teacher_id)
+        class_.id = class_id
+        assessment = _make_assessment_row()
+
+        class_result = MagicMock()
+        class_result.scalar_one_or_none.return_value = class_
+        mock_db.execute = AsyncMock(
+            side_effect=[
+                class_result,
+                *_list_results(
+                    [assessment],
+                    total=1,
+                    attempt_counts=[SimpleNamespace(assessment_id=assessment.id, cnt=4)],
+                ),
+            ]
+        )
+
+        items, total, attempt_counts = await service.list_class_assessments(
+            class_id=class_id,
+            school_id=school_id,
+            requesting_user_id=teacher_id,
+            requesting_user_role=UserRole.TEACHER,
+            status_filter=None,
+            page=1,
+            page_size=20,
+        )
+
+        assert items == [assessment]
+        assert total == 1
+        assert attempt_counts == {assessment.id: 4}
+
+    @pytest.mark.asyncio
+    async def test_list_when_teacher_does_not_own_class_then_raises_teacher_not_class_owner_error(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        school_id, class_id = uuid.uuid4(), uuid.uuid4()
+        class_ = _make_class(school_id, teacher_id=uuid.uuid4())
+        class_.id = class_id
+
+        class_result = MagicMock()
+        class_result.scalar_one_or_none.return_value = class_
+        mock_db.execute = AsyncMock(return_value=class_result)
+
+        with pytest.raises(TeacherNotClassOwnerError):
+            await service.list_class_assessments(
+                class_id=class_id,
+                school_id=school_id,
+                requesting_user_id=uuid.uuid4(),  # not the owner
+                requesting_user_role=UserRole.TEACHER,
+                status_filter=None,
+                page=1,
+                page_size=20,
+            )
+
+    @pytest.mark.asyncio
+    async def test_list_when_teacher_and_class_missing_then_raises_value_error(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        class_result = MagicMock()
+        class_result.scalar_one_or_none.return_value = None
+        mock_db.execute = AsyncMock(return_value=class_result)
+
+        with pytest.raises(ValueError, match="Class not found"):
+            await service.list_class_assessments(
+                class_id=uuid.uuid4(),
+                school_id=uuid.uuid4(),
+                requesting_user_id=uuid.uuid4(),
+                requesting_user_role=UserRole.TEACHER,
+                status_filter=None,
+                page=1,
+                page_size=20,
+            )
+
+    @pytest.mark.asyncio
+    async def test_list_when_student_then_no_class_ownership_query_is_made(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """Students are filtered to ACTIVE/CLOSED in SQL, not by an ownership check.
+
+        Exactly three queries — count, page, attempt roll-up — means the teacher-only
+        class lookup did not run. A fourth would mean students were being ownership-checked.
+        """
+        assessment = _make_assessment_row()
+        mock_db.execute = AsyncMock(
+            side_effect=_list_results(
+                [assessment],
+                total=1,
+                attempt_counts=[SimpleNamespace(assessment_id=assessment.id, cnt=2)],
+            )
+        )
+
+        items, total, attempt_counts = await service.list_class_assessments(
+            class_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            requesting_user_id=uuid.uuid4(),
+            requesting_user_role=UserRole.STUDENT,
+            status_filter="DRAFT",  # ignored for students
+            page=1,
+            page_size=20,
+        )
+
+        assert items == [assessment]
+        assert total == 1
+        assert attempt_counts == {assessment.id: 2}
+        assert mock_db.execute.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_list_when_kaihle_admin_then_no_school_filter_and_no_ownership_check(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """KaihleAdmin bypasses school scoping entirely (Rule 12)."""
+        assessment = _make_assessment_row()
+        mock_db.execute = AsyncMock(side_effect=_list_results([assessment], total=1))
+
+        items, total, attempt_counts = await service.list_class_assessments(
+            class_id=uuid.uuid4(),
+            school_id=None,  # no school — only valid for KaihleAdmin
+            requesting_user_id=uuid.uuid4(),
+            requesting_user_role=UserRole.KAIHLE_ADMIN,
+            status_filter="ACTIVE",
+            page=2,
+            page_size=10,
+        )
+
+        assert items == [assessment]
+        assert total == 1
+        # No attempts recorded for it, so the roll-up stays empty rather than 0-filled.
+        assert attempt_counts == {}
+        assert mock_db.execute.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_list_when_no_items_then_attempt_count_query_is_skipped(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        """An empty page must not issue an IN () attempt-count query."""
+        count_result = MagicMock()
+        count_result.scalar.return_value = 0
+        items_result = MagicMock()
+        items_result.scalars.return_value.all.return_value = []
+        mock_db.execute = AsyncMock(side_effect=[count_result, items_result])
+
+        items, total, attempt_counts = await service.list_class_assessments(
+            class_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            requesting_user_id=uuid.uuid4(),
+            requesting_user_role=UserRole.SCHOOL_ADMIN,
+            status_filter=None,
+            page=1,
+            page_size=20,
+        )
+
+        assert (items, total, attempt_counts) == ([], 0, {})
+        assert mock_db.execute.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# list_teacher_assessments
+# ---------------------------------------------------------------------------
+
+
+class TestListTeacherAssessments:
+    @pytest.mark.asyncio
+    async def test_list_teacher_assessments_when_rows_exist_then_flattens_class_and_grade(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        assessment = SimpleNamespace(
+            id=uuid.uuid4(),
+            class_id=uuid.uuid4(),
+            title="Fractions Check",
+            assessment_type=AssessmentType.PROGRESS_CHECK,
+            status=AssessmentStatus.ACTIVE,
+            question_count=12,
+            questions_per_topic=4,
+            minimum_difficulty=1,
+            maximum_difficulty=5,
+            question_types=["MCQ"],
+            time_limit_minutes=30,
+            created_at=datetime(2026, 8, 1, tzinfo=UTC),
+            published_at=None,
+            deadline=None,
+        )
+        result = MagicMock()
+        result.all.return_value = [(assessment, "Class 7A", "Grade 7")]
+        mock_db.execute = AsyncMock(return_value=result)
+
+        rows = await service.list_teacher_assessments(
+            teacher_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            status_filter="ACTIVE",
+        )
+
+        assert len(rows) == 1
+        assert rows[0]["class_name"] == "Class 7A"
+        assert rows[0]["grade_name"] == "Grade 7"
+        assert rows[0]["title"] == "Fractions Check"
+        assert rows[0]["questions_per_topic"] == 4
+
+    @pytest.mark.asyncio
+    async def test_list_teacher_assessments_when_no_rows_then_returns_empty_list(
+        self, service: AssessmentService, mock_db: MagicMock
+    ) -> None:
+        result = MagicMock()
+        result.all.return_value = []
+        mock_db.execute = AsyncMock(return_value=result)
+
+        rows = await service.list_teacher_assessments(
+            teacher_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            status_filter=None,
+        )
+
+        assert rows == []
 
 
 # ---------------------------------------------------------------------------
@@ -570,6 +1207,7 @@ class TestDesignTier1DiagnosticClosedUnlock:
             curriculum_topic_id=topic_id,
             grade_level=9,
             grade_id=grade_id,
+            subject_id=class_ns.subject_id,
         )
 
         mock_db.execute = AsyncMock(

@@ -311,6 +311,35 @@ async def db_session(engine: AsyncEngine, _schema: None) -> AsyncGenerator[Async
 
 
 @pytest_asyncio.fixture
+async def ungraded_objectives_allowed(db_session: AsyncSession) -> AsyncGenerator[None, None]:
+    """Relax ADR-003 T4's NOT NULL columns for the duration of one test.
+
+    The T1 backfill and the T3 split exist precisely to eliminate NULL grade_id, and T4
+    then forbids it. Their tests therefore have to construct a state the schema no longer
+    permits — there is no way to test "the backfill fills NULLs" against a column that
+    cannot hold one. Postgres DDL is transactional, but this suite isolates by TRUNCATE
+    rather than by rollback, so the constraint is restored explicitly on teardown.
+
+    Scope this as narrowly as possible: only the two script test modules should use it.
+    Any other test needing it is a sign that production code is creating objectives
+    without a grade, which is the bug T4 exists to make impossible.
+    """
+    for column in ("grade_id", "normalised_objective"):
+        await db_session.execute(text(f"ALTER TABLE learning_objectives ALTER COLUMN {column} DROP NOT NULL"))
+    await db_session.commit()
+
+    yield
+
+    # TRUNCATE first: SET NOT NULL revalidates the table, so any row the test left with a
+    # NULL would block the restore and leak a relaxed schema into every later test.
+    await db_session.rollback()
+    await db_session.execute(text("TRUNCATE TABLE learning_objectives CASCADE"))
+    for column in ("grade_id", "normalised_objective"):
+        await db_session.execute(text(f"ALTER TABLE learning_objectives ALTER COLUMN {column} SET NOT NULL"))
+    await db_session.commit()
+
+
+@pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """Create an async HTTP client for testing API endpoints."""
 

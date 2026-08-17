@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.similarity import normalise_text
 from app.models.assessment import (
     Assessment,
     AssessmentStatus,
@@ -423,7 +424,9 @@ class TestGapStatesAfterCurriculumRemap:
             canonical_code=f"LO-{uuid.uuid4().hex[:10]}",
             name="Remapped objective",
             learning_objective="Order negative integers on a number line.",
+            normalised_objective=normalise_text("Order negative integers on a number line."),
             topic_id=ct.topic_id,
+            grade_id=grade.id,
             is_active=True,
         )
         db_session.add(objective)
@@ -496,7 +499,9 @@ class TestGapStatesAfterCurriculumRemap:
             canonical_code=f"LO-{uuid.uuid4().hex[:10]}",
             name="Shared objective",
             learning_objective="Shared across two placements.",
+            normalised_objective=normalise_text("Shared across two placements."),
             topic_id=other_ct.topic_id,
+            grade_id=other_grade.id,
             is_active=True,
         )
         db_session.add(objective)

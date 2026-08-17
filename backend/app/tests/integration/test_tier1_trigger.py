@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.similarity import normalise_text
 from app.models.assessment import (
     Assessment,
     AssessmentSelectedQuestion,
@@ -38,7 +39,9 @@ from app.services.assessment_service import AssessmentService
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
-async def _create_objective(db: AsyncSession, subtopic: Subtopic, topic_id: uuid.UUID) -> LearningObjective:
+async def _create_objective(
+    db: AsyncSession, subtopic: Subtopic, topic_id: uuid.UUID, grade_id: uuid.UUID
+) -> LearningObjective:
     """Give a subtopic an objective and bridge them.
 
     Selection resolves curriculum_topics -> subtopics -> subtopic_objectives ->
@@ -51,7 +54,9 @@ async def _create_objective(db: AsyncSession, subtopic: Subtopic, topic_id: uuid
         canonical_code=f"TEST-LO-{uuid.uuid4().hex[:12].upper()}",
         name=subtopic.name,
         learning_objective=subtopic.learning_objective,
+        normalised_objective=normalise_text(subtopic.learning_objective),
         topic_id=topic_id,
+        grade_id=grade_id,
     )
     db.add(objective)
     await db.flush()
@@ -145,7 +150,7 @@ async def _setup_full_class(
         db.add(subtopic)
         await db.flush()
 
-        objective = await _create_objective(db, subtopic, topic.id)
+        objective = await _create_objective(db, subtopic, topic.id, grade.id)
 
         for _ in range(questions_per_topic):
             q = await _create_question(db, subtopic.id, objective.id)

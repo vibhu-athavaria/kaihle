@@ -51,6 +51,7 @@ from app.services.assessment_service import (
     AssessmentService,
     InsufficientQuestionsError,
     TeacherNotClassOwnerError,
+    TopicGradeOutOfRangeError,
 )
 
 logger = structlog.get_logger()
@@ -222,6 +223,17 @@ async def create_assessment(
                 "requested": exc.requested,
             },
         )
+    except TopicGradeOutOfRangeError as exc:
+        # The topic exists — the selection is invalid. 422, not 404.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": str(exc),
+                "topic_id": str(exc.topic_id),
+                "topic_grade_level": exc.topic_grade_level,
+                "class_grade_level": exc.class_grade_level,
+            },
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -317,6 +329,17 @@ async def design_tier1_diagnostic(
                 "message": "Insufficient questions for selected topics.",
                 "available": exc.available,
                 "requested": exc.requested,
+            },
+        )
+    except TopicGradeOutOfRangeError as exc:
+        # The topic exists — the selection is invalid. 422, not 404.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": str(exc),
+                "topic_id": str(exc.topic_id),
+                "topic_grade_level": exc.topic_grade_level,
+                "class_grade_level": exc.class_grade_level,
             },
         )
     except ValueError as exc:

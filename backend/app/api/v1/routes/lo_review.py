@@ -113,7 +113,13 @@ class ObjectiveSearchItem(BaseModel):
 @router.get("/items", response_model=ReviewListResponse)
 async def list_review_items(
     status_filter: str = Query("PENDING", pattern="^(PENDING|APPROVED|REJECTED|SPLIT)$", alias="status"),
-    item_type: str | None = Query(None, pattern="^(QUESTION_REMAP|QUESTION_REMAP_REMAINDER|OBJECTIVE_DEDUP)$"),
+    item_type: str | None = Query(
+        None,
+        # Must list every value the CHECK constraint allows. OBJECTIVE_GRADE_SPLIT was
+        # added by ADR-003 T3; omitting it here would 422 the one filter a reviewer needs
+        # to find those items in a queue of hundreds.
+        pattern="^(QUESTION_REMAP|QUESTION_REMAP_REMAINDER|OBJECTIVE_DEDUP|OBJECTIVE_GRADE_SPLIT)$",
+    ),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),

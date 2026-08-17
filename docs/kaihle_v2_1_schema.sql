@@ -430,17 +430,120 @@ CREATE INDEX idx_chunks_subtopic ON curriculum_chunks (subtopic_id);
 -- Enable after load: CREATE INDEX idx_chunks_embedding
 --   ON curriculum_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
+-- ---------------------------------------------------------------------------
+-- learning_objectives: the stable binding target for questions.
+--
+-- Subtopics are curriculum PLACEMENT — they are deleted and recreated whenever a
+-- curriculum is remapped (see /scripts/wipe_curriculum.py, which NULLs
+-- question_bank.subtopic_id). Learning objectives are the underlying CONCEPT and
+-- survive that, so questions bind here instead.
+--
+-- topic_id points at topics, which is grade-agnostic. Grade is therefore NOT
+-- derivable from an objective today; ADR-003 adds grade_id to fix that.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE learning_objectives (
+    id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    -- 64 not 50: ADR-003 T3 splits grade-spanning objectives by suffixing -G{level},
+    -- and '-G10'..'-G13' would land exactly on the old 50-char limit.
+    canonical_code       VARCHAR(64) NOT NULL,   -- e.g. 'MATH-NEGATIVE-NUMBERS'
+    name                 TEXT        NOT NULL,
+    learning_objective   TEXT        NOT NULL,   -- basis for text/semantic de-duplication
+    -- RESTRICT: topics are shared across grades and curricula, so deleting a topic
+    -- that still owns objectives must be a hard error, never a silent cascade.
+    topic_id             UUID        NOT NULL
+                             REFERENCES topics (id) ON DELETE RESTRICT,
+    -- ADR-003: grade is part of objective identity, because a question can suit
+    -- Year 6 and not Year 8 even when both teach the same objective. NOT NULL since
+    -- T4, which is what makes a question's grade derivable from its objective alone
+    -- rather than from a subtopic_id a curriculum remap can NULL.
+    grade_id             UUID        NOT NULL
+                             REFERENCES grades (id) ON DELETE RESTRICT,
+    -- normalise_text(learning_objective) from app/ai/similarity.py — the comparison
+    -- key for de-duplication, and the third column of the uniqueness constraint.
+    -- STORED, not generated: the normalisation folds accents via NFKD, which Postgres
+    -- can only reach through unaccent(), and unaccent() is not IMMUTABLE so it is
+    -- rejected in both generated columns and index expressions.
+    normalised_objective TEXT        NOT NULL,
+    bloom_taxonomy_level VARCHAR(50),
+    embedding            VECTOR(768),            -- de-duplication only; not used for RAG
+    is_active            BOOLEAN     NOT NULL DEFAULT TRUE,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMPTZ,
+    CONSTRAINT uq_learning_objectives_canonical_code UNIQUE (canonical_code),
+    -- ADR-003 T4: the objective's identity. NOT (topic_id, grade_id, canonical_code) —
+    -- that permits the same concept twice under two different codes, the exact
+    -- duplication ADR-003 exists to prevent. Grade is in the key so one concept may
+    -- legitimately exist at several grades, which is what T3's split produces.
+    CONSTRAINT uq_learning_objective_topic_grade_text
+        UNIQUE (topic_id, grade_id, normalised_objective)
+);
+
+COMMENT ON TABLE learning_objectives IS
+    'Curriculum-agnostic statement of what a learner should be able to do.
+     The stable binding target for question_bank.learning_objective_id: subtopics are
+     placement and are wiped on remap, objectives are concept and survive.
+     Created by /scripts/create_learning_objectives.py in two modes —
+     new-tree (staged de-duplication, embedding-based) and legacy-backfill (1:1 mirror).
+     Deliberately carries no difficulty range (per-question property).
+     Grade is NOT carried today — ADR-003 adds grade_id and makes identity
+     (topic_id, grade_id, normalised objective text).';
+
+CREATE INDEX ix_learning_objectives_topic_id ON learning_objectives (topic_id);
+CREATE INDEX ix_learning_objectives_grade_id ON learning_objectives (grade_id);
+
+-- ---------------------------------------------------------------------------
+-- subtopic_objectives: many-to-many bridge between placement and concept.
+-- One subtopic can teach several objectives; one objective can be taught by
+-- several subtopics (across grades, and across curriculum versions).
+--
+-- NOTE the asymmetric delete rules — they are the whole point of this table:
+--   subtopic_id           CASCADE  — placement rows die with the remap
+--   learning_objective_id RESTRICT — the concept must outlive it
+-- This is why questions bind to learning_objective_id and NOT to this bridge:
+-- the bridge rows themselves cascade away on a wipe.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE subtopic_objectives (
+    subtopic_id           UUID NOT NULL
+                              REFERENCES subtopics (id) ON DELETE CASCADE,
+    learning_objective_id UUID NOT NULL
+                              REFERENCES learning_objectives (id) ON DELETE RESTRICT,
+    PRIMARY KEY (subtopic_id, learning_objective_id)
+);
+
+COMMENT ON TABLE subtopic_objectives IS
+    'Bridge from curriculum placement (subtopic) to concept (learning objective).
+     Composite primary key — deliberately no surrogate id.
+     Question selection resolves through this table:
+       curriculum_topics -> subtopics -> subtopic_objectives -> learning_objectives
+                         -> question_bank.learning_objective_id
+     See app/services/question_selection.py, which owns that join.';
+
 -- =============================================================================
 -- SECTION 2: QUESTION BANK
--- subtopic_id is the ONLY curriculum FK.
--- subject / grade / curriculum / topic all derived via:
---   question_bank → subtopics → curriculum_topics → (subject, grade, curriculum, topic)
+-- learning_objective_id is the CANONICAL curriculum FK. Selection resolves via:
+--   question_bank → learning_objectives → subtopic_objectives → subtopics
+--                 → curriculum_topics → (subject, grade, curriculum, topic)
+--
+-- subtopic_id is LEGACY/provenance only and is NULL for any question whose
+-- placement has been replaced by a remap. Selecting on it silently returns zero
+-- rows for remapped scopes — do not use it in new queries.
 -- =============================================================================
 
 CREATE TABLE question_bank (
     id                      UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
-    subtopic_id             UUID    NOT NULL
+    -- NULLABLE since the cambridge_v2 remap: wipe_curriculum.py NULLs this for
+    -- every in-scope question rather than deleting the question. A populated value
+    -- is the signature of LEGACY mapping; new mappings leave it NULL deliberately.
+    -- Retained as the only provenance record of what a question originally tested.
+    subtopic_id             UUID
                                 REFERENCES subtopics (id) ON DELETE RESTRICT,
+    -- The canonical binding. RESTRICT: an objective with questions bound to it must
+    -- not be deletable. NULL only for questions awaiting remap adjudication
+    -- (see lo_review_items).
+    learning_objective_id   UUID
+                                REFERENCES learning_objectives (id) ON DELETE RESTRICT,
     question_text           TEXT    NOT NULL,
     question_type           question_type NOT NULL,
     options                 JSONB,
@@ -460,6 +563,9 @@ CREATE TABLE question_bank (
     -- 'bank' = from founders 7K import | 'llm' = AI-generated | 'teacher' = teacher-submitted (school-scoped until promoted)
     meta_tags               JSONB,
     is_active               BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Self-referential: set on a source='llm-correction' row to point at the question
+    -- it supersedes. SET NULL so deleting the original does not delete its replacement.
+    replaces_question_id    UUID        REFERENCES question_bank (id) ON DELETE SET NULL,
     -- Teacher-submitted question fields (NULL for bank/llm questions)
     school_id               UUID        REFERENCES schools (id) ON DELETE RESTRICT,
     submitted_by            UUID        REFERENCES users (id)   ON DELETE SET NULL,
@@ -474,14 +580,25 @@ CREATE TABLE question_bank (
 
 COMMENT ON TABLE question_bank IS
     'Single canonical question store.
-     subtopic_id is the ONLY curriculum FK — no redundant subject/grade/topic columns.
-     All context derived via join: subtopics → curriculum_topics.
+     learning_objective_id is the canonical curriculum FK — no redundant
+     subject/grade/topic columns. All context derived via join:
+     learning_objectives → subtopic_objectives → subtopics → curriculum_topics.
+     subtopic_id is retained for legacy/audit provenance only and is NULL for
+     remapped scopes; see app/services/question_selection.py.
+     Anything that CREATES a question MUST set learning_objective_id — a question
+     stored with only a subtopic_id is unreachable by selection.
      source=bank: /scripts/import_questions.py maps existing 7K questions to subtopic_id.
      source=llm:  quiz_generator.py saves generated questions here for reuse.
      source=teacher: teacher-submitted via assessment question management; school_id set until KaihleAdmin promotes.
      canonical_form + problem_signature: used to detect near-duplicate questions.';
 
 CREATE INDEX idx_qb_subtopic   ON question_bank (subtopic_id);
+CREATE INDEX ix_question_bank_learning_objective_id ON question_bank (learning_objective_id);
+-- Partial: only source='llm-correction' rows populate replaces_question_id, so the
+-- vast majority are NULL and indexing them wastes space for no lookup benefit.
+-- Created CONCURRENTLY in migration 3aa9ab53e687.
+CREATE INDEX ix_question_bank_replaces_question_id   ON question_bank (replaces_question_id)
+    WHERE replaces_question_id IS NOT NULL;
 CREATE INDEX idx_qb_type       ON question_bank (question_type);
 CREATE INDEX idx_qb_difficulty ON question_bank (difficulty_level);
 CREATE INDEX idx_qb_active     ON question_bank (is_active);
@@ -1229,6 +1346,80 @@ CREATE TABLE question_review_items (
 CREATE INDEX idx_qri_item_type ON question_review_items (item_type);
 CREATE INDEX idx_qri_school    ON question_review_items (school_id);
 CREATE INDEX idx_qri_status    ON question_review_items (status) WHERE status = 'PENDING';
+
+-- =============================================================================
+-- SECTION: LEARNING OBJECTIVE REVIEW ITEMS
+-- Curriculum-mapping decisions awaiting human judgement, produced by the remap
+-- pipeline wherever automated matching is inconclusive (embedding similarity in
+-- the ambiguous band, or the adjudicating model declines to choose).
+--
+-- item_type='QUESTION_REMAP': which objective should an old subtopic's questions
+--   bind to. source_code is the OLD subtopic's canonical_code — stored as text, not
+--   an FK, because that row no longer exists after the wipe.
+-- item_type='QUESTION_REMAP_REMAINDER': questions left unbound after the main pass.
+-- item_type='OBJECTIVE_DEDUP': are two objectives the same concept, and should they
+--   be merged.
+-- item_type='OBJECTIVE_GRADE_SPLIT': which grade's objective should a question bind
+--   to, when a grade-spanning objective is split (ADR-003 T3) and the question has no
+--   surviving subtopic_id to infer it from. Defaulting these to the lowest grade would
+--   assign grade by accident of the split algorithm.
+--
+-- Deliberately has NO school_id. These are curriculum-level rulings — one decision
+-- applies to every school — which is why question_review_items cannot be reused:
+-- that table is NOT NULL on both school_id and submitted_by.
+-- CONSTITUTION Rule 2 exempts curriculum tables from the school_id requirement.
+-- =============================================================================
+
+CREATE TABLE lo_review_items (
+    id                        UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    item_type                 VARCHAR(30) NOT NULL,
+    status                    VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    -- Identity of the thing being mapped FROM (see section header on source_code).
+    source_code               VARCHAR(100) NOT NULL,
+    source_name               TEXT,
+    source_learning_objective TEXT        NOT NULL,
+    subject_code              VARCHAR(20),
+    grade_level               INT,
+    -- How many questions this single decision governs — shown to the reviewer
+    -- because it is the blast radius of getting it wrong.
+    question_count            INT         NOT NULL DEFAULT 0,
+    -- [{"objective_id": ..., "canonical_code": ..., "learning_objective": ..., "similarity": 0.83}]
+    candidates                JSONB       NOT NULL,
+    -- The questions this decision governs, so approving an item can bind them
+    -- without re-reading the wipe snapshot from disk. These ids are
+    -- ENVIRONMENT-LOCAL and are deliberately excluded from the exported artifact,
+    -- which carries only source_code -> objective_code.
+    question_ids              JSONB       NOT NULL,
+    llm_suggested_code        VARCHAR(50),
+    llm_reason                TEXT,
+    -- RESTRICT: an objective a reviewer has bound work to must not vanish underneath it.
+    chosen_objective_id       UUID                 REFERENCES learning_objectives (id) ON DELETE RESTRICT,
+    resolved_by               UUID                 REFERENCES users (id)               ON DELETE SET NULL,
+    resolved_at               TIMESTAMPTZ,
+    admin_note                TEXT,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                TIMESTAMPTZ,
+    CONSTRAINT uq_lo_review_item_source UNIQUE (item_type, source_code),
+    CONSTRAINT chk_lo_review_item_type CHECK (
+        item_type IN ('QUESTION_REMAP', 'QUESTION_REMAP_REMAINDER', 'OBJECTIVE_DEDUP',
+                      'OBJECTIVE_GRADE_SPLIT')),
+    CONSTRAINT chk_lo_review_status CHECK (
+        status IN ('PENDING', 'APPROVED', 'REJECTED', 'SPLIT')),
+    -- An approved item must say what it approved; a pending one must not pretend to.
+    CONSTRAINT chk_lo_review_resolution_consistent CHECK (
+        (status = 'APPROVED' AND chosen_objective_id IS NOT NULL) OR
+        (status <> 'APPROVED' AND (status <> 'PENDING' OR chosen_objective_id IS NULL)))
+);
+
+COMMENT ON TABLE lo_review_items IS
+    'Curriculum-level remap decisions awaiting human judgement. No school_id by design.
+     Each item bundles the source objective, candidate targets with similarity scores,
+     and the model''s suggestion and reason, so a reviewer sees why the machine
+     hesitated rather than rubber-stamping a bare pick.
+     Managed by app/services/lo_review_service.py.';
+
+CREATE INDEX ix_lo_review_items_item_type ON lo_review_items (item_type);
+CREATE INDEX ix_lo_review_items_status    ON lo_review_items (status);
 
 -- =============================================================================
 -- SECTION: MINI-COURSE PROGRESS AND FEEDBACK (v2.2)

@@ -1,6 +1,8 @@
 import { Button, Skeleton } from "@kaihle/ui";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { useAssessmentWizard } from "../../../hooks/useAssessmentWizard";
+import type { AssessmentType } from "../../../hooks/useAssessmentWizard";
 import { useClassTopicsWithGrades } from "../../../hooks/useClassTopicsWithGrades";
 import type { DiagnosticTopicItem } from "../../../hooks/useClassTopicsWithGrades";
 
@@ -57,8 +59,31 @@ function TopicSection({
   );
 }
 
+/**
+ * Which topics arrive pre-ticked, by assessment type.
+ *
+ * DIAGNOSTIC and FINAL used to skip this step entirely and send no topics at all,
+ * which wrote zero assessment_topic_config rows and silently degraded attempt
+ * attribution. They now arrive with a sensible default the teacher can adjust.
+ *
+ *  - FINAL       current grade only. An end-of-term paper assesses this year's
+ *                work; prior-year topics are opt-in, not the default.
+ *  - DIAGNOSTIC  current + prior grade. Placement depends on finding prerequisite
+ *                gaps, which usually sit in the previous year.
+ *  - others      nothing pre-selected; the teacher is choosing deliberately.
+ */
+type PreselectMode = "current" | "all" | "none";
+
+const PRESELECT_BY_TYPE: Record<AssessmentType, PreselectMode> = {
+  FINAL: "current",
+  DIAGNOSTIC: "all",
+  TOPIC_SPECIFIC: "none",
+  PROGRESS_CHECK: "none",
+};
+
 export function Step2Topics() {
-  const { classId, topicIds, setTopicIds, setStep } = useAssessmentWizard();
+  const { classId, assessmentType, topicIds, setTopicIds, setStep } =
+    useAssessmentWizard();
 
   const { data, isLoading, isError, refetch } = useClassTopicsWithGrades(
     classId ?? undefined,
@@ -68,6 +93,28 @@ export function Step2Topics() {
   const previousTopics = data?.previous_grade_topics ?? [];
   const allTopics = [...previousTopics, ...currentTopics];
   const allTopicIds = allTopics.map((t) => t.curriculum_topic_id);
+
+  // Run once per visit, after topics load. The ref stops a re-render from
+  // re-ticking topics the teacher has just deselected.
+  const hasPreselected = useRef(false);
+  const preselectMode = assessmentType
+    ? PRESELECT_BY_TYPE[assessmentType]
+    : "none";
+
+  useEffect(() => {
+    if (hasPreselected.current || isLoading || allTopics.length === 0) return;
+    hasPreselected.current = true;
+
+    // Returning to this step with an existing selection must not clobber it.
+    if (topicIds.length > 0 || preselectMode === "none") return;
+
+    setTopicIds(
+      preselectMode === "current"
+        ? currentTopics.map((t) => t.curriculum_topic_id)
+        : allTopicIds,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, data, preselectMode]);
 
   const canProceed = topicIds.length > 0;
 
@@ -131,8 +178,13 @@ export function Step2Topics() {
           </div>
         ) : allTopics.length === 0 ? (
           <div className="border border-brand-border rounded-xl p-6 text-center">
-            <p className="text-sm font-sans text-brand-muted">
-              No topics defined for this subject and grade yet.
+            <p className="text-sm font-sans font-semibold text-brand-ink mb-1">
+              No topics available
+            </p>
+            <p className="text-xs font-sans text-brand-muted max-w-sm mx-auto">
+              This class&apos;s subject and grade have no curriculum topics yet,
+              so an assessment cannot be created. Ask your school admin to set
+              up the curriculum for this class.
             </p>
           </div>
         ) : (
@@ -152,6 +204,14 @@ export function Step2Topics() {
               onToggle={toggleTopic}
             />
           </div>
+        )}
+
+        {allTopics.length > 0 && preselectMode !== "none" && (
+          <p className="mt-2 text-xs font-sans text-brand-muted italic">
+            {preselectMode === "current"
+              ? "Current-year topics are selected by default for a final assessment. Adjust to match what you taught."
+              : "Current and prior-year topics are selected by default so the diagnostic can find earlier gaps."}
+          </p>
         )}
 
         {allTopics.length > 0 && !canProceed && (
@@ -227,6 +287,9 @@ export function Step2Topics() {
         </div>
       )}
 
+      {/* An assessment always needs at least one topic. With none available at all,
+          proceeding would fail schema validation at Step 4 with a confusing error,
+          so it is blocked here where the cause is visible. */}
       <div className="flex justify-between pt-2">
         <Button variant="secondary" onClick={() => setStep(1)}>
           Back
@@ -234,7 +297,7 @@ export function Step2Topics() {
         <Button
           variant="primary"
           className="bg-brand-gold hover:bg-brand-gold-dark"
-          disabled={isError || (allTopics.length > 0 && !canProceed)}
+          disabled={isError || !canProceed}
           onClick={() => setStep(3)}
         >
           Next

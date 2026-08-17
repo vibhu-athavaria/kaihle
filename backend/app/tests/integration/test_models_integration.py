@@ -13,6 +13,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.similarity import normalise_text
 from app.models.assessment import Assessment, StudentAttempt
 from app.models.billing import (
     SchoolSubscription,
@@ -688,21 +689,34 @@ class TestLearningObjectiveLayer:
         return subtopic
 
     @staticmethod
-    def _make_lo(topic_id: uuid.UUID, code: str | None = None) -> LearningObjective:
+    def _make_lo(
+        topic_id: uuid.UUID,
+        grade_id: uuid.UUID,
+        code: str | None = None,
+        learning_objective: str = "Order and use negative numbers in practical contexts.",
+    ) -> LearningObjective:
+        """grade_id and normalised_objective are NOT NULL since ADR-003 T4.
+
+        learning_objective is a parameter because (topic_id, grade_id,
+        normalised_objective) is now UNIQUE — two objectives on one topic and grade must
+        differ in text, or the constraint rejects the second.
+        """
         return LearningObjective(
             id=uuid.uuid4(),
             canonical_code=code or f"MATH-LO-{uuid.uuid4().hex[:8]}",
             name="Using negative numbers",
-            learning_objective="Order and use negative numbers in practical contexts.",
+            learning_objective=learning_objective,
+            normalised_objective=normalise_text(learning_objective),
             topic_id=topic_id,
+            grade_id=grade_id,
             bloom_taxonomy_level="Apply",
             is_active=True,
         )
 
     async def test_learning_objective_when_persisted_then_reads_back(
-        self, db_session: AsyncSession, test_topic: Topic
+        self, db_session: AsyncSession, test_grade: Grade, test_topic: Topic
     ) -> None:
-        lo = self._make_lo(test_topic.id)
+        lo = self._make_lo(test_topic.id, test_grade.id)
         db_session.add(lo)
         await db_session.commit()
 
@@ -713,22 +727,23 @@ class TestLearningObjectiveLayer:
         assert fetched.embedding is None
 
     async def test_canonical_code_when_duplicated_then_raises_integrity_error(
-        self, db_session: AsyncSession, test_topic: Topic
+        self, db_session: AsyncSession, test_grade: Grade, test_topic: Topic
     ) -> None:
         code = f"MATH-DUP-{uuid.uuid4().hex[:8]}"
-        db_session.add(self._make_lo(test_topic.id, code))
+        db_session.add(self._make_lo(test_topic.id, test_grade.id, code))
         await db_session.commit()
 
-        db_session.add(self._make_lo(test_topic.id, code))
+        # Different text, so canonical_code is the ONLY thing that collides.
+        db_session.add(self._make_lo(test_topic.id, test_grade.id, code, "A quite different objective."))
         with pytest.raises(IntegrityError):
             await db_session.commit()
         await db_session.rollback()
 
     async def test_topic_when_deleted_with_objectives_then_restrict_blocks_delete(
-        self, db_session: AsyncSession, test_topic: Topic
+        self, db_session: AsyncSession, test_grade: Grade, test_topic: Topic
     ) -> None:
         """Topics are shared across grades/curricula — the wipe must never cascade them away."""
-        db_session.add(self._make_lo(test_topic.id))
+        db_session.add(self._make_lo(test_topic.id, test_grade.id))
         await db_session.commit()
 
         # The FK is checked at statement time, not at COMMIT — so the raise must
@@ -746,7 +761,8 @@ class TestLearningObjectiveLayer:
         test_topic: Topic,
     ) -> None:
         subtopic = await self._make_subtopic(db_session, test_curriculum, test_subject, test_grade, test_topic)
-        lo_a, lo_b = self._make_lo(test_topic.id), self._make_lo(test_topic.id)
+        lo_a = self._make_lo(test_topic.id, test_grade.id, learning_objective="Order negative numbers.")
+        lo_b = self._make_lo(test_topic.id, test_grade.id, learning_objective="Add negative numbers.")
         db_session.add_all([lo_a, lo_b])
         await db_session.flush()
         db_session.add_all(
@@ -776,7 +792,7 @@ class TestLearningObjectiveLayer:
         st_b = await self._make_subtopic(
             db_session, test_curriculum, test_subject, test_grade, test_topic, "Ordering decimals G7"
         )
-        lo = self._make_lo(test_topic.id)
+        lo = self._make_lo(test_topic.id, test_grade.id)
         db_session.add(lo)
         await db_session.flush()
         db_session.add_all(
@@ -802,7 +818,7 @@ class TestLearningObjectiveLayer:
     ) -> None:
         """Exactly the scoped-wipe path: placement is removed, the concept is kept."""
         subtopic = await self._make_subtopic(db_session, test_curriculum, test_subject, test_grade, test_topic)
-        lo = self._make_lo(test_topic.id)
+        lo = self._make_lo(test_topic.id, test_grade.id)
         db_session.add(lo)
         await db_session.flush()
         db_session.add(SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=lo.id))
@@ -827,7 +843,7 @@ class TestLearningObjectiveLayer:
         test_topic: Topic,
     ) -> None:
         subtopic = await self._make_subtopic(db_session, test_curriculum, test_subject, test_grade, test_topic)
-        lo = self._make_lo(test_topic.id)
+        lo = self._make_lo(test_topic.id, test_grade.id)
         db_session.add(lo)
         await db_session.flush()
         db_session.add(SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=lo.id))
@@ -864,10 +880,10 @@ class TestLearningObjectiveLayer:
         await db_session.rollback()
 
     async def test_question_when_bound_to_objective_only_then_null_subtopic_is_allowed(
-        self, db_session: AsyncSession, test_topic: Topic
+        self, db_session: AsyncSession, test_grade: Grade, test_topic: Topic
     ) -> None:
         """The post-remap steady state: selection runs off the LO, not the subtopic."""
-        lo = self._make_lo(test_topic.id)
+        lo = self._make_lo(test_topic.id, test_grade.id)
         db_session.add(lo)
         await db_session.flush()
 

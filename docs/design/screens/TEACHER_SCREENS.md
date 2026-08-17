@@ -166,17 +166,33 @@ Pending steps: `bg-gray-100 text-gray-400`
 **Step 1 — Setup**
 - Class dropdown (teacher's own classes only)
 - 4 assessment type cards in 2×2 grid — icon, name, one-line description
-- DIAGNOSTIC and FINAL skip Step 2 (no topic selection needed)
+- DIAGNOSTIC and FINAL show a note that topics will be pre-selected on Step 2
 - Next disabled until both class and type selected
 
-**Step 2 — Topics** *(TOPIC_SPECIFIC and PROGRESS_CHECK only)*
-- Checklist of curriculum topics for selected class subject/grade
-- Each item shows topic name + available question count
-- At least one required to proceed
+**Step 2 — Topics** *(all four types)*
+- Checklist of curriculum topics, split into "Prior Year" and "Current Year" sections
+- Each item shows topic name + subtopic count
+- **At least one topic is always required** — `topic_ids` is `min_length=1` on the API.
+  An empty selection used to mean "any topic at the class's grade", which wrote no
+  `assessment_topic_config` rows and silently degraded attempt attribution to
+  first-match ordering.
+- **Pre-selection by type** — the teacher can adjust any of it:
+
+  | Type | Pre-selected |
+  |---|---|
+  | FINAL | Current grade only — an end-of-term paper assesses this year's work |
+  | DIAGNOSTIC | Current + prior grade — placement depends on finding earlier gaps |
+  | TOPIC_SPECIFIC, PROGRESS_CHECK | Nothing; deliberate selection |
+
+- Topics outside `{class grade, class grade − 1}` are rejected by the service with
+  **422** (`TopicGradeOutOfRangeError`) — the topic exists, the selection is invalid
+- If the class subject/grade has no curriculum topics at all, an empty state explains
+  why and Next stays disabled
 
 **Step 3 — Configure**
-- Question count slider: 5–30, default 10, live readout
-- Difficulty range: two number inputs (1.0–5.0, step 0.5)
+- **Questions per topic** slider: 1–20, default 5, live readout. This is
+  `questions_per_topic` on the API; total = this × number of selected topics
+- Difficulty range: two number inputs (1–5, integers — the API takes ints)
 - Deadline date picker: optional
 - Next always enabled (all fields have valid defaults)
 
@@ -185,7 +201,9 @@ Pending steps: `bg-gray-100 text-gray-400`
 - Loading skeleton: "Selecting questions from the bank..."
 - Question list: question text + MCQ badge + remove ✕ button
 - Question count badge updates on removal
-- 422 error state: "Not enough questions — broaden your topic selection."
+- 422 error states: insufficient questions ("broaden your topic selection or difficulty
+  range") and topic-outside-grade-window (should be unreachable from the UI, which only
+  offers current and prior grade)
 
 **Step 5 — Publish**
 - Summary card: class, type, topics, question count, difficulty, deadline, visible to N students

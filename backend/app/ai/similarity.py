@@ -5,6 +5,8 @@ the review service needed them: a service importing from scripts/ inverts the
 dependency direction — scripts are allowed to depend on the app, not the reverse.
 """
 
+import re
+import unicodedata
 from typing import Any, cast
 
 import structlog
@@ -15,6 +17,30 @@ logger = structlog.get_logger()
 
 # Provider-sized batches, so one oversized request cannot fail a whole run.
 EMBED_BATCH_SIZE = 96
+
+
+def normalise_text(value: str) -> str:
+    """Fold an objective to a comparison key: casing, accents, punctuation, spacing.
+
+    The exact-match half of learning-objective de-duplication, paired with the cosine
+    half below. It catches the common case of the same objective restated verbatim at
+    a different grade.
+
+    This is the single definition on purpose. The value is persisted to
+    learning_objectives.normalised_objective and constrained by
+    UNIQUE (topic_id, grade_id, normalised_objective) — so if the de-duplicator and
+    the backfill ever computed it differently, the constraint would stop matching what
+    the de-duplicator considers a duplicate. Importing beats copying.
+
+    Not expressible as a Postgres generated column: the NFKD accent folding needs
+    unaccent(), which is not IMMUTABLE and is rejected in generated columns and index
+    expressions alike.
+    """
+    decomposed = unicodedata.normalize("NFKD", value)
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    lowered = stripped.lower()
+    without_punct = re.sub(r"[^a-z0-9\s]", " ", lowered)
+    return re.sub(r"\s+", " ", without_punct).strip()
 
 
 def parse_vector(raw: object) -> list[float] | None:

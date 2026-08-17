@@ -339,11 +339,11 @@ async def test_create_assessment_when_teacher_owns_class_then_201_draft(
 
     payload = {
         "title": "My Progress Check",
-        "topic_ids": [],
+        "topic_ids": [str(ct.id)],
         "questions_per_topic": 5,
         "assessment_type": "PROGRESS_CHECK",
-        "difficulty_min": 1.0,
-        "difficulty_max": 5.0,
+        "minimum_difficulty": 1,
+        "maximum_difficulty": 5,
     }
 
     response = await client.post(
@@ -382,7 +382,7 @@ async def test_create_assessment_when_teacher_does_not_own_class_then_403(
 
     payload = {
         "title": "Unauthorized Check",
-        "topic_ids": [],
+        "topic_ids": [str(ct.id)],
         "questions_per_topic": 5,
         "assessment_type": "PROGRESS_CHECK",
     }
@@ -409,7 +409,7 @@ async def test_create_assessment_when_insufficient_questions_then_422(
 
     payload = {
         "title": "Too Big Check",
-        "topic_ids": [],
+        "topic_ids": [str(ct.id)],
         "questions_per_topic": 10,  # request more than available
         "assessment_type": "PROGRESS_CHECK",
     }

@@ -14,7 +14,7 @@ export function Step4Preview() {
     classId,
     assessmentType,
     topicIds,
-    questionCount,
+    questionsPerTopic,
     difficultyMin,
     difficultyMax,
     deadline,
@@ -26,6 +26,13 @@ export function Step4Preview() {
 
   const [localQuestions, setLocalQuestions] = useState<PreviewQuestion[]>(
     draftAssessmentId && previewQuestions.length > 0 ? previewQuestions : [],
+  );
+  // Authoritative per-attempt count, from the server. Deriving it as
+  // questionsPerTopic * topicIds.length overstates it: the sampler distributes
+  // across difficulty bands and under-fills when a band is thin, so a derived
+  // figure can exceed the pool ("answers 50 of the 35 questions in the pool").
+  const [serverQuestionCount, setServerQuestionCount] = useState<number | null>(
+    null,
   );
   const [isLoading, setIsLoading] = useState(false);
   const [insufficientError, setInsufficientError] = useState(false);
@@ -50,14 +57,16 @@ export function Step4Preview() {
       setServerError(null);
 
       try {
+        // Field names must match AssessmentCreateRequest exactly. Pydantic ignores
+        // unknown keys, so a misspelt field is silently dropped and the server
+        // quietly falls back to its default rather than erroring.
         const payload: Record<string, unknown> = {
           assessment_type: assessmentType,
-          question_count: questionCount,
-          difficulty_min: difficultyMin,
-          difficulty_max: difficultyMax,
-          topic_ids: topicIds.length > 0 ? topicIds : undefined,
+          questions_per_topic: questionsPerTopic,
+          minimum_difficulty: Math.round(difficultyMin),
+          maximum_difficulty: Math.round(difficultyMax),
+          topic_ids: topicIds,
           deadline: deadline ?? undefined,
-          is_system_generated: false,
         };
 
         const res = await apiClient.post(
@@ -91,17 +100,44 @@ export function Step4Preview() {
 
         setDraftAssessment(res.data.id, questions);
         setLocalQuestions(questions);
+        setServerQuestionCount(
+          typeof res.data.question_count === "number"
+            ? res.data.question_count
+            : questions.length,
+        );
       } catch (err: unknown) {
         if (abortController.signal.aborted) return;
         const axiosErr = err as {
           response?: { status?: number; data?: { detail?: string } };
         };
+        // 422 now covers three distinct causes: an under-stocked bank
+        // (InsufficientQuestionsError, detail carries available/requested), a topic
+        // outside the class's grade window (TopicGradeOutOfRangeError), and schema
+        // rejection of an empty topic_ids. Only the first means "broaden your
+        // selection", so the others must not borrow that advice.
+        const detail = axiosErr?.response?.data?.detail;
         if (axiosErr?.response?.status === 422) {
-          setInsufficientError(true);
+          if (typeof detail === "object" && detail !== null) {
+            if ("available" in detail) {
+              setInsufficientError(true);
+            } else {
+              setServerError(
+                (detail as { message?: string }).message ??
+                  "This assessment configuration was rejected. Go back and adjust your topics.",
+              );
+            }
+          } else {
+            setServerError(
+              typeof detail === "string"
+                ? detail
+                : "This assessment configuration was rejected. Go back and adjust your topics.",
+            );
+          }
         } else {
           setServerError(
-            axiosErr?.response?.data?.detail ??
-              "An unexpected error occurred. Please try again.",
+            typeof detail === "string"
+              ? detail
+              : "An unexpected error occurred. Please try again.",
           );
         }
       } finally {
@@ -208,6 +244,14 @@ export function Step4Preview() {
   const diffMax =
     difficultyLevels.length > 0 ? Math.max(...difficultyLevels) : difficultyMax;
 
+  // What one student actually answers, as reported by the server. Falls back to the
+  // pool size before the draft returns, and is capped by it: the count can never
+  // exceed the questions that exist, and a teacher may have removed some since.
+  const totalQuestions = Math.min(
+    serverQuestionCount ?? localQuestions.length,
+    localQuestions.length,
+  );
+
   const totalPages = Math.max(1, Math.ceil(localQuestions.length / PAGE_SIZE));
   const pageQuestions = localQuestions.slice(
     (currentPage - 1) * PAGE_SIZE,
@@ -228,7 +272,7 @@ export function Step4Preview() {
           </div>
           <div className="bg-[#fffbeb] border border-brand-border rounded-xl p-3 text-center">
             <p className="font-sans font-extrabold text-2xl text-brand-gold leading-none">
-              {questionCount}
+              {totalQuestions}
             </p>
             <p className="text-xs font-sans text-brand-muted mt-1">
               per attempt
@@ -260,7 +304,7 @@ export function Step4Preview() {
             <span className="font-bold text-brand-ink">
               This assessment adapts.
             </span>{" "}
-            Each student answers {questionCount} of the {localQuestions.length}{" "}
+            Each student answers {totalQuestions} of the {localQuestions.length}{" "}
             questions in the pool. The first question in each subtopic starts
             mid-difficulty; after that, two correct answers in a row move that
             subtopic up a level and one wrong answer moves it down. Every

@@ -296,15 +296,23 @@ class LearningObjective(Base, UUIDMixin, TimestampMixin):
 
     This is the stable binding target for questions. Subtopics are curriculum
     PLACEMENT (they change when a curriculum is remapped); learning objectives are
-    the underlying concept and survive remapping. Deliberately carries neither a
-    difficulty range (that is a per-question property) nor a grade range (that is a
-    placement property, expressed via curriculum_topics -> subtopics).
+    the underlying concept and survive remapping.
+
+    Identity is (topic_id, grade_id, normalised_objective) — see ADR-003. Grade is
+    part of that identity because a question can be appropriate for Year 6 and
+    inappropriate for Year 8 even when both teach the same objective; without it a
+    question's grade is underivable once subtopic_id is NULLed by a remap.
+
+    Still carries no difficulty range — that remains a per-question property, and
+    difficulty_level expresses difficulty WITHIN a grade, not demand BETWEEN grades.
     """
 
     __tablename__ = "learning_objectives"
 
     # Human-readable stable identifier, e.g. 'MATH-NEGATIVE-NUMBERS'.
-    canonical_code: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    # 64 rather than 50: ADR-003 splits grade-spanning objectives by suffixing the
+    # code with -G{level}, and '-G10'..'-G13' would otherwise hit the limit exactly.
+    canonical_code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     # Full objective text. This is the basis for text/semantic de-duplication.
     learning_objective: Mapped[str] = mapped_column(Text, nullable=False)
@@ -316,17 +324,53 @@ class LearningObjective(Base, UUIDMixin, TimestampMixin):
         nullable=False,
         index=True,
     )
+    # Part of the objective's identity (ADR-003). NOT NULL since T4 — every objective
+    # resolves to exactly one grade, so a question's grade is derivable from its
+    # objective alone and no longer depends on subtopic_id surviving a remap.
+    # RESTRICT matches topic_id: grades are global and shared, so deleting one that
+    # still owns objectives must be a hard error.
+    grade_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("grades.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    # normalise_text(learning_objective) — the comparison key for de-duplication,
+    # stored rather than generated because the Python normalisation folds accents via
+    # NFKD and Postgres can only do that through unaccent(), which is not IMMUTABLE
+    # and is therefore rejected in generated columns and index expressions.
+    # Every writer must set it: scripts/create_learning_objectives.py,
+    # scripts/split_spanning_objectives.py, scripts/import_remap_artifact.py.
+    normalised_objective: Mapped[str] = mapped_column(Text, nullable=False)
     bloom_taxonomy_level: Mapped[str | None] = mapped_column(String(50))
     embedding: Mapped[list[float] | None] = mapped_column(Vector(768))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     topic: Mapped["Topic"] = relationship("Topic")
+    grade: Mapped["Grade"] = relationship("Grade")
     subtopics: Mapped[list["Subtopic"]] = relationship(
         "Subtopic",
         secondary="subtopic_objectives",
         back_populates="learning_objectives",
     )
     questions: Mapped[list["QuestionBank"]] = relationship("QuestionBank", back_populates="learning_objective")
+
+    __table_args__ = (
+        # The ADR-003 identity, enforced by the database rather than by convention.
+        # Deliberately NOT (topic_id, grade_id, canonical_code): that would permit the
+        # same concept twice under two different codes, which is the exact duplication
+        # ADR-003 exists to prevent. normalised_objective is the concept.
+        #
+        # Grade is in the key, so one objective text may legitimately exist at several
+        # grades — that is what T3's split produces, and why the copies share
+        # normalised_objective without colliding.
+        UniqueConstraint(
+            "topic_id",
+            "grade_id",
+            "normalised_objective",
+            name="uq_learning_objective_topic_grade_text",
+        ),
+    )
 
 
 class SubtopicObjective(Base):
@@ -457,6 +501,10 @@ class LearningObjectiveReviewItem(Base, UUIDMixin, TimestampMixin):
 
     # QUESTION_REMAP: which objective should an old subtopic's questions bind to.
     # OBJECTIVE_DEDUP: are two objectives the same concept and should they be merged.
+    # OBJECTIVE_GRADE_SPLIT: which grade's objective should a question bind to, when
+    #   a grade-spanning objective is split (ADR-003 T3) and the question has no
+    #   surviving subtopic_id to infer it from. Defaulting these to the lowest grade
+    #   would assign grade by accident of the split algorithm.
     item_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="PENDING", server_default="PENDING", index=True
@@ -507,7 +555,7 @@ class LearningObjectiveReviewItem(Base, UUIDMixin, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("item_type", "source_code", name="uq_lo_review_item_source"),
         CheckConstraint(
-            "item_type IN ('QUESTION_REMAP', 'QUESTION_REMAP_REMAINDER', 'OBJECTIVE_DEDUP')",
+            "item_type IN ('QUESTION_REMAP', 'QUESTION_REMAP_REMAINDER', 'OBJECTIVE_DEDUP', 'OBJECTIVE_GRADE_SPLIT')",
             name="chk_lo_review_item_type",
         ),
         CheckConstraint(

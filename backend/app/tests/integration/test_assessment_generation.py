@@ -171,11 +171,12 @@ async def test_full_creation_flow_when_valid_then_assessment_and_bridge_rows_in_
     service = AssessmentService(db_session)
     body = AssessmentCreateRequest(
         title="Test Progress Check",
-        topic_ids=[],
+        # One topic x 3 questions = the 3 bridge rows asserted below.
+        topic_ids=[curriculum_topics[0].id],
         questions_per_topic=3,
         assessment_type=AssessmentType.PROGRESS_CHECK,
-        difficulty_min=1.0,
-        difficulty_max=5.0,
+        minimum_difficulty=1,
+        maximum_difficulty=5,
     )
 
     assessment = await service.create_assessment(test_school.id, teacher.id, class_.id, body)
@@ -205,13 +206,13 @@ async def test_create_and_publish_flow_then_status_transitions_correctly(
     db_session: AsyncSession, test_school: School
 ) -> None:
     """Create then publish an assessment — verify status transitions in DB."""
-    _, _, _, _, subtopics, teacher, class_ = await _create_curriculum_setup(db_session, test_school)
+    _, _, _, curriculum_topics, subtopics, teacher, class_ = await _create_curriculum_setup(db_session, test_school)
     await _add_questions(db_session, subtopics[0], 5)
 
     service = AssessmentService(db_session)
     body = AssessmentCreateRequest(
         title="Quiz 1",
-        topic_ids=[],
+        topic_ids=[curriculum_topics[0].id],
         questions_per_topic=3,
         assessment_type=AssessmentType.PROGRESS_CHECK,
     )
@@ -278,13 +279,13 @@ async def test_create_when_insufficient_questions_then_raises_and_no_row_in_db(
     db_session: AsyncSession, test_school: School
 ) -> None:
     """InsufficientQuestionsError leaves no Assessment row in DB."""
-    _, _, _, _, subtopics, teacher, class_ = await _create_curriculum_setup(db_session, test_school)
+    _, _, _, curriculum_topics, subtopics, teacher, class_ = await _create_curriculum_setup(db_session, test_school)
     await _add_questions(db_session, subtopics[0], 2)  # only 2 questions
 
     service = AssessmentService(db_session)
     body = AssessmentCreateRequest(
         title="Too Many",
-        topic_ids=[],
+        topic_ids=[curriculum_topics[0].id],
         questions_per_topic=10,  # request 10, only 2 available
         assessment_type=AssessmentType.PROGRESS_CHECK,
     )
@@ -305,13 +306,13 @@ async def test_create_when_insufficient_questions_then_raises_and_no_row_in_db(
 @pytest.mark.asyncio
 async def test_publish_and_close_full_lifecycle_in_db(db_session: AsyncSession, test_school: School) -> None:
     """Full lifecycle: DRAFT → ACTIVE → CLOSED."""
-    _, _, _, _, subtopics, teacher, class_ = await _create_curriculum_setup(db_session, test_school)
+    _, _, _, curriculum_topics, subtopics, teacher, class_ = await _create_curriculum_setup(db_session, test_school)
     await _add_questions(db_session, subtopics[0], 5)
 
     service = AssessmentService(db_session)
     body = AssessmentCreateRequest(
         title="Lifecycle Test",
-        topic_ids=[],
+        topic_ids=[curriculum_topics[0].id],
         questions_per_topic=3,
         assessment_type=AssessmentType.PROGRESS_CHECK,
     )
