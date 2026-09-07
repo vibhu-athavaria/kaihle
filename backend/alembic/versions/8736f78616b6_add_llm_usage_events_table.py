@@ -6,25 +6,10 @@ Create Date: 2026-09-07 16:23:16.262332
 
 MLH-T2. Per-call LLM usage and cost telemetry.
 
-`router.py` has always logged token counts, but `core/logging.py` renders to stdout via
-PrintLoggerFactory with no store behind it, so the history was not queryable. This table is
-where "what did the diagnostic cost?" gets answered.
-
-TWO NOTES FOR REVIEWERS
------------------------
-1. `school_id` IS NULLABLE — a deliberate CONSTITUTION Rule 2 deviation, approved by Vibhu
-   on 2026-09-07. A large share of LLM spend has no school: curriculum-wide question
-   generation, quality validation, remap adjudication, and mini-course content generated at
-   scope='curriculum'. NULL means "platform-level work", not "unknown school". Precedent:
-   `lo_review_items` carries no school_id at all. Do not "fix" this to NOT NULL.
-
-2. THIS MIGRATION WAS TRIMMED AFTER AUTOGENERATION. `alembic revision --autogenerate`
-   additionally proposed dropping table comments from 33 unrelated tables (`assessments`,
-   `users`, `schools`, ...). That is pre-existing drift between the ORM models, which do not
-   declare `comment=`, and the database, which has comments from the original SQL schema. It
-   predates this task, and applying it would delete schema documentation for reasons
-   unrelated to LLM telemetry. Those operations were removed by hand; only the new table
-   remains. The drift is real and should be addressed on its own terms.
+`school_id` is NULLABLE by design — a CONSTITUTION Rule 2 deviation approved by Vibhu on
+2026-09-07. Curriculum-wide question generation, quality validation, remap adjudication and
+scope='curriculum' content have no school. NULL means "platform-level work", not "unknown
+school". Do not change it to NOT NULL; see app/models/llm_usage.py for the full rationale.
 """
 
 from collections.abc import Sequence
@@ -75,12 +60,6 @@ def upgrade() -> None:
         # was performed and paid for.
         sa.ForeignKeyConstraint(["school_id"], ["schools.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_table_comment(
-        "llm_usage_events",
-        "Per-call LLM usage and cost telemetry. school_id is nullable by design — "
-        "platform-level work (curriculum generation, remap adjudication) has no school.",
-        schema=None,
     )
     # Every report groups by one of these and filters by date, so each index leads with the
     # grouping column and ends with the range scan.

@@ -336,6 +336,14 @@ class TestUsageAccounting:
 
     @pytest.mark.asyncio
     async def test_complete_when_cost_estimation_raises_then_call_still_succeeds(self) -> None:
+        """A pricing bug must not fail a student's request.
+
+        estimate_cost reads LiteLLM's pricing tables and a config file on the success path of
+        every call. Before this was guarded, a raising pricer propagated straight out of
+        complete() — telemetry failing inference, which is the one thing this design forbids.
+        An unpriceable call is already a supported state, so the degraded result is a NULL
+        cost, not an error.
+        """
         response = MagicMock()
         response.choices = [MagicMock(message=MagicMock(content="ok"))]
         response.usage = MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2)
@@ -344,12 +352,61 @@ class TestUsageAccounting:
             patch("litellm.acompletion", new_callable=AsyncMock, return_value=response),
             patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
             patch("app.ai.providers.router.estimate_cost", side_effect=RuntimeError("pricing blew up")),
-            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock),
-            pytest.raises(RuntimeError),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock) as record,
         ):
-            # estimate_cost is called inside _log_completed, which is NOT wrapped — if this
-            # ever needs to be non-fatal, wrap it there rather than relaxing this test.
+            result = await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        assert result == "ok"
+        assert record.await_args is not None
+        assert record.await_args.kwargs["estimated_cost_usd"] is None
+
+    @pytest.mark.asyncio
+    async def test_complete_when_school_bound_then_recorded_on_usage_row(self) -> None:
+        """A call made while serving a student is attributable to their school.
+
+        Without this, every interactive call would record NULL and the column's meaning
+        ("platform-level work") would be destroyed.
+        """
+        import uuid as _uuid
+
+        from structlog.contextvars import bind_contextvars, clear_contextvars
+
+        school = _uuid.uuid4()
+        response = MagicMock()
+        response.choices = [MagicMock(message=MagicMock(content="x"))]
+        response.usage = MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2)
+
+        try:
+            bind_contextvars(school_id=str(school))
+            with (
+                patch("litellm.acompletion", new_callable=AsyncMock, return_value=response),
+                patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+                patch("app.ai.providers.router.record_usage", new_callable=AsyncMock) as record,
+            ):
+                await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+        finally:
+            clear_contextvars()
+
+        assert record.await_args is not None
+        assert record.await_args.kwargs["school_id"] == school
+
+    @pytest.mark.asyncio
+    async def test_complete_when_no_school_bound_then_school_id_is_none(self) -> None:
+        """Batch and curriculum-scope work binds nothing — that is what makes NULL mean
+        'platform-level' rather than 'we forgot'."""
+        response = MagicMock()
+        response.choices = [MagicMock(message=MagicMock(content="x"))]
+        response.usage = MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2)
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=response),
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock) as record,
+        ):
             await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        assert record.await_args is not None
+        assert record.await_args.kwargs["school_id"] is None
 
     @pytest.mark.asyncio
     async def test_complete_when_component_bound_then_passed_through_context(self) -> None:

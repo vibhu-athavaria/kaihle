@@ -44,9 +44,17 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         """Process request and log completion with timing and context."""
         request_id = str(uuid.uuid4())
-        # request_id doubles as the correlation id on llm_usage_events rows; the component
-        # attributes any LLM call made while serving this request (MLH-T2).
-        bind_contextvars(request_id=request_id, llm_component=_component_for(request.url.path))
+        # Bound BEFORE call_next, not in the finally block, because an LLM call made while
+        # handling the request reads these. request_id doubles as the correlation id on
+        # llm_usage_events; component attributes the call; school_id is what keeps NULL in
+        # that column meaning "platform-level work" rather than "student traffic we failed
+        # to attribute" (MLH-T2).
+        _user_id, _school_id = self._extract_user_context(request)
+        bind_contextvars(
+            request_id=request_id,
+            llm_component=_component_for(request.url.path),
+            school_id=_school_id,
+        )
 
         start_time = time.time()
         status_code = 500
@@ -61,7 +69,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             raise
         finally:
             duration_ms = round((time.time() - start_time) * 1000)
-            user_id, school_id = self._extract_user_context(request)
+            # Already decoded above when binding contextvars — decoding the JWT twice per
+            # request is wasted work on every single request.
+            user_id, school_id = _user_id, _school_id
 
             log_data = {
                 "service": "kaihle-api",

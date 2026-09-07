@@ -18,7 +18,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from app.core.middleware import RequestLoggingMiddleware
+from app.core.middleware import RequestLoggingMiddleware, _component_for
 from app.core.security import create_access_token
 
 
@@ -263,3 +263,26 @@ def _find_all_request_completed_logs(output: str) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
     return results
+
+
+class TestLlmAttributionBinding:
+    """MLH-T2 code review. The middleware binds LLM-attribution context per request.
+
+    Binding happens BEFORE call_next, not in the finally block, because an LLM call made
+    while handling the request is what reads these values.
+    """
+
+    def test_component_for_when_api_path_then_resource_segment_only(self) -> None:
+        # A UUID in the component would give the cost report one row per request.
+        assert _component_for("/api/v1/subtopic-content/8f14e45f-ceea-467a-9f6a-1b2c3d4e5f60/approve") == (
+            "api:subtopic-content"
+        )
+
+    def test_component_for_when_bare_resource_then_named(self) -> None:
+        assert _component_for("/api/v1/assessments") == "api:assessments"
+
+    def test_component_for_when_not_api_path_then_other(self) -> None:
+        assert _component_for("/health") == "api:other"
+
+    def test_component_for_when_api_root_then_root(self) -> None:
+        assert _component_for("/api/v1/") == "api:root"

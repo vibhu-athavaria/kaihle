@@ -48,6 +48,13 @@ def _bind_llm_component(sender: object, task_id: str | None = None, **kwargs: ob
 
     Bound here rather than in each task body so a new task is attributed automatically —
     a per-task decorator would be forgotten and record NULL silently.
+
+    POOL ASSUMPTION: valid under the prefork pool (Celery's default, and what this project
+    runs) and under --pool=solo, where the signal handler and the task body share a context.
+    Under gevent or eventlet a contextvar set in the handler is not guaranteed to be visible
+    in the greenlet running the task, and attribution would silently degrade to NULL. If
+    either pool ever enters the deployment matrix, re-bind inside the task body instead —
+    the cost report's unattributed percentage is what would surface the regression.
     """
     name = getattr(sender, "name", None) or "unknown"
     bind_contextvars(llm_component=f"celery:{name}", request_id=task_id)

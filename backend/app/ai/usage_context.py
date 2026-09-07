@@ -19,6 +19,7 @@ NULL silently — producing a report that looks complete and is not. Bound once 
 point, everything beneath it is covered without touching the call sites at all.
 """
 
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -30,6 +31,7 @@ logger = structlog.get_logger()
 
 COMPONENT_KEY = "llm_component"
 RUN_ID_KEY = "llm_run_id"
+SCHOOL_ID_KEY = "school_id"
 
 
 @contextmanager
@@ -91,6 +93,29 @@ def current_run_id() -> str | None:
     """Run id bound for the current context, or None."""
     value = get_contextvars().get(RUN_ID_KEY)
     return str(value) if value is not None else None
+
+
+def current_school_id() -> uuid.UUID | None:
+    """School the current request belongs to, or None for platform-level work.
+
+    Bound by RequestLoggingMiddleware from the JWT before the request is handled, so an LLM
+    call made while serving a student is attributable to their school. Batch scripts and
+    curriculum-scope Celery work bind nothing, which is what makes NULL mean "platform-level"
+    rather than "we forgot".
+
+    Returns None on an unparseable value rather than raising: this is read on the telemetry
+    path, and a malformed claim in a token must not fail an LLM call.
+    """
+    value = get_contextvars().get(SCHOOL_ID_KEY)
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, AttributeError, TypeError):
+        logger.warning("llm_usage_school_id_unparseable", value=str(value)[:64])
+        return None
 
 
 def current_correlation_id() -> str | None:

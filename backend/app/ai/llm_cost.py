@@ -122,8 +122,15 @@ def estimate_cost(
         if per_token:
             prompt_cost, completion_cost = per_token
             total = Decimal(str(prompt_cost)) + Decimal(str(completion_cost))
-            if total > 0:
+            # >= 0, not > 0. A genuine zero — a free tier, a fully cached prompt, a
+            # self-hosted model priced at zero — is an authoritative answer from LiteLLM,
+            # and falling through to the override table would replace it with a made-up
+            # non-zero price for a call that actually cost nothing.
+            if total >= 0:
                 return total
+            # Negative is not a cost. Do not persist it (a CHECK constraint rejects it) and
+            # do not silently treat it as free; fall through and say so.
+            logger.warning("litellm_returned_negative_cost", model=model, total=str(total))
     except Exception as exc:
         logger.debug("litellm_cost_per_token_unavailable", model=model, error=str(exc))
 

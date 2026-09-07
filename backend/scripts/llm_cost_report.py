@@ -160,10 +160,12 @@ async def unit_costs(db: AsyncSession, since: datetime) -> list[tuple[str, str]]
     # zero, not a number derived from unrelated spend.
     results.append(
         (
-            "Cost per completed diagnostic",
+            "Cost during a completed diagnostic (student-time only)",
             f"$0.00 marginal — {completed} completed since cutoff. Adaptive selection and MCQ "
             "scoring are deterministic; no LLM call is made while a student sits a diagnostic. "
-            "The cost is in generating the bank, reported below.",
+            "This is NOT the full cost of a diagnostic: the question bank it draws from was "
+            "LLM-generated, and that spend is amortised into 'Cost per subtopic of generated "
+            "questions' below. Quoting this line alone would understate the true figure.",
         )
     )
 

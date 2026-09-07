@@ -17,7 +17,7 @@ import litellm
 import structlog
 
 from app.ai.llm_cost import estimate_cost
-from app.ai.usage_context import current_component
+from app.ai.usage_context import current_component, current_school_id
 from app.ai.usage_sink import record_usage
 from app.core.config import settings
 
@@ -104,7 +104,16 @@ async def _log_completed(
     ai/usage_sink.py.
     """
     latency_ms = int((time.monotonic() - t0) * 1000)
-    cost = estimate_cost(model, prompt_tokens, completion_tokens, response)
+    # Guarded: estimate_cost reaches into LiteLLM's pricing tables and a config file, and
+    # this runs on the success path of every LLM call. Unguarded, a pricing bug would fail a
+    # student's request — breaking the invariant that telemetry never fails inference.
+    # An unpriceable call is already a supported state (NULL cost), so a raising pricer
+    # degrades to exactly that.
+    try:
+        cost = estimate_cost(model, prompt_tokens, completion_tokens, response)
+    except Exception as exc:
+        logger.warning("llm_cost_estimation_failed", task=task, model=model, error=str(exc), exc_info=True)
+        cost = None
     logger.info(
         "llm_call_completed",
         task=task,
@@ -125,6 +134,7 @@ async def _log_completed(
         total_tokens=total_tokens,
         estimated_cost_usd=cost,
         streamed=streamed,
+        school_id=current_school_id(),
     )
 
 
@@ -152,6 +162,7 @@ async def _log_failed(task: str, model: str, t0: float, exc: Exception, streamed
         succeeded=False,
         error_type=type(exc).__name__,
         error_detail=str(exc),
+        school_id=current_school_id(),
     )
 
 

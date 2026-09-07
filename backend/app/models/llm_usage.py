@@ -79,18 +79,21 @@ class LlmUsageEvent(Base, UUIDMixin):
     # and a report that counts only successes understates spend.
     error_type: Mapped[str | None] = mapped_column(String(100))
 
+    error_detail: Mapped[str | None] = mapped_column(Text)
+
     # From structlog contextvars — ties a call back to the request or job that caused it.
     correlation_id: Mapped[str | None] = mapped_column(String(64))
 
-    # See the class docstring. SET NULL rather than CASCADE: deleting a school must not
-    # erase the record that its work was performed and paid for.
+    # Bound from the JWT by RequestLoggingMiddleware, so a call made while serving a student
+    # is attributable to their school. Batch scripts and curriculum-scope work bind nothing,
+    # which is what makes NULL mean "platform-level" rather than "we forgot". See the class
+    # docstring. SET NULL rather than CASCADE: deleting a school must not erase the record
+    # that its work was performed and paid for.
     school_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("schools.id", ondelete="SET NULL"),
         nullable=True,
     )
-
-    error_detail: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
 

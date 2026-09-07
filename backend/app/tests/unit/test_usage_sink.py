@@ -9,15 +9,18 @@ subsequent call in the same worker process, and because the value would still lo
 the resulting cost report would be wrong without appearing wrong.
 """
 
+import uuid
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from app.ai.usage_context import (
     current_component,
     current_correlation_id,
     current_run_id,
+    current_school_id,
     llm_component,
 )
 from app.ai.usage_sink import record_usage, usage_kwargs_from_response
@@ -217,3 +220,45 @@ class TestUsageKwargsFromResponse:
             "completion_tokens": None,
             "total_tokens": None,
         }
+
+
+class TestCurrentSchoolId:
+    """school_id rides the same contextvar channel as component.
+
+    It is read on the telemetry path, so a malformed claim in a token must degrade to None
+    rather than raise — an unparseable school id cannot be allowed to fail an LLM call.
+    """
+
+    def test_current_school_id_when_nothing_bound_then_none(self) -> None:
+        assert current_school_id() is None
+
+    def test_current_school_id_when_uuid_string_bound_then_parsed(self) -> None:
+        value = uuid.uuid4()
+        try:
+            bind_contextvars(school_id=str(value))
+            assert current_school_id() == value
+        finally:
+            clear_contextvars()
+
+    def test_current_school_id_when_uuid_object_bound_then_returned(self) -> None:
+        value = uuid.uuid4()
+        try:
+            bind_contextvars(school_id=value)
+            assert current_school_id() == value
+        finally:
+            clear_contextvars()
+
+    def test_current_school_id_when_unparseable_then_none_not_raised(self) -> None:
+        try:
+            bind_contextvars(school_id="not-a-uuid")
+            assert current_school_id() is None
+        finally:
+            clear_contextvars()
+
+    def test_current_school_id_when_none_bound_then_none(self) -> None:
+        # An unauthenticated request binds school_id=None explicitly.
+        try:
+            bind_contextvars(school_id=None)
+            assert current_school_id() is None
+        finally:
+            clear_contextvars()
