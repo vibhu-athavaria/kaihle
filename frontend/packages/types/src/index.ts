@@ -7,8 +7,13 @@ export type {
   ClassContextSnapshot,
 } from "./lesson-plan";
 
-export { getMasteryStyle, scoreToPercent } from "./mastery";
-export type { MasteryLabel, MasteryStyle } from "./mastery";
+export {
+  getConfidenceStyle,
+  getMasteryStyle,
+  PROVISIONAL_CONFIDENCE_THRESHOLD,
+  scoreToPercent,
+} from "./mastery";
+export type { ConfidenceStyle, MasteryLabel, MasteryStyle } from "./mastery";
 
 export { getSubjectColor, SUBJECT_COLORS } from "./subjects";
 

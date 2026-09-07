@@ -39,6 +39,10 @@ docs/plans/**
 .coverage
 *coverage.xml
 
+# Jest coverage output. The Python patterns above do not match a bare coverage/ dir,
+# so running `pnpm test` in any package left an untracked build artifact behind.
+coverage/
+
 # Data working files
 backend/data/curriculum/curriculum_review.csv
 

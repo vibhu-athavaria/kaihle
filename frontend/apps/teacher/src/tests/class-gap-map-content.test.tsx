@@ -244,3 +244,29 @@ describe("ClassGapMapContent — expand/collapse", () => {
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
   });
 });
+
+describe("ClassGapMapContent — provisional evidence (MLH-T6)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    setup();
+  });
+
+  test("test_gap_map_legend_when_rendered_then_includes_provisional_entry", () => {
+    // Uncertainty is a legend entry in its own right. Without it a dashed cell is an
+    // unexplained visual difference rather than a signal a teacher can act on.
+    renderComponent();
+    expect(
+      screen.getByText(/Provisional — limited evidence/i),
+    ).toBeInTheDocument();
+  });
+
+  test("test_gap_map_legend_when_rendered_then_mastery_bands_still_present", () => {
+    // T6 is additive; the three display bands are explicitly out of scope.
+    renderComponent();
+    // getAllByText, not getByText: these labels appear in the legend AND inside cells,
+    // which is the point — the legend explains what the cells already show.
+    for (const band of ["Strong", "Developing", "Needs Work", "Not assessed"]) {
+      expect(screen.getAllByText(band).length).toBeGreaterThan(0);
+    }
+  });
+});

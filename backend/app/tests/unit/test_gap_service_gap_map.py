@@ -93,6 +93,7 @@ class TestGetClassGapMap:
             subtopic_id=subtopic_id,
             student_id=student_id_1,
             mastery_score=0.6,
+            confidence=0.8,
             last_assessed_at=datetime(2026, 4, 1, tzinfo=UTC),
             first_name="Alice",
             last_name="Smith",
@@ -101,6 +102,7 @@ class TestGetClassGapMap:
             subtopic_id=subtopic_id,
             student_id=student_id_2,
             mastery_score=0.8,
+            confidence=0.9,
             last_assessed_at=datetime(2026, 4, 1, tzinfo=UTC),
             first_name="Bob",
             last_name="Jones",
@@ -193,7 +195,10 @@ class TestGetStudentGapMap:
         subtopics_result.all.return_value = [subtopic_row]
 
         gap_row = SimpleNamespace(
-            subtopic_id=subtopic_id, mastery_score=0.75, last_assessed_at=datetime(2026, 4, 1, tzinfo=UTC)
+            subtopic_id=subtopic_id,
+            mastery_score=0.75,
+            confidence=0.6,
+            last_assessed_at=datetime(2026, 4, 1, tzinfo=UTC),
         )
         gap_result = MagicMock()
         gap_result.all.return_value = [gap_row]
@@ -312,3 +317,106 @@ class TestVerifyTeacherHasStudentAccess:
         result = await service._verify_teacher_has_student_access(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
 
         assert result is False
+
+
+def _subtopic_row(subtopic_id: uuid.UUID) -> SimpleNamespace:
+    return SimpleNamespace(
+        subtopic_id=subtopic_id,
+        subtopic_name="Ordering decimals",
+        topic_id=uuid.uuid4(),
+        topic_name="Number",
+        grade_id=uuid.uuid4(),
+        grade_name="Grade 6",
+        grade_level=6,
+    )
+
+
+def _gap_row(
+    subtopic_id: uuid.UUID,
+    mastery_score: float | None,
+    confidence: float | None,
+    name: str = "Priya",
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        subtopic_id=subtopic_id,
+        student_id=uuid.uuid4(),
+        mastery_score=mastery_score,
+        confidence=confidence,
+        last_assessed_at=datetime(2026, 4, 1, tzinfo=UTC) if mastery_score is not None else None,
+        first_name=name,
+        last_name="N",
+    )
+
+
+def _all_result(rows: list[object]) -> MagicMock:
+    result = MagicMock()
+    result.all.return_value = rows
+    return result
+
+
+class TestConfidenceSurfacing:
+    """MLH-T6. `gap_states.confidence` is computed on every row and was never surfaced.
+
+    Without it a student assessed on two questions and one assessed on forty can render
+    identically, and a teacher deciding whether to intervene cannot tell "this student is
+    middling" from "we barely have data".
+    """
+
+    def _service_and_db(self) -> tuple[GapService, MagicMock, uuid.UUID]:
+        """Service wired to a class that passes the multi-tenancy check."""
+        db = _make_db()
+        school_id = uuid.uuid4()
+        db.scalar.side_effect = [_make_class(uuid.uuid4(), school_id, uuid.uuid4()), "MATH"]
+        return GapService(db), db, school_id
+
+    @pytest.mark.asyncio
+    async def test_get_class_gap_map_when_row_has_confidence_then_included_in_response(self) -> None:
+        service, db, school_id = self._service_and_db()
+        subtopic_id = uuid.uuid4()
+        db.execute.side_effect = [
+            _make_family_execute_result(uuid.uuid4()),
+            _all_result([_subtopic_row(subtopic_id)]),
+            _all_result([_gap_row(subtopic_id, 0.55, 0.25)]),
+        ]
+
+        result = await service.get_class_gap_map(uuid.uuid4(), school_id, uuid.uuid4())
+
+        assert result.nodes[0].student_scores[0].confidence == 0.25
+
+    @pytest.mark.asyncio
+    async def test_get_class_gap_map_when_low_confidence_rows_then_provisional_count_correct(self) -> None:
+        service, db, school_id = self._service_and_db()
+        subtopic_id = uuid.uuid4()
+        db.execute.side_effect = [
+            _make_family_execute_result(uuid.uuid4()),
+            _all_result([_subtopic_row(subtopic_id)]),
+            _all_result(
+                [
+                    _gap_row(subtopic_id, 0.90, 0.95, "Confident"),
+                    _gap_row(subtopic_id, 0.50, 0.20, "Thin"),
+                    _gap_row(subtopic_id, 0.40, None, "NoConfidence"),
+                ]
+            ),
+        ]
+
+        result = await service.get_class_gap_map(uuid.uuid4(), school_id, uuid.uuid4())
+
+        # Thin evidence and absent confidence both count; a confident row does not.
+        assert result.nodes[0].provisional_student_count == 2
+        assert result.nodes[0].student_count == 3
+
+    @pytest.mark.asyncio
+    async def test_get_class_gap_map_when_student_unassessed_then_not_counted_provisional(self) -> None:
+        service, db, school_id = self._service_and_db()
+        subtopic_id = uuid.uuid4()
+        db.execute.side_effect = [
+            _make_family_execute_result(uuid.uuid4()),
+            _all_result([_subtopic_row(subtopic_id)]),
+            _all_result([_gap_row(subtopic_id, None, None, "Unassessed")]),
+        ]
+
+        result = await service.get_class_gap_map(uuid.uuid4(), school_id, uuid.uuid4())
+
+        # "Not assessed" already says there is no evidence. Counting it provisional as well
+        # would report the same absence twice.
+        assert result.nodes[0].provisional_student_count == 0

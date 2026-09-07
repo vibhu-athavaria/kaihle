@@ -42,6 +42,16 @@ from app.schemas.gap_map import (
 
 logger = structlog.get_logger()
 
+# Below this, a mastery score rests on too little evidence to act on alone and the UI marks
+# it provisional. Mirrors PROVISIONAL_CONFIDENCE_THRESHOLD in packages/types/src/mastery.ts;
+# the two must move together.
+#
+# 0.5 corresponds to the midpoint of the existing confidence ramp (min(attempts/5, 1)), i.e.
+# fewer than about three attempts. MLH-T3 replaces that ramp with posterior variance, at
+# which point this value should be re-derived rather than assumed to still mean the same
+# thing.
+PROVISIONAL_CONFIDENCE_THRESHOLD = 0.5
+
 
 class GapService:
     """Service responsible for maintaining student gap states.
@@ -459,6 +469,9 @@ class GapService:
                     GapState.subtopic_id,
                     GapState.student_id,
                     GapState.mastery_score,
+                    # Already on the row — this adds a column to an existing select, not a
+                    # second query. It was being dropped at serialisation, not missing.
+                    GapState.confidence,
                     GapState.last_assessed_at,
                     User.first_name,
                     User.last_name,
@@ -482,11 +495,21 @@ class GapService:
                     student_id=g.student_id,
                     student_name=f"{g.first_name} {g.last_name}",
                     mastery_score=g.mastery_score,
+                    confidence=g.confidence,
                     last_assessed_at=g.last_assessed_at,
                 )
                 for g in student_gaps
             ]
             scored = [s for s in student_scores if s.mastery_score is not None]
+            # Counted on assessed students only: an unassessed cell reads "Not assessed",
+            # which already says there is no evidence. Calling it provisional as well would
+            # double-count the same absence.
+            provisional_count = sum(
+                1
+                for s in student_scores
+                if s.mastery_score is not None
+                and (s.confidence is None or s.confidence < PROVISIONAL_CONFIDENCE_THRESHOLD)
+            )
             class_average: float | None = (
                 sum(s.mastery_score for s in scored if s.mastery_score is not None) / len(scored) if scored else None
             )
@@ -501,6 +524,7 @@ class GapService:
                     topic_name=st.topic_name,
                     class_average=class_average,
                     student_count=len(student_scores),
+                    provisional_student_count=provisional_count,
                     student_scores=student_scores,
                 )
             )
@@ -596,6 +620,7 @@ class GapService:
                     select(
                         GapState.subtopic_id,
                         GapState.mastery_score,
+                        GapState.confidence,
                         GapState.last_assessed_at,
                     ).where(
                         GapState.student_id == student_id,
@@ -622,6 +647,7 @@ class GapService:
                 mastery_score=gaps_by_subtopic[st.subtopic_id].mastery_score
                 if st.subtopic_id in gaps_by_subtopic
                 else None,
+                confidence=gaps_by_subtopic[st.subtopic_id].confidence if st.subtopic_id in gaps_by_subtopic else None,
                 last_assessed_at=gaps_by_subtopic[st.subtopic_id].last_assessed_at
                 if st.subtopic_id in gaps_by_subtopic
                 else None,

@@ -216,6 +216,18 @@ export function ClassGapMapContent({
                   </div>
                 );
               })}
+              {/* Fourth entry: uncertainty, carried by border style rather than by a
+                  washed-out fill (DESIGN_SYSTEM §11). Shape reads in greyscale and under
+                  colour-blindness, where a tint would not. */}
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="w-4 h-4 rounded border-2 border-dashed border-brand-muted"
+                  aria-hidden="true"
+                />
+                <span className="text-xs font-medium text-brand-body">
+                  Provisional — limited evidence
+                </span>
+              </div>
             </div>
             <p className="text-xs text-brand-muted italic">
               Click any cell to view that student's full learning profile
