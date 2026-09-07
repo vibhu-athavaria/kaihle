@@ -29,6 +29,7 @@ from app.models.curriculum import (
 from app.models.gap import GapState
 from app.models.interest_category import InterestCategory
 from app.models.lesson_plan import LessonPlan
+from app.models.llm_usage import LlmUsageEvent
 from app.models.mini_course import (
     MiniCourseChatMessage,
     MiniCourseQuizResponse,
@@ -52,6 +53,7 @@ from app.models.user import (
 )
 
 __all__ = [
+    "LlmUsageEvent",
     "Base",
     "Curriculum",
     "Subject",

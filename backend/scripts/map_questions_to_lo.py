@@ -50,6 +50,7 @@ if str(_BACKEND_ROOT) not in sys.path:
 
 from app.ai.providers.router import complete  # noqa: E402
 from app.ai.similarity import cosine_similarity, embed_all, parse_vector  # noqa: E402
+from app.ai.usage_context import llm_component  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.services.lo_review_service import ITEM_TYPE_QUESTION_REMAP, upsert_review_item  # noqa: E402
 
@@ -388,15 +389,19 @@ def _parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = _parse_args()
-    sys.exit(
-        asyncio.run(
-            main(
-                snapshot_path=args.snapshot,
-                dry_run=args.dry_run,
-                auto_threshold=args.auto_threshold,
-                review_threshold=args.review_threshold,
-                report_dir=args.report_dir,
-                use_llm=not args.no_llm,
+    # Attribute every LLM call in this run (MLH-T2). Bound at the entry point so no call
+    # site inside the run needs to know about it.
+    _run_id = f"map_questions_to_lo-{datetime.now(UTC):%Y%m%d-%H%M%S}"
+    with llm_component("script:map_questions_to_lo", run_id=_run_id):
+        sys.exit(
+            asyncio.run(
+                main(
+                    snapshot_path=args.snapshot,
+                    dry_run=args.dry_run,
+                    auto_threshold=args.auto_threshold,
+                    review_threshold=args.review_threshold,
+                    report_dir=args.report_dir,
+                    use_llm=not args.no_llm,
+                )
             )
         )
-    )

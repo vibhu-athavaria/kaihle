@@ -1890,3 +1890,44 @@ CREATE TABLE alembic_version (
 --   plan_features, plan_subjects  → subscription_plans.features JSONB
 --
 -- =============================================================================
+
+-- ============================================================================
+-- llm_usage_events (MLH-T2)
+-- Per-call LLM usage and cost telemetry.
+--
+-- school_id IS NULLABLE — a deliberate CONSTITUTION Rule 2 deviation approved by Vibhu
+-- 2026-09-07. Curriculum-wide question generation, quality validation, remap adjudication
+-- and scope='curriculum' content have no school. NULL means "platform-level work", not
+-- "unknown school". Precedent: lo_review_items carries no school_id at all.
+-- ============================================================================
+CREATE TABLE llm_usage_events (
+    id                  UUID PRIMARY KEY,
+    task                VARCHAR(50)  NOT NULL,   -- a key of router.TASK_MODEL_MAP
+    model               VARCHAR(200) NOT NULL,   -- resolved model string, env-driven
+    component           VARCHAR(80),             -- api:<resource> | celery:<task> | script:<name>
+    run_id              VARCHAR(64),             -- groups one batch invocation
+    prompt_tokens       INTEGER,                 -- NULL when the provider did not report
+    completion_tokens   INTEGER,
+    total_tokens        INTEGER,
+    latency_ms          INTEGER      NOT NULL,
+    estimated_cost_usd  NUMERIC(12,6),           -- NULL when the model is not priceable
+    streamed            BOOLEAN      NOT NULL DEFAULT FALSE,
+    succeeded           BOOLEAN      NOT NULL DEFAULT TRUE,
+    error_type          VARCHAR(100),
+    error_detail        TEXT,
+    correlation_id      VARCHAR(64),
+    school_id           UUID REFERENCES schools(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ  NOT NULL,
+    CONSTRAINT chk_llm_usage_latency_non_negative CHECK (latency_ms >= 0),
+    CONSTRAINT chk_llm_usage_cost_non_negative
+        CHECK (estimated_cost_usd IS NULL OR estimated_cost_usd >= 0),
+    CONSTRAINT chk_llm_usage_error_consistent
+        CHECK ((succeeded = TRUE AND error_type IS NULL)
+            OR (succeeded = FALSE AND error_type IS NOT NULL))
+);
+
+CREATE INDEX idx_llm_usage_task_created      ON llm_usage_events(task, created_at);
+CREATE INDEX idx_llm_usage_component_created ON llm_usage_events(component, created_at);
+CREATE INDEX idx_llm_usage_model_created     ON llm_usage_events(model, created_at);
+CREATE INDEX idx_llm_usage_created           ON llm_usage_events(created_at);
+CREATE INDEX idx_llm_usage_run               ON llm_usage_events(run_id);
