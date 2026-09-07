@@ -15,6 +15,23 @@ from app.core.config import settings
 # Health check endpoints that should not be logged at INFO level
 HEALTH_ENDPOINTS = {"/health", "/ready"}
 
+# Path prefix stripped before deriving the component name.
+_API_PREFIX = "/api/v1/"
+
+
+def _component_for(path: str) -> str:
+    """Derive a low-cardinality LLM-attribution component from a request path.
+
+    The resource segment only — "/api/v1/subtopic-content/<uuid>/approve" becomes
+    "api:subtopic-content". Using the full path would put a UUID in the component column and
+    turn the cost report's grouping into one row per request.
+    """
+    if not path.startswith(_API_PREFIX):
+        return "api:other"
+    remainder = path[len(_API_PREFIX) :]
+    resource = remainder.split("/", 1)[0] or "root"
+    return f"api:{resource}"
+
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Middleware that logs every request with structured JSON output.
@@ -27,7 +44,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         """Process request and log completion with timing and context."""
         request_id = str(uuid.uuid4())
-        bind_contextvars(request_id=request_id)
+        # request_id doubles as the correlation id on llm_usage_events rows; the component
+        # attributes any LLM call made while serving this request (MLH-T2).
+        bind_contextvars(request_id=request_id, llm_component=_component_for(request.url.path))
 
         start_time = time.time()
         status_code = 500

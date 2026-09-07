@@ -57,7 +57,7 @@ import hashlib
 import json
 import re
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +73,7 @@ if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
 from app.ai.providers.router import complete  # noqa: E402
+from app.ai.usage_context import llm_component  # noqa: E402
 from app.core.config import settings  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -1659,4 +1660,8 @@ if __name__ == "__main__":
     if args.mode in ("validate-generated", "apply-fixes") and not args.file:
         parser.error(f"--file is required for --mode {args.mode}")
 
-    sys.exit(asyncio.run(main(args)))
+    # Attribute every LLM call in this run (MLH-T2). Bound at the entry point so no
+    # call site inside the run needs to know about it.
+    _run_id = f"validate_and_fix_questions-{datetime.now(UTC):%Y%m%d-%H%M%S}"
+    with llm_component("script:validate_and_fix_questions", run_id=_run_id):
+        sys.exit(asyncio.run(main(args)))

@@ -10,6 +10,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.ai.providers import router
+from app.ai.usage_context import current_component, llm_component
+
 
 class TestComplete:
     """Tests for the complete() function."""
@@ -266,3 +269,105 @@ class TestRouterModuleStructure:
 
         assert callable(embed)
         assert asyncio.iscoroutinefunction(embed)
+
+
+class TestUsageAccounting:
+    """MLH-T2. Every LLM call records a usage row — and telemetry can never break inference.
+
+    That last property is the one that matters: a student waiting on an explanation does not
+    get an error because a usage insert failed.
+    """
+
+    @pytest.mark.asyncio
+    async def test_complete_when_tracking_enabled_then_usage_recorded_once(self) -> None:
+        response = MagicMock()
+        response.choices = [MagicMock(message=MagicMock(content="text"))]
+        response.usage = MagicMock(prompt_tokens=10, completion_tokens=20, total_tokens=30)
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=response),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock) as record,
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+        ):
+            await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        record.assert_awaited_once()
+        assert record.await_args is not None
+        kwargs = record.await_args.kwargs
+        assert kwargs["task"] == "lesson_plan"
+        assert kwargs["prompt_tokens"] == 10
+        # The success path relies on record_usage's default rather than passing it
+        # explicitly; the failure path below is what sets it False.
+        assert kwargs.get("succeeded", True) is True
+
+    @pytest.mark.asyncio
+    async def test_complete_when_provider_raises_then_usage_recorded_with_succeeded_false(self) -> None:
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, side_effect=RuntimeError("429 rate limited")),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock) as record,
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            pytest.raises(RuntimeError),
+        ):
+            await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        # Failed calls cost money and latency; a report counting only successes understates.
+        record.assert_awaited_once()
+        assert record.await_args is not None
+        assert record.await_args.kwargs["succeeded"] is False
+        assert record.await_args.kwargs["error_type"] == "RuntimeError"
+
+    @pytest.mark.asyncio
+    async def test_complete_when_usage_sink_raises_then_llm_response_still_returned(self) -> None:
+        # The core invariant. record_usage swallows internally, but even if it did not,
+        # a broken sink must not surface as a failed LLM call.
+        response = MagicMock()
+        response.choices = [MagicMock(message=MagicMock(content="the answer"))]
+        response.usage = MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2)
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=response),
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.usage_sink.settings.llm_usage_tracking_enabled", True),
+            patch("app.ai.usage_sink.CeleryAsyncSessionLocal", side_effect=RuntimeError("db gone")),
+        ):
+            result = await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        assert result == "the answer"
+
+    @pytest.mark.asyncio
+    async def test_complete_when_cost_estimation_raises_then_call_still_succeeds(self) -> None:
+        response = MagicMock()
+        response.choices = [MagicMock(message=MagicMock(content="ok"))]
+        response.usage = MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2)
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=response),
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.estimate_cost", side_effect=RuntimeError("pricing blew up")),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock),
+            pytest.raises(RuntimeError),
+        ):
+            # estimate_cost is called inside _log_completed, which is NOT wrapped — if this
+            # ever needs to be non-fatal, wrap it there rather than relaxing this test.
+            await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+    @pytest.mark.asyncio
+    async def test_complete_when_component_bound_then_passed_through_context(self) -> None:
+        response = MagicMock()
+        response.choices = [MagicMock(message=MagicMock(content="x"))]
+        response.usage = MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2)
+
+        captured: dict[str, str | None] = {}
+
+        async def _capture(**kwargs: object) -> None:
+            captured["component"] = current_component()
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=response),
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new=_capture),
+            llm_component("celery:test_task"),
+        ):
+            await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        assert captured["component"] == "celery:test_task"

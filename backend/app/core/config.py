@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
+    # LLM usage accounting (MLH-T2). Off by default so unit tests and offline scripts can
+    # make LLM calls without a database.
+    llm_usage_tracking_enabled: bool = False
+    # Path to a JSON file mapping model string -> {"input_per_1k": float, "output_per_1k": float}.
+    # The ONLY way a self-hosted endpoint gets a cost; LiteLLM has no prices for one. Empty by
+    # default and never committed with contents — no model names live in this repo.
+    llm_price_table_path: str = ""
+
     # LLM task routing — no defaults here; configure via environment variables
     llm_gap_classification_model: str = ""
     llm_gap_classification_api_base: str | None = None

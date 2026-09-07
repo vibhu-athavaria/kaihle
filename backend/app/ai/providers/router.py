@@ -16,6 +16,9 @@ from typing import Any
 import litellm
 import structlog
 
+from app.ai.llm_cost import estimate_cost
+from app.ai.usage_context import current_component
+from app.ai.usage_sink import record_usage
 from app.core.config import settings
 
 logger = structlog.get_logger()
@@ -84,22 +87,71 @@ def _log_started(task: str, model: str, stream: bool, api_base: str | None) -> f
     return time.monotonic()
 
 
-def _log_completed(
+async def _log_completed(
     task: str,
     model: str,
     t0: float,
     prompt_tokens: int | None,
     completion_tokens: int | None,
     total_tokens: int | None,
+    streamed: bool = False,
+    response: Any | None = None,
 ) -> None:
+    """Log the call and persist a usage row.
+
+    Both happen here because this is the single point every successful LLM call passes
+    through. `record_usage` never raises, so awaiting it cannot fail the call — see
+    ai/usage_sink.py.
+    """
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    cost = estimate_cost(model, prompt_tokens, completion_tokens, response)
     logger.info(
         "llm_call_completed",
         task=task,
         model=model,
-        latency_ms=int((time.monotonic() - t0) * 1000),
+        latency_ms=latency_ms,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
+        component=current_component(),
+        estimated_cost_usd=float(cost) if cost is not None else None,
+    )
+    await record_usage(
+        task=task,
+        model=model,
+        latency_ms=latency_ms,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        estimated_cost_usd=cost,
+        streamed=streamed,
+    )
+
+
+async def _log_failed(task: str, model: str, t0: float, exc: Exception, streamed: bool = False) -> None:
+    """Record a failed call.
+
+    Failures cost money and latency too. A report that counts only successes understates
+    spend and hides a provider that is erroring expensively.
+    """
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    logger.warning(
+        "llm_call_failed",
+        task=task,
+        model=model,
+        latency_ms=latency_ms,
+        error_type=type(exc).__name__,
+        error=str(exc),
+        component=current_component(),
+    )
+    await record_usage(
+        task=task,
+        model=model,
+        latency_ms=latency_ms,
+        streamed=streamed,
+        succeeded=False,
+        error_type=type(exc).__name__,
+        error_detail=str(exc),
     )
 
 
@@ -133,16 +185,22 @@ async def complete(
     api_base = TASK_API_BASE_MAP.get(task)
     t0 = _log_started(task, model, stream=stream, api_base=api_base)
 
-    response = await litellm.acompletion(
-        model=model,
-        api_base=api_base or None,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stream=stream,
-        # Request usage stats in the final streaming chunk where supported
-        **({"stream_options": {"include_usage": True}} if stream else {}),
-    )
+    try:
+        response = await litellm.acompletion(
+            model=model,
+            api_base=api_base or None,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=stream,
+            # Request usage stats in the final streaming chunk where supported
+            **({"stream_options": {"include_usage": True}} if stream else {}),
+        )
+    except Exception as exc:
+        # Record and re-raise. Retry policy stays with the caller (see module docstring);
+        # this only ensures a failed call is not invisible in the cost report.
+        await _log_failed(task, model, t0, exc, streamed=stream)
+        raise
 
     if stream:
         chunks: list[str] = []
@@ -161,17 +219,18 @@ async def complete(
             if delta is not None:
                 chunks.append(delta)
         text = "".join(chunks)
-        _log_completed(task, model, t0, prompt_tokens, completion_tokens, total_tokens)
+        await _log_completed(task, model, t0, prompt_tokens, completion_tokens, total_tokens, streamed=True)
         return text
 
     usage = response.usage if hasattr(response, "usage") else None
-    _log_completed(
+    await _log_completed(
         task,
         model,
         t0,
         prompt_tokens=usage.prompt_tokens if usage else None,
         completion_tokens=usage.completion_tokens if usage else None,
         total_tokens=usage.total_tokens if usage else None,
+        response=response,
     )
 
     # Handle potential empty choices or None content (e.g., tool calls, non-text responses)
@@ -220,15 +279,19 @@ async def stream_sse(
     api_base = TASK_API_BASE_MAP.get(task)
     t0 = _log_started(task, model, stream=True, api_base=api_base)
 
-    response = await litellm.acompletion(
-        model=model,
-        api_base=api_base or None,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stream=True,
-        stream_options={"include_usage": True},
-    )
+    try:
+        response = await litellm.acompletion(
+            model=model,
+            api_base=api_base or None,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+            stream_options={"include_usage": True},
+        )
+    except Exception as exc:
+        await _log_failed(task, model, t0, exc, streamed=True)
+        raise
 
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
@@ -245,7 +308,7 @@ async def stream_sse(
         if delta is not None:
             yield f"data: {delta}\n\n"
 
-    _log_completed(task, model, t0, prompt_tokens, completion_tokens, total_tokens)
+    await _log_completed(task, model, t0, prompt_tokens, completion_tokens, total_tokens, streamed=True)
     yield "data: [DONE]\n\n"
 
 
@@ -297,7 +360,12 @@ async def embed_batch(texts: list[str]) -> list[list[float]]:
     if dimensions is not None:
         kwargs["dimensions"] = dimensions
 
-    response = await litellm.aembedding(**kwargs)
+    t0 = _log_started("embeddings", model, stream=False, api_base=api_base)
+    try:
+        response = await litellm.aembedding(**kwargs)
+    except Exception as exc:
+        await _log_failed("embeddings", model, t0, exc)
+        raise
 
     if not response.data or len(response.data) == 0:
         raise ValueError("Embedding API returned empty data array")
@@ -323,5 +391,20 @@ async def embed_batch(texts: list[str]) -> list[list[float]]:
                 "supports the requested dimensionality."
             )
         vectors.append(vector)
+
+    # Embedding runs are a real cost centre — a curriculum-wide re-embed is thousands of
+    # calls — and were previously invisible. Providers report prompt_tokens only; there is
+    # no completion side, so completion_tokens is 0 rather than None so the call remains
+    # priceable.
+    usage = getattr(response, "usage", None)
+    await _log_completed(
+        "embeddings",
+        model,
+        t0,
+        prompt_tokens=getattr(usage, "prompt_tokens", None) if usage else None,
+        completion_tokens=0 if usage else None,
+        total_tokens=getattr(usage, "total_tokens", None) if usage else None,
+        response=response,
+    )
 
     return vectors

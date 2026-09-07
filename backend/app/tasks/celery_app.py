@@ -4,8 +4,9 @@ from datetime import UTC, datetime, timedelta
 import structlog
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import worker_ready
+from celery.signals import task_postrun, task_prerun, worker_ready
 from sqlalchemy import or_, update
+from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from app.core.config import settings
 from app.core.database import CeleryAsyncSessionLocal
@@ -39,6 +40,23 @@ celery_app.conf.update(
     task_track_started=True,
     worker_prefetch_multiplier=1,
 )
+
+
+@task_prerun.connect
+def _bind_llm_component(sender: object, task_id: str | None = None, **kwargs: object) -> None:
+    """Attribute every LLM call made during a task to that task (MLH-T2).
+
+    Bound here rather than in each task body so a new task is attributed automatically —
+    a per-task decorator would be forgotten and record NULL silently.
+    """
+    name = getattr(sender, "name", None) or "unknown"
+    bind_contextvars(llm_component=f"celery:{name}", request_id=task_id)
+
+
+@task_postrun.connect
+def _clear_llm_component(sender: object, **kwargs: object) -> None:
+    """Clear task context so a pooled worker process does not misattribute the next task."""
+    clear_contextvars()
 
 
 @worker_ready.connect
