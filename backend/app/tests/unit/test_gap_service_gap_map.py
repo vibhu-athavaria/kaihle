@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
-from app.services.gap_service import GapService
+from app.services.gap_service import PROVISIONAL_CONFIDENCE_THRESHOLD, GapService
 
 
 def _make_db() -> MagicMock:
@@ -384,7 +384,7 @@ class TestConfidenceSurfacing:
         assert result.nodes[0].student_scores[0].confidence == 0.25
 
     @pytest.mark.asyncio
-    async def test_get_class_gap_map_when_low_confidence_rows_then_provisional_count_correct(self) -> None:
+    async def test_get_class_gap_map_when_mixed_confidence_then_each_value_passed_through(self) -> None:
         service, db, school_id = self._service_and_db()
         subtopic_id = uuid.uuid4()
         db.execute.side_effect = [
@@ -401,12 +401,17 @@ class TestConfidenceSurfacing:
 
         result = await service.get_class_gap_map(uuid.uuid4(), school_id, uuid.uuid4())
 
-        # Thin evidence and absent confidence both count; a confident row does not.
-        assert result.nodes[0].provisional_student_count == 2
+        # The service passes confidence through untouched; the provisional/confident call
+        # is the frontend's, via getConfidenceStyle. Keeping the split in one place stops
+        # a cell and a summary disagreeing about the same student.
+        by_name = {s.student_name.split()[0]: s for s in result.nodes[0].student_scores}
+        assert by_name["Confident"].confidence == 0.95
+        assert by_name["Thin"].confidence == 0.20
+        assert by_name["NoConfidence"].confidence is None
         assert result.nodes[0].student_count == 3
 
     @pytest.mark.asyncio
-    async def test_get_class_gap_map_when_student_unassessed_then_not_counted_provisional(self) -> None:
+    async def test_get_class_gap_map_when_student_unassessed_then_confidence_is_none(self) -> None:
         service, db, school_id = self._service_and_db()
         subtopic_id = uuid.uuid4()
         db.execute.side_effect = [
@@ -417,6 +422,32 @@ class TestConfidenceSurfacing:
 
         result = await service.get_class_gap_map(uuid.uuid4(), school_id, uuid.uuid4())
 
-        # "Not assessed" already says there is no evidence. Counting it provisional as well
-        # would report the same absence twice.
-        assert result.nodes[0].provisional_student_count == 0
+        # An unassessed student carries no confidence. The cell renders "Not assessed",
+        # which already says there is no evidence — GapMapCell suppresses the provisional
+        # outline in that case so the same absence is not signalled twice.
+        assert result.nodes[0].student_scores[0].mastery_score is None
+        assert result.nodes[0].student_scores[0].confidence is None
+
+    @pytest.mark.asyncio
+    async def test_get_class_gap_map_when_confidence_at_real_ceiling_then_passed_through(self) -> None:
+        """0.6 is the highest value the writer path can produce.
+
+        confidence is min(attempt_count / 5, 1) and calculate_gap_states_for_attempt caps
+        rolling_attempt_count at 3, so the column only ever holds 0.2, 0.4 or 0.6. A
+        threshold above 0.6 would mark every row provisional forever; this pins the real
+        ceiling so that constraint is visible if the ramp changes.
+        """
+        service, db, school_id = self._service_and_db()
+        subtopic_id = uuid.uuid4()
+        db.execute.side_effect = [
+            _make_family_execute_result(uuid.uuid4()),
+            _all_result([_subtopic_row(subtopic_id)]),
+            _all_result([_gap_row(subtopic_id, 0.8, 0.6, "Ceiling")]),
+        ]
+
+        result = await service.get_class_gap_map(uuid.uuid4(), school_id, uuid.uuid4())
+
+        assert result.nodes[0].student_scores[0].confidence == 0.6
+        assert PROVISIONAL_CONFIDENCE_THRESHOLD < 0.6, (
+            "Threshold must sit below the reachable ceiling, or nothing is ever confident"
+        )

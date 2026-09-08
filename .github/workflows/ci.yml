@@ -220,6 +220,10 @@ jobs:
           pnpm --filter teacher exec jest --passWithNoTests --coverage
           pnpm --filter @kaihle/school-admin exec jest --passWithNoTests --coverage
           pnpm --filter @kaihle/kaihle-admin exec jest --passWithNoTests --coverage
+          # Shared packages. packages/ui had no committed jest config until MLH-T6, so its
+          # suites had never run anywhere; packages/types holds getMasteryStyle and
+          # getConfidenceStyle, which every app's colour rendering depends on.
+          pnpm --filter @kaihle/types exec jest --passWithNoTests --coverage
         working-directory: frontend
 
   # ─── E2E TESTS ───────────────────────────────────────────────────────────

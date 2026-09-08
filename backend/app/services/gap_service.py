@@ -46,10 +46,19 @@ logger = structlog.get_logger()
 # it provisional. Mirrors PROVISIONAL_CONFIDENCE_THRESHOLD in packages/types/src/mastery.ts;
 # the two must move together.
 #
-# 0.5 corresponds to the midpoint of the existing confidence ramp (min(attempts/5, 1)), i.e.
-# fewer than about three attempts. MLH-T3 replaces that ramp with posterior variance, at
-# which point this value should be re-derived rather than assumed to still mean the same
-# thing.
+# WHAT 0.5 ACTUALLY MEANS TODAY. confidence is min(attempt_count / 5, 1), and the history
+# query below is LIMIT 2, so rolling_attempt_count never exceeds 3. The column can therefore
+# only ever hold 0.2, 0.4 or 0.6 — the "5+ attempts = full confidence" comment on
+# upsert_gap_state describes a ramp this writer cannot traverse. 0.5 splits that actual
+# range at "three or more attempts", which is the only meaningful cut available.
+#
+# On the current dev database every gap_states row is 0.2, because every student has taken
+# exactly one diagnostic. Every cell is therefore provisional — which is true, not a bug:
+# one assessment IS thin evidence. Cells become solid as students accumulate attempts.
+#
+# MLH-T3 replaces this ramp with posterior variance, producing a continuous value with a
+# genuine distribution. Re-derive this threshold from that distribution then; do not assume
+# 0.5 still means the same thing.
 PROVISIONAL_CONFIDENCE_THRESHOLD = 0.5
 
 
@@ -89,8 +98,10 @@ class GapService:
         """
         needs_review = new_mastery < 0.4
 
-        # Confidence grows with attempt count: min(attempt_count / 5, 1.0)
-        # 5+ attempts = full confidence (1.0), fewer = proportional confidence
+        # Confidence grows with attempt count: min(attempt_count / 5, 1.0).
+        # NOTE: 1.0 is unreachable on this path. calculate_gap_states_for_attempt caps
+        # rolling_attempt_count at 3 (its history query is LIMIT 2), so the stored value is
+        # only ever 0.2, 0.4 or 0.6. MLH-T3 replaces this ramp with posterior variance.
         confidence = min(rolling_attempt_count / 5.0, 1.0)
 
         # gap_states.last_assessed_at is TIMESTAMP WITHOUT TIME ZONE in the schema.
@@ -501,15 +512,6 @@ class GapService:
                 for g in student_gaps
             ]
             scored = [s for s in student_scores if s.mastery_score is not None]
-            # Counted on assessed students only: an unassessed cell reads "Not assessed",
-            # which already says there is no evidence. Calling it provisional as well would
-            # double-count the same absence.
-            provisional_count = sum(
-                1
-                for s in student_scores
-                if s.mastery_score is not None
-                and (s.confidence is None or s.confidence < PROVISIONAL_CONFIDENCE_THRESHOLD)
-            )
             class_average: float | None = (
                 sum(s.mastery_score for s in scored if s.mastery_score is not None) / len(scored) if scored else None
             )
@@ -524,7 +526,6 @@ class GapService:
                     topic_name=st.topic_name,
                     class_average=class_average,
                     student_count=len(student_scores),
-                    provisional_student_count=provisional_count,
                     student_scores=student_scores,
                 )
             )

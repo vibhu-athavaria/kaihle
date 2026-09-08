@@ -37,11 +37,6 @@ class GapMapNode(BaseModel):
     class_average: float | None  # None = no students assessed on this subtopic yet
     student_count: int
 
-    # How many of this subtopic's scores rest on thin evidence. The column-level view of
-    # the same question, so a teacher can see which subtopics are under-assessed without
-    # reading every cell.
-    provisional_student_count: int = 0
-
     student_scores: list[StudentGapScore]
 
 
