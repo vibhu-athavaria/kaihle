@@ -70,6 +70,7 @@ from app.schemas.subtopic_content import (
     VideoSuggestionRequest,
 )
 from app.services.question_selection import resolve_objective_for_subtopic
+from app.services.subtopic_content_visibility import visible_scope_clause
 from app.services.youtube_service import search_youtube_videos
 from app.tasks.content_tasks import generate_personalised_explanations
 from app.tasks.teacher_content_tasks import generate_teacher_requested_content
@@ -521,17 +522,31 @@ async def get_subtopic_videos(
     assert current_user.school_id is not None
     await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
 
+    # No scope filter here previously meant .first() could return ANOTHER school's
+    # school-scoped video row (with no defined ordering to prefer one over the other) —
+    # this teacher would see School B's curated candidate list. Mirrors
+    # get_teacher_video_candidates' own_row-over-curriculum_row preference below.
     result = await db.execute(
         select(SubtopicContent).where(
             SubtopicContent.subtopic_id == subtopic_id,
             SubtopicContent.content_type == "video",
+            visible_scope_clause(current_user.school_id),
         )
     )
-    row = result.scalars().first()
-    if row is None or not row.videos:
+    rows = result.scalars().all()
+    own_row: SubtopicContent | None = None
+    curriculum_row: SubtopicContent | None = None
+    for row in rows:
+        if row.scope == "school" and row.school_id == current_user.school_id:
+            own_row = row
+        elif row.scope == "curriculum":
+            curriculum_row = row
+
+    content = own_row or curriculum_row
+    if content is None or not content.videos:
         return []
 
-    approved = [v for v in row.videos if v.get("status") == "approved"]
+    approved = [v for v in content.videos if v.get("status") == "approved"]
     return approved
 
 
@@ -1024,7 +1039,11 @@ def _content_type_status(row: SubtopicContent | None, school_id: uuid.UUID | Non
         if row.review_status == "pending":
             return ContentTypeStatus(status="own_school_pending", scope="school", school_id=row.school_id)
         return ContentTypeStatus(status=row.review_status, scope="school", school_id=row.school_id)
-    return ContentTypeStatus(status="other_school_pending", scope="school", school_id=row.school_id)
+    # Another school's row: the teacher may learn *that* some school has already staged
+    # content here (useful — avoids duplicate generation), but never *which* school —
+    # leaking another tenant's school_id violates CONSTITUTION Rule 3 even though this
+    # endpoint returns only a status token, not the content itself.
+    return ContentTypeStatus(status="other_school_pending", scope="school", school_id=None)
 
 
 async def _verify_teacher_subtopic_access(
@@ -1613,16 +1632,22 @@ async def get_subtopic_explanations(
     Teachers are scoped to subtopics in their assigned classes.
     KaihleAdmin sees all.
     """
+    query = select(SubtopicContent).where(
+        SubtopicContent.subtopic_id == subtopic_id,
+        SubtopicContent.content_type == "explanation",
+    )
+
     if current_user.role == UserRole.TEACHER:
         assert current_user.school_id is not None
         await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+        # Without this, a teacher sees every school's personalised explanation variants for
+        # this subtopic — the docstring above says "Teachers are scoped to subtopics in
+        # their assigned classes," but that only verified the subtopic itself, not which
+        # school's rows on it are visible (CONSTITUTION Rule 3).
+        query = query.where(visible_scope_clause(current_user.school_id))
+    # KAIHLE_ADMIN: no scope filter — sees all schools' rows, per Rule 12.
 
-    result = await db.execute(
-        select(SubtopicContent).where(
-            SubtopicContent.subtopic_id == subtopic_id,
-            SubtopicContent.content_type == "explanation",
-        )
-    )
+    result = await db.execute(query)
     rows = result.scalars().all()
 
     generic: ExplanationSection | None = None
@@ -1661,6 +1686,16 @@ async def create_explanation_suggestion(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Suggestions are only for personalised explanation rows",
+        )
+
+    # A teacher must not be able to touch another school's content row just by knowing its
+    # id (CONSTITUTION Rule 3) — a curriculum-scope row is fair game for anyone, since
+    # suggesting an edit to shared content is the point of this feature.
+    assert current_user.school_id is not None
+    if content.scope == "school" and content.school_id != current_user.school_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This content belongs to another school",
         )
 
     suggestion = SubtopicExplanationSuggestion(

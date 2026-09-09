@@ -354,14 +354,14 @@ export function PromotionQueuePage() {
   }
 
   return (
-    <AdminLayout pageTitle="Promotion Queue" onLogout={logout}>
+    <AdminLayout pageTitle="Course Content Review" onLogout={logout}>
       <div className="p-6 space-y-6">
         <div>
           <p className="font-['Inter'] text-xs font-bold uppercase tracking-widest text-role-admin-muted">
-            Content Review
+            Mini-Course Content
           </p>
           <h1 className="font-['Inter'] text-sm font-bold text-role-admin-ink mt-1">
-            Promotion Queue
+            Course Content Review
           </h1>
           <p className="font-['Inter'] text-xs text-role-admin-subtle mt-1">
             School-approved content awaiting promotion to the global curriculum

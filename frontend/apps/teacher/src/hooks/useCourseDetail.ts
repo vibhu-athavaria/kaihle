@@ -19,6 +19,8 @@ export interface SubtopicCourseDetail {
   subtopic_name: string;
   sequence_order: number;
   variants: Record<string, SubtopicVariant | null>;
+  /** Curriculum-scope video curated separately from this grid — non-blocking signal. */
+  has_video: boolean;
 }
 
 export interface StudentCourseAssignment {
@@ -89,6 +91,10 @@ export function useReviewVariant(classId: string, topicId: string) {
       queryClient.invalidateQueries({
         queryKey: ["course-detail", classId, topicId],
       });
+      // This mutates the same SubtopicContent rows usePendingReviewCount counts
+      // (content_type='explanation') — without this, the sidebar badge stays stale
+      // for up to 60s after a teacher approves/rejects a variant from this grid.
+      queryClient.invalidateQueries({ queryKey: ["pending-review-count"] });
     },
   });
 }

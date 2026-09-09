@@ -1,11 +1,27 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 
-export type MiniCourseStatus = "none" | "generating" | "ready" | "failed";
+export type MiniCourseStatus =
+  | "none"
+  | "generating"
+  | "ready"
+  | "partial"
+  | "failed";
+
+export interface VideoCoverage {
+  covered: number;
+  total: number;
+}
 
 export interface CourseStatusResponse {
   status: MiniCourseStatus;
   subtopic_count: number;
+  /** Only meaningful when status === "partial" — how many explanation/quiz items are
+   * still missing, recomputed live by the backend on every request. */
+  gaps_count: number;
+  /** Video is curated separately (KaihleAdmin-only, never LLM-generated) — this is a
+   * non-blocking signal, never a completion requirement for "ready"/"partial". */
+  video_coverage: VideoCoverage;
 }
 
 /**

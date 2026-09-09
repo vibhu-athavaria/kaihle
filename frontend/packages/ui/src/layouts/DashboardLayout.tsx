@@ -11,6 +11,8 @@ interface DashboardLayoutProps {
   onLogout?: () => void;
   permissions?: Record<string, boolean> | null;
   settingsHref?: string;
+  /** Teacher-only: drives the "Content Review" sidebar badge. Ignored for school-admin. */
+  contentReviewPendingCount?: number;
 }
 
 export function DashboardLayout({
@@ -22,6 +24,7 @@ export function DashboardLayout({
   onLogout,
   permissions,
   settingsHref,
+  contentReviewPendingCount,
 }: DashboardLayoutProps) {
   const bgClass =
     variant === "teacher" ? "bg-role-teacher-bg" : "bg-role-school-bg";
@@ -36,6 +39,7 @@ export function DashboardLayout({
         onLogout={onLogout}
         permissions={permissions}
         settingsHref={settingsHref ?? defaultSettingsHref}
+        contentReviewPendingCount={contentReviewPendingCount}
       />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <TopNav

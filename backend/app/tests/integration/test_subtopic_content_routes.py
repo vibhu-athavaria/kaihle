@@ -1002,6 +1002,9 @@ async def test_get_status_when_school_scoped_other_school_then_shows_other_schoo
     assert response.status_code == 200
     data = response.json()
     assert data["quiz"]["status"] == "other_school_pending"
+    # Regression: this endpoint must never disclose which school it is — only that
+    # some other school has content staged here (CONSTITUTION Rule 3).
+    assert data["quiz"]["school_id"] is None
 
 
 @pytest.mark.asyncio
@@ -1252,6 +1255,81 @@ async def test_get_explanations_when_no_content_then_returns_empty(
     assert data["subtopic_id"] == str(st.id)
     assert data["generic"] is None
     assert data["personalised"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_explanations_when_other_school_content_exists_then_not_in_response(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A teacher must not see another school's personalised explanation rows for a subtopic
+    their own school also has a class on (CONSTITUTION Rule 3). Regression test for the
+    cross-school leak fixed in MCR-T1 — before the fix, get_subtopic_explanations returned
+    every school's rows for the subtopic with no scope filter at all."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    _home_school, home_teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+    other_school, _other_teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    interest_cat_result = await db_session.execute(sa_select(InterestCategory).limit(1))
+    interest_cat = interest_cat_result.scalar_one_or_none()
+    if interest_cat is None:
+        pytest.skip("No interest categories seeded — run seed_test_data first")
+
+    other_school_content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="explanation",
+        scope="school",
+        school_id=other_school.id,
+        interest_category_id=interest_cat.id,
+        explanation_text="Other school's personalised explanation",
+        review_status="pending",
+    )
+    db_session.add(other_school_content)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/subtopic-content/{st.id}/explanations",
+        headers=make_auth_header(home_teacher),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["personalised"] == []
+
+
+@pytest.mark.asyncio
+async def test_suggest_explanation_when_content_belongs_to_other_school_then_403(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A teacher must not be able to suggest an edit against another school's content row
+    just by knowing its id (write-leak fixed alongside the read-leak in MCR-T1)."""
+    subject, grade, curriculum, ct, st = await _create_curriculum_tree(db_session)
+    _home_school, home_teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+    other_school, _other_teacher = await _setup_teacher_with_class(db_session, subject, grade, curriculum)
+
+    interest_cat_result = await db_session.execute(sa_select(InterestCategory).limit(1))
+    interest_cat = interest_cat_result.scalar_one_or_none()
+    if interest_cat is None:
+        pytest.skip("No interest categories seeded — run seed_test_data first")
+
+    other_school_content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=st.id,
+        content_type="explanation",
+        scope="school",
+        school_id=other_school.id,
+        interest_category_id=interest_cat.id,
+        explanation_text="Other school's personalised explanation",
+        review_status="pending",
+    )
+    db_session.add(other_school_content)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/subtopic-content/{other_school_content.id}/suggest",
+        headers=make_auth_header(home_teacher),
+        json={"suggested_text": "Trying to edit another school's content."},
+    )
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

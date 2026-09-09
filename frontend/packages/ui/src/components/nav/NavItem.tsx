@@ -7,6 +7,7 @@ interface NavItemProps {
   isActive: boolean;
   variant: "teacher" | "school-admin" | "admin";
   collapsed?: boolean;
+  badge?: number;
 }
 
 const activeClasses: Record<NavItemProps["variant"], string> = {
@@ -25,6 +26,14 @@ const inactiveClasses: Record<NavItemProps["variant"], string> = {
     "text-role-admin-subtle hover:bg-gray-50 hover:text-role-admin-ink rounded-lg",
 };
 
+// Badge fill follows each role's action color (DESIGN_SYSTEM.md §5) — gold for Teacher,
+// brand-primary green for School Admin and Kaihle Admin.
+const badgeClasses: Record<NavItemProps["variant"], string> = {
+  teacher: "bg-brand-gold text-white",
+  "school-admin": "bg-brand-primary text-white",
+  admin: "bg-brand-primary text-white",
+};
+
 export function NavItem({
   label,
   href,
@@ -32,6 +41,7 @@ export function NavItem({
   isActive,
   variant,
   collapsed = false,
+  badge,
 }: NavItemProps) {
   const activeClass = activeClasses[variant];
   const inactiveClass = inactiveClasses[variant];
@@ -51,7 +61,15 @@ export function NavItem({
         <span className="w-1.5 h-1.5 rounded-full bg-brand-primary flex-shrink-0" />
       )}
       {Icon && <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />}
-      {!collapsed && <span>{label}</span>}
+      {!collapsed && <span className="flex-1">{label}</span>}
+      {!collapsed && !!badge && badge > 0 && (
+        <span
+          className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[11px] font-bold flex-shrink-0 ${badgeClasses[variant]}`}
+          aria-label={`${badge} pending`}
+        >
+          {badge}
+        </span>
+      )}
     </a>
   );
 }

@@ -33,6 +33,7 @@ from app.schemas.teacher_content import (
     TeacherExplanationUpdateResponse,
 )
 from app.schemas.user_detail import TeacherDetailResponse
+from app.services.subtopic_content_visibility import visible_scope_clause
 from app.services.teacher_content_service import list_all_explanation_content, list_explanation_content
 
 logger = structlog.get_logger()
@@ -91,6 +92,7 @@ async def list_explanation_review(
         db=db,
         subject_id=class_.subject_id,
         grade_id=class_.grade_id,
+        school_id=class_.school_id,
         status_filter=status_filter,
         page=page,
         page_size=page_size,
@@ -114,7 +116,7 @@ async def get_explanation_review_detail(
     db: AsyncSession = Depends(get_db),
 ) -> TeacherExplanationReviewDetailResponse:
     """Get explanation detail for a specific subtopic in a class."""
-    await _verify_class_ownership(db, class_id, current_user.id)
+    class_ = await _verify_class_ownership(db, class_id, current_user.id)
 
     result = await db.execute(
         select(SubtopicContent)
@@ -123,6 +125,7 @@ async def get_explanation_review_detail(
         .where(
             SubtopicContent.subtopic_id == subtopic_id,
             SubtopicContent.content_type == ContentType.EXPLANATION,
+            visible_scope_clause(class_.school_id),
         )
     )
     sc = result.unique().scalar_one_or_none()
@@ -166,7 +169,7 @@ async def update_explanation_review(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Request body is required",
         )
-    await _verify_class_ownership(db, class_id, current_user.id)
+    class_ = await _verify_class_ownership(db, class_id, current_user.id)
 
     result = await db.execute(
         select(SubtopicContent).where(
@@ -180,6 +183,23 @@ async def update_explanation_review(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No explanation content found for subtopic {subtopic_id}",
+        )
+
+    # A school-scope row must belong to this teacher's own school (closes the read/write
+    # leak fixed in MCR-T1). A curriculum-scope row is KaihleAdmin-owned global content —
+    # unlike topics.py's review_topic_variant, this endpoint has no "claim it for my
+    # school" semantics, so a teacher approving/rejecting/editing it here would silently
+    # change status for every school at once with no KaihleAdmin authorization at all.
+    # Block both, rather than inventing new claim behavior as part of a security fix.
+    if sc.scope == "curriculum":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Curriculum-wide content can only be reviewed by Kaihle Admin",
+        )
+    if sc.scope == "school" and sc.school_id != class_.school_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This content belongs to another school",
         )
 
     if body.review_status is not None:

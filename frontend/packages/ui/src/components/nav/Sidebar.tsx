@@ -33,36 +33,51 @@ interface SidebarProps {
   onLogout?: () => void;
   permissions?: Record<string, boolean> | null;
   settingsHref?: string;
+  /** Count of mini-course content items awaiting this teacher's review — drives the
+   * "Content Review" nav badge. Ignored for non-teacher variants. */
+  contentReviewPendingCount?: number;
 }
 
 interface NavSection {
   section: string;
-  items: { label: string; href: string; icon: LucideIcon }[];
+  items: { label: string; href: string; icon: LucideIcon; badge?: number }[];
 }
 
-const teacherSections: NavSection[] = [
-  {
-    section: "MY WORKSPACE",
-    items: [
-      { label: "Home", href: "/teacher/dashboard", icon: LayoutDashboard },
-      { label: "Classes", href: "/teacher/classes", icon: Building2 },
-      { label: "Students", href: "/teacher/students", icon: Users },
-      {
-        label: "Assessments",
-        href: "/teacher/assessments",
-        icon: ClipboardList,
-      },
-    ],
-  },
-  {
-    section: "TOOLS",
-    items: [
-      { label: "Lesson Plans", href: "/teacher/lesson-plans", icon: BookOpen },
-      // Content Review temporarily hidden — re-enable when feature is ready
-      // { label: "Content Review", href: "/teacher/content-review", icon: FileText },
-    ],
-  },
-];
+function buildTeacherSections(
+  contentReviewPendingCount?: number,
+): NavSection[] {
+  return [
+    {
+      section: "MY WORKSPACE",
+      items: [
+        { label: "Home", href: "/teacher/dashboard", icon: LayoutDashboard },
+        { label: "Classes", href: "/teacher/classes", icon: Building2 },
+        { label: "Students", href: "/teacher/students", icon: Users },
+        {
+          label: "Assessments",
+          href: "/teacher/assessments",
+          icon: ClipboardList,
+        },
+      ],
+    },
+    {
+      section: "TOOLS",
+      items: [
+        {
+          label: "Lesson Plans",
+          href: "/teacher/lesson-plans",
+          icon: BookOpen,
+        },
+        {
+          label: "Content Review",
+          href: "/teacher/content-review",
+          icon: FileText,
+          badge: contentReviewPendingCount,
+        },
+      ],
+    },
+  ];
+}
 
 function buildSchoolAdminSections(
   permissions?: Record<string, boolean> | null,
@@ -138,12 +153,18 @@ const adminSections: NavSection[] = [
         icon: FileText,
       },
       {
-        label: "Content Review",
+        // Video curation queue — was mislabeled "Content Review", which collided with the
+        // mini-course explanation/quiz queue below and was the source of real confusion
+        // (MCR-T2).
+        label: "Video Review",
         href: "/kaihle-admin/content/review",
         icon: Video,
       },
       {
-        label: "Promotion Queue",
+        // Teacher-approved mini-course explanations/quizzes awaiting global promotion.
+        // Renamed from "Promotion Queue" so it reads as the destination for
+        // teacher-generated content review, not just a promotion mechanic (MCR-T2).
+        label: "Course Content Review",
         href: "/kaihle-admin/content/promotion",
         icon: ArrowUpCircle,
       },
@@ -181,12 +202,13 @@ export function Sidebar({
   onLogout,
   permissions,
   settingsHref,
+  contentReviewPendingCount,
 }: SidebarProps) {
   const { collapsed, toggle } = useSidebarCollapsed();
 
   const sections =
     variant === "teacher"
-      ? teacherSections
+      ? buildTeacherSections(contentReviewPendingCount)
       : variant === "school-admin"
         ? buildSchoolAdminSections(permissions)
         : adminSections;
@@ -253,6 +275,7 @@ export function Sidebar({
                   isActive={isActive}
                   variant={variant}
                   collapsed={collapsed}
+                  badge={item.badge}
                 />
               );
             })}

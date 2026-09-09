@@ -121,6 +121,7 @@ async def _run_generation(task: celery.Task, topic_id: str, school_id: str, teac
         # Check if content already exists (fast path)
         from app.models.curriculum import CurriculumTopic, Subtopic
         from app.models.subtopic_content import SubtopicContent
+        from app.services.subtopic_content_visibility import visible_scope_clause
 
         subtopic_ids_result = await db.execute(
             select(Subtopic.id)
@@ -129,9 +130,16 @@ async def _run_generation(task: celery.Task, topic_id: str, school_id: str, teac
         )
         subtopic_ids = [row[0] for row in subtopic_ids_result.all()]
 
-        # Fast path: ALL interest-category variants exist for ALL subtopics.
-        # Checking "any content exists" was insufficient — it would skip generation even
-        # when only 1 of 4 variants had been created per subtopic (e.g. after schema drift).
+        # Fast path: ALL interest-category variants VISIBLE TO THIS SCHOOL exist for ALL
+        # subtopics. Checking "any content exists" was insufficient — it would skip
+        # generation even when only 1 of 4 variants had been created per subtopic (e.g.
+        # after schema drift). Checking across ALL schools (no scope filter) was a
+        # second, more serious bug: Topic is school-agnostic shared curriculum data, so
+        # without visible_scope_clause here, School A completing generation for a shared
+        # topic would make this fast path fire for School B too — marking School B's
+        # topic "ready" and skipping real generation, while School B's own students
+        # still see nothing (mini_course_service.py's delivery queries correctly exclude
+        # School A's rows; this check must apply the identical filter to agree with them).
         all_variants_complete = False
         if subtopic_ids:
             from sqlalchemy import func
@@ -149,6 +157,7 @@ async def _run_generation(task: celery.Task, topic_id: str, school_id: str, teac
                     SubtopicContent.interest_category_id.is_not(None),
                     SubtopicContent.review_status != "rejected",
                     SubtopicContent.is_archived.is_(False),
+                    visible_scope_clause(UUID(school_id)),
                 )
             )
             actual_count: int = actual_result.scalar_one()
@@ -188,18 +197,58 @@ async def _run_generation(task: celery.Task, topic_id: str, school_id: str, teac
         try:
             service = MiniCourseGenerationService(db)
             result = await service.generate_for_topic(topic_id=topic_id, school_id=school_id)
+            # generate_for_topic catches per-item LLM failures internally (MCR-T3) so one
+            # bad call doesn't discard everything else — but that same change silently
+            # removed Celery's retry for the OTHER case it was built for: a full provider
+            # outage where every single call fails. Before MCR-T3, that always raised and
+            # hit the except block below (self.retry, and after 3 exhausted retries,
+            # GenerateMiniCourseTask.on_failure's CRITICAL log + admin email). Detected
+            # here as "something was attempted, and none of it landed" — re-raising
+            # restores that retry + alerting path for a genuine total outage, while a
+            # partial success (some pairs landed) still takes the graceful "partial"
+            # branch below with no retry storm.
+            if (
+                not result.get("complete")
+                and not result.get("explanations_written")
+                and not result.get("questions_written")
+            ):
+                raise RuntimeError(
+                    f"Mini-course generation produced zero successful items for topic {topic_id} "
+                    "this run — treating as a total failure, not a partial result."
+                )
         except Exception:
-            # Mark failed, email admin, re-raise so Celery retries
+            # Mark failed, email admin, re-raise so Celery retries.
             if topic:
                 topic.mini_course_status = "failed"
                 await db.commit()
             raise
 
+        # Three-way status: "ready" only when every explanation and quiz landed this
+        # run; "partial" when some content generated but gaps remain (retry via the
+        # same idempotent task fills only the gaps, not a full re-generation); "failed"
+        # is the except branch above. A topic that produced nothing at all — a
+        # first-generation attempt that failed on every single pair — is also
+        # "partial" rather than "failed": some rows may already exist from a prior
+        # attempt, and the teacher should see "still working on this" rather than an
+        # alarming full failure when the task itself completed without raising.
         if topic:
-            topic.mini_course_status = "ready"
+            gap_count = len(result.get("explanation_gaps", [])) + len(result.get("quiz_gaps", []))
+            if result.get("complete"):
+                topic.mini_course_status = "ready"
+            else:
+                topic.mini_course_status = "partial"
+                logger.warning(
+                    "mini_course_generation_partial",
+                    topic_id=topic_id,
+                    school_id=school_id,
+                    explanation_gaps=result.get("explanation_gaps", []),
+                    quiz_gaps=result.get("quiz_gaps", []),
+                    gap_count=gap_count,
+                )
             await db.commit()
 
-        # Email teacher on success
+        # Email teacher regardless of ready/partial — silence on a partial result would
+        # leave the teacher with no signal that generation finished at all.
         if teacher_id:
             teacher_row = await db.execute(select(User).where(User.id == UUID(teacher_id)))
             teacher = teacher_row.scalar_one_or_none()
