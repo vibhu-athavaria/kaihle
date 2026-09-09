@@ -83,4 +83,45 @@ describe("NavItem", () => {
 
     expect(screen.getByRole("link")).not.toHaveAttribute("aria-current");
   });
+
+  it("test_NavItem_when_badge_prop_positive_then_renders_badge_count", () => {
+    render(
+      <NavItem
+        label="Content Review"
+        href="/teacher/content-review"
+        isActive={false}
+        variant="teacher"
+        badge={3}
+      />,
+    );
+
+    expect(screen.getByLabelText("3 pending")).toHaveTextContent("3");
+  });
+
+  it("test_NavItem_when_badge_prop_zero_then_renders_no_badge", () => {
+    render(
+      <NavItem
+        label="Content Review"
+        href="/teacher/content-review"
+        isActive={false}
+        variant="teacher"
+        badge={0}
+      />,
+    );
+
+    expect(screen.queryByLabelText(/pending/)).not.toBeInTheDocument();
+  });
+
+  it("test_NavItem_when_no_badge_prop_then_renders_no_badge", () => {
+    render(
+      <NavItem
+        label="Content Review"
+        href="/teacher/content-review"
+        isActive={false}
+        variant="teacher"
+      />,
+    );
+
+    expect(screen.queryByLabelText(/pending/)).not.toBeInTheDocument();
+  });
 });

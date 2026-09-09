@@ -41,6 +41,7 @@ import { CourseDetailPage } from "./pages/content-review/CourseDetailPage";
 import { ClassStudyPlanPage } from "./pages/classes/ClassStudyPlanPage";
 import { SubtopicContentBrowser } from "./pages/SubtopicContentBrowser";
 import { AssessmentPreviewPage } from "./pages/assessments/AssessmentPreviewPage";
+import { usePendingReviewCount } from "./hooks/usePendingReviewCount";
 
 // Plain function — no state, no effects, no React APIs
 function getTeacherGreeting(firstName: string | undefined): {
@@ -56,6 +57,7 @@ function getTeacherGreeting(firstName: string | undefined): {
 function TeacherShell() {
   const { user, logout } = useAuth();
   const { pageTitle } = getTeacherGreeting(user?.first_name);
+  const { data: pendingReviewCount } = usePendingReviewCount();
 
   const routes = useMemo(
     () => [
@@ -80,7 +82,12 @@ function TeacherShell() {
   const innerRoutes = useRoutes(routes);
 
   return (
-    <DashboardLayout variant="teacher" pageTitle={pageTitle} onLogout={logout}>
+    <DashboardLayout
+      variant="teacher"
+      pageTitle={pageTitle}
+      onLogout={logout}
+      contentReviewPendingCount={pendingReviewCount}
+    >
       {innerRoutes}
     </DashboardLayout>
   );
@@ -89,6 +96,7 @@ function TeacherShell() {
 function TeacherContentShell() {
   const { user, logout } = useAuth();
   const { pageTitle } = getTeacherGreeting(user?.first_name);
+  const { data: pendingReviewCount } = usePendingReviewCount();
 
   const contentRoutes = useMemo(
     () => [
@@ -113,7 +121,12 @@ function TeacherContentShell() {
   const innerRoutes = useRoutes(contentRoutes);
 
   return (
-    <DashboardLayout variant="teacher" pageTitle={pageTitle} onLogout={logout}>
+    <DashboardLayout
+      variant="teacher"
+      pageTitle={pageTitle}
+      onLogout={logout}
+      contentReviewPendingCount={pendingReviewCount}
+    >
       {innerRoutes}
     </DashboardLayout>
   );
@@ -122,9 +135,15 @@ function TeacherContentShell() {
 function TeacherSettingsApp() {
   const { user, logout } = useAuth();
   const { pageTitle } = getTeacherGreeting(user?.first_name);
+  const { data: pendingReviewCount } = usePendingReviewCount();
 
   return (
-    <DashboardLayout variant="teacher" pageTitle={pageTitle} onLogout={logout}>
+    <DashboardLayout
+      variant="teacher"
+      pageTitle={pageTitle}
+      onLogout={logout}
+      contentReviewPendingCount={pendingReviewCount}
+    >
       <TeacherSettingsPage />
     </DashboardLayout>
   );
@@ -133,9 +152,15 @@ function TeacherSettingsApp() {
 function NewAssessmentApp() {
   const { user, logout } = useAuth();
   const { pageTitle } = getTeacherGreeting(user?.first_name);
+  const { data: pendingReviewCount } = usePendingReviewCount();
 
   return (
-    <DashboardLayout variant="teacher" pageTitle={pageTitle} onLogout={logout}>
+    <DashboardLayout
+      variant="teacher"
+      pageTitle={pageTitle}
+      onLogout={logout}
+      contentReviewPendingCount={pendingReviewCount}
+    >
       <NewAssessmentPage />
     </DashboardLayout>
   );
