@@ -1,6 +1,8 @@
 """Platform-level endpoints for Kaihle Admin operations."""
 
 import uuid
+from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,10 +14,17 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models.user import UserRole
 from app.schemas.auth import ImpersonationStartResponse
+from app.schemas.llm_usage import LlmUsageBucket, LlmUsageResponse, LlmUsageSummary
 from app.services.auth_service import (
     AuthService,
     ImpersonationNotAllowedError,
     UserNotFoundError,
+)
+from app.services.llm_usage_service import (
+    DEFAULT_LOOKBACK_DAYS,
+    InvalidGroupByError,
+    compute_unit_costs,
+    summarise_usage,
 )
 from app.services.user_service import UserService
 
@@ -128,20 +137,88 @@ async def get_platform_users(
     return PlatformUsersResponse(
         users=[
             PlatformUserSummary(
-                id=str(user.id),
-                school_id=str(user.school_id) if user.school_id else None,
-                first_name=user.first_name or "",
-                last_name=user.last_name or "",
-                email=user.email or "",
-                username=user.username or "",
-                role=user.role,
-                is_active=user.is_active,
-                last_active=user.last_login_at.isoformat() if user.last_login_at else None,
-                school_name=user.school_name if hasattr(user, "school_name") else None,  # type: ignore[attr-defined]
+                id=str(row.user.id),
+                school_id=str(row.user.school_id) if row.user.school_id else None,
+                first_name=row.user.first_name or "",
+                last_name=row.user.last_name or "",
+                email=row.user.email or "",
+                username=row.user.username or "",
+                role=row.user.role,
+                is_active=row.user.is_active,
+                last_active=row.user.last_login_at.isoformat() if row.user.last_login_at else None,
+                school_name=row.school_name,
             )
-            for user in users
+            for row in users
         ],
         total=total,
         page=page,
         page_size=page_size,
+    )
+
+
+@router.get("/llm-usage")
+async def get_llm_usage(
+    since: date | None = Query(None),
+    group_by: Literal["task", "component", "model", "run_id"] = Query("component"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> LlmUsageResponse:
+    """LLM spend, grouped and paginated — the same figures `scripts/llm_cost_report.py`
+    prints, computed by the same `llm_usage_service` functions so the two can never
+    disagree about a number.
+    """
+    since_dt = (
+        datetime.combine(since, datetime.min.time(), tzinfo=UTC)
+        if since
+        else datetime.now(UTC) - timedelta(days=DEFAULT_LOOKBACK_DAYS)
+    )
+
+    logger.info(
+        "platform.llm_usage.requested",
+        user_id=str(current_user.id),
+        since=since_dt.isoformat(),
+        group_by=group_by,
+        page=page,
+        page_size=page_size,
+    )
+
+    try:
+        report = await summarise_usage(db, since_dt, group_by, page=page, page_size=page_size)
+    except InvalidGroupByError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    unit_costs = await compute_unit_costs(db, since_dt)
+
+    return LlmUsageResponse(
+        since=since_dt.date(),
+        group_by=group_by,
+        buckets=[
+            LlmUsageBucket(
+                bucket=b.bucket,
+                calls=b.calls,
+                failures=b.failures,
+                tokens=b.tokens,
+                cost=float(b.cost) if b.cost is not None else None,
+                p50_ms=b.p50_ms,
+                p95_ms=b.p95_ms,
+            )
+            for b in report.buckets
+        ],
+        summary=LlmUsageSummary(
+            calls=report.summary.calls,
+            tokens=report.summary.tokens,
+            cost=float(report.summary.cost) if report.summary.cost is not None else None,
+            unpriced_count=report.summary.unpriced_count,
+            unpriced_percent=report.summary.unpriced_percent,
+            unpriced_models=report.summary.unpriced_models,
+            unattributed_count=report.summary.unattributed_count,
+            unattributed_percent=report.summary.unattributed_percent,
+            failures=report.summary.failures,
+            p95_ms=report.summary.p95_ms,
+        ),
+        unit_costs=unit_costs,
+        page=page,
+        page_size=page_size,
+        total_buckets=report.total_buckets,
     )
