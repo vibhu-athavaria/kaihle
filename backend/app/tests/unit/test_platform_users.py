@@ -66,8 +66,10 @@ class TestListPlatformUsers:
         # Assert
         assert len(users) == 2
         assert total == 2
-        assert users[0].email == "user1@test.com"
-        assert users[1].email == "user2@test.com"
+        assert users[0].user.email == "user1@test.com"
+        assert users[0].school_name == "School One"
+        assert users[1].user.email == "user2@test.com"
+        assert users[1].school_name == "School Two"
 
     @pytest.mark.asyncio
     async def test_list_platform_users_when_role_filter_then_returns_only_that_role(
@@ -96,7 +98,7 @@ class TestListPlatformUsers:
 
         # Assert
         assert len(users) == 1
-        assert users[0].role == UserRole.TEACHER
+        assert users[0].user.role == UserRole.TEACHER
 
     @pytest.mark.asyncio
     async def test_list_platform_users_when_q_filter_then_searches_name_and_email(
@@ -124,7 +126,8 @@ class TestListPlatformUsers:
 
         # Assert
         assert len(users) == 1
-        assert users[0].first_name == "John"
+        assert users[0].user.first_name == "John"
+        assert users[0].school_name is None
 
     @pytest.mark.asyncio
     async def test_list_platform_users_when_paginated_then_correct_page_returned(

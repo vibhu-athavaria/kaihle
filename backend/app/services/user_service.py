@@ -2,6 +2,7 @@
 
 import secrets
 import uuid
+from dataclasses import dataclass
 
 import structlog
 from sqlalchemy import and_, func, select
@@ -42,6 +43,20 @@ class UserNotFoundError(ValueError):
 
 class CrossSchoolAccessError(PermissionError):
     """Raised when a school-scoped caller accesses a user from another school."""
+
+
+@dataclass
+class PlatformUserRow:
+    """A platform user plus its joined school name.
+
+    `User` has no `school_name` column — it comes from a LEFT JOIN in
+    `list_platform_users`. Carrying it alongside the user in a typed row (rather than
+    setting it as a dynamic attribute on the ORM instance) keeps it visible to mypy, so
+    callers don't need `# type: ignore[attr-defined]` to read it back.
+    """
+
+    user: User
+    school_name: str | None
 
 
 class UserService:
@@ -935,7 +950,7 @@ class UserService:
         role: str | None = None,
         page: int = 1,
         page_size: int = 25,
-    ) -> tuple[list[User], int]:
+    ) -> tuple[list[PlatformUserRow], int]:
         """List all platform users with optional filters.
 
         KAIHLE_ADMIN bypass — returns users from ALL schools (Rule 12 explicit).
@@ -998,12 +1013,7 @@ class UserService:
         result = await self.db.execute(stmt)
         rows = result.all()
 
-        # Attach school_name to user objects for convenience
-        users = []
-        for user, school_name in rows:
-            # Store school_name as a dynamic attribute for response mapping
-            user.school_name = school_name  # type: ignore[attr-defined]
-            users.append(user)
+        users = [PlatformUserRow(user=user, school_name=school_name) for user, school_name in rows]
 
         logger.info(
             "platform_users_listed",
