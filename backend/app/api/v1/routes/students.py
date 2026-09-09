@@ -28,8 +28,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from structlog.contextvars import bind_contextvars, get_contextvars
 
-from app.core.database import get_db
+from app.core.database import CeleryAsyncSessionLocal, get_db
 from app.core.deps import CurrentUser, get_current_user, require_role
 from app.models.user import User, UserRole
 from app.schemas.mini_course import (
@@ -481,44 +482,72 @@ async def send_subtopic_chat_message(
         for m in history.messages[-11:-1]  # up to 10 prior messages, skip just-saved one
     ]
 
+    # Snapshot request-scoped context (llm_component, request_id, school_id) now, while it's
+    # still bound. RequestLoggingMiddleware clears these contextvars in its `finally` block as
+    # soon as this route function returns — which happens the instant `StreamingResponse` is
+    # constructed below, well before the generator body actually runs. Re-bound inside the
+    # generator so llm_usage_events keeps correct attribution instead of NULLs.
+    request_context = get_contextvars()
+
     async def event_stream() -> AsyncGenerator[str, None]:
-        chunks: list[str] = []
-        async for sse_line in stream_chat_reply(
-            subtopic_id=subtopic_id,
-            student_id=student_id,
-            school_id=school_id,
-            question=body.question,
-            prior_messages=prior_turns,
-            db=db,
-        ):
-            # stream_sse yields "data: <text>\n\n" or "data: [DONE]\n\n"
-            if sse_line == "data: [DONE]\n\n":
-                break
-            raw = sse_line.removeprefix("data: ").rstrip("\n")
-            if raw:
-                chunks.append(raw)
-                yield f"data: {json.dumps({'type': 'chunk', 'delta': raw})}\n\n"
+        bind_contextvars(**request_context)
 
-        # Persist the complete AI reply
-        full_reply = "".join(chunks)
-        if full_reply:
-            await service.save_chat_message(
-                student_id=student_id,
-                subtopic_id=subtopic_id,
-                school_id=school_id,
-                role="ai",
-                content=full_reply,
+        # `db` (Depends(get_db)) is already closed by the time this generator is drained —
+        # same timing issue as the contextvars above: FastAPI tears down yield-dependencies
+        # as soon as the route function returns, not once the streamed body finishes sending.
+        # Every DB touch after that point needs its own session.
+        async with CeleryAsyncSessionLocal() as stream_db:
+            stream_service = MiniCourseService(stream_db)
+            chunks: list[str] = []
+            try:
+                async for sse_line in stream_chat_reply(
+                    subtopic_id=subtopic_id,
+                    student_id=student_id,
+                    school_id=school_id,
+                    question=body.question,
+                    prior_messages=prior_turns,
+                    db=stream_db,
+                ):
+                    # stream_sse yields "data: <text>\n\n" or "data: [DONE]\n\n"
+                    if sse_line == "data: [DONE]\n\n":
+                        break
+                    raw = sse_line.removeprefix("data: ").rstrip("\n")
+                    if raw:
+                        chunks.append(raw)
+                        yield f"data: {json.dumps({'type': 'chunk', 'delta': raw})}\n\n"
+            except Exception:
+                logger.warning(
+                    "subtopic_chat_stream_failed",
+                    subtopic_id=str(subtopic_id),
+                    student_id=str(student_id),
+                    exc_info=True,
+                )
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Something went wrong. Please try again.'})}\n\n"
+                return
+
+            # Persist the complete AI reply
+            full_reply = "".join(chunks)
+            if full_reply:
+                await stream_service.save_chat_message(
+                    student_id=student_id,
+                    subtopic_id=subtopic_id,
+                    school_id=school_id,
+                    role="ai",
+                    content=full_reply,
+                )
+
+            # Emit terminal event with full updated history
+            updated = await stream_service.get_chat_history(
+                student_id=student_id, subtopic_id=subtopic_id, school_id=school_id
             )
-
-        # Emit terminal event with full updated history
-        updated = await service.get_chat_history(student_id=student_id, subtopic_id=subtopic_id, school_id=school_id)
-        payload = {
-            "type": "done",
-            "messages": [
-                {"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()} for m in updated.messages
-            ],
-        }
-        yield f"data: {json.dumps(payload)}\n\n"
+            payload = {
+                "type": "done",
+                "messages": [
+                    {"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()}
+                    for m in updated.messages
+                ],
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

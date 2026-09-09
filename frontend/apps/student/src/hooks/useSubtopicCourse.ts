@@ -111,13 +111,18 @@ export function useStreamChatMessage(subtopicId: string) {
       question: string,
       callbacks: {
         onError?: (msg: string) => void;
+        onDone?: () => void;
       } = {},
     ) => {
       setIsStreaming(true);
       setStreamingContent("");
 
       const token = tokenRef.current;
-      const baseUrl = (import.meta.env.VITE_API_BASE_URL as string) ?? "";
+      // Same env var + fallback as packages/auth/src/apiClient.ts — this is the one
+      // fetch() call in the app that can't go through the shared axios client, since it
+      // needs a raw ReadableStream for SSE.
+      const baseUrl =
+        (import.meta.env.VITE_API_URL as string) ?? "http://localhost:8000";
 
       try {
         const response = await fetch(
@@ -155,7 +160,8 @@ export function useStreamChatMessage(subtopicId: string) {
             try {
               const event = JSON.parse(raw) as
                 | { type: "chunk"; delta: string }
-                | { type: "done"; messages: ChatHistory["messages"] };
+                | { type: "done"; messages: ChatHistory["messages"] }
+                | { type: "error"; message: string };
 
               if (event.type === "chunk") {
                 setStreamingContent((prev) => prev + event.delta);
@@ -165,6 +171,9 @@ export function useStreamChatMessage(subtopicId: string) {
                   { messages: event.messages },
                 );
                 setStreamingContent("");
+                callbacks.onDone?.();
+              } else if (event.type === "error") {
+                callbacks.onError?.(event.message);
               }
             } catch {
               // malformed chunk — skip
