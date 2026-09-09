@@ -21,6 +21,12 @@ export type MasteryLabel =
 export interface MasteryStyle {
   /** Tailwind class for the colored dot/circle/cell */
   dotClass: string;
+  /**
+   * Tailwind border colour for the band, used to draw a provisional cell's dashed
+   * outline. Stays inside the band's own colour family, so uncertainty never introduces
+   * a new hue — and mastery colour is still never inlined in a component.
+   */
+  borderClass: string;
   /** Tailwind class for text displaying the score */
   textClass: string;
   /** Tailwind class for tinted card/row background */
@@ -51,6 +57,7 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
       dotClass: "bg-brand-muted",
       textClass: "text-brand-muted",
       bgClass: "bg-gray-50",
+      borderClass: "border-brand-muted",
       label: "Not assessed",
       strokeColour: "#9ca3af",
       fillColour: "#9ca3af",
@@ -61,6 +68,7 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
       dotClass: "bg-brand-green",
       textClass: "text-brand-green-dark",
       bgClass: "bg-brand-green-light",
+      borderClass: "border-brand-green-dark",
       label: "Strong",
       strokeColour: "#16a34a",
       fillColour: "#15803d",
@@ -71,6 +79,7 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
       dotClass: "bg-brand-amber",
       textClass: "text-brand-amber-dark",
       bgClass: "bg-brand-amber-light",
+      borderClass: "border-brand-amber-dark",
       label: "Developing",
       strokeColour: "#f59e0b",
       fillColour: "#92400e",
@@ -80,6 +89,7 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
     dotClass: "bg-brand-red",
     textClass: "text-brand-red-dark",
     bgClass: "bg-brand-red-light",
+    borderClass: "border-brand-red-dark",
     label: "Needs Work",
     strokeColour: "#ef4444",
     fillColour: "#b91c1c",
@@ -96,4 +106,83 @@ export function getMasteryStyle(score: number | null): MasteryStyle {
 export function scoreToPercent(score: number | null): string {
   if (score === null) return "—";
   return `${Math.round(score * 100)}%`;
+}
+
+/**
+ * Confidence below which a mastery score is shown as provisional.
+ *
+ * Owned here. The threshold is a PRESENTATION decision — where to stop trusting a score
+ * enough to act on it alone — so it lives with the rendering, not with the writer. An
+ * earlier copy in backend/app/services/gap_service.py was removed once nothing read it;
+ * a constant duplicated across two languages with no test spanning them is a drift trap,
+ * not a safeguard.
+ *
+ * It is NOT independent of the backend, though: see the ceiling invariant in
+ * __tests__/mastery.test.ts, which asserts this value sits below the highest confidence
+ * the writer path can actually produce.
+ *
+ * 0.5 is the midpoint of the current confidence ramp (min(attempts / 5, 1)), i.e. fewer
+ * than roughly three attempts. MLH-T3 replaces that ramp with posterior variance, at which
+ * point this value should be re-derived rather than assumed to still mean the same thing.
+ */
+export const PROVISIONAL_CONFIDENCE_THRESHOLD = 0.5;
+
+export interface ConfidenceStyle {
+  /** True when the score rests on too little evidence to act on by itself. */
+  isProvisional: boolean;
+  /**
+   * Border width and style. ALWAYS "border-2" — transparent when confident — so adding a
+   * visible border to a provisional cell never shifts layout and the grid cannot jitter
+   * between neighbouring cells.
+   */
+  borderStyleClass: string;
+  /** Appended to tooltip and aria-label. Empty string when confident. */
+  label: string;
+}
+
+/**
+ * Derive the uncertainty affordance for a mastery score.
+ *
+ * Deliberately separate from getMasteryStyle: that maps score to colour and must keep
+ * doing exactly that. Confidence is an orthogonal dimension, and conflating them would
+ * mean a low-confidence Strong cell had to pick between two colours.
+ *
+ * Uncertainty is carried by BORDER STYLE, never by fading or desaturating the fill.
+ * DESIGN_SYSTEM.md §11 prohibits washed-out data visuals, and shape survives
+ * colour-blindness, greyscale printing and a projector where a tint does not — satisfying
+ * §9.1 (colour is never the only signal).
+ *
+ * `undefined` and `null` mean different things here, and conflating them would be a bug:
+ *
+ *   undefined — this caller does not supply confidence at all. Renders exactly as before,
+ *               so every existing call site is unaffected. Marking these provisional would
+ *               turn every cell in the app dashed overnight and make the signal meaningless.
+ *   null      — the backend reported a score with no confidence behind it. That IS thin
+ *               evidence, and claiming confidence we do not have is the worse error, since
+ *               a teacher may act on it.
+ *
+ * @param confidence - Float 0.0-1.0 from gap_states.confidence.
+ */
+export function getConfidenceStyle(
+  confidence: number | null | undefined,
+): ConfidenceStyle {
+  if (confidence === undefined) {
+    return {
+      isProvisional: false,
+      borderStyleClass: "border-2 border-transparent",
+      label: "",
+    };
+  }
+  if (confidence === null || confidence < PROVISIONAL_CONFIDENCE_THRESHOLD) {
+    return {
+      isProvisional: true,
+      borderStyleClass: "border-2 border-dashed",
+      label: "provisional",
+    };
+  }
+  return {
+    isProvisional: false,
+    borderStyleClass: "border-2 border-transparent",
+    label: "",
+  };
 }

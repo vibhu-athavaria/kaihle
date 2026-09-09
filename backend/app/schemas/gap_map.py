@@ -12,6 +12,19 @@ class StudentGapScore(BaseModel):
     mastery_score: float | None  # None = this student has not yet been assessed
     last_assessed_at: datetime | None
 
+    # How much evidence stands behind mastery_score, in [0,1]. Computed and stored on every
+    # gap_states row since M1 but never surfaced — a student assessed on two questions and
+    # one assessed on forty could render identically, and a teacher deciding whether to
+    # intervene cannot tell "this student is middling" from "we barely have data".
+    # None when never assessed, matching mastery_score.
+    confidence: float | None = None
+
+    # Responses behind the estimate. ALWAYS None until MLH-T3 adds
+    # student_attempt_subtopic_scores.total_count — gap_states.attempt_count counts
+    # ATTEMPTS, and three attempts of one question each is not the evidence of one attempt
+    # of thirty. The field ships now so the frontend contract does not change when T3 lands.
+    total_responses: int | None = None
+
 
 class GapMapNode(BaseModel):
     subtopic_id: UUID
@@ -23,6 +36,7 @@ class GapMapNode(BaseModel):
     grade_level: int
     class_average: float | None  # None = no students assessed on this subtopic yet
     student_count: int
+
     student_scores: list[StudentGapScore]
 
 
@@ -41,6 +55,8 @@ class StudentSubtopicScore(BaseModel):
     topic_name: str
     mastery_score: float | None
     last_assessed_at: datetime | None
+    confidence: float | None = None  # see StudentGapScore.confidence
+    total_responses: int | None = None  # see StudentGapScore.total_responses
 
 
 class StudentGapMap(BaseModel):

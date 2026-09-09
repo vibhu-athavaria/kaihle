@@ -79,8 +79,10 @@ class GapService:
         """
         needs_review = new_mastery < 0.4
 
-        # Confidence grows with attempt count: min(attempt_count / 5, 1.0)
-        # 5+ attempts = full confidence (1.0), fewer = proportional confidence
+        # Confidence grows with attempt count: min(attempt_count / 5, 1.0).
+        # NOTE: 1.0 is unreachable on this path. calculate_gap_states_for_attempt caps
+        # rolling_attempt_count at 3 (its history query is LIMIT 2), so the stored value is
+        # only ever 0.2, 0.4 or 0.6. MLH-T3 replaces this ramp with posterior variance.
         confidence = min(rolling_attempt_count / 5.0, 1.0)
 
         # gap_states.last_assessed_at is TIMESTAMP WITHOUT TIME ZONE in the schema.
@@ -459,6 +461,9 @@ class GapService:
                     GapState.subtopic_id,
                     GapState.student_id,
                     GapState.mastery_score,
+                    # Already on the row — this adds a column to an existing select, not a
+                    # second query. It was being dropped at serialisation, not missing.
+                    GapState.confidence,
                     GapState.last_assessed_at,
                     User.first_name,
                     User.last_name,
@@ -482,6 +487,7 @@ class GapService:
                     student_id=g.student_id,
                     student_name=f"{g.first_name} {g.last_name}",
                     mastery_score=g.mastery_score,
+                    confidence=g.confidence,
                     last_assessed_at=g.last_assessed_at,
                 )
                 for g in student_gaps
@@ -596,6 +602,7 @@ class GapService:
                     select(
                         GapState.subtopic_id,
                         GapState.mastery_score,
+                        GapState.confidence,
                         GapState.last_assessed_at,
                     ).where(
                         GapState.student_id == student_id,
@@ -622,6 +629,7 @@ class GapService:
                 mastery_score=gaps_by_subtopic[st.subtopic_id].mastery_score
                 if st.subtopic_id in gaps_by_subtopic
                 else None,
+                confidence=gaps_by_subtopic[st.subtopic_id].confidence if st.subtopic_id in gaps_by_subtopic else None,
                 last_assessed_at=gaps_by_subtopic[st.subtopic_id].last_assessed_at
                 if st.subtopic_id in gaps_by_subtopic
                 else None,

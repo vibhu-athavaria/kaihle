@@ -1,20 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Download } from "lucide-react";
-import { getMasteryStyle } from "@kaihle/types";
-import { ClassGapMapTable } from "@kaihle/ui";
+import { getConfidenceStyle } from "@kaihle/types";
+import { ClassGapMapTable, GapMapLegend } from "@kaihle/ui";
 import { useClassGapMap } from "../../hooks/useClassGapMap";
 import { useClass } from "../../hooks/useClass";
 import { useClassAssessments } from "../../hooks/useClassAssessments";
 import { useClassEnrollments } from "../../hooks/useClassEnrollments";
 import { LearningProfileSidePanel } from "./LearningProfileSidePanel";
-
-const LEGEND_SCORES: Array<[number | null, string]> = [
-  [0.8, "Strong"],
-  [0.55, "Developing"],
-  [0.2, "Needs Work"],
-  [null, "Not assessed"],
-];
 
 interface ClassGapMapContentProps {
   classId: string;
@@ -71,8 +64,18 @@ export function ClassGapMapContent({
 
   const handleExportCsv = () => {
     if (!data?.nodes || !currentClass) return;
+    // Confidence is exported alongside mastery: without it the file reproduces exactly the
+    // "43% on 2 responses vs 43% on 40" ambiguity this feature exists to remove, and an
+    // exported CSV is precisely where someone reads the number away from the legend.
     const rows: string[][] = [
-      ["Student", "Topic", "Subtopic", "Mastery %", "Last Assessed"],
+      [
+        "Student",
+        "Topic",
+        "Subtopic",
+        "Mastery %",
+        "Confidence",
+        "Last Assessed",
+      ],
     ];
     for (const node of data.nodes) {
       for (const score of node.student_scores) {
@@ -83,6 +86,11 @@ export function ClassGapMapContent({
           score.mastery_score !== null
             ? `${Math.round(score.mastery_score * 100)}`
             : "—",
+          score.mastery_score === null
+            ? "—"
+            : getConfidenceStyle(score.confidence).isProvisional
+              ? "Provisional"
+              : "Confident",
           score.last_assessed_at
             ? new Date(score.last_assessed_at).toLocaleDateString("en-GB")
             : "—",
@@ -200,27 +208,7 @@ export function ClassGapMapContent({
 
       {data && hasAnyStudentData && (
         <>
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-5">
-              {LEGEND_SCORES.map(([score, label]) => {
-                const { bgClass, textClass } = getMasteryStyle(score);
-                return (
-                  <div key={label} className="flex items-center gap-1.5">
-                    <span
-                      className={`w-4 h-4 rounded ${bgClass}`}
-                      aria-hidden="true"
-                    />
-                    <span className={`text-xs font-medium ${textClass}`}>
-                      {label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="text-xs text-brand-muted italic">
-              Click any cell to view that student's full learning profile
-            </p>
-          </div>
+          <GapMapLegend hint="Click any cell to view that student's full learning profile" />
 
           {pendingCount > 0 && (
             <p className="text-xs text-brand-muted">

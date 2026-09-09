@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { getMasteryStyle, scoreToPercent } from "@kaihle/types";
+import {
+  getConfidenceStyle,
+  getMasteryStyle,
+  scoreToPercent,
+} from "@kaihle/types";
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
@@ -8,6 +12,10 @@ export interface GapMapStudentScore {
   student_id: string;
   student_name: string;
   mastery_score: number | null;
+  /** Evidence behind mastery_score, 0.0-1.0. Omit to render exactly as before. */
+  confidence?: number | null;
+  /** Responses behind the estimate. Null until MLH-T3 lands the column. */
+  total_responses?: number | null;
 }
 
 export interface GapMapNode {
@@ -74,19 +82,59 @@ function HeatCell({
   label,
   onClick,
   variant = "summary",
+  confidence,
+  totalResponses,
 }: {
   score: number | null;
   label: string;
   onClick?: () => void;
   variant?: "default" | "summary";
+  /** See GapMapStudentScore.confidence. Omit to render exactly as before. */
+  confidence?: number | null;
+  totalResponses?: number | null;
 }) {
-  const { bgClass, textClass, label: masteryLabel } = getMasteryStyle(score);
+  const {
+    bgClass,
+    textClass,
+    borderClass,
+    label: masteryLabel,
+  } = getMasteryStyle(score);
   const pct = scoreToPercent(score);
+
+  // An unassessed cell already reads "—" / Not assessed. Marking it provisional as well
+  // would signal the same absence of evidence twice.
+  const confidenceStyle = getConfidenceStyle(
+    score === null ? undefined : confidence,
+  );
+
+  // border-2 in BOTH states — transparent when confident — so a dashed border never
+  // changes the cell's box size and the grid cannot jitter between neighbours.
+  const borderClasses = confidenceStyle.isProvisional
+    ? `${confidenceStyle.borderStyleClass} ${borderClass}`
+    : confidenceStyle.borderStyleClass;
+
+  // aria-label OVERRIDES inner text for screen readers, so it must always carry the
+  // mastery band and score — otherwise a confident cell announces only a name and subtopic
+  // and its state is conveyed by colour alone, violating DESIGN_SYSTEM §9.1.
+  // "provisional" then says how sure; the response count says why, and is what decides
+  // between reassessing and intervening. The count clause is dropped when unavailable
+  // rather than rendered as "based on null responses".
+  const evidenceSuffix = confidenceStyle.isProvisional
+    ? `, ${confidenceStyle.label}${
+        totalResponses !== null && totalResponses !== undefined
+          ? ` — based on ${totalResponses} response${totalResponses === 1 ? "" : "s"}`
+          : ""
+      }`
+    : "";
+  const fullLabel = `${label}: ${masteryLabel}${
+    score !== null ? ` (${pct})` : ""
+  }${evidenceSuffix}`;
 
   const baseClass = [
     "w-full h-12 flex flex-col items-center justify-center gap-0.5 rounded select-none",
     bgClass,
     textClass,
+    borderClasses,
     variant === "summary" ? "ring-1 ring-inset ring-black/10" : "",
   ].join(" ");
 
@@ -104,7 +152,12 @@ function HeatCell({
 
   if (!onClick) {
     return (
-      <div className={baseClass} aria-label={label}>
+      <div
+        className={baseClass}
+        aria-label={fullLabel}
+        title={fullLabel}
+        data-provisional={confidenceStyle.isProvisional || undefined}
+      >
         {content}
       </div>
     );
@@ -114,7 +167,9 @@ function HeatCell({
     <button
       type="button"
       onClick={onClick}
-      aria-label={label}
+      aria-label={fullLabel}
+      title={fullLabel}
+      data-provisional={confidenceStyle.isProvisional || undefined}
       className={[
         baseClass,
         "transition-all hover:scale-[1.06] hover:shadow-lg hover:z-10 relative",
@@ -377,6 +432,8 @@ export function ClassGapMapTable({
                                   >
                                     <HeatCell
                                       score={ss?.mastery_score ?? null}
+                                      confidence={ss?.confidence}
+                                      totalResponses={ss?.total_responses}
                                       label={`${s.name} — ${node.subtopic_name}`}
                                       onClick={
                                         onCellClick
