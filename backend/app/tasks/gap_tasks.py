@@ -222,6 +222,16 @@ def update_gap_state_from_quiz(
                 existing_gap = gap_result.scalar_one_or_none()
                 rolling_count = (existing_gap.attempt_count or 0) + 1
 
+                # Study plans were removed from the product 2026-05-21 (see
+                # project_study_plans_removed) — this path is unreachable in the current
+                # product but stays wired for import safety. MLH-T3 changed
+                # upsert_gap_state to take confidence explicitly rather than derive it
+                # internally; this preserves this path's exact prior numeric behavior
+                # (the retired min(count/5, 1.0) ramp) rather than adopting the new
+                # Beta-Binomial estimator, since redesigning a removed feature's
+                # calculation is out of scope for that change.
+                confidence = min(rolling_count / 5.0, 1.0)
+
                 # Upsert gap state
                 service = GapService(db)
                 await service.upsert_gap_state(
@@ -230,6 +240,7 @@ def update_gap_state_from_quiz(
                     school_id=school_id,
                     class_id=class_id,
                     new_mastery=score,
+                    confidence=confidence,
                     rolling_attempt_count=rolling_count,
                     last_assessed_at=datetime.now(UTC),
                 )

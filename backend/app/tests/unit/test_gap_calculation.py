@@ -2,8 +2,16 @@
 
 Tests cover:
 - GapService.upsert_gap_state — DB upsert call shape and idempotency semantics
-- calculate_gap_states Celery task — mastery weighting formulas for 1/2/3+ attempts
+- calculate_gap_states Celery task — event loop / retry / CRITICAL-log structure
+- calculate_gap_states_for_attempt — early returns, subtopic skipping, multi-subtopic flow
 - Multiple subtopics, unknown question IDs, needs_review boundary
+
+MLH-T3: the mastery formula itself (magic coefficients replaced by
+mastery_model.estimate, a Beta-Binomial posterior) is tested where it lives — pure, in
+test_mastery_model.py — and where its real computed values matter, against a real
+database, in test_gap_states_updated.py. This file stays mocked and stays focused on
+control flow: it does not assert exact mastery scores, because a mocked positional call
+sequence is not where a shrinkage/decay computation should be trusted.
 """
 
 import uuid
@@ -88,6 +96,7 @@ class TestGapServiceUpsertGapState:
             school_id=school_id,
             class_id=class_id,
             new_mastery=0.8,
+            confidence=0.5,
             rolling_attempt_count=1,
             last_assessed_at=ts,
         )
@@ -97,6 +106,7 @@ class TestGapServiceUpsertGapState:
             school_id=school_id,
             class_id=class_id,
             new_mastery=0.8,
+            confidence=0.5,
             rolling_attempt_count=1,
             last_assessed_at=ts,
         )
@@ -124,6 +134,7 @@ class TestGapServiceUpsertGapState:
             school_id=school_id,
             class_id=class_id,
             new_mastery=0.3,
+            confidence=0.4,
             rolling_attempt_count=1,
             last_assessed_at=ts,
         )
@@ -133,6 +144,7 @@ class TestGapServiceUpsertGapState:
             school_id=school_id,
             class_id=class_id,
             new_mastery=0.8,
+            confidence=0.6,
             rolling_attempt_count=2,
             last_assessed_at=ts,
         )
@@ -157,6 +169,7 @@ class TestGapServiceUpsertGapState:
             school_id=uuid.uuid4(),
             class_id=uuid.uuid4(),
             new_mastery=0.39,
+            confidence=0.5,
             rolling_attempt_count=1,
             last_assessed_at=datetime.now(UTC),
         )
@@ -185,6 +198,7 @@ class TestGapServiceUpsertGapState:
             school_id=uuid.uuid4(),
             class_id=uuid.uuid4(),
             new_mastery=0.4,
+            confidence=0.5,
             rolling_attempt_count=1,
             last_assessed_at=datetime.now(UTC),
         )
@@ -193,117 +207,13 @@ class TestGapServiceUpsertGapState:
         assert captured_params[0]["needs_review"] is False
 
 
-# ── Mastery weighting formula tests ──────────────────────────────────────────
-#
-# These tests validate the weighting formulas by directly testing the pure
-# computation, decoupled from DB and Celery infrastructure.
-
-
-class TestMasteryWeightingFormulas:
-    """Tests for the recency-weighted mastery computation formula.
-
-    The formula lives inside the Celery task's _run() closure, but we test
-    the mathematical results by invoking the same logic directly.
-    """
-
-    def _compute_mastery(self, current_score: float, historical: list[float], is_diagnostic: bool = False) -> float:
-        """Replicate the weighting formula from gap_tasks.py."""
-        if len(historical) == 0:
-            if is_diagnostic:
-                mastery = current_score * 0.7
-            else:
-                mastery = current_score * 1.0
-            return max(0.0, min(1.0, mastery))
-        elif len(historical) == 1:
-            mastery = (current_score * 0.65) + (historical[0] * 0.35)
-        else:
-            second_score = historical[0]  # most recent historical
-            third_score = historical[1]  # older historical
-            mastery = (current_score * 0.5) + (second_score * 0.3) + (third_score * 0.2)
-        return max(0.0, min(1.0, mastery))
-
-    def test_calculate_when_first_attempt_5_questions_all_correct_then_mastery_1_0(
-        self,
-    ) -> None:
-        """First attempt, all correct, not system-generated → mastery = 1.0."""
-        mastery = self._compute_mastery(
-            current_score=1.0,
-            historical=[],
-            is_diagnostic=False,
-        )
-        assert mastery == 1.0
-
-    def test_calculate_when_first_enrollment_diagnostic_then_mastery_seeded_at_0_7(
-        self,
-    ) -> None:
-        """System-generated, first attempt, all correct → mastery = 0.7 (seeded)."""
-        mastery = self._compute_mastery(
-            current_score=1.0,
-            historical=[],
-            is_diagnostic=True,
-        )
-        assert mastery == pytest.approx(0.7)
-
-    def test_calculate_when_second_attempt_higher_score_then_mastery_is_weighted(
-        self,
-    ) -> None:
-        """Second attempt: first=0.4, second=0.8 → mastery = 0.8×0.65 + 0.4×0.35 = 0.66."""
-        mastery = self._compute_mastery(
-            current_score=0.8,
-            historical=[0.4],
-        )
-        assert mastery == pytest.approx(0.66, abs=1e-9)
-
-    def test_calculate_when_four_attempts_then_only_last_three_count(
-        self,
-    ) -> None:
-        """Scores [0.2, 0.4, 0.6, 0.8] (oldest to newest).
-        Current = 0.8, historical = [0.6, 0.4] (skip 0.2 as only last 2 historical loaded).
-        mastery = 0.8×0.5 + 0.6×0.3 + 0.4×0.2 = 0.40 + 0.18 + 0.08 = 0.66.
-        """
-        mastery = self._compute_mastery(
-            current_score=0.8,
-            historical=[0.6, 0.4],  # last 2 historical (oldest 0.2 excluded by LIMIT 2)
-        )
-        assert mastery == pytest.approx(0.66, abs=1e-9)
-
-    def test_calculate_when_mastery_would_exceed_1_then_clamped_to_1(
-        self,
-    ) -> None:
-        """Clamping: very high weighted score cannot exceed 1.0."""
-        mastery = self._compute_mastery(
-            current_score=1.0,
-            historical=[1.0, 1.0],
-        )
-        assert mastery <= 1.0
-
-    def test_calculate_when_mastery_would_go_below_0_then_clamped_to_0(
-        self,
-    ) -> None:
-        """Clamping: mastery cannot be negative."""
-        mastery = self._compute_mastery(
-            current_score=0.0,
-            historical=[0.0, 0.0],
-        )
-        assert mastery >= 0.0
-
-    def test_calculate_when_first_attempt_3_of_5_correct_then_mastery_0_6(
-        self,
-    ) -> None:
-        """First attempt (non-system_generated), 3 correct out of 5 questions for one subtopic.
-
-        current_score = 3/5 = 0.6, no historical, not system-generated.
-        mastery = 0.6 × 1.0 = 0.6.
-        """
-        mastery = self._compute_mastery(
-            current_score=3 / 5,
-            historical=[],
-            is_diagnostic=False,
-        )
-        assert mastery == pytest.approx(0.6, abs=1e-9)
-
-
-# ── Task-level tests (mocked DB) ─────────────────────────────────────────────
+# TestMasteryWeightingFormulas removed (MLH-T3). It reimplemented the six-coefficient
+# formula inside the test file (_compute_mastery) and asserted against its own copy —
+# every test in it would have passed if gap_service.py were deleted, violating
+# .claude/rules/05-testing.md ("Tests MUST assert behavior... not implementation
+# details"). The formula is gone; its replacement (mastery_model.estimate) has its own
+# pure test suite in test_mastery_model.py, and this file's remaining tests below
+# assert against the real GapService path instead of a parallel reimplementation.
 
 
 class TestCalculateGapStatesTask:
@@ -419,6 +329,7 @@ class TestCalculateGapStatesTask:
                 school_id=school_id,
                 class_id=class_id,
                 new_mastery=score,
+                confidence=0.5,
                 rolling_attempt_count=1,
                 last_assessed_at=datetime.now(UTC),
             )
@@ -531,13 +442,22 @@ def _build_mock_db_for_calculate(
       4. Load class, for scoping attribution to its curriculum/subject/grade
          (scalar_one_or_none)
       5. Map question → subtopic via the learning objective, within that scope (all())
+      6. Batch-fetch mastery_priors for every resolved subtopic (all()) — MLH-T3. An
+         empty result here is a valid, already-handled case: it means no subtopic in
+         this attempt has been calibrated yet, and the service falls back to the
+         platform bootstrap default (settings.mastery_prior_alpha/beta), not an error.
       Per subtopic:
-        6+. Historical scores query (all())
-        7+. Gap state upsert (execute with text)
-        8+. Insert subtopic score row (execute with text)
+        7+. Historical (correct_count, total_count) query (all())
+        8+. Gap state upsert (execute with text)
+        9+. Insert subtopic score row (execute with text)
 
     Call 5 resolves every question here, so the service's legacy subtopic_id fallback
-    is not reached and issues no query.
+    is not reached and issues no query. Call 6 and beyond all return an empty `.all()`
+    by default (see the `else` branch below), which is correct for both "no priors
+    calibrated yet" and "no history yet" — neither test using this helper asserts an
+    exact mastery value, only that the flow completes and updates the right count of
+    subtopics; see test_gap_states_updated.py for tests that assert real values against
+    a real database instead of a positional mock sequence.
     """
     call_count = [0]
 
@@ -703,16 +623,28 @@ class TestCalculateGapStatesForAttempt:
         assert result["subtopics_updated"] == 0
 
     @pytest.mark.asyncio
-    async def test_when_first_diagnostic_attempt_then_mastery_weighted_at_0_7(self) -> None:
-        """Tier 1 diagnostic → mastery = score * 0.7."""
+    async def test_when_first_attempt_no_prior_calibrated_then_completes_via_bootstrap_default(
+        self,
+    ) -> None:
+        """First attempt, no mastery_priors row for this subtopic yet — flow completes.
+
+        Was test_when_first_diagnostic_attempt_then_mastery_weighted_at_0_7, asserting
+        the retired "mastery = score * 0.7" behaviour (Finding 1: this was the exact bug
+        that capped every diagnostic below the Strong band). Its own upsert_calls capture
+        never actually matched anything — SQL bind params use "mastery_score", not
+        "new_mastery" — so no numeric assertion was ever made here; the real regression
+        test for Finding 1 lives in test_gap_states_updated.py against a real database,
+        where an exact posterior value can be asserted meaningfully. This mocked test
+        keeps its actual, narrower job: the flow completes and updates 1 subtopic when no
+        prior has been calibrated for it (mastery_priors batch-fetch returns empty and
+        the service falls back to the platform bootstrap default).
+        """
         student_id = uuid.uuid4()
         sub1 = uuid.uuid4()
         q1 = uuid.uuid4()
         assessment = _make_assessment(uuid.uuid4(), uuid.uuid4(), assessment_type=AssessmentType.DIAGNOSTIC)
         attempt = _make_attempt(assessment.id, student_id, status="COMPLETED")
         responses = [_make_response(q1, is_correct=True)]  # 100% correct
-
-        upsert_calls: list[dict] = []
 
         call_count = [0]
 
@@ -738,11 +670,9 @@ class TestCalculateGapStatesForAttempt:
                 # question → subtopic, resolved via the learning objective
                 m.all.return_value = [(q1, sub1)]
             elif c == 6:
-                m.all.return_value = []  # no history
+                m.all.return_value = []  # no mastery_priors row calibrated yet
             else:
-                if params and "new_mastery" in str(params):
-                    upsert_calls.append(params)
-                m.all.return_value = []
+                m.all.return_value = []  # no history
             return m
 
         mock_db = MagicMock()

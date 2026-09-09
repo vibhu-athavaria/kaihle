@@ -298,17 +298,28 @@ class TestGapStatesUpdated:
         assert gap_state is not None
 
     @pytest.mark.asyncio
-    async def test_gap_states_correct_after_submit_10_correct_of_10(
+    async def test_gap_states_when_perfect_score_then_strong_band_reachable(
         self,
         db_session: AsyncSession,
         school: School,
     ) -> None:
-        """10 correct responses on a DIAGNOSTIC → mastery=0.7 (diagnostic applies 0.7 confidence damper)."""
+        """10/10 on a first DIAGNOSTIC reaches Strong — Finding 1 regression test.
+
+        Was test_gap_states_correct_after_submit_10_correct_of_10, asserting
+        mastery == 0.7 exactly. That was the bug: the retired formula applied score * 0.7
+        to every first diagnostic regardless of assessment content, and 0.7 is exactly the
+        Strong-band boundary (> 0.7), so a PERFECT score could never reach it — every top
+        performer showed as "Developing", forever.
+
+        Under mastery_model.estimate with no mastery_priors row yet (falls back to the
+        bootstrap default Beta(2,3)): posterior = (10+2)/(10+2+0+3) = 12/15 = 0.8,
+        comfortably inside Strong. The exact value is asserted, not just the band, because
+        an inequality alone would not catch a regression that landed at, say, 0.71.
+        """
         curriculum, grade, subject, ct, subtopic = await _create_curriculum_chain(db_session, school)
         teacher = await _create_teacher(db_session, school)
         class_ = await _create_class(db_session, school, curriculum, grade, subject, teacher)
 
-        # Create 10 questions in the same subtopic
         questions = [await _create_question(db_session, subtopic) for _ in range(10)]
 
         student = User(
@@ -340,8 +351,180 @@ class TestGapStatesUpdated:
         )
         gap_state = gs_result.scalar_one_or_none()
         assert gap_state is not None
-        assert gap_state.mastery_score == pytest.approx(0.7, abs=1e-9)
+        assert gap_state.mastery_score == pytest.approx(0.8, abs=1e-9)
+        assert gap_state.mastery_score > 0.7  # Strong band — the ceiling that could never
+        # be reached before is now reached exactly when the evidence supports it.
         assert gap_state.needs_review is False
+
+    @pytest.mark.asyncio
+    async def test_gap_states_when_partial_score_then_shrunk_toward_prior_not_raw(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        """3/5 correct, first attempt: posterior sits between the prior mean and the raw
+        score — shrinkage happening, not a flat multiplier and not the raw proportion.
+
+        With no calibrated prior (bootstrap default Beta(2,3), mean 0.4): raw score is
+        0.6; posterior = (3+2)/(5+2+3) = 5/10 = 0.5 — pulled toward 0.4, but not equal to
+        either endpoint.
+        """
+        curriculum, grade, subject, ct, subtopic = await _create_curriculum_chain(db_session, school)
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, grade, subject, teacher)
+        questions = [await _create_question(db_session, subtopic) for _ in range(5)]
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-shrink-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="Shrunk",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        assessment = await _create_assessment(db_session, school, class_, teacher)
+        attempt = await _create_attempt(db_session, assessment, student)
+        for i, q in enumerate(questions):
+            await _create_response(db_session, attempt, q, is_correct=i < 3)
+
+        service = GapService(db_session)
+        await service.calculate_gap_states_for_attempt(attempt.id)
+
+        gap_state = (
+            await db_session.execute(
+                select(GapState).where(
+                    GapState.student_id == student.id,
+                    GapState.subtopic_id == subtopic.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert gap_state is not None
+        assert gap_state.mastery_score == pytest.approx(0.5, abs=1e-9)
+        assert 0.4 < gap_state.mastery_score < 0.6  # shrunk toward the prior, not raw
+
+    @pytest.mark.asyncio
+    async def test_gap_states_when_confidence_written_then_matches_pure_estimator(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        """gap_states.confidence matches what mastery_model.estimate computes directly for
+        the same observations and prior — verifies the wiring, not the math (the math has
+        its own pure test suite in test_mastery_model.py)."""
+        from app.services.mastery_model import Observation, estimate
+
+        curriculum, grade, subject, ct, subtopic = await _create_curriculum_chain(db_session, school)
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, grade, subject, teacher)
+        questions = [await _create_question(db_session, subtopic) for _ in range(4)]
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-conf-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="Confidence",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        assessment = await _create_assessment(db_session, school, class_, teacher)
+        attempt = await _create_attempt(db_session, assessment, student)
+        for i, q in enumerate(questions):
+            await _create_response(db_session, attempt, q, is_correct=i < 3)
+
+        service = GapService(db_session)
+        await service.calculate_gap_states_for_attempt(attempt.id)
+
+        gap_state = (
+            await db_session.execute(
+                select(GapState).where(
+                    GapState.student_id == student.id,
+                    GapState.subtopic_id == subtopic.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert gap_state is not None
+
+        expected = estimate(
+            [Observation(correct=3, total=4, age_index=0)],
+            prior_alpha=2.0,
+            prior_beta=3.0,
+            decay=0.7,
+        )
+        assert gap_state.confidence == pytest.approx(expected.confidence, abs=1e-6)
+        assert gap_state.mastery_score == pytest.approx(expected.score, abs=1e-6)
+
+    @pytest.mark.asyncio
+    async def test_gap_states_when_repeat_attempt_then_recent_weighted_above_historical(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        """A weak first attempt followed by a strong second attempt scores higher than
+        equal weighting of the two would — recency decay favouring the recent evidence,
+        exercised end to end: the first call's written correct_count/total_count is what
+        the second call reads back as history.
+        """
+        curriculum, grade, subject, ct, subtopic = await _create_curriculum_chain(db_session, school)
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, grade, subject, teacher)
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-recency-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="Recency",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        service = GapService(db_session)
+
+        # First attempt: 1/5 correct.
+        first_questions = [await _create_question(db_session, subtopic) for _ in range(5)]
+        first_assessment = await _create_assessment(db_session, school, class_, teacher)
+        first_attempt = await _create_attempt(db_session, first_assessment, student)
+        for i, q in enumerate(first_questions):
+            await _create_response(db_session, first_attempt, q, is_correct=i == 0)
+        await service.calculate_gap_states_for_attempt(first_attempt.id)
+
+        # Second attempt: 5/5 correct — should pull the score up more than an
+        # equally-weighted average of the two attempts would.
+        second_questions = [await _create_question(db_session, subtopic) for _ in range(5)]
+        second_assessment = await _create_assessment(db_session, school, class_, teacher)
+        second_attempt = await _create_attempt(db_session, second_assessment, student)
+        for q in second_questions:
+            await _create_response(db_session, second_attempt, q, is_correct=True)
+        await service.calculate_gap_states_for_attempt(second_attempt.id)
+
+        gap_state = (
+            await db_session.execute(
+                select(GapState).where(
+                    GapState.student_id == student.id,
+                    GapState.subtopic_id == subtopic.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert gap_state is not None
+
+        # decay=0.7: weighted_correct = 5*1 + 1*0.7 = 5.7, weighted_total = 5+3.5 = 8.5.
+        # posterior = (5.7+2)/(8.5+5) = 7.7/13.5.
+        assert gap_state.mastery_score == pytest.approx(7.7 / 13.5, abs=1e-6)
+
+        # Equal weighting (decay=1) of the same two attempts would give (6+2)/(10+5) =
+        # 8/15 — lower. Recency weighting must place the recent-favouring score above it.
+        equal_weighted = 8.0 / 15.0
+        assert gap_state.mastery_score > equal_weighted
 
     @pytest.mark.asyncio
     async def test_celery_task_idempotent_when_called_twice(
@@ -375,6 +558,16 @@ class TestGapStatesUpdated:
 
         # Call twice — both calls use ON CONFLICT DO UPDATE / DO NOTHING
         await service.calculate_gap_states_for_attempt(attempt.id)
+        first_score = (
+            await db_session.execute(
+                select(GapState.mastery_score, GapState.confidence).where(
+                    GapState.student_id == student.id,
+                    GapState.subtopic_id == subtopic.id,
+                    GapState.class_id == class_.id,
+                )
+            )
+        ).one()
+
         await service.calculate_gap_states_for_attempt(attempt.id)
 
         # Should be exactly one gap_states row for this student/subtopic/class
@@ -387,6 +580,13 @@ class TestGapStatesUpdated:
         )
         gap_states = gs_result.scalars().all()
         assert len(gap_states) == 1
+
+        # Idempotent in VALUE, not just in row count: the same attempt_id re-run must not
+        # double-count the (unchanged) attempt as new evidence via ON CONFLICT DO NOTHING
+        # on student_attempt_subtopic_scores — the second call's historical query must see
+        # the same rows the first call did, not the first call's row plus a duplicate.
+        assert gap_states[0].mastery_score == pytest.approx(first_score.mastery_score, abs=1e-9)
+        assert gap_states[0].confidence == pytest.approx(first_score.confidence, abs=1e-9)
 
         # Should be exactly one subtopic score row
         score_result = await db_session.execute(
