@@ -28,6 +28,7 @@ celery_app = Celery(
         "app.tasks.study_plan_tasks",
         "app.tasks.content_tasks",
         "app.tasks.teacher_content_tasks",
+        "app.tasks.mastery_tasks",
     ],
 )
 
@@ -119,5 +120,14 @@ celery_app.conf.beat_schedule = {
     "check-stale-video-links": {
         "task": "tasks.check_stale_video_links",
         "schedule": crontab(hour=2, minute=0),  # every day at 02:00 UTC
+    },
+    # MLH-T3-2. Weekly, not nightly: at pilot scale, a single day rarely adds enough
+    # response data to move a hierarchical level across MIN_ROWS_FOR_FIT. Re-fits every
+    # subtopic's mastery prior so a subject that starts with zero data (e.g. Biology,
+    # Chemistry today) automatically graduates from the GLOBAL fallback to its own prior
+    # once a school actually uses it, without a human needing to rerun a script by hand.
+    "recalibrate-mastery-priors": {
+        "task": "tasks.recalibrate_mastery_priors",
+        "schedule": crontab(hour=3, minute=0, day_of_week=0),  # weekly, Sunday 03:00 UTC
     },
 }

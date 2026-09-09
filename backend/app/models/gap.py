@@ -6,8 +6,8 @@ Covers: gap_states
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -54,4 +54,51 @@ class GapState(Base, UUIDMixin, TimestampMixin):
         CheckConstraint("mastery_score BETWEEN 0.0 AND 1.0", name="chk_gs_mastery"),
         CheckConstraint("confidence BETWEEN 0.0 AND 1.0", name="chk_gs_confidence"),
         CheckConstraint("total_correct <= total_attempted", name="chk_gs_counts"),
+    )
+
+
+class MasteryPrior(Base):
+    """The hierarchical Bayesian prior a subtopic's mastery estimate shrinks toward.
+
+    Exactly one row per ACTIVE subtopic, always — including subtopics with zero response
+    data (source_level='GLOBAL' in that case). Written offline by
+    scripts/calibrate_mastery_prior.py, either invoked directly or via the weekly
+    recalibrate_mastery_priors Celery task; read by GapService at attempt-submission time.
+
+    This separation exists because fitting the hierarchical prior means scanning every
+    response for a subtopic's topic and subject, which is too expensive to redo on every
+    attempt submission (.claude/rules/07-performance.md prohibits unbounded scans in hot
+    paths). Precompute, store, read cheaply — the same pattern
+    learning_objectives.embedding already uses.
+
+    No school_id: curriculum-derived, like learning_objectives, and applies platform-wide.
+    """
+
+    __tablename__ = "mastery_priors"
+
+    subtopic_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subtopics.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    alpha: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False)
+    beta: Mapped[float] = mapped_column(Numeric(12, 6), nullable=False)
+    # Which level of the backoff chain this row's alpha/beta actually came from —
+    # SUBTOPIC | TOPIC | SUBJECT | GLOBAL — shown for transparency/debugging, not read by
+    # gap_service itself (which only needs alpha/beta).
+    source_level: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Observations backing the level actually used, NOT this subtopic's own count — a
+    # subtopic resolved to GLOBAL reports the global observation count here, which is the
+    # evidence actually behind its prior.
+    source_n: Mapped[int] = mapped_column(Integer, nullable=False)
+    fitted_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("alpha > 0", name="chk_mastery_prior_alpha_positive"),
+        CheckConstraint("beta > 0", name="chk_mastery_prior_beta_positive"),
+        CheckConstraint(
+            "source_level IN ('SUBTOPIC', 'TOPIC', 'SUBJECT', 'GLOBAL')",
+            name="chk_mastery_prior_source_level",
+        ),
+        CheckConstraint("source_n >= 0", name="chk_mastery_prior_source_n_non_negative"),
     )
