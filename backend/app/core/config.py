@@ -28,6 +28,33 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
+    # Mastery model (MLH-T3). BOOTSTRAP DEFAULTS ONLY.
+    #
+    # These are the prior mastery_model.estimate() falls back to when no calibrated row
+    # exists yet in mastery_priors for a subtopic — e.g. a fresh database before
+    # scripts/calibrate_mastery_prior.py has ever run. In steady state, every active
+    # subtopic has its own row in mastery_priors (always populated, resolved down to
+    # GLOBAL when nothing more specific qualifies — see that table's docstring), and THAT
+    # row's alpha/beta is what gap_service actually reads. These two settings are not the
+    # single global prior; the hierarchical fit is.
+    #
+    # The values themselves are chosen ANALYTICALLY, not fitted, precisely because they
+    # only matter before any fit has ever run:
+    #
+    #   prior mean 2/(2+3) = 0.4  — the Developing/Needs-Work boundary, the correct
+    #                               neutral assumption for an unassessed student
+    #   prior strength 2+3 = 5    — matches the intuition behind the retired
+    #                               min(attempts/5, 1) confidence ramp
+    #
+    # Do not hand-tune these to "improve" a specific subject or subtopic — that is what
+    # mastery_priors and its hierarchical backoff are for.
+    mastery_prior_alpha: float = 2.0
+    mastery_prior_beta: float = 3.0
+    # Per-attempt recency weight. 1.0 pools all attempts equally, 0.0 keeps only the most
+    # recent. 0.7 approximates the retired three-attempt 0.5/0.3/0.2 profile while
+    # extending to any number of attempts.
+    mastery_recency_decay: float = 0.7
+
     # LLM usage accounting (MLH-T2). Off by default so unit tests and offline scripts can
     # make LLM calls without a database.
     llm_usage_tracking_enabled: bool = False
