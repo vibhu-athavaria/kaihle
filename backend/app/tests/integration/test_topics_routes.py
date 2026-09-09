@@ -220,6 +220,70 @@ async def test_review_topic_variant_when_curriculum_scope_then_teacher_claims_fo
     assert reloaded.school_id == school.id
 
 
+@pytest.mark.asyncio
+async def test_review_topic_variant_when_school_already_has_row_for_slot_then_skips_takeover_without_500(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """Prod regression: approving a curriculum-scope row whose (subtopic_id, content_type,
+    interest_category_id) slot is already occupied by a school-scope row for the caller's
+    own school previously crashed with an unhandled 500 — the ownership-claim assignment
+    below unconditionally set scope='school' + school_id=<caller's school> and collided
+    with uq_subtopic_content_school on commit (IntegrityError, uncaught). The review itself
+    must still succeed; only the ownership takeover is skipped when it would collide."""
+    topic, subtopic, _class, teacher = await _create_topic_with_class(db_session, school)
+    interest_category = InterestCategory(id=uuid.uuid4(), name="sports_movement")
+    db_session.add(interest_category)
+    await db_session.flush()
+
+    # Already occupies the (subtopic, content_type, school, interest_category) slot.
+    existing_school_row = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=subtopic.id,
+        content_type="explanation",
+        interest_category_id=interest_category.id,
+        explanation_text="Existing school-specific explanation",
+        review_status="approved",
+        scope="school",
+        school_id=school.id,
+        is_active=True,
+    )
+    # A separate curriculum-scope row for the exact same slot, still pending review.
+    curriculum_content = SubtopicContent(
+        id=uuid.uuid4(),
+        subtopic_id=subtopic.id,
+        content_type="explanation",
+        interest_category_id=interest_category.id,
+        explanation_text="Newer curriculum-scope explanation",
+        review_status="pending",
+        scope="curriculum",
+        school_id=None,
+        is_active=True,
+    )
+    db_session.add_all([existing_school_row, curriculum_content])
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/v1/topics/{topic.id}/variants/{curriculum_content.id}/review",
+        headers=make_auth_header(teacher),
+        json={"review_status": "approved"},
+    )
+
+    assert response.status_code == 200
+    reloaded = await _reload(db_session, curriculum_content.id)
+    assert reloaded.review_status == "approved"
+    # Ownership takeover skipped — reassigning would have collided with existing_school_row.
+    assert reloaded.scope == "curriculum"
+    assert reloaded.school_id is None
+
+    # The pre-existing school row must be untouched.
+    reloaded_existing = await _reload(db_session, existing_school_row.id)
+    assert reloaded_existing.review_status == "approved"
+    assert reloaded_existing.scope == "school"
+    assert reloaded_existing.school_id == school.id
+
+
 async def _ensure_interest_categories(db: AsyncSession) -> None:
     """Create the 4 production interest categories if they don't already exist.
 
