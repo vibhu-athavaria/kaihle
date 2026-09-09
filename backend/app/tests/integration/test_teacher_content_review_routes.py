@@ -24,6 +24,8 @@ from app.models.school import Class, School
 from app.models.subtopic_content import SubtopicContent
 from app.models.user import User, UserRole
 
+TEACHER_ROUTE_PREFIX = "/api/v1/teacher/classes"
+
 
 def make_auth_header(user: User) -> dict[str, str]:
     """Generate Authorization header with a real JWT."""
@@ -125,6 +127,122 @@ async def _create_full_setup(
 
     await db.flush()
     return subject, grade, curriculum, curriculum_topic, subtopic, teacher, class_, subtopic_content
+
+
+@pytest.mark.asyncio
+async def test_list_explanation_review_when_other_school_content_exists_then_not_in_response(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+    other_school: School,
+) -> None:
+    """Another school's pending/approved content for the same subject+grade must not appear
+    in this teacher's per-class review list (CONSTITUTION Rule 3). Regression test for the
+    cross-school leak fixed in MCR-T1 — before the fix, list_explanation_content filtered
+    only by subject_id/grade_id, with no school boundary at all."""
+    (
+        _,
+        _,
+        _,
+        curriculum_topic,
+        _,
+        teacher,
+        class_,
+        _,
+    ) = await _create_full_setup(db_session, school)
+
+    # A second subtopic under the SAME curriculum_topic (same subject/grade), owned by
+    # another school — this is exactly the shape that would have leaked before the fix.
+    other_subtopic = Subtopic(
+        id=uuid.uuid4(),
+        curriculum_topic_id=curriculum_topic.id,
+        name="Other School's Subtopic",
+        canonical_code="ALG-OTHER",
+        learning_objective="Belongs to another school entirely",
+        sequence_order=2,
+        is_active=True,
+    )
+    db_session.add(other_subtopic)
+    await db_session.flush()
+
+    db_session.add(
+        SubtopicContent(
+            id=uuid.uuid4(),
+            subtopic_id=other_subtopic.id,
+            content_type="explanation",
+            explanation_text="Other school's explanation — must not leak",
+            review_status="pending",
+            scope="school",
+            school_id=other_school.id,
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get(
+        f"{TEACHER_ROUTE_PREFIX}/{class_.id}/explanation-review",
+        headers=make_auth_header(teacher),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    subtopic_ids_returned = {item["subtopic_id"] for item in data["items"]}
+    assert str(other_subtopic.id) not in subtopic_ids_returned
+
+
+@pytest.mark.asyncio
+async def test_update_explanation_review_when_content_belongs_to_other_school_then_403(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+    other_school: School,
+) -> None:
+    """A teacher must not be able to approve/reject another school's pending content just by
+    knowing its subtopic_id (write-leak fixed in MCR-T1 alongside the read-leak)."""
+    (
+        _,
+        _,
+        _,
+        curriculum_topic,
+        _,
+        teacher,
+        class_,
+        _,
+    ) = await _create_full_setup(db_session, school)
+
+    other_subtopic = Subtopic(
+        id=uuid.uuid4(),
+        curriculum_topic_id=curriculum_topic.id,
+        name="Other School's Subtopic",
+        canonical_code="ALG-OTHER-2",
+        learning_objective="Belongs to another school entirely",
+        sequence_order=3,
+        is_active=True,
+    )
+    db_session.add(other_subtopic)
+    await db_session.flush()
+
+    db_session.add(
+        SubtopicContent(
+            id=uuid.uuid4(),
+            subtopic_id=other_subtopic.id,
+            content_type="explanation",
+            explanation_text="Other school's explanation",
+            review_status="pending",
+            scope="school",
+            school_id=other_school.id,
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.patch(
+        f"{TEACHER_ROUTE_PREFIX}/{class_.id}/explanation-review/{other_subtopic.id}",
+        headers=make_auth_header(teacher),
+        json={"review_status": "approved"},
+    )
+
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

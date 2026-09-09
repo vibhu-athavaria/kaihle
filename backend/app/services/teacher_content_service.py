@@ -15,6 +15,7 @@ from sqlalchemy.orm import joinedload
 
 from app.models import Class, SubtopicContent
 from app.models.curriculum import CurriculumTopic, Subtopic
+from app.services.subtopic_content_visibility import visible_scope_clause
 
 _ST = TypeVar("_ST", bound="tuple[Any, ...]")
 
@@ -23,16 +24,21 @@ async def list_explanation_content(
     db: AsyncSession,
     subject_id: UUID,
     grade_id: UUID,
+    school_id: UUID,
     status_filter: str | None,
     page: int,
     page_size: int,
 ) -> tuple[list[dict[str, Any]], int, int]:
-    """Query explanation content for a class's subject/grade.
+    """Query explanation content for a class's subject/grade, scoped to the caller's school.
 
     Args:
         db: Async SQLAlchemy session.
         subject_id: UUID of the class subject.
         grade_id: UUID of the class grade.
+        school_id: The teacher's school — a curriculum-scope row is always included, a
+            school-scope row only when it belongs to this school (CONSTITUTION Rule 3).
+            Without this, a teacher could see — and approve/reject/edit — another school's
+            pending content that happens to share the same subject/grade.
         status_filter: Optional status string to filter by ("pending", "approved", "rejected").
         page: 1-indexed page number.
         page_size: Items per page.
@@ -50,6 +56,7 @@ async def list_explanation_content(
             SubtopicContent.content_type == "explanation",
             CurriculumTopic.subject_id == subject_id,
             CurriculumTopic.grade_id == grade_id,
+            visible_scope_clause(school_id),
         )
 
     join_chain = (
@@ -160,6 +167,7 @@ async def list_all_explanation_content(
             SubtopicContent.content_type == "explanation",
             CurriculumTopic.subject_id.in_(subject_ids),
             CurriculumTopic.grade_id.in_(grade_ids),
+            visible_scope_clause(school_id),
         )
     )
 

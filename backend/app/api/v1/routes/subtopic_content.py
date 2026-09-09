@@ -70,6 +70,7 @@ from app.schemas.subtopic_content import (
     VideoSuggestionRequest,
 )
 from app.services.question_selection import resolve_objective_for_subtopic
+from app.services.subtopic_content_visibility import visible_scope_clause
 from app.services.youtube_service import search_youtube_videos
 from app.tasks.content_tasks import generate_personalised_explanations
 from app.tasks.teacher_content_tasks import generate_teacher_requested_content
@@ -1613,16 +1614,22 @@ async def get_subtopic_explanations(
     Teachers are scoped to subtopics in their assigned classes.
     KaihleAdmin sees all.
     """
+    query = select(SubtopicContent).where(
+        SubtopicContent.subtopic_id == subtopic_id,
+        SubtopicContent.content_type == "explanation",
+    )
+
     if current_user.role == UserRole.TEACHER:
         assert current_user.school_id is not None
         await _verify_teacher_subtopic_access(subtopic_id, current_user.school_id, db)
+        # Without this, a teacher sees every school's personalised explanation variants for
+        # this subtopic — the docstring above says "Teachers are scoped to subtopics in
+        # their assigned classes," but that only verified the subtopic itself, not which
+        # school's rows on it are visible (CONSTITUTION Rule 3).
+        query = query.where(visible_scope_clause(current_user.school_id))
+    # KAIHLE_ADMIN: no scope filter — sees all schools' rows, per Rule 12.
 
-    result = await db.execute(
-        select(SubtopicContent).where(
-            SubtopicContent.subtopic_id == subtopic_id,
-            SubtopicContent.content_type == "explanation",
-        )
-    )
+    result = await db.execute(query)
     rows = result.scalars().all()
 
     generic: ExplanationSection | None = None
@@ -1661,6 +1668,16 @@ async def create_explanation_suggestion(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Suggestions are only for personalised explanation rows",
+        )
+
+    # A teacher must not be able to touch another school's content row just by knowing its
+    # id (CONSTITUTION Rule 3) — a curriculum-scope row is fair game for anyone, since
+    # suggesting an edit to shared content is the point of this feature.
+    assert current_user.school_id is not None
+    if content.scope == "school" and content.school_id != current_user.school_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This content belongs to another school",
         )
 
     suggestion = SubtopicExplanationSuggestion(

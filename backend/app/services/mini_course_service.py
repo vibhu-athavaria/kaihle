@@ -55,6 +55,7 @@ from app.schemas.mini_course import (
     TransferQuestionResponse,
 )
 from app.services.question_selection import questions_for_subtopic
+from app.services.subtopic_content_visibility import visible_scope_clause
 
 _PROMPTS_DIR = Path(__file__).parent.parent / "ai" / "prompts"
 _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)), autoescape=False)
@@ -144,10 +145,11 @@ class MiniCourseService:
         explanation_content = await self._fetch_best_explanation(
             subtopic_id=subtopic_id,
             interest_category_id=interest_category_id,
+            school_id=school_id,
         )
 
         # 4. Fetch best approved video
-        video_content = await self._fetch_approved_video(subtopic_id=subtopic_id)
+        video_content = await self._fetch_approved_video(subtopic_id=subtopic_id, school_id=school_id)
 
         # 5. Fetch check questions (random sample)
         check_questions = await self._fetch_check_questions(subtopic_id=subtopic_id)
@@ -534,10 +536,15 @@ class MiniCourseService:
         self,
         subtopic_id: uuid.UUID,
         interest_category_id: uuid.UUID | None,
+        school_id: uuid.UUID,
     ) -> SubtopicContent | None:
-        """Return best approved explanation for subtopic.
+        """Return best approved explanation for subtopic, visible to this school.
 
         Ordering: interest-matched row first (CASE score 0), generic fallback (score 1).
+        A curriculum-scope row is always visible; a school-scope row only when it belongs
+        to the caller's own school (CONSTITUTION Rule 3) — otherwise a teacher-approved
+        explanation from another school would leak to every student before KaihleAdmin
+        ever promotes it.
         """
         priority_expr = case(
             (SubtopicContent.interest_category_id == interest_category_id, 0),
@@ -551,14 +558,15 @@ class MiniCourseService:
                 SubtopicContent.review_status == "approved",
                 SubtopicContent.is_active.is_(True),
                 SubtopicContent.is_archived.is_(False),
+                visible_scope_clause(school_id),
             )
             .order_by(priority_expr, SubtopicContent.created_at.desc())
             .limit(1)
         )
         return result.scalar_one_or_none()
 
-    async def _fetch_approved_video(self, subtopic_id: uuid.UUID) -> SubtopicContent | None:
-        """Return first approved active video for subtopic."""
+    async def _fetch_approved_video(self, subtopic_id: uuid.UUID, school_id: uuid.UUID) -> SubtopicContent | None:
+        """Return first approved active video for subtopic, visible to this school."""
         result = await self.db.execute(
             select(SubtopicContent)
             .where(
@@ -567,6 +575,7 @@ class MiniCourseService:
                 SubtopicContent.review_status == "approved",
                 SubtopicContent.is_active.is_(True),
                 SubtopicContent.is_archived.is_(False),
+                visible_scope_clause(school_id),
             )
             .limit(1)
         )
@@ -1092,12 +1101,15 @@ class MiniCourseService:
         subtopics = list(subtopics_result.scalars().all())
         subtopic_ids = [s.id for s in subtopics]
 
-        # All SubtopicContent for these subtopics (any review status, not archived)
+        # All SubtopicContent for these subtopics (any review status, not archived) —
+        # scoped to this school so School A's grid never shows School B's pending/approved
+        # rows (CONSTITUTION Rule 3).
         content_result = await self.db.execute(
             select(SubtopicContent).where(
                 SubtopicContent.subtopic_id.in_(subtopic_ids),
                 SubtopicContent.content_type == "explanation",
                 SubtopicContent.is_archived.is_(False),
+                visible_scope_clause(school_id),
             )
         )
         all_content = list(content_result.scalars().all())

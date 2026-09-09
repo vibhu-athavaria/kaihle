@@ -203,6 +203,58 @@ async def test_get_course_when_interest_matched_explanation_exists_then_returns_
 
 
 @pytest.mark.asyncio
+async def test_get_course_when_called_then_explanation_and_video_queries_scope_to_caller_school() -> None:
+    """get_course_for_student's explanation and video queries must apply the school-visibility
+    clause (CONSTITUTION Rule 3) — regression test for the cross-school leak fixed in MCR-T1.
+    A mocked db.execute doesn't evaluate WHERE clauses, so this asserts the compiled SQL of
+    each call actually references the caller's school_id, rather than trusting the returned
+    (mocked) rows alone."""
+    db = _make_db()
+    student_id = uuid.uuid4()
+    subtopic_id = uuid.uuid4()
+    school_id = uuid.uuid4()
+
+    subtopic_result = MagicMock()
+    subtopic_result.one_or_none = MagicMock(return_value=_make_subtopic_row())
+    profile_result = MagicMock()
+    profile_result.scalar_one_or_none = MagicMock(return_value=None)
+    explanation_result = MagicMock()
+    explanation_result.scalar_one_or_none = MagicMock(return_value=None)
+    video_result = MagicMock()
+    video_result.scalar_one_or_none = MagicMock(return_value=None)
+    question_result = MagicMock()
+    question_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+    progress_result = MagicMock()
+    progress_result.scalar_one = MagicMock(return_value=_make_progress_row())
+
+    db.execute = AsyncMock(
+        side_effect=[
+            subtopic_result,
+            profile_result,
+            explanation_result,
+            video_result,
+            question_result,
+            _make_open_answer_result(),
+            MagicMock(),  # upsert execute
+            progress_result,
+            _make_next_subtopic_result(None),
+        ]
+    )
+
+    service = MiniCourseService(db)
+    await service.get_course_for_student(subtopic_id, student_id, school_id)
+
+    explanation_query = db.execute.call_args_list[2].args[0]
+    video_query = db.execute.call_args_list[3].args[0]
+    school_id_hex = str(school_id).replace("-", "")
+
+    for query in (explanation_query, video_query):
+        compiled_sql = str(query.compile(compile_kwargs={"literal_binds": True}))
+        assert "subtopic_content.scope" in compiled_sql
+        assert school_id_hex in compiled_sql
+
+
+@pytest.mark.asyncio
 async def test_get_course_when_no_interest_match_then_falls_back_to_generic() -> None:
     """When explanation interest_category_id is None, interest_matched=False but explanation not None."""
     db = _make_db()
@@ -1345,3 +1397,39 @@ async def test_get_course_detail_for_teacher_when_subtopics_and_content_then_bui
     assert subtopic_out["subtopic_name"] == "Linear Equations"
     assert subtopic_out["variants"]["sports_movement"] is not None
     assert subtopic_out["variants"]["sports_movement"]["review_status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_get_course_detail_for_teacher_when_called_then_content_query_scopes_to_caller_school() -> None:
+    """The variant-grid content query must apply the school-visibility clause — regression
+    test for the cross-school leak fixed in MCR-T1 (a teacher at School A must never see
+    School B's explanation rows in this grid, approved or not)."""
+    db = _make_db()
+    school_id = uuid.uuid4()
+
+    class_result = MagicMock()
+    class_result.scalar_one_or_none = MagicMock(return_value=MagicMock())
+    topic_row = MagicMock()
+    topic_row.name = "Algebra"
+    topic_result = MagicMock()
+    topic_result.first = MagicMock(return_value=topic_row)
+    cats_result = MagicMock()
+    cats_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+    subtopics_result = MagicMock()
+    subtopics_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+    content_result = MagicMock()
+    content_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+    enrolled_result = MagicMock()
+    enrolled_result.all = MagicMock(return_value=[])
+
+    db.execute = AsyncMock(
+        side_effect=[class_result, topic_result, cats_result, subtopics_result, content_result, enrolled_result]
+    )
+
+    service = MiniCourseService(db)
+    await service.get_course_detail_for_teacher(topic_id=uuid.uuid4(), class_id=uuid.uuid4(), school_id=school_id)
+
+    content_query = db.execute.call_args_list[4].args[0]
+    compiled_sql = str(content_query.compile(compile_kwargs={"literal_binds": True}))
+    assert "subtopic_content.scope" in compiled_sql
+    assert str(school_id).replace("-", "") in compiled_sql

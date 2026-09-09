@@ -132,6 +132,14 @@ async def review_topic_variant(
     if sc is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variant not found")
 
+    # A teacher may review a curriculum-scope row (claiming it for their school, per the
+    # comment below) or their OWN school's row — never another school's row. Without this,
+    # a teacher could point this endpoint at any content_id and both approve/reject it AND
+    # (via the scope reassignment below) reassign a row that already belongs to another
+    # school onto their own school (CONSTITUTION Rule 3 — a write takeover, not just a leak).
+    if current_user.role == UserRole.TEACHER and sc.scope == "school" and sc.school_id != current_user.school_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This content belongs to another school")
+
     sc.review_status = review_status
     sc.reviewed_at = datetime.now(UTC)
     sc.reviewed_by_id = current_user.id

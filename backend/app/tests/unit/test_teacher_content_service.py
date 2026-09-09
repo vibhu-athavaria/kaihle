@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.teacher_content_service import list_all_explanation_content
+from app.services.teacher_content_service import list_all_explanation_content, list_explanation_content
 
 
 @pytest.fixture
@@ -186,3 +186,69 @@ class TestListAllExplanationContent:
         # Assert - verify second query includes status filter
         # The where clause should include review_status filter
         assert mock_db.execute.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_content_query_when_called_then_scopes_to_caller_school(self, mock_db: MagicMock) -> None:
+        """Regression test for the cross-school leak fixed in MCR-T1: the content query must
+        include the school-visibility clause, not just subject_id/grade_id — otherwise a
+        teacher sees every school's rows sharing the same curriculum coordinates."""
+        teacher_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+        class_id = uuid.uuid4()
+        subject_id = uuid.uuid4()
+        grade_id = uuid.uuid4()
+
+        class_result = MagicMock()
+        class_result.all.return_value = [
+            MagicMock(id=class_id, name="Math 7A", subject_id=subject_id, grade_id=grade_id)
+        ]
+        content_result = MagicMock()
+        content_result.unique.return_value.all.return_value = []
+        mock_db.execute.side_effect = [class_result, content_result]
+
+        await list_all_explanation_content(
+            db=mock_db,
+            teacher_id=teacher_id,
+            school_id=school_id,
+            status_filter=None,
+        )
+
+        content_query = mock_db.execute.call_args_list[1].args[0]
+        compiled_sql = str(content_query.compile(compile_kwargs={"literal_binds": True}))
+        assert "subtopic_content.scope" in compiled_sql
+        assert str(school_id).replace("-", "") in compiled_sql
+
+
+class TestListExplanationContent:
+    """Tests for list_explanation_content (per-class review query)."""
+
+    @pytest.mark.asyncio
+    async def test_content_query_when_called_then_scopes_to_caller_school(self, mock_db: MagicMock) -> None:
+        """Regression test for the cross-school leak fixed in MCR-T1: without the school scope
+        clause, this query returns any school's rows for the class's subject/grade."""
+        subject_id = uuid.uuid4()
+        grade_id = uuid.uuid4()
+        school_id = uuid.uuid4()
+
+        count_result = MagicMock()
+        count_result.scalar_one.return_value = 0
+        data_result = MagicMock()
+        data_result.unique.return_value.scalars.return_value.all.return_value = []
+        mock_db.execute.side_effect = [count_result, count_result, data_result]
+
+        await list_explanation_content(
+            db=mock_db,
+            subject_id=subject_id,
+            grade_id=grade_id,
+            school_id=school_id,
+            status_filter=None,
+            page=1,
+            page_size=20,
+        )
+
+        # First call is the "total" count query — assert it already carries the scope clause,
+        # since _base_where wraps every query built in this function.
+        total_query = mock_db.execute.call_args_list[0].args[0]
+        compiled_sql = str(total_query.compile(compile_kwargs={"literal_binds": True}))
+        assert "subtopic_content.scope" in compiled_sql
+        assert str(school_id).replace("-", "") in compiled_sql

@@ -25,6 +25,7 @@ from app.models.curriculum import (
     Topic,
 )
 from app.models.school import School
+from app.models.subtopic_content import SubtopicContent
 from app.models.user import User, UserRole
 
 # ---------------------------------------------------------------------------
@@ -190,6 +191,103 @@ async def test_post_progress_route_when_valid_payload_then_returns_200(
     assert response.status_code == 200
     data = response.json()
     assert data["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_get_course_when_only_other_school_has_approved_content_then_content_status_unavailable(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+    other_school: School,
+) -> None:
+    """A school-scope explanation approved for another school must never leak to this school's
+    students (CONSTITUTION Rule 3). Regression test for the cross-school visibility leak fixed
+    in MCR-T1 — before the fix, this returned content_status="ready" with the other school's
+    explanation text."""
+    subtopic, _ = await _create_curriculum_subtopic(db_session)
+
+    db_session.add(
+        SubtopicContent(
+            id=uuid.uuid4(),
+            subtopic_id=subtopic.id,
+            content_type="explanation",
+            explanation_text="Other school's explanation — must not leak",
+            review_status="approved",
+            scope="school",
+            school_id=other_school.id,
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    student = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"student-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Test",
+        last_name="Student",
+        role=UserRole.STUDENT,
+        is_active=True,
+    )
+    db_session.add(student)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/students/me/subtopics/{subtopic.id}/course",
+        headers=make_auth_header(student),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["content_status"] == "unavailable"
+    assert data["explanation"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_course_when_own_school_has_approved_content_then_content_status_ready(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """A school-scope explanation approved for THIS school is served normally — the fix in
+    MCR-T1 only excludes other schools, it must not exclude the caller's own school."""
+    subtopic, _ = await _create_curriculum_subtopic(db_session)
+
+    db_session.add(
+        SubtopicContent(
+            id=uuid.uuid4(),
+            subtopic_id=subtopic.id,
+            content_type="explanation",
+            explanation_text="Own school's explanation",
+            review_status="approved",
+            scope="school",
+            school_id=school.id,
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    student = User(
+        id=uuid.uuid4(),
+        school_id=school.id,
+        email=f"student-{uuid.uuid4().hex[:8]}@test.com",
+        first_name="Test",
+        last_name="Student",
+        role=UserRole.STUDENT,
+        is_active=True,
+    )
+    db_session.add(student)
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/students/me/subtopics/{subtopic.id}/course",
+        headers=make_auth_header(student),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["content_status"] == "ready"
+    assert data["explanation"]["explanation_text"] == "Own school's explanation"
 
 
 @pytest.mark.asyncio
