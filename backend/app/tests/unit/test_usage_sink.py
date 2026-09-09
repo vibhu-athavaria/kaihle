@@ -23,7 +23,7 @@ from app.ai.usage_context import (
     current_school_id,
     llm_component,
 )
-from app.ai.usage_sink import record_usage, usage_kwargs_from_response
+from app.ai.usage_sink import prompt_text_from_messages, record_usage, usage_kwargs_from_response
 
 
 def _session_ctx(session: MagicMock) -> MagicMock:
@@ -91,6 +91,42 @@ class TestRecordUsageNeverRaises:
         assert row.latency_ms == 4127
         assert row.estimated_cost_usd == Decimal("0.00187")
         assert row.succeeded is True
+
+    async def test_record_usage_when_prompt_and_response_text_given_then_persisted(self) -> None:
+        session = MagicMock()
+        session.add = MagicMock()
+        session.commit = AsyncMock()
+
+        with (
+            patch("app.ai.usage_sink.settings.llm_usage_tracking_enabled", True),
+            patch("app.ai.usage_sink.CeleryAsyncSessionLocal", return_value=_session_ctx(session)),
+        ):
+            await record_usage(
+                task="question_generation",
+                model="test/model-a",
+                latency_ms=100,
+                prompt_text="[user] What is 2+2?",
+                response_text="4",
+            )
+
+        row = session.add.call_args.args[0]
+        assert row.prompt_text == "[user] What is 2+2?"
+        assert row.response_text == "4"
+
+    async def test_record_usage_when_no_prompt_or_response_text_given_then_columns_none(self) -> None:
+        session = MagicMock()
+        session.add = MagicMock()
+        session.commit = AsyncMock()
+
+        with (
+            patch("app.ai.usage_sink.settings.llm_usage_tracking_enabled", True),
+            patch("app.ai.usage_sink.CeleryAsyncSessionLocal", return_value=_session_ctx(session)),
+        ):
+            await record_usage(task="embeddings", model="test/model-a", latency_ms=50)
+
+        row = session.add.call_args.args[0]
+        assert row.prompt_text is None
+        assert row.response_text is None
 
     async def test_record_usage_when_latency_negative_then_clamped_to_zero(self) -> None:
         # A CHECK constraint rejects negatives; clamping keeps a clock anomaly from
@@ -220,6 +256,23 @@ class TestUsageKwargsFromResponse:
             "completion_tokens": None,
             "total_tokens": None,
         }
+
+
+class TestPromptTextFromMessages:
+    def test_prompt_text_from_messages_when_single_message_then_role_and_content_joined(self) -> None:
+        result = prompt_text_from_messages([{"role": "user", "content": "Hello"}])
+        assert result == "[user] Hello"
+
+    def test_prompt_text_from_messages_when_multi_turn_then_all_turns_present_in_order(self) -> None:
+        messages = [
+            {"role": "system", "content": "Be concise."},
+            {"role": "user", "content": "What is 2+2?"},
+        ]
+        result = prompt_text_from_messages(messages)
+        assert result == "[system] Be concise.\n\n[user] What is 2+2?"
+
+    def test_prompt_text_from_messages_when_empty_list_then_empty_string(self) -> None:
+        assert prompt_text_from_messages([]) == ""
 
 
 class TestCurrentSchoolId:

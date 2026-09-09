@@ -64,6 +64,16 @@ class LlmUsageEvent(Base, UUIDMixin):
     completion_tokens: Mapped[int | None] = mapped_column(Integer)
     total_tokens: Mapped[int | None] = mapped_column(Integer)
 
+    # Full prompt/response text, for the LLM Logs admin viewer's per-call detail. NULL
+    # for every row written before this column existed, and for a streamed call whose
+    # provider dropped the connection before the response was fully assembled — captured
+    # best-effort, same tolerance as prompt_tokens/completion_tokens above. Stored raw, no
+    # masking or truncation (explicit product decision 2026-09-09): this table already
+    # carries real student/teacher content whenever it flows through a prompt, and the
+    # page is KAIHLE_ADMIN-only, same trust boundary as every other admin-only view here.
+    prompt_text: Mapped[str | None] = mapped_column(Text)
+    response_text: Mapped[str | None] = mapped_column(Text)
+
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # NULL when the model is not priceable. Never guessed and never borrowed from another

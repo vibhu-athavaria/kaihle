@@ -1,11 +1,12 @@
-"""LLM spend aggregation — the single source of truth for `llm_usage_events` reporting.
+"""LLM spend aggregation — grouped totals and unit costs for `scripts/llm_cost_report.py`.
 
-Used by both `scripts/llm_cost_report.py` (CLI) and `GET /api/v1/platform/llm-usage`
-(Kaihle Admin page). Neither caller runs its own copy of these queries: a total that the
-CLI and the admin page could disagree on would be worse than either being wrong alone,
-because there would be no way to tell which one to trust.
+Aggregate reporting only. For a flat, per-call view (one admin looking at one call's full
+prompt/response/tokens/cost at a time), see `llm_log_service.py` instead — the Kaihle
+Admin "LLM Logs" page reads from there, not here. The two used to be one page (an
+aggregate dashboard); that was replaced (2026-09-09) with the simpler per-call log viewer,
+and this module now has exactly one caller: the CLI.
 
-TWO HONESTY INDICATORS, computed here so every caller gets the same numbers:
+TWO HONESTY INDICATORS, computed here so the CLI's numbers are self-consistent:
   * unpriced_percent     — of SUCCESSFUL calls only. A failed call has no tokens, so
                             having no cost is correct, not a pricing gap.
   * unattributed_percent — of ALL calls with `component IS NULL`.

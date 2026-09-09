@@ -12,7 +12,7 @@ import { PasswordSetupPage } from "./pages/PasswordSetupPage";
 import { AdminOverview } from "./pages/AdminOverview";
 import { AdminCurriculum } from "./pages/AdminCurriculum";
 import { AdminBilling } from "./pages/AdminBilling";
-import { AdminLlmUsage } from "./pages/AdminLlmUsage";
+import { AdminLlmLogs } from "./pages/AdminLlmLogs";
 import { AdminLogs } from "./pages/AdminLogs";
 import { AdminSchools } from "./pages/AdminSchools";
 import { AdminSchoolDetail } from "./pages/AdminSchoolDetail";
@@ -57,7 +57,7 @@ export default function App() {
                     <Routes>
                       <Route path="dashboard" element={<AdminOverview />} />
                       <Route path="billing" element={<AdminBilling />} />
-                      <Route path="llm-usage" element={<AdminLlmUsage />} />
+                      <Route path="llm-logs" element={<AdminLlmLogs />} />
                       <Route path="logs" element={<AdminLogs />} />
                       <Route path="schools" element={<AdminSchools />} />
                       <Route

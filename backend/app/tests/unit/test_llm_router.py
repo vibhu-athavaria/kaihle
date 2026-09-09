@@ -428,3 +428,89 @@ class TestUsageAccounting:
             await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
 
         assert captured["component"] == "celery:test_task"
+
+
+class TestPromptResponseTextCapture:
+    """LLM Logs (the per-call admin viewer) needs the full prompt/response text, not just
+    token counts. These pin that `complete()`/`stream_sse()` forward it to `record_usage`
+    without changing any existing return value or raise behaviour."""
+
+    @pytest.mark.asyncio
+    async def test_complete_when_non_streaming_then_prompt_and_response_text_recorded(self) -> None:
+        response = MagicMock()
+        response.choices = [MagicMock(message=MagicMock(content="the answer"))]
+        response.usage = MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2)
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=response),
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock) as record,
+        ):
+            result = await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        assert result == "the answer"
+        assert record.await_args is not None
+        kwargs = record.await_args.kwargs
+        assert kwargs["prompt_text"] == "[user] hi"
+        assert kwargs["response_text"] == "the answer"
+
+    @pytest.mark.asyncio
+    async def test_complete_when_streaming_then_full_assembled_text_recorded(self) -> None:
+        async def _chunks():
+            for delta in ["Hel", "lo"]:
+                chunk = MagicMock()
+                chunk.choices = [MagicMock(delta=MagicMock(content=delta))]
+                yield chunk
+            final = MagicMock()
+            final.choices = []
+            final.usage = MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2)
+            yield final
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=_chunks()),
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock) as record,
+        ):
+            result = await router.complete("lesson_plan", [{"role": "user", "content": "hi"}], stream=True)
+
+        assert result == "Hello"
+        assert record.await_args is not None
+        kwargs = record.await_args.kwargs
+        assert kwargs["prompt_text"] == "[user] hi"
+        assert kwargs["response_text"] == "Hello"
+
+    @pytest.mark.asyncio
+    async def test_complete_when_provider_raises_then_prompt_text_still_recorded(self) -> None:
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, side_effect=RuntimeError("429")),
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock) as record,
+            pytest.raises(RuntimeError),
+        ):
+            await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        assert record.await_args is not None
+        assert record.await_args.kwargs["prompt_text"] == "[user] hi"
+        # A failed call never produced a response — there is nothing honest to record here.
+        assert record.await_args.kwargs.get("response_text") is None
+
+    @pytest.mark.asyncio
+    async def test_complete_when_response_has_no_choices_then_telemetry_still_recorded_before_raise(self) -> None:
+        """Extraction for telemetry must be tolerant even when the strict validation right
+        after it is about to raise — usage_sink's invariant is that recording usage never
+        depends on the call's own shape being valid."""
+        response = MagicMock()
+        response.choices = []
+        response.usage = MagicMock(prompt_tokens=1, completion_tokens=0, total_tokens=1)
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=response),
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock) as record,
+            pytest.raises(ValueError, match="no choices"),
+        ):
+            await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        record.assert_awaited_once()
+        assert record.await_args is not None
+        assert record.await_args.kwargs["response_text"] is None

@@ -49,6 +49,8 @@ async def record_usage(
     error_type: str | None = None,
     error_detail: str | None = None,
     school_id: uuid.UUID | None = None,
+    prompt_text: str | None = None,
+    response_text: str | None = None,
 ) -> None:
     """Write one `llm_usage_events` row. Never raises.
 
@@ -58,6 +60,10 @@ async def record_usage(
     Component, run id, and correlation id are read from structlog contextvars rather than
     passed in — see `usage_context.llm_component` for why threading them through every call
     site would guarantee gaps.
+
+    `prompt_text`/`response_text` are stored raw, no truncation, no masking (explicit product
+    decision 2026-09-09, for the LLM Logs admin viewer) — unlike `error_detail` below, which
+    predates that decision and keeps its own 2000-char cap.
     """
     if not settings.llm_usage_tracking_enabled:
         return
@@ -82,6 +88,8 @@ async def record_usage(
                     error_detail=error_detail[:2000] if error_detail else None,
                     correlation_id=current_correlation_id(),
                     school_id=school_id,
+                    prompt_text=prompt_text,
+                    response_text=response_text,
                     created_at=datetime.now(UTC),
                 )
             )
@@ -97,6 +105,15 @@ async def record_usage(
             error_type=type(exc).__name__,
             exc_info=True,
         )
+
+
+def prompt_text_from_messages(messages: list[dict[str, Any]]) -> str:
+    """Flatten an OpenAI-format message list into one string for the LLM Logs detail view.
+
+    Multi-turn / system+user messages are joined with a role label so the full exchange is
+    visible, not just the last turn.
+    """
+    return "\n\n".join(f"[{m.get('role', 'unknown')}] {m.get('content', '')}" for m in messages)
 
 
 def usage_kwargs_from_response(response: Any) -> dict[str, int | None]:

@@ -1,8 +1,6 @@
 """Platform-level endpoints for Kaihle Admin operations."""
 
 import uuid
-from datetime import date
-from typing import Literal
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,18 +12,13 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models.user import UserRole
 from app.schemas.auth import ImpersonationStartResponse
-from app.schemas.llm_usage import LlmUsageBucket, LlmUsageResponse, LlmUsageSummary
+from app.schemas.llm_logs import LlmLogDetailResponse, LlmLogsResponse, LlmLogSummaryResponse
 from app.services.auth_service import (
     AuthService,
     ImpersonationNotAllowedError,
     UserNotFoundError,
 )
-from app.services.llm_usage_service import (
-    InvalidGroupByError,
-    compute_unit_costs,
-    resolve_since,
-    summarise_usage,
-)
+from app.services.llm_log_service import DEFAULT_LOG_PAGE_SIZE, LlmLogSummary, get_llm_log, list_llm_logs
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/platform", tags=["platform"])
@@ -156,68 +149,68 @@ async def get_platform_users(
     )
 
 
-@router.get("/llm-usage")
-async def get_llm_usage(
-    since: date | None = Query(None),
-    group_by: Literal["task", "component", "model", "run_id"] = Query("component"),
+def _log_summary_response(log: LlmLogSummary) -> LlmLogSummaryResponse:
+    """`LlmLogDetail` is also a `LlmLogSummary` (it subclasses it), so this covers both
+    the list route and the shared base fields of the detail route below."""
+    return LlmLogSummaryResponse(
+        id=str(log.id),
+        created_at=log.created_at,
+        task=log.task,
+        model=log.model,
+        component=log.component,
+        run_id=log.run_id,
+        prompt_tokens=log.prompt_tokens,
+        completion_tokens=log.completion_tokens,
+        total_tokens=log.total_tokens,
+        latency_ms=log.latency_ms,
+        estimated_cost_usd=float(log.estimated_cost_usd) if log.estimated_cost_usd is not None else None,
+        succeeded=log.succeeded,
+        error_type=log.error_type,
+    )
+
+
+@router.get("/llm-logs")
+async def get_llm_logs(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    include_unit_costs: bool = Query(
-        True, description="Set false to skip the unit-cost queries when the caller won't render them"
-    ),
+    page_size: int = Query(DEFAULT_LOG_PAGE_SIZE, ge=1, le=200),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
-) -> LlmUsageResponse:
-    """LLM spend, grouped and paginated — the same figures `scripts/llm_cost_report.py`
-    prints, computed by the same `llm_usage_service` functions so the two can never
-    disagree about a number.
+) -> LlmLogsResponse:
+    """Most-recent-first, paginated list of individual LLM calls. Click a row in the admin
+    UI to fetch its full detail (prompt/response text) via GET /llm-logs/{id}.
     """
-    since_dt = resolve_since(since)
+    logger.info("platform.llm_logs.requested", user_id=str(current_user.id), page=page, page_size=page_size)
 
-    logger.info(
-        "platform.llm_usage.requested",
-        user_id=str(current_user.id),
-        since=since_dt.isoformat(),
-        group_by=group_by,
+    logs, total = await list_llm_logs(db, page=page, page_size=page_size)
+
+    return LlmLogsResponse(
+        logs=[_log_summary_response(log) for log in logs],
+        total=total,
         page=page,
         page_size=page_size,
     )
 
-    try:
-        report = await summarise_usage(db, since_dt, group_by, page=page, page_size=page_size)
-    except InvalidGroupByError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    unit_costs = await compute_unit_costs(db, since_dt) if include_unit_costs else []
 
-    return LlmUsageResponse(
-        since=since_dt.date(),
-        group_by=group_by,
-        buckets=[
-            LlmUsageBucket(
-                bucket=b.bucket,
-                calls=b.calls,
-                failures=b.failures,
-                tokens=b.tokens,
-                cost=float(b.cost) if b.cost is not None else None,
-                p50_ms=b.p50_ms,
-                p95_ms=b.p95_ms,
-            )
-            for b in report.buckets
-        ],
-        summary=LlmUsageSummary(
-            calls=report.summary.calls,
-            tokens=report.summary.tokens,
-            cost=float(report.summary.cost) if report.summary.cost is not None else None,
-            unpriced_count=report.summary.unpriced_count,
-            unpriced_percent=report.summary.unpriced_percent,
-            unpriced_models=report.summary.unpriced_models,
-            unattributed_count=report.summary.unattributed_count,
-            unattributed_percent=report.summary.unattributed_percent,
-            failures=report.summary.failures,
-            p95_ms=report.summary.p95_ms,
-        ),
-        unit_costs=unit_costs,
-        page=page,
-        page_size=page_size,
-        total_buckets=report.total_buckets,
+@router.get("/llm-logs/{log_id}")
+async def get_llm_log_detail(
+    log_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> LlmLogDetailResponse:
+    """Full detail for one LLM call, including prompt/response text. 404 if the id
+    doesn't exist."""
+    logger.info("platform.llm_log_detail.requested", user_id=str(current_user.id), log_id=str(log_id))
+
+    log = await get_llm_log(db, log_id)
+    if log is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="LLM log not found")
+
+    return LlmLogDetailResponse(
+        **_log_summary_response(log).model_dump(),
+        prompt_text=log.prompt_text,
+        response_text=log.response_text,
+        error_detail=log.error_detail,
+        correlation_id=log.correlation_id,
+        school_id=str(log.school_id) if log.school_id else None,
+        streamed=log.streamed,
     )

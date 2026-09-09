@@ -111,7 +111,7 @@ const adminSections: NavSection[] = [
       { label: "Schools", href: "/kaihle-admin/schools", icon: Building2 },
       { label: "Users", href: "/kaihle-admin/users", icon: Users },
       { label: "Billing", href: "/kaihle-admin/billing", icon: Settings },
-      { label: "LLM Usage", href: "/kaihle-admin/llm-usage", icon: Coins },
+      { label: "LLM Logs", href: "/kaihle-admin/llm-logs", icon: Coins },
     ],
   },
   {

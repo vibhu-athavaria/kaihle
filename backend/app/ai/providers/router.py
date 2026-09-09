@@ -18,7 +18,7 @@ import structlog
 
 from app.ai.llm_cost import estimate_cost
 from app.ai.usage_context import current_component, current_school_id
-from app.ai.usage_sink import record_usage
+from app.ai.usage_sink import prompt_text_from_messages, record_usage
 from app.core.config import settings
 
 logger = structlog.get_logger()
@@ -96,6 +96,8 @@ async def _log_completed(
     total_tokens: int | None,
     streamed: bool = False,
     response: Any | None = None,
+    prompt_text: str | None = None,
+    response_text: str | None = None,
 ) -> None:
     """Log the call and persist a usage row.
 
@@ -135,10 +137,19 @@ async def _log_completed(
         estimated_cost_usd=cost,
         streamed=streamed,
         school_id=current_school_id(),
+        prompt_text=prompt_text,
+        response_text=response_text,
     )
 
 
-async def _log_failed(task: str, model: str, t0: float, exc: Exception, streamed: bool = False) -> None:
+async def _log_failed(
+    task: str,
+    model: str,
+    t0: float,
+    exc: Exception,
+    streamed: bool = False,
+    prompt_text: str | None = None,
+) -> None:
     """Record a failed call.
 
     Failures cost money and latency too. A report that counts only successes understates
@@ -163,6 +174,7 @@ async def _log_failed(task: str, model: str, t0: float, exc: Exception, streamed
         error_type=type(exc).__name__,
         error_detail=str(exc),
         school_id=current_school_id(),
+        prompt_text=prompt_text,
     )
 
 
@@ -210,7 +222,7 @@ async def complete(
     except Exception as exc:
         # Record and re-raise. Retry policy stays with the caller (see module docstring);
         # this only ensures a failed call is not invisible in the cost report.
-        await _log_failed(task, model, t0, exc, streamed=stream)
+        await _log_failed(task, model, t0, exc, streamed=stream, prompt_text=prompt_text_from_messages(messages))
         raise
 
     if stream:
@@ -230,10 +242,24 @@ async def complete(
             if delta is not None:
                 chunks.append(delta)
         text = "".join(chunks)
-        await _log_completed(task, model, t0, prompt_tokens, completion_tokens, total_tokens, streamed=True)
+        await _log_completed(
+            task,
+            model,
+            t0,
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            streamed=True,
+            prompt_text=prompt_text_from_messages(messages),
+            response_text=text,
+        )
         return text
 
     usage = response.usage if hasattr(response, "usage") else None
+    # Extracted tolerantly (None on empty choices) so telemetry still fires even when the
+    # strict validation below is about to raise — usage_sink's invariant is that recording
+    # usage must never depend on the call's own success/shape.
+    response_text = response.choices[0].message.content if response.choices else None
     await _log_completed(
         task,
         model,
@@ -242,6 +268,8 @@ async def complete(
         completion_tokens=usage.completion_tokens if usage else None,
         total_tokens=usage.total_tokens if usage else None,
         response=response,
+        prompt_text=prompt_text_from_messages(messages),
+        response_text=response_text,
     )
 
     # Handle potential empty choices or None content (e.g., tool calls, non-text responses)
@@ -301,12 +329,13 @@ async def stream_sse(
             stream_options={"include_usage": True},
         )
     except Exception as exc:
-        await _log_failed(task, model, t0, exc, streamed=True)
+        await _log_failed(task, model, t0, exc, streamed=True, prompt_text=prompt_text_from_messages(messages))
         raise
 
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    chunks: list[str] = []
 
     async for chunk in response:
         if not chunk.choices:
@@ -317,9 +346,20 @@ async def stream_sse(
             continue
         delta = chunk.choices[0].delta.content
         if delta is not None:
+            chunks.append(delta)
             yield f"data: {delta}\n\n"
 
-    await _log_completed(task, model, t0, prompt_tokens, completion_tokens, total_tokens, streamed=True)
+    await _log_completed(
+        task,
+        model,
+        t0,
+        prompt_tokens,
+        completion_tokens,
+        total_tokens,
+        streamed=True,
+        prompt_text=prompt_text_from_messages(messages),
+        response_text="".join(chunks),
+    )
     yield "data: [DONE]\n\n"
 
 
@@ -375,7 +415,7 @@ async def embed_batch(texts: list[str]) -> list[list[float]]:
     try:
         response = await litellm.aembedding(**kwargs)
     except Exception as exc:
-        await _log_failed("embeddings", model, t0, exc)
+        await _log_failed("embeddings", model, t0, exc, prompt_text="\n\n".join(texts))
         raise
 
     if not response.data or len(response.data) == 0:
@@ -416,6 +456,7 @@ async def embed_batch(texts: list[str]) -> list[list[float]]:
         completion_tokens=0 if usage else None,
         total_tokens=getattr(usage, "total_tokens", None) if usage else None,
         response=response,
+        prompt_text="\n\n".join(texts),
     )
 
     return vectors
