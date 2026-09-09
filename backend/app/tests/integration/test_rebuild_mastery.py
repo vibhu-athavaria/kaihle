@@ -71,7 +71,7 @@ async def _replay_all_completed_attempts_oldest_first(db, service: GapService, p
                 FROM student_attempts sa
                 JOIN assessments a ON a.id = sa.assessment_id
                 WHERE sa.status = 'COMPLETED' AND sa.completed_at IS NOT NULL
-                ORDER BY sa.completed_at ASC
+                ORDER BY sa.completed_at ASC, sa.id ASC
                 """
             )
         )

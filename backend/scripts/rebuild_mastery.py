@@ -81,6 +81,13 @@ structlog.configure(
 )
 log = structlog.get_logger()
 
+# Attempts committed per batch during --apply. Bounds how long row-level locks are held
+# (a fully uncommitted rebuild over prod-sized history would block the live app's own
+# gap-state writes for the whole run) and how much work is lost if the process is killed
+# mid-run. Not tuned against a specific lock-contention measurement — a starting point,
+# small enough to matter at pilot scale, cheap to revisit once real run times are known.
+COMMIT_BATCH_SIZE = 50
+
 PG_DUMP_REMINDER = """
   BEFORE RUNNING --apply IN PROD:
 
@@ -113,7 +120,18 @@ async def _upsert_subtopic_score(
 
     ON CONFLICT DO UPDATE, not DO NOTHING (contrast GapService's live-path insert) — the
     whole point of a rebuild is to set counts on rows that predate them.
+
+    Raises rather than silently computing a fake score: total<=0 or correct>total means a
+    caller passed a broken (correct, total) pair. Today this is unreachable — the only
+    caller, replay_attempt, already skips total==0, and correct<=total is structurally
+    guaranteed by how subtopic_correct/subtopic_total are built in
+    resolve_subtopic_totals_for_attempt. Guarded anyway (Kilo review, PR #263): a future
+    caller that skips that guarantee should fail loudly here, not write a score > 1.0 or a
+    0.0 that looks like "confirmed wrong" rather than "broken input".
     """
+    if total <= 0 or correct < 0 or correct > total:
+        raise ValueError(f"invalid (correct, total) pair for subtopic score: correct={correct}, total={total}")
+
     await db.execute(
         text(
             """
@@ -184,7 +202,8 @@ async def replay_attempt(
     resolved = await service.resolve_subtopic_totals_for_attempt(attempt.id)
     if resolved is None:
         return 0
-    _, _, subtopic_correct, subtopic_total = resolved
+    subtopic_correct = resolved.subtopic_correct
+    subtopic_total = resolved.subtopic_total
 
     updated = 0
     assessed_at = attempt.completed_at
@@ -268,7 +287,7 @@ async def run(apply: bool) -> int:
                     FROM student_attempts sa
                     JOIN assessments a ON a.id = sa.assessment_id
                     WHERE sa.status = 'COMPLETED' AND sa.completed_at IS NOT NULL
-                    ORDER BY sa.completed_at ASC
+                    ORDER BY sa.completed_at ASC, sa.id ASC
                     """
                 )
             )
@@ -286,11 +305,23 @@ async def run(apply: bool) -> int:
                     priors=priors,
                 )
                 total_updated += updated
+
+                # Commit periodically, --apply only (Kilo review, PR #263). The whole
+                # rebuild in one transaction holds row-level locks for its full duration,
+                # blocking the live app's own gap-state writes on prod-sized data — a
+                # single 39-attempt dev run never surfaced this. A dry run must still
+                # commit NOTHING until the final rollback, so this is strictly gated on
+                # apply; once a batch is committed it is durable regardless of what
+                # happens afterward, which is also what makes resuming after a kill safe
+                # (only work since the last batch boundary is at risk, not the whole run).
+                if apply and (i + 1) % COMMIT_BATCH_SIZE == 0:
+                    await db.commit()
+                    log.info("rebuild_mastery_batch_committed", attempts_committed=i + 1, total=len(attempt_rows))
                 if (i + 1) % 200 == 0:
                     log.info("rebuild_mastery_replay_progress", processed=i + 1, total=len(attempt_rows))
 
             if apply:
-                await db.commit()
+                await db.commit()  # final partial batch, if any
                 log.info(
                     "rebuild_mastery_committed", attempts_replayed=len(attempt_rows), subtopics_updated=total_updated
                 )

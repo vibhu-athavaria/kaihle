@@ -11,8 +11,9 @@ Also provides read methods for the gap map UI (M2-1-T2):
 
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import HTTPException, status
@@ -44,6 +45,25 @@ from app.services.mastery_model import Observation
 from app.services.mastery_model import estimate as estimate_mastery
 
 logger = structlog.get_logger()
+
+if TYPE_CHECKING:
+    from app.models.assessment import Assessment, StudentAttempt
+
+
+@dataclass(frozen=True)
+class AttemptResolution:
+    """Attempt validity and subtopic attribution for one attempt.
+
+    Introduced (MLH-T3-4) so resolve_subtopic_totals_for_attempt's return type is not a
+    bare tuple[Any, Any, dict, dict] — callers get a static guarantee that
+    attempt.student_id and assessment.school_id/class_id actually exist, per Kilo review
+    on PR #263, rather than trusting positional tuple order.
+    """
+
+    attempt: "StudentAttempt"
+    assessment: "Assessment"
+    subtopic_correct: dict[uuid.UUID, int]
+    subtopic_total: dict[uuid.UUID, int]
 
 
 class GapService:
@@ -159,9 +179,7 @@ class GapService:
             attempt_count=rolling_attempt_count,
         )
 
-    async def resolve_subtopic_totals_for_attempt(
-        self, attempt_id: uuid.UUID
-    ) -> tuple[Any, Any, dict[uuid.UUID, int], dict[uuid.UUID, int]] | None:
+    async def resolve_subtopic_totals_for_attempt(self, attempt_id: uuid.UUID) -> AttemptResolution | None:
         """Attempt validity, response loading, question -> subtopic attribution.
 
         Extracted from calculate_gap_states_for_attempt (MLH-T3-4) so the offline replay
@@ -169,10 +187,10 @@ class GapService:
         bridge and its legacy subtopic_id fallback — rather than a second, divergence-prone
         copy of a curriculum-attribution join.
 
-        Returns (attempt, assessment, subtopic_correct, subtopic_total), or None if the
-        attempt cannot be scored (not found, not completed, no assessment, no responses).
-        Every early-return case is logged here, so a caller receiving None does not need
-        to re-derive or re-log which case occurred.
+        Returns an AttemptResolution, or None if the attempt cannot be scored (not found,
+        not completed, no assessment, no responses). Every early-return case is logged
+        here, so a caller receiving None does not need to re-derive or re-log which case
+        occurred.
         """
         from app.models.assessment import (
             Assessment,
@@ -298,7 +316,12 @@ class GapService:
             if response.is_correct:
                 subtopic_correct[sub_id] += 1
 
-        return attempt, assessment, subtopic_correct, subtopic_total
+        return AttemptResolution(
+            attempt=attempt,
+            assessment=assessment,
+            subtopic_correct=subtopic_correct,
+            subtopic_total=subtopic_total,
+        )
 
     async def calculate_gap_states_for_attempt(self, attempt_id: uuid.UUID) -> dict[str, object]:
         """Calculate and persist gap states for a completed attempt.
@@ -317,7 +340,10 @@ class GapService:
         resolved = await self.resolve_subtopic_totals_for_attempt(attempt_id)
         if resolved is None:
             return {"attempt_id": attempt_id_str, "subtopics_updated": 0}
-        attempt, assessment, subtopic_correct, subtopic_total = resolved
+        attempt = resolved.attempt
+        assessment = resolved.assessment
+        subtopic_correct = resolved.subtopic_correct
+        subtopic_total = resolved.subtopic_total
 
         # Step 6: Compute mastery via the Beta-Binomial posterior (MLH-T3), upsert
         # gap_state, insert score row.
