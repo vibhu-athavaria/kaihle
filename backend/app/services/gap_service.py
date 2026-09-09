@@ -11,8 +11,9 @@ Also provides read methods for the gap map UI (M2-1-T2):
 
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import HTTPException, status
@@ -44,6 +45,25 @@ from app.services.mastery_model import Observation
 from app.services.mastery_model import estimate as estimate_mastery
 
 logger = structlog.get_logger()
+
+if TYPE_CHECKING:
+    from app.models.assessment import Assessment, StudentAttempt
+
+
+@dataclass(frozen=True)
+class AttemptResolution:
+    """Attempt validity and subtopic attribution for one attempt.
+
+    Introduced (MLH-T3-4) so resolve_subtopic_totals_for_attempt's return type is not a
+    bare tuple[Any, Any, dict, dict] — callers get a static guarantee that
+    attempt.student_id and assessment.school_id/class_id actually exist, per Kilo review
+    on PR #263, rather than trusting positional tuple order.
+    """
+
+    attempt: "StudentAttempt"
+    assessment: "Assessment"
+    subtopic_correct: dict[uuid.UUID, int]
+    subtopic_total: dict[uuid.UUID, int]
 
 
 class GapService:
@@ -159,17 +179,18 @@ class GapService:
             attempt_count=rolling_attempt_count,
         )
 
-    async def calculate_gap_states_for_attempt(self, attempt_id: uuid.UUID) -> dict[str, object]:
-        """Calculate and persist gap states for a completed attempt.
+    async def resolve_subtopic_totals_for_attempt(self, attempt_id: uuid.UUID) -> AttemptResolution | None:
+        """Attempt validity, response loading, question -> subtopic attribution.
 
-        This is the async core of the calculate_gap_states Celery task.
-        Can be called directly in tests (no event loop nesting issue).
+        Extracted from calculate_gap_states_for_attempt (MLH-T3-4) so the offline replay
+        in scripts/rebuild_mastery.py shares this exact logic — the ADR-003 objective
+        bridge and its legacy subtopic_id fallback — rather than a second, divergence-prone
+        copy of a curriculum-attribution join.
 
-        Args:
-            attempt_id: The StudentAttempt UUID.
-
-        Returns:
-            Dict with attempt_id and subtopics_updated count.
+        Returns an AttemptResolution, or None if the attempt cannot be scored (not found,
+        not completed, no assessment, no responses). Every early-return case is logged
+        here, so a caller receiving None does not need to re-derive or re-log which case
+        occurred.
         """
         from app.models.assessment import (
             Assessment,
@@ -186,7 +207,7 @@ class GapService:
 
         if attempt is None:
             logger.warning("calculate_gap_states_skipped_attempt_not_found", attempt_id=attempt_id_str)
-            return {"attempt_id": attempt_id_str, "subtopics_updated": 0}
+            return None
 
         if attempt.status != AttemptStatus.COMPLETED:
             logger.warning(
@@ -194,14 +215,14 @@ class GapService:
                 attempt_id=attempt_id_str,
                 status=attempt.status,
             )
-            return {"attempt_id": attempt_id_str, "subtopics_updated": 0}
+            return None
 
         # Step 2: Load assessment
         assessment_result = await self.db.execute(select(Assessment).where(Assessment.id == attempt.assessment_id))
         assessment: Assessment | None = assessment_result.scalar_one_or_none()
         if assessment is None:
             logger.warning("calculate_gap_states_skipped_assessment_not_found", attempt_id=attempt_id_str)
-            return {"attempt_id": attempt_id_str, "subtopics_updated": 0}
+            return None
 
         # Step 3: Load responses — exclude empty-string answers created by the
         # timed-out auto-fill path in attempt_service.submit_attempt().
@@ -217,7 +238,7 @@ class GapService:
 
         if not responses:
             logger.warning("calculate_gap_states_skipped_no_responses", attempt_id=attempt_id_str)
-            return {"attempt_id": attempt_id_str, "subtopics_updated": 0}
+            return None
 
         # Step 4: Map question_id → subtopic_id.
         #
@@ -294,6 +315,35 @@ class GapService:
             subtopic_total[sub_id] += 1
             if response.is_correct:
                 subtopic_correct[sub_id] += 1
+
+        return AttemptResolution(
+            attempt=attempt,
+            assessment=assessment,
+            subtopic_correct=subtopic_correct,
+            subtopic_total=subtopic_total,
+        )
+
+    async def calculate_gap_states_for_attempt(self, attempt_id: uuid.UUID) -> dict[str, object]:
+        """Calculate and persist gap states for a completed attempt.
+
+        This is the async core of the calculate_gap_states Celery task.
+        Can be called directly in tests (no event loop nesting issue).
+
+        Args:
+            attempt_id: The StudentAttempt UUID.
+
+        Returns:
+            Dict with attempt_id and subtopics_updated count.
+        """
+        attempt_id_str = str(attempt_id)
+
+        resolved = await self.resolve_subtopic_totals_for_attempt(attempt_id)
+        if resolved is None:
+            return {"attempt_id": attempt_id_str, "subtopics_updated": 0}
+        attempt = resolved.attempt
+        assessment = resolved.assessment
+        subtopic_correct = resolved.subtopic_correct
+        subtopic_total = resolved.subtopic_total
 
         # Step 6: Compute mastery via the Beta-Binomial posterior (MLH-T3), upsert
         # gap_state, insert score row.
