@@ -1,7 +1,7 @@
 """Platform-level endpoints for Kaihle Admin operations."""
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import date
 from typing import Literal
 
 import structlog
@@ -21,9 +21,9 @@ from app.services.auth_service import (
     UserNotFoundError,
 )
 from app.services.llm_usage_service import (
-    DEFAULT_LOOKBACK_DAYS,
     InvalidGroupByError,
     compute_unit_costs,
+    resolve_since,
     summarise_usage,
 )
 from app.services.user_service import UserService
@@ -162,6 +162,9 @@ async def get_llm_usage(
     group_by: Literal["task", "component", "model", "run_id"] = Query("component"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    include_unit_costs: bool = Query(
+        True, description="Set false to skip the unit-cost queries when the caller won't render them"
+    ),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> LlmUsageResponse:
@@ -169,11 +172,7 @@ async def get_llm_usage(
     prints, computed by the same `llm_usage_service` functions so the two can never
     disagree about a number.
     """
-    since_dt = (
-        datetime.combine(since, datetime.min.time(), tzinfo=UTC)
-        if since
-        else datetime.now(UTC) - timedelta(days=DEFAULT_LOOKBACK_DAYS)
-    )
+    since_dt = resolve_since(since)
 
     logger.info(
         "platform.llm_usage.requested",
@@ -188,7 +187,7 @@ async def get_llm_usage(
         report = await summarise_usage(db, since_dt, group_by, page=page, page_size=page_size)
     except InvalidGroupByError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    unit_costs = await compute_unit_costs(db, since_dt)
+    unit_costs = await compute_unit_costs(db, since_dt) if include_unit_costs else []
 
     return LlmUsageResponse(
         since=since_dt.date(),

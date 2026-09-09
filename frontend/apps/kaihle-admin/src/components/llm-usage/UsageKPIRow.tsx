@@ -7,18 +7,11 @@ import {
   Gauge,
 } from "lucide-react";
 import { LlmUsageSummary } from "../../hooks/useAdminLlmUsage";
+import { formatCost } from "../../utils/formatCost";
 
 interface UsageKPIRowProps {
   summary: LlmUsageSummary | undefined;
   loading: boolean;
-}
-
-function formatCost(cost: number | null | undefined): string {
-  if (cost === null || cost === undefined) return "—";
-  if (cost === 0) return "$0.00";
-  if (Math.abs(cost) < 0.01) return `$${cost.toFixed(6)}`;
-  if (Math.abs(cost) < 1) return `$${cost.toFixed(4)}`;
-  return `$${cost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 interface KPICardProps {

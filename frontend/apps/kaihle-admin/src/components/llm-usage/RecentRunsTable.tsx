@@ -1,6 +1,7 @@
 import { Skeleton, EmptyState } from "@kaihle/ui";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { LlmUsageBucket } from "../../hooks/useAdminLlmUsage";
+import { formatCost } from "../../utils/formatCost";
 
 interface RecentRunsTableProps {
   runs: LlmUsageBucket[];
@@ -11,20 +12,15 @@ interface RecentRunsTableProps {
   onPageChange: (page: number) => void;
 }
 
-/** Mirrors `format_cost()` in `app/services/llm_usage_service.py`. */
-function formatCost(cost: number | null): string {
-  if (cost === null) return "—";
-  if (cost === 0) return "$0.00";
-  if (Math.abs(cost) < 0.01) return `$${cost.toFixed(6)}`;
-  if (Math.abs(cost) < 1) return `$${cost.toFixed(4)}`;
-  return `$${cost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 /**
  * A whole batch-script invocation as one row, so "what did the cambridge_v2 remap
  * adjudication cost" has a single number to point to. Genuinely paginated — `run_id`
  * groupings can far outnumber task/component/model groupings, and this codebase
  * prohibits an unbounded scan to render one table.
+ *
+ * Sorted by cost, not recency (it shares `summarise_usage`'s bucket query, which orders
+ * by spend) — the page heading says "Runs by cost", not "Recent runs", so the label
+ * matches what's actually shown.
  */
 export function RecentRunsTable({
   runs,

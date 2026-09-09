@@ -14,7 +14,7 @@ TWO HONESTY INDICATORS, computed here so every caller gets the same numbers:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -37,6 +37,17 @@ DEFAULT_LOOKBACK_DAYS = 30
 
 class InvalidGroupByError(ValueError):
     """Raised when `group_by` is not a key of GROUPABLE — rejected before any query runs."""
+
+
+def resolve_since(since: date | None) -> datetime:
+    """Turn an optional request-level `since` into the datetime cutoff every query filters
+    by. Defaulting to a lookback window and normalising a bare date to midnight UTC is a
+    business rule (what "no since given" means), not input validation — it belongs in the
+    service, not the route (CONSTITUTION Rule 1).
+    """
+    if since is not None:
+        return datetime.combine(since, datetime.min.time(), tzinfo=UTC)
+    return datetime.now(UTC) - timedelta(days=DEFAULT_LOOKBACK_DAYS)
 
 
 @dataclass
@@ -153,6 +164,10 @@ async def summarise_usage(
     )
     total_buckets = int(bucket_count_row.scalar_one() or 0)
 
+    # `unpriced_models` folded in via array_agg rather than a separate SELECT DISTINCT:
+    # this query is always exactly one row (no GROUP BY), so — unlike the bucket query
+    # above, where a page past the end returns zero rows and would lose an OVER()-derived
+    # count — there's no edge case where the extra column goes missing.
     totals_row = await db.execute(
         text(
             """
@@ -163,7 +178,9 @@ async def summarise_usage(
                    count(*) FILTER (WHERE succeeded)                               AS successes,
                    count(*) FILTER (WHERE component IS NULL)                       AS unattributed,
                    count(*) FILTER (WHERE NOT succeeded)                           AS failures,
-                   percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)        AS p95
+                   percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)        AS p95,
+                   array_agg(DISTINCT model ORDER BY model)
+                       FILTER (WHERE estimated_cost_usd IS NULL AND succeeded)     AS unpriced_models
             FROM llm_usage_events
             WHERE created_at >= :since
             """
@@ -171,18 +188,7 @@ async def summarise_usage(
         {"since": since},
     )
     totals = totals_row.mappings().one()
-
-    unpriced_models_result = await db.execute(
-        text(
-            """
-            SELECT DISTINCT model FROM llm_usage_events
-            WHERE created_at >= :since AND estimated_cost_usd IS NULL AND succeeded
-            ORDER BY model
-            """
-        ),
-        {"since": since},
-    )
-    unpriced_models = [r[0] for r in unpriced_models_result.all()]
+    unpriced_models = list(totals["unpriced_models"] or [])
 
     calls = int(totals["calls"] or 0)
     successes = int(totals["successes"] or 0)
@@ -240,45 +246,50 @@ async def compute_unit_costs(db: AsyncSession, since: datetime) -> list[tuple[st
         )
     )
 
-    generation = await db.execute(
+    # Both tasks are single-row global aggregates over the same table — merged into one
+    # query via FILTER rather than two near-identical round trips.
+    generation_and_mini = await db.execute(
         text(
             """
-            SELECT count(*) AS calls, sum(estimated_cost_usd) AS cost,
-                   count(*) FILTER (WHERE estimated_cost_usd IS NULL) AS unpriced
+            SELECT count(*) FILTER (WHERE task = 'question_generation')      AS generation_calls,
+                   sum(estimated_cost_usd) FILTER (WHERE task = 'question_generation') AS generation_cost,
+                   count(*) FILTER (WHERE task = 'question_generation'
+                                     AND estimated_cost_usd IS NULL)          AS generation_unpriced,
+                   count(*) FILTER (WHERE task = 'mini_course_explanation')   AS mini_calls,
+                   sum(estimated_cost_usd) FILTER (WHERE task = 'mini_course_explanation') AS mini_cost
             FROM llm_usage_events
-            WHERE created_at >= :since AND task = 'question_generation'
+            WHERE created_at >= :since
             """
         ),
         {"since": since},
     )
-    row: Any = generation.mappings().one()
-    if row["calls"]:
+    row: Any = generation_and_mini.mappings().one()
+
+    generation_calls = int(row["generation_calls"] or 0)
+    if generation_calls:
         # One generation call covers one subtopic — see generate_gap_questions.py, which
         # batches per subtopic.
-        cost = row["cost"]
-        per_call = f"{format_cost(cost / row['calls'])} per subtopic" if cost else "unpriced"
+        generation_cost = row["generation_cost"]
+        # `is not None`, not truthiness: a real $0.00 total is priced data, not "unpriced".
+        per_call = (
+            f"{format_cost(generation_cost / generation_calls)} per subtopic"
+            if generation_cost is not None
+            else "unpriced"
+        )
+        unpriced = int(row["generation_unpriced"] or 0)
         results.append(
             (
                 "Cost per subtopic of generated questions",
-                f"{per_call} over {row['calls']} calls" + (f" ({row['unpriced']} unpriced)" if row["unpriced"] else ""),
+                f"{per_call} over {generation_calls} calls" + (f" ({unpriced} unpriced)" if unpriced else ""),
             )
         )
     else:
         results.append(("Cost per subtopic of generated questions", "no calls recorded since cutoff"))
 
-    mini = await db.execute(
-        text(
-            """
-            SELECT count(*) AS calls, sum(estimated_cost_usd) AS cost
-            FROM llm_usage_events
-            WHERE created_at >= :since AND task = 'mini_course_explanation'
-            """
-        ),
-        {"since": since},
-    )
-    row = mini.mappings().one()
-    if row["calls"] and row["cost"]:
-        results.append(("Cost per mini-course explanation", f"{format_cost(row['cost'] / row['calls'])} per call"))
+    mini_calls = int(row["mini_calls"] or 0)
+    mini_cost = row["mini_cost"]
+    if mini_calls and mini_cost is not None:
+        results.append(("Cost per mini-course explanation", f"{format_cost(mini_cost / mini_calls)} per call"))
     else:
         results.append(("Cost per mini-course explanation", "no priced calls recorded since cutoff"))
 

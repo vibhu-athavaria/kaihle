@@ -22,6 +22,9 @@ export function AdminLlmUsage() {
     groupBy: "run_id",
     page: runsPage,
     pageSize: RUNS_PAGE_SIZE,
+    // This table only reads buckets/total_buckets — skip the unit-cost queries the
+    // backend would otherwise compute (and this call would then discard).
+    includeUnitCosts: false,
   });
 
   const buckets = data?.buckets ?? [];
@@ -52,7 +55,7 @@ export function AdminLlmUsage() {
 
         <section>
           <h2 className="font-['Inter'] text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">
-            Recent runs
+            Runs by cost
           </h2>
           <RecentRunsTable
             runs={runs}

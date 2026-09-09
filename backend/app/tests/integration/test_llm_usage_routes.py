@@ -13,7 +13,7 @@ from decimal import Decimal
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -49,8 +49,6 @@ def _event(**overrides: object) -> LlmUsageEvent:
 
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    from httpx import ASGITransport
-
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
@@ -132,6 +130,21 @@ class TestLlmUsageRoutePagination:
             headers={"Authorization": "Bearer fake-token"},
         )
         assert len(page_two.json()["buckets"]) == 2
+
+
+class TestLlmUsageRouteUnitCostsSkip:
+    async def test_llm_usage_route_when_include_unit_costs_false_then_unit_costs_empty(
+        self, client: AsyncClient, kaihle_admin: User
+    ) -> None:
+        app.dependency_overrides[get_current_user] = lambda: kaihle_admin
+
+        response = await client.get(
+            "/api/v1/platform/llm-usage",
+            params={"include_unit_costs": False},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        assert response.status_code == 200
+        assert response.json()["unit_costs"] == []
 
 
 class TestLlmUsageRouteMatchesService:

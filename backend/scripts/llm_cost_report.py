@@ -23,7 +23,7 @@ Usage (from backend/):
 import argparse
 import asyncio
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -35,11 +35,11 @@ if str(_BACKEND_ROOT) not in sys.path:
 
 from app.core.config import settings  # noqa: E402
 from app.services.llm_usage_service import (  # noqa: E402
-    DEFAULT_LOOKBACK_DAYS,
     GROUPABLE,
     UsageReport,
     compute_unit_costs,
     format_cost,
+    resolve_since,
     summarise_usage,
 )
 
@@ -97,6 +97,13 @@ def render(report: UsageReport, group_by: str, since: datetime) -> str:
         f"  {'TOTAL':<34} {calls:>7} {summary.failures:>5} {summary.tokens:>12,} {format_cost(summary.cost):>10}",
         "",
     ]
+
+    if report.total_buckets > len(report.buckets):
+        lines.append(
+            f"  ⚠ Showing {len(report.buckets)} of {report.total_buckets} {group_by} groups — "
+            f"the rest were cut off. Narrow --since to bring the group count under {_CLI_MAX_BUCKETS}."
+        )
+        lines.append("")
 
     successes = calls - summary.failures
     lines.append(
@@ -164,7 +171,7 @@ def main() -> int:
             log.error("invalid_since", value=args.since, hint="Use an ISO date such as 2026-08-01")
             return 1
     else:
-        since = datetime.now(UTC) - timedelta(days=DEFAULT_LOOKBACK_DAYS)
+        since = resolve_since(None)
 
     return asyncio.run(run(since, args.group_by, args.unit_costs))
 
