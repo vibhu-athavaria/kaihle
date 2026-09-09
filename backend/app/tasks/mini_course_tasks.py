@@ -189,17 +189,42 @@ async def _run_generation(task: celery.Task, topic_id: str, school_id: str, teac
             service = MiniCourseGenerationService(db)
             result = await service.generate_for_topic(topic_id=topic_id, school_id=school_id)
         except Exception:
-            # Mark failed, email admin, re-raise so Celery retries
+            # Mark failed, email admin, re-raise so Celery retries.
+            # generate_for_topic catches per-item LLM failures internally (MCR-T3), so
+            # this branch is now reserved for genuine infra failures — a DB outage, a
+            # bug outside the per-item try/excepts — not the routine "one call timed
+            # out" case that used to land here and nuke the whole run.
             if topic:
                 topic.mini_course_status = "failed"
                 await db.commit()
             raise
 
+        # Three-way status: "ready" only when every explanation and quiz landed this
+        # run; "partial" when some content generated but gaps remain (retry via the
+        # same idempotent task fills only the gaps, not a full re-generation); "failed"
+        # is the except branch above. A topic that produced nothing at all — a
+        # first-generation attempt that failed on every single pair — is also
+        # "partial" rather than "failed": some rows may already exist from a prior
+        # attempt, and the teacher should see "still working on this" rather than an
+        # alarming full failure when the task itself completed without raising.
         if topic:
-            topic.mini_course_status = "ready"
+            gap_count = len(result.get("explanation_gaps", [])) + len(result.get("quiz_gaps", []))
+            if result.get("complete"):
+                topic.mini_course_status = "ready"
+            else:
+                topic.mini_course_status = "partial"
+                logger.warning(
+                    "mini_course_generation_partial",
+                    topic_id=topic_id,
+                    school_id=school_id,
+                    explanation_gaps=result.get("explanation_gaps", []),
+                    quiz_gaps=result.get("quiz_gaps", []),
+                    gap_count=gap_count,
+                )
             await db.commit()
 
-        # Email teacher on success
+        # Email teacher regardless of ready/partial — silence on a partial result would
+        # leave the teacher with no signal that generation finished at all.
         if teacher_id:
             teacher_row = await db.execute(select(User).where(User.id == UUID(teacher_id)))
             teacher = teacher_row.scalar_one_or_none()

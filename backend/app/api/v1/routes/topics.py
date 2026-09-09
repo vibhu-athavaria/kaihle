@@ -20,6 +20,8 @@ from app.core.deps import CurrentUser, require_role
 from app.models.curriculum import CurriculumTopic, Subtopic, Topic
 from app.models.subtopic_content import SubtopicContent
 from app.models.user import UserRole
+from app.schemas.mini_course import CourseStatusResponse, VideoCoverage
+from app.services.mini_course_generation_service import compute_gap_count, compute_video_coverage
 from app.tasks.mini_course_tasks import generate_topic_mini_course as celery_mini_course_task
 
 router = APIRouter(tags=["topics"])
@@ -70,20 +72,19 @@ async def generate_topic_mini_course(
 
 @router.get(
     "/topics/{topic_id}/course-status",
+    response_model=CourseStatusResponse,
     status_code=status.HTTP_200_OK,
 )
 async def get_topic_course_status(
     topic_id: uuid.UUID,
     current_user: CurrentUser = Depends(require_role(UserRole.TEACHER, UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, object]:
+) -> CourseStatusResponse:
     """Return the mini-course generation status for a topic.
 
-    Returns:
-        {
-          "status": "none" | "generating" | "ready" | "failed",
-          "subtopic_count": int
-        }
+    status="partial" means some explanations/quizzes generated but not all — gaps_count
+    reports how many are still missing, recomputed live from current content state
+    (MCR-T3), not from a stored value that could drift.
     """
     topic_result = await db.execute(
         select(Topic.mini_course_status).where(Topic.id == topic_id, Topic.is_active.is_(True))
@@ -99,10 +100,18 @@ async def get_topic_course_status(
     )
     subtopic_count = len(subtopic_count_result.all())
 
-    return {
-        "status": topic_row.mini_course_status,
-        "subtopic_count": subtopic_count,
-    }
+    gaps_count = 0
+    if topic_row.mini_course_status == "partial":
+        gaps_count = await compute_gap_count(db, topic_id)
+
+    covered, total = await compute_video_coverage(db, topic_id)
+
+    return CourseStatusResponse(
+        status=topic_row.mini_course_status,
+        subtopic_count=subtopic_count,
+        gaps_count=gaps_count,
+        video_coverage=VideoCoverage(covered=covered, total=total),
+    )
 
 
 @router.patch(

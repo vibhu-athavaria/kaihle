@@ -75,6 +75,24 @@ class SubtopicCourseResponse(BaseModel):
     latest_open_answer: LatestOpenAnswerItem | None = None
 
 
+class VideoCoverage(BaseModel):
+    """How many of this topic's subtopics have an approved curriculum-scope video.
+
+    Video is curated separately from mini-course generation (KaihleAdmin-only, not
+    LLM-generated) — this is a non-blocking signal, never a completion requirement.
+    """
+
+    covered: int
+    total: int
+
+
+class CourseStatusResponse(BaseModel):
+    status: Literal["none", "generating", "ready", "partial", "failed"]
+    subtopic_count: int
+    gaps_count: int = 0
+    video_coverage: VideoCoverage
+
+
 class MarkProgressRequest(BaseModel):
     explanation_accessed: bool = False
     video_accessed: bool = False

@@ -5,6 +5,7 @@ Naming convention: test_<what>_when_<condition>_then_<expected>
 Run with: pytest backend/app/tests/integration/test_topics_routes.py -v
 """
 
+import random
 import uuid
 
 import pytest
@@ -14,9 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token
 from app.models.curriculum import Curriculum, CurriculumTopic, Grade, Subject, Subtopic, Topic
+from app.models.interest_category import InterestCategory
 from app.models.school import Class, School
 from app.models.subtopic_content import SubtopicContent
 from app.models.user import User, UserRole
+from app.services.mini_course_generation_service import INTEREST_CATEGORIES
 
 
 def make_auth_header(user: User) -> dict[str, str]:
@@ -30,7 +33,15 @@ async def _create_topic_with_class(db: AsyncSession, school: School) -> tuple[To
     subject = Subject(
         id=uuid.uuid4(), name=f"Math-{uuid.uuid4().hex[:4]}", code=f"M{uuid.uuid4().hex[:4]}", is_active=True
     )
-    grade = Grade(id=uuid.uuid4(), name="Grade 7", level=7, is_active=True)
+    # level is unique AND constrained to 1-13 (grades_level_range) — a hardcoded value
+    # collided once enough tests in this file ran back-to-back in the same session.
+    # Get-or-create rather than always inserting: the level space is small enough that
+    # collisions are expected, not just possible.
+    grade_level = random.randint(1, 13)
+    existing_grade = await db.execute(select(Grade).where(Grade.level == grade_level))
+    grade = existing_grade.scalar_one_or_none()
+    if grade is None:
+        grade = Grade(id=uuid.uuid4(), name=f"Grade {grade_level}", level=grade_level, is_active=True)
     curriculum = Curriculum(
         id=uuid.uuid4(), name=f"Curr-{uuid.uuid4().hex[:4]}", code=f"C{uuid.uuid4().hex[:4]}", is_active=True
     )
@@ -207,3 +218,172 @@ async def test_review_topic_variant_when_curriculum_scope_then_teacher_claims_fo
     assert reloaded.review_status == "approved"
     assert reloaded.scope == "school"
     assert reloaded.school_id == school.id
+
+
+async def _ensure_interest_categories(db: AsyncSession) -> None:
+    """Create the 4 production interest categories if they don't already exist.
+
+    interest_categories.name is a native Postgres enum column — the enum TYPE persists
+    across the test suite's TRUNCATE-based isolation, but the table rows do not, so each
+    test that needs them (like compute_gap_count's expected-total calculation) must
+    re-seed them.
+    """
+    existing = await db.execute(select(InterestCategory.name))
+    existing_names = {row[0] for row in existing.all()}
+    for db_name, _, _ in INTEREST_CATEGORIES:
+        if db_name not in existing_names:
+            db.add(InterestCategory(id=uuid.uuid4(), name=db_name))
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_get_course_status_when_partial_then_returns_partial_with_gaps_count(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """MCR-T3: a topic stuck at status="partial" reports how many items are still
+    missing, computed live rather than trusted from the last generation run."""
+    topic, subtopic, _class, teacher = await _create_topic_with_class(db_session, school)
+    await _ensure_interest_categories(db_session)
+
+    topic.mini_course_status = "partial"
+    # Only 1 of the 4 interest-category explanation variants exists for this subtopic —
+    # 3 explanation gaps, plus 1 quiz gap (no quiz row at all).
+    db_session.add(
+        SubtopicContent(
+            id=uuid.uuid4(),
+            subtopic_id=subtopic.id,
+            content_type="explanation",
+            explanation_text="Sports-flavoured explanation",
+            review_status="approved",
+            scope="school",
+            school_id=school.id,
+            interest_category_id=(
+                await db_session.execute(select(InterestCategory.id).where(InterestCategory.name == "sports_movement"))
+            ).scalar_one(),
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/topics/{topic.id}/course-status",
+        headers=make_auth_header(teacher),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "partial"
+    assert data["gaps_count"] == 4  # 3 missing explanation variants + 1 missing quiz
+
+
+@pytest.mark.asyncio
+async def test_get_course_status_when_ready_then_gaps_count_is_zero(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """A "ready" topic never pays the cost of computing gaps — gaps_count stays 0
+    without a live query, since there's nothing to report."""
+    topic, _subtopic, _class, teacher = await _create_topic_with_class(db_session, school)
+    topic.mini_course_status = "ready"
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/topics/{topic.id}/course-status",
+        headers=make_auth_header(teacher),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ready"
+    assert data["gaps_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_course_status_when_no_video_curated_then_video_coverage_zero_of_total(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """MCR-T4: video coverage is reported even for a topic with no video curated at
+    all — the signal must be present, never silently omitted."""
+    topic, _subtopic, _class, teacher = await _create_topic_with_class(db_session, school)
+    topic.mini_course_status = "ready"
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/topics/{topic.id}/course-status",
+        headers=make_auth_header(teacher),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["video_coverage"] == {"covered": 0, "total": 1}
+
+
+@pytest.mark.asyncio
+async def test_get_course_status_when_video_approved_then_covered_equals_total(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """An approved curriculum-scope video counts as covered; the video wasn't generated
+    by this teacher's own school, but coverage is a global fact, not school-scoped."""
+    topic, subtopic, _class, teacher = await _create_topic_with_class(db_session, school)
+    topic.mini_course_status = "ready"
+    db_session.add(
+        SubtopicContent(
+            id=uuid.uuid4(),
+            subtopic_id=subtopic.id,
+            content_type="video",
+            video_url="https://youtube.com/watch?v=abc123",
+            review_status="approved",
+            scope="curriculum",
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/topics/{topic.id}/course-status",
+        headers=make_auth_header(teacher),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["video_coverage"] == {"covered": 1, "total": 1}
+
+
+@pytest.mark.asyncio
+async def test_get_course_status_when_video_pending_not_approved_then_not_counted_as_covered(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """A pending (not yet KaihleAdmin-approved) video candidate must not count as
+    coverage — only an approved video is a real, student-visible video."""
+    topic, subtopic, _class, teacher = await _create_topic_with_class(db_session, school)
+    topic.mini_course_status = "ready"
+    db_session.add(
+        SubtopicContent(
+            id=uuid.uuid4(),
+            subtopic_id=subtopic.id,
+            content_type="video",
+            video_url="https://youtube.com/watch?v=abc123",
+            review_status="pending",
+            scope="curriculum",
+            is_active=True,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/topics/{topic.id}/course-status",
+        headers=make_auth_header(teacher),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["video_coverage"] == {"covered": 0, "total": 1}

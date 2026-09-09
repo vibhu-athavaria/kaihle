@@ -19,6 +19,8 @@ export interface SubtopicCourseDetail {
   subtopic_name: string;
   sequence_order: number;
   variants: Record<string, SubtopicVariant | null>;
+  /** Curriculum-scope video curated separately from this grid — non-blocking signal. */
+  has_video: boolean;
 }
 
 export interface StudentCourseAssignment {

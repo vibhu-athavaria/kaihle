@@ -1301,6 +1301,9 @@ async def test_get_course_detail_for_teacher_when_valid_then_returns_structure()
     content_result = MagicMock()
     content_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
 
+    video_result = MagicMock()
+    video_result.all = MagicMock(return_value=[])
+
     enrolled_result = MagicMock()
     enrolled_result.all = MagicMock(return_value=[])
 
@@ -1311,6 +1314,7 @@ async def test_get_course_detail_for_teacher_when_valid_then_returns_structure()
             cats_result,
             subtopics_result,
             content_result,
+            video_result,
             enrolled_result,
         ]
     )
@@ -1370,6 +1374,10 @@ async def test_get_course_detail_for_teacher_when_subtopics_and_content_then_bui
     content_result = MagicMock()
     content_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[content])))
 
+    # No curated video for this subtopic
+    video_result = MagicMock()
+    video_result.all = MagicMock(return_value=[])
+
     # No enrolled students
     enrolled_result = MagicMock()
     enrolled_result.all = MagicMock(return_value=[])
@@ -1381,6 +1389,7 @@ async def test_get_course_detail_for_teacher_when_subtopics_and_content_then_bui
             cats_result,
             subtopics_result,
             content_result,
+            video_result,
             enrolled_result,
         ]
     )
@@ -1397,6 +1406,57 @@ async def test_get_course_detail_for_teacher_when_subtopics_and_content_then_bui
     assert subtopic_out["subtopic_name"] == "Linear Equations"
     assert subtopic_out["variants"]["sports_movement"] is not None
     assert subtopic_out["variants"]["sports_movement"]["review_status"] == "approved"
+    assert subtopic_out["has_video"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_course_detail_for_teacher_when_subtopic_has_approved_video_then_has_video_true() -> None:
+    """MCR-T4: an approved curriculum-scope video marks the subtopic has_video=True."""
+    db = _make_db()
+
+    class_result = MagicMock()
+    class_result.scalar_one_or_none = MagicMock(return_value=MagicMock())
+    topic_row = MagicMock(name="Algebra")
+    topic_result = MagicMock()
+    topic_result.first = MagicMock(return_value=topic_row)
+    cats_result = MagicMock()
+    cats_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+
+    sub_id = uuid.uuid4()
+    sub = MagicMock()
+    sub.id = sub_id
+    sub.name = "Linear Equations"
+    sub.sequence_order = 1
+    subtopics_result = MagicMock()
+    subtopics_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[sub])))
+
+    content_result = MagicMock()
+    content_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+
+    video_result = MagicMock()
+    video_result.all = MagicMock(return_value=[(sub_id,)])
+
+    enrolled_result = MagicMock()
+    enrolled_result.all = MagicMock(return_value=[])
+
+    db.execute = AsyncMock(
+        side_effect=[
+            class_result,
+            topic_result,
+            cats_result,
+            subtopics_result,
+            content_result,
+            video_result,
+            enrolled_result,
+        ]
+    )
+
+    service = MiniCourseService(db)
+    result = await service.get_course_detail_for_teacher(
+        topic_id=uuid.uuid4(), class_id=uuid.uuid4(), school_id=uuid.uuid4()
+    )
+
+    assert result["subtopics"][0]["has_video"] is True
 
 
 @pytest.mark.asyncio
@@ -1419,11 +1479,21 @@ async def test_get_course_detail_for_teacher_when_called_then_content_query_scop
     subtopics_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
     content_result = MagicMock()
     content_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+    video_result = MagicMock()
+    video_result.all = MagicMock(return_value=[])
     enrolled_result = MagicMock()
     enrolled_result.all = MagicMock(return_value=[])
 
     db.execute = AsyncMock(
-        side_effect=[class_result, topic_result, cats_result, subtopics_result, content_result, enrolled_result]
+        side_effect=[
+            class_result,
+            topic_result,
+            cats_result,
+            subtopics_result,
+            content_result,
+            video_result,
+            enrolled_result,
+        ]
     )
 
     service = MiniCourseService(db)

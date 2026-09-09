@@ -1120,6 +1120,20 @@ class MiniCourseService:
             cat_name = cat_by_id.get(row.interest_category_id, "unknown") if row.interest_category_id else "unknown"
             content_index.setdefault(row.subtopic_id, {})[cat_name] = row
 
+        # Video is curriculum-scope-only and curated separately from this teacher flow
+        # (MCR-T4) — surfaced here as a per-subtopic signal, not a variant to review.
+        video_result = await self.db.execute(
+            select(SubtopicContent.subtopic_id).where(
+                SubtopicContent.subtopic_id.in_(subtopic_ids),
+                SubtopicContent.content_type == "video",
+                SubtopicContent.scope == "curriculum",
+                SubtopicContent.review_status == "approved",
+                SubtopicContent.is_active.is_(True),
+                SubtopicContent.is_archived.is_(False),
+            )
+        )
+        subtopics_with_video = {row[0] for row in video_result.all()}
+
         subtopics_out = []
         for sub in subtopics:
             variants: dict[str, dict[str, str] | None] = {}
@@ -1140,6 +1154,7 @@ class MiniCourseService:
                     "subtopic_name": sub.name,
                     "sequence_order": sub.sequence_order,
                     "variants": variants,
+                    "has_video": sub.id in subtopics_with_video,
                 }
             )
 

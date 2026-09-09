@@ -21,6 +21,7 @@ import {
   UserCog,
   XCircle,
   Pencil,
+  Video,
 } from "lucide-react";
 
 // ── Variant pill ──────────────────────────────────────────────────────────────
@@ -572,6 +573,9 @@ export function CourseDetailPage() {
                       {cat.label}
                     </th>
                   ))}
+                  <th className="text-center px-4 py-3 font-semibold text-brand-ink text-xs uppercase tracking-wide">
+                    Video
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -603,11 +607,40 @@ export function CourseDetailPage() {
                         </td>
                       );
                     })}
+                    <td className="px-4 py-3 text-center">
+                      <span
+                        role="img"
+                        aria-label={
+                          subtopic.has_video
+                            ? "Video curated for this subtopic"
+                            : "No video yet — curated separately by Kaihle Admin"
+                        }
+                        title={
+                          subtopic.has_video ? "Video curated" : "No video yet"
+                        }
+                      >
+                        <Video
+                          className={`w-4 h-4 inline-block ${subtopic.has_video ? "text-brand-primary" : "text-brand-muted opacity-40"}`}
+                          aria-hidden="true"
+                        />
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        )}
+        {data.subtopics.some((s) => !s.has_video) && (
+          <p className="text-xs text-brand-muted mt-2">
+            Video is curated separately by Kaihle Admin — subtopics without the{" "}
+            <Video
+              className="w-3 h-3 inline-block mx-0.5 opacity-40"
+              aria-hidden="true"
+            />
+            icon filled in don&apos;t have an approved video yet. This
+            doesn&apos;t block content review.
+          </p>
         )}
       </section>
 
