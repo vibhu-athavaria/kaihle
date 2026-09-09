@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { X, Send, AlertCircle, Bot, User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import {
   useChatHistory,
   useStreamChatMessage,
@@ -26,6 +27,12 @@ export function ExplainThisDrawer({
   const triggerRef = useRef<Element | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  // Shown immediately on send, ahead of the persisted history — the backend only
+  // returns the student's own message as part of the "done" event once the AI reply
+  // finishes, so without this the student's question doesn't appear until their own
+  // answer does. Cleared once "done" arrives and the persisted list already includes
+  // it; left in place on error since the message is saved server-side either way.
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
 
   const { data: chatHistory, isFetching: historyLoading } =
     useChatHistory(subtopicId);
@@ -42,7 +49,7 @@ export function ExplainThisDrawer({
     if (open) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [chatHistory?.messages.length, streamingContent, open]);
+  }, [chatHistory?.messages.length, streamingContent, pendingQuestion, open]);
 
   // Capture trigger element on open so focus can return on close
   useEffect(() => {
@@ -102,8 +109,10 @@ export function ExplainThisDrawer({
 
     setSendError(null);
     setQuestion(""); // clear immediately — don't wait for the stream to finish
+    setPendingQuestion(q);
     stream(q, {
       onError: (msg) => setSendError(msg),
+      onDone: () => setPendingQuestion(null),
     });
   };
 
@@ -163,7 +172,7 @@ export function ExplainThisDrawer({
             </div>
           )}
 
-          {!historyLoading && messages.length === 0 && (
+          {!historyLoading && messages.length === 0 && !pendingQuestion && (
             <div className="text-center py-10">
               <Bot
                 className="w-8 h-8 text-brand-muted mx-auto mb-2"
@@ -197,17 +206,32 @@ export function ExplainThisDrawer({
                   />
                 )}
               </div>
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 font-sans text-sm leading-relaxed whitespace-pre-wrap ${
-                  msg.role === "ai"
-                    ? "bg-brand-primary/5 text-brand-ink rounded-tl-sm"
-                    : "bg-brand-ink text-white rounded-tr-sm"
-                }`}
-              >
-                {msg.content}
-              </div>
+              {msg.role === "ai" ? (
+                <div className="max-w-[80%] rounded-2xl rounded-tl-sm px-4 py-3 bg-brand-primary/5 text-brand-ink font-sans text-sm leading-relaxed">
+                  <div className="prose prose-sm max-w-none prose-p:text-brand-ink prose-strong:text-brand-ink prose-li:text-brand-ink">
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                </div>
+              ) : (
+                <div className="max-w-[80%] rounded-2xl rounded-tr-sm px-4 py-3 bg-brand-ink text-white font-sans text-sm leading-relaxed whitespace-pre-wrap">
+                  {msg.content}
+                </div>
+              )}
             </div>
           ))}
+
+          {/* Optimistic student message — shown immediately on send, ahead of the AI's
+              reply, since the backend doesn't return it until the reply is done streaming */}
+          {pendingQuestion && (
+            <div className="flex gap-2.5 flex-row-reverse">
+              <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-brand-border">
+                <User className="w-4 h-4 text-brand-muted" aria-hidden="true" />
+              </div>
+              <div className="max-w-[80%] rounded-2xl rounded-tr-sm px-4 py-3 bg-brand-ink text-white font-sans text-sm leading-relaxed whitespace-pre-wrap">
+                {pendingQuestion}
+              </div>
+            </div>
+          )}
 
           {/* Streaming AI reply — shows live text while generating, replaced by persisted message on done */}
           {isStreaming && (
@@ -218,8 +242,12 @@ export function ExplainThisDrawer({
                   aria-hidden="true"
                 />
               </div>
-              <div className="max-w-[80%] bg-brand-primary/5 rounded-2xl rounded-tl-sm px-4 py-3 font-sans text-sm leading-relaxed text-brand-ink whitespace-pre-wrap">
-                {streamingContent || (
+              <div className="max-w-[80%] bg-brand-primary/5 rounded-2xl rounded-tl-sm px-4 py-3 font-sans text-sm leading-relaxed text-brand-ink">
+                {streamingContent ? (
+                  <div className="prose prose-sm max-w-none prose-p:text-brand-ink prose-strong:text-brand-ink prose-li:text-brand-ink">
+                    <ReactMarkdown>{streamingContent}</ReactMarkdown>
+                  </div>
+                ) : (
                   <span className="flex gap-1">
                     {[0, 150, 300].map((delay) => (
                       <span

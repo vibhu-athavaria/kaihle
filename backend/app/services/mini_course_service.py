@@ -693,7 +693,21 @@ class MiniCourseService:
         subtopic_id: uuid.UUID,
         school_id: uuid.UUID,
     ) -> ChatHistoryResponse:
-        """Return up to 50 chat messages for this student+subtopic, oldest first."""
+        """Return the most recent 50 chat messages for this student+subtopic, oldest first.
+
+        Queried newest-first so the cap keeps the live end of a long conversation
+        rather than pinning it to the first 50 messages ever exchanged, then
+        reversed for chronological display order.
+
+        Ordered by (created_at, id) rather than created_at alone: Postgres gives no
+        defined tie-break order for rows with an equal sort key, so a created_at-only
+        ORDER BY can return a different order on every call once two rows tie — and
+        ties are real here, not theoretical. `created_at`'s DB-side `now()` default is
+        the transaction start time, constant for every statement in that transaction,
+        so any code path that ever saves more than one message per transaction produces
+        identical timestamps. `id` breaks the tie deterministically, which also makes
+        the DESC-then-reversed round trip below an exact inverse of the ASC order.
+        """
         result = await self.db.execute(
             select(MiniCourseChatMessage)
             .where(
@@ -701,10 +715,10 @@ class MiniCourseService:
                 MiniCourseChatMessage.subtopic_id == subtopic_id,
                 MiniCourseChatMessage.school_id == school_id,
             )
-            .order_by(MiniCourseChatMessage.created_at.asc())
+            .order_by(MiniCourseChatMessage.created_at.desc(), MiniCourseChatMessage.id.desc())
             .limit(50)
         )
-        rows = result.scalars().all()
+        rows = list(reversed(result.scalars().all()))
         return ChatHistoryResponse(
             messages=[ChatMessageItem(role=row.role, content=row.content, created_at=row.created_at) for row in rows]
         )

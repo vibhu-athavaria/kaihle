@@ -716,7 +716,13 @@ async def test_submit_quiz_when_empty_answers_then_score_is_zero() -> None:
 
 @pytest.mark.asyncio
 async def test_get_chat_history_when_messages_exist_then_returns_ordered_list() -> None:
-    """get_chat_history returns ChatHistoryResponse with messages from DB, oldest first."""
+    """get_chat_history returns ChatHistoryResponse with messages oldest first.
+
+    The query itself is newest-first (ORDER BY created_at DESC LIMIT 50) so the cap
+    keeps the live end of a long conversation — the service reverses the rows back to
+    chronological order before returning them. The mock below returns rows in that
+    newest-first shape (msg2 before msg1) to match.
+    """
     db = _make_db()
     student_id = uuid.uuid4()
     subtopic_id = uuid.uuid4()
@@ -733,7 +739,7 @@ async def test_get_chat_history_when_messages_exist_then_returns_ordered_list() 
     msg2.created_at = datetime(2026, 1, 1, 10, 0, 5, tzinfo=UTC)
 
     history_result = MagicMock()
-    history_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[msg1, msg2])))
+    history_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[msg2, msg1])))
     db.execute = AsyncMock(return_value=history_result)
 
     service = MiniCourseService(db)
