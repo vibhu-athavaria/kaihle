@@ -292,11 +292,23 @@ class StudentAttemptSubtopicScore(Base):
         nullable=False,
     )
     score: Mapped[float] = mapped_column(nullable=False)
-    # Per-subtopic fraction correct for this attempt: correct / total in subtopic
+    # Per-subtopic fraction correct for this attempt: correct / total in subtopic.
+    # A proportion alone cannot recover the counts a Beta-Binomial posterior needs — 3/5
+    # and 30/50 are both 0.6 but carry very different evidential weight. `score` is kept
+    # for existing readers; `correct_count`/`total_count` are the source mastery_model
+    # actually consumes (MLH-T3).
     attempted_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,
     )
+    # NULLABLE: rows written before MLH-T3 predate these columns and cannot be
+    # backfilled from `score` alone (the proportion does not determine the counts it
+    # came from). Every new write populates both; MLH-T3-4's rebuild backfills existing
+    # rows where the underlying responses can still be attributed. A NULL pair here means
+    # "counts unknown", not zero — such rows are excluded from mastery_model's
+    # observations rather than treated as zero evidence.
+    correct_count: Mapped[int | None] = mapped_column(nullable=True)
+    total_count: Mapped[int | None] = mapped_column(nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -307,6 +319,19 @@ class StudentAttemptSubtopicScore(Base):
         ),
         Index("idx_subtopic_scores_student_sub", "student_id", "subtopic_id"),
         CheckConstraint("score BETWEEN 0.0 AND 1.0", name="chk_sats_score"),
+        # Both counts arrive together or not at all — never one without the other.
+        CheckConstraint(
+            "(correct_count IS NULL) = (total_count IS NULL)",
+            name="chk_sats_counts_both_or_neither",
+        ),
+        CheckConstraint(
+            "correct_count IS NULL OR correct_count <= total_count",
+            name="chk_sats_correct_le_total",
+        ),
+        CheckConstraint(
+            "correct_count IS NULL OR correct_count >= 0",
+            name="chk_sats_correct_non_negative",
+        ),
     )
 
 

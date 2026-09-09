@@ -19,6 +19,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.curriculum import (
     CurriculumTopic,
     Grade,
@@ -28,7 +29,7 @@ from app.models.curriculum import (
     SubtopicObjective,
     Topic,
 )
-from app.models.gap import GapState
+from app.models.gap import GapState, MasteryPrior
 from app.models.school import Class, ClassEnrollment
 from app.models.user import User
 from app.schemas.gap_map import (
@@ -39,6 +40,8 @@ from app.schemas.gap_map import (
     StudentGapScore,
     StudentSubtopicScore,
 )
+from app.services.mastery_model import Observation
+from app.services.mastery_model import estimate as estimate_mastery
 
 logger = structlog.get_logger()
 
@@ -59,13 +62,14 @@ class GapService:
         school_id: uuid.UUID,
         class_id: uuid.UUID,
         new_mastery: float,
+        confidence: float,
         rolling_attempt_count: int,
         last_assessed_at: datetime,
     ) -> None:
         """Atomically upsert a gap_state row using ON CONFLICT DO UPDATE.
 
         Uses the unique constraint (student_id, subtopic_id, class_id) as conflict target.
-        On conflict, updates mastery_score, attempt_count, and related fields.
+        On conflict, updates mastery_score, confidence, attempt_count, and related fields.
         needs_review is set TRUE when mastery < 0.4, FALSE otherwise.
 
         Args:
@@ -74,16 +78,17 @@ class GapService:
             school_id: The school UUID (stored for context — gap_states is school-scoped via class).
             class_id: The class UUID (gap states are per-class).
             new_mastery: Recency-weighted mastery score [0.0, 1.0].
-            rolling_attempt_count: Total number of attempts for this subtopic.
+            confidence: [0.0, 1.0], caller-computed. MLH-T3: this used to be derived here
+                from rolling_attempt_count via min(count/5, 1.0) — a ramp capped at 3
+                attempts (the history query was LIMIT 2) so it could only ever be 0.2, 0.4
+                or 0.6. Now the caller passes mastery_model.estimate()'s posterior-SD-based
+                confidence directly; this method no longer computes one itself, so a
+                caller and its stored confidence can never silently disagree.
+            rolling_attempt_count: Total number of attempts for this subtopic. Stored in
+                gap_states.attempt_count for reporting; no longer used to derive confidence.
             last_assessed_at: Timestamp of the most recent assessment.
         """
         needs_review = new_mastery < 0.4
-
-        # Confidence grows with attempt count: min(attempt_count / 5, 1.0).
-        # NOTE: 1.0 is unreachable on this path. calculate_gap_states_for_attempt caps
-        # rolling_attempt_count at 3 (its history query is LIMIT 2), so the stored value is
-        # only ever 0.2, 0.4 or 0.6. MLH-T3 replaces this ramp with posterior variance.
-        confidence = min(rolling_attempt_count / 5.0, 1.0)
 
         # gap_states.last_assessed_at is TIMESTAMP WITHOUT TIME ZONE in the schema.
         # asyncpg rejects timezone-aware datetimes for non-tz columns — strip tzinfo.
@@ -168,7 +173,6 @@ class GapService:
         """
         from app.models.assessment import (
             Assessment,
-            AssessmentType,
             AttemptStatus,
             StudentAttempt,
             StudentResponse,
@@ -198,8 +202,6 @@ class GapService:
         if assessment is None:
             logger.warning("calculate_gap_states_skipped_assessment_not_found", attempt_id=attempt_id_str)
             return {"attempt_id": attempt_id_str, "subtopics_updated": 0}
-
-        is_diagnostic: bool = assessment.assessment_type == AssessmentType.DIAGNOSTIC
 
         # Step 3: Load responses — exclude empty-string answers created by the
         # timed-out auto-fill path in attempt_service.submit_attempt().
@@ -293,7 +295,8 @@ class GapService:
             if response.is_correct:
                 subtopic_correct[sub_id] += 1
 
-        # Step 6 + 7 + 8: Compute mastery, upsert gap_state, insert score row
+        # Step 6: Compute mastery via the Beta-Binomial posterior (MLH-T3), upsert
+        # gap_state, insert score row.
         raw_completed_at = attempt.completed_at or datetime.now(UTC)
         # Normalise to timezone-aware for use with TIMESTAMPTZ columns.
         # upsert_gap_state handles stripping tzinfo for gap_states.last_assessed_at
@@ -305,23 +308,46 @@ class GapService:
             assessed_at = raw_completed_at
         subtopics_updated = 0
 
+        # Batch-fetch every resolved subtopic's calibrated prior in one query — Rule
+        # 07-performance prohibits N+1, and this attempt may touch several subtopics.
+        # A subtopic never calibrated yet (e.g. seeded after the last
+        # calibrate_mastery_prior run) has no row here and falls back to the platform
+        # bootstrap default below — the same fallback mastery_priors itself documents.
+        resolved_subtopic_ids = list(subtopic_total.keys())
+        priors_by_subtopic: dict[uuid.UUID, tuple[float, float]] = {}
+        if resolved_subtopic_ids:
+            priors_result = await self.db.execute(
+                select(MasteryPrior.subtopic_id, MasteryPrior.alpha, MasteryPrior.beta).where(
+                    MasteryPrior.subtopic_id.in_(resolved_subtopic_ids)
+                )
+            )
+            priors_by_subtopic = {row.subtopic_id: (float(row.alpha), float(row.beta)) for row in priors_result.all()}
+
         for sub_id, total in subtopic_total.items():
             if total == 0:
                 continue
 
-            current_score = subtopic_correct[sub_id] / total
+            current_correct = subtopic_correct[sub_id]
 
-            # Load last 2 historical scores (excluding this attempt)
+            # Full history for this (student, subtopic), most recent first — not capped
+            # at 2 the way the retired formula was, since decay makes a far-back attempt's
+            # contribution vanish on its own rather than needing to be excluded by hand.
+            #
+            # correct_count IS NOT NULL excludes rows written before this column existed:
+            # a proportion alone cannot recover the counts an Observation needs (3/5 and
+            # 30/50 are both 0.6), so such rows are simply unusable evidence rather than
+            # silently miscounted. MLH-T3-4's rebuild backfills counts for existing rows;
+            # until then this is a transitional gap, not a bug.
             hist_result = await self.db.execute(
                 text(
                     """
-                    SELECT score, attempted_at
+                    SELECT correct_count, total_count
                     FROM student_attempt_subtopic_scores
                     WHERE student_id = :student_id
                       AND subtopic_id = :subtopic_id
                       AND attempt_id != :attempt_id
+                      AND correct_count IS NOT NULL
                     ORDER BY attempted_at DESC
-                    LIMIT 2
                     """
                 ),
                 {
@@ -332,25 +358,32 @@ class GapService:
             )
             historical = hist_result.all()
 
-            if len(historical) == 0:
-                mastery = current_score * 0.7 if is_diagnostic else current_score * 1.0
-                rolling_count = 1
-            elif len(historical) == 1:
-                mastery = (current_score * 0.65) + (historical[0][0] * 0.35)
-                rolling_count = 2
-            else:
-                mastery = (current_score * 0.5) + (historical[0][0] * 0.3) + (historical[1][0] * 0.2)
-                rolling_count = len(historical) + 1
+            # age_index 0 is always the CURRENT attempt — the most recent evidence by
+            # definition, since it just happened.
+            observations = [Observation(correct=current_correct, total=total, age_index=0)]
+            observations.extend(
+                Observation(correct=int(row.correct_count), total=int(row.total_count), age_index=i + 1)
+                for i, row in enumerate(historical)
+            )
 
-            mastery = max(0.0, min(1.0, mastery))
+            prior_alpha, prior_beta = priors_by_subtopic.get(
+                sub_id, (settings.mastery_prior_alpha, settings.mastery_prior_beta)
+            )
+            posterior = estimate_mastery(
+                observations,
+                prior_alpha=prior_alpha,
+                prior_beta=prior_beta,
+                decay=settings.mastery_recency_decay,
+            )
 
             await self.upsert_gap_state(
                 student_id=attempt.student_id,
                 subtopic_id=sub_id,
                 school_id=assessment.school_id,
                 class_id=assessment.class_id,
-                new_mastery=mastery,
-                rolling_attempt_count=rolling_count,
+                new_mastery=posterior.score,
+                confidence=posterior.confidence,
+                rolling_attempt_count=len(historical) + 1,
                 last_assessed_at=assessed_at,
             )
 
@@ -358,10 +391,11 @@ class GapService:
                 text(
                     """
                     INSERT INTO student_attempt_subtopic_scores
-                        (id, student_id, subtopic_id, attempt_id, score, attempted_at)
+                        (id, student_id, subtopic_id, attempt_id, score,
+                         correct_count, total_count, attempted_at)
                     VALUES
                         (gen_random_uuid(), :student_id, :subtopic_id, :attempt_id,
-                         :score, :attempted_at)
+                         :score, :correct_count, :total_count, :attempted_at)
                     ON CONFLICT (student_id, subtopic_id, attempt_id) DO NOTHING
                     """
                 ),
@@ -369,7 +403,9 @@ class GapService:
                     "student_id": attempt.student_id,
                     "subtopic_id": sub_id,
                     "attempt_id": attempt_id,
-                    "score": current_score,
+                    "score": current_correct / total,
+                    "correct_count": current_correct,
+                    "total_count": total,
                     "attempted_at": assessed_at,
                 },
             )
