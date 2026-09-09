@@ -113,15 +113,22 @@ function HeatCell({
     ? `${confidenceStyle.borderStyleClass} ${borderClass}`
     : confidenceStyle.borderStyleClass;
 
-  // "provisional" says how sure; the count says why, and the count is what decides between
-  // reassessing and intervening. Dropped entirely when unavailable.
-  const fullLabel = confidenceStyle.isProvisional
-    ? `${label}: ${masteryLabel}, ${confidenceStyle.label}${
+  // aria-label OVERRIDES inner text for screen readers, so it must always carry the
+  // mastery band and score — otherwise a confident cell announces only a name and subtopic
+  // and its state is conveyed by colour alone, violating DESIGN_SYSTEM §9.1.
+  // "provisional" then says how sure; the response count says why, and is what decides
+  // between reassessing and intervening. The count clause is dropped when unavailable
+  // rather than rendered as "based on null responses".
+  const evidenceSuffix = confidenceStyle.isProvisional
+    ? `, ${confidenceStyle.label}${
         totalResponses !== null && totalResponses !== undefined
           ? ` — based on ${totalResponses} response${totalResponses === 1 ? "" : "s"}`
           : ""
       }`
-    : label;
+    : "";
+  const fullLabel = `${label}: ${masteryLabel}${
+    score !== null ? ` (${pct})` : ""
+  }${evidenceSuffix}`;
 
   const baseClass = [
     "w-full h-12 flex flex-col items-center justify-center gap-0.5 rounded select-none",
@@ -145,7 +152,12 @@ function HeatCell({
 
   if (!onClick) {
     return (
-      <div className={baseClass} aria-label={fullLabel} title={fullLabel}>
+      <div
+        className={baseClass}
+        aria-label={fullLabel}
+        title={fullLabel}
+        data-provisional={confidenceStyle.isProvisional || undefined}
+      >
         {content}
       </div>
     );

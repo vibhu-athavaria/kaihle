@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
-from app.services.gap_service import PROVISIONAL_CONFIDENCE_THRESHOLD, GapService
+from app.services.gap_service import GapService
 
 
 def _make_db() -> MagicMock:
@@ -447,7 +447,8 @@ class TestConfidenceSurfacing:
 
         result = await service.get_class_gap_map(uuid.uuid4(), school_id, uuid.uuid4())
 
+        # 0.6 is the ceiling the writer path can actually reach: rolling_attempt_count is
+        # capped at 3 (the history query uses LIMIT 2), and confidence = min(count/5, 1).
+        # The matching "threshold must sit below this ceiling" invariant is asserted in
+        # packages/types/src/__tests__/mastery.test.ts, where the threshold now lives.
         assert result.nodes[0].student_scores[0].confidence == 0.6
-        assert PROVISIONAL_CONFIDENCE_THRESHOLD < 0.6, (
-            "Threshold must sit below the reachable ceiling, or nothing is ever confident"
-        )

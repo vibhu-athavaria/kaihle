@@ -15,7 +15,11 @@ describe("NavItem", () => {
     );
 
     const link = screen.getByRole("link", { name: /dashboard/i });
-    expect(link.className).toContain("bg-[#fffbeb]");
+    // Token, not raw hex. The component was correctly refactored to
+    // bg-role-teacher-nav-active (= #fffbeb) per DESIGN_SYSTEM §1: "All hex values live
+    // only in tailwind.config.js. Components use token names only." This expectation was
+    // never updated and had been failing on main.
+    expect(link.className).toContain("bg-role-teacher-nav-active");
     expect(link.className).toContain("text-brand-gold-dark");
     expect(link.className).toContain("font-bold");
   });

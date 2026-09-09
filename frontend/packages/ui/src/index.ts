@@ -44,6 +44,10 @@ export { Modal } from "./components/Modal";
 export { SlideOverPanel } from "./components/SlideOverPanel";
 export { GapMapCell, type GapMapCellProps } from "./components/GapMapCell";
 export {
+  GapMapLegend,
+  type GapMapLegendProps,
+} from "./components/GapMapLegend";
+export {
   ClassGapMapTable,
   type ClassGapMapTableProps,
   type GapMapNode,

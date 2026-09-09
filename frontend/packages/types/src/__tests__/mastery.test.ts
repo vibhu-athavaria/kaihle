@@ -60,6 +60,21 @@ describe("getConfidenceStyle (MLH-T6)", () => {
     expect(getConfidenceStyle(0.49).isProvisional).toBe(true);
   });
 
+  it("test_getConfidenceStyle_when_threshold_compared_to_writer_ceiling_then_confident_is_reachable", () => {
+    // The backend writer path caps confidence at 0.6: rolling_attempt_count is capped at 3
+    // (gap_service history query uses LIMIT 2) and confidence = min(count / 5, 1). If the
+    // threshold ever meets or exceeds that ceiling, NO cell can ever render confident and
+    // the whole gap map goes dashed — the exact failure this affordance exists to avoid.
+    // Re-derive this when MLH-T3 replaces the ramp with posterior variance.
+    const WRITER_PATH_CONFIDENCE_CEILING = 0.6;
+    expect(PROVISIONAL_CONFIDENCE_THRESHOLD).toBeLessThan(
+      WRITER_PATH_CONFIDENCE_CEILING,
+    );
+    expect(
+      getConfidenceStyle(WRITER_PATH_CONFIDENCE_CEILING).isProvisional,
+    ).toBe(false);
+  });
+
   it("test_getConfidenceStyle_when_confidence_at_threshold_then_provisional_is_false", () => {
     expect(
       getConfidenceStyle(PROVISIONAL_CONFIDENCE_THRESHOLD).isProvisional,

@@ -36,12 +36,14 @@ const MOCK_GAP_MAP = {
           student_id: STUDENT_1_ID,
           student_name: "Alice Smith",
           mastery_score: 0.7,
+          confidence: 0.8, // well-evidenced — renders confident
           last_assessed_at: null,
         },
         {
           student_id: STUDENT_2_ID,
           student_name: "Bob Jones",
           mastery_score: 0.6,
+          confidence: 0.2, // thin evidence — renders provisional
           last_assessed_at: null,
         },
       ],
@@ -268,5 +270,33 @@ describe("ClassGapMapContent — provisional evidence (MLH-T6)", () => {
     for (const band of ["Strong", "Developing", "Needs Work", "Not assessed"]) {
       expect(screen.getAllByText(band).length).toBeGreaterThan(0);
     }
+  });
+
+  // The three below exercise the path a teacher actually sees — HeatCell inside the
+  // shared ClassGapMapTable. The packages/ui unit tests cover GapMapCell, which only
+  // school-admin renders; without these the shipped provisional branch had no coverage.
+
+  test("test_gap_map_when_score_has_thin_evidence_then_cell_marked_provisional", () => {
+    renderComponent();
+    expect(screen.getAllByLabelText(/provisional/i).length).toBeGreaterThan(0);
+  });
+
+  test("test_gap_map_when_score_well_evidenced_then_cell_not_marked_provisional", () => {
+    renderComponent();
+    const confident = screen.getByLabelText(/Alice Smith.*Linear Equations/i);
+    expect(confident.getAttribute("aria-label")).not.toContain("provisional");
+  });
+
+  test("test_gap_map_when_cell_confident_then_aria_label_still_carries_mastery_and_score", () => {
+    // aria-label OVERRIDES inner text for screen readers, so a confident cell must still
+    // announce its band and score — state is never conveyed by colour alone
+    // (DESIGN_SYSTEM §9.1).
+    renderComponent();
+    const label =
+      screen
+        .getByLabelText(/Alice Smith.*Linear Equations/i)
+        .getAttribute("aria-label") ?? "";
+    expect(label).toMatch(/Strong|Developing|Needs Work/);
+    expect(label).toMatch(/\d+%/);
   });
 });

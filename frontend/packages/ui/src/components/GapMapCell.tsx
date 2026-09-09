@@ -87,6 +87,7 @@ export function GapMapCell({
   if (readOnly) {
     return (
       <div
+        data-provisional={confidenceStyle.isProvisional || undefined}
         className={[
           "w-12 h-12 min-h-[44px] min-w-[44px] rounded flex items-center justify-center text-xs font-semibold",
           bgClass,

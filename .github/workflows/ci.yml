@@ -220,10 +220,17 @@ jobs:
           pnpm --filter teacher exec jest --passWithNoTests --coverage
           pnpm --filter @kaihle/school-admin exec jest --passWithNoTests --coverage
           pnpm --filter @kaihle/kaihle-admin exec jest --passWithNoTests --coverage
-          # Shared packages. packages/ui had no committed jest config until MLH-T6, so its
-          # suites had never run anywhere; packages/types holds getMasteryStyle and
-          # getConfidenceStyle, which every app's colour rendering depends on.
+          # packages/types holds getMasteryStyle and getConfidenceStyle, which every app's
+          # colour rendering depends on.
           pnpm --filter @kaihle/types exec jest --passWithNoTests --coverage
+          # packages/ui had no committed jest config until MLH-T6. 14 of its 16 suites pass;
+          # StudentLayout is excluded because its 6 tests assert a nav structure that
+          # deliberately changed (study plans removed from the product; "My progress" hidden
+          # for MVP — see StudentLayout.tsx:139). Rewriting them means re-deciding what that
+          # sidebar should contain, which is its own task (MLH-T9), not a side effect of a
+          # gap-map change. Everything else in the package now gates.
+          pnpm --filter @kaihle/ui exec jest --passWithNoTests --coverage \
+            --testPathIgnorePatterns "layouts/__tests__/StudentLayout.test.tsx"
         working-directory: frontend
 
   # ─── E2E TESTS ───────────────────────────────────────────────────────────

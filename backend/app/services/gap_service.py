@@ -42,25 +42,6 @@ from app.schemas.gap_map import (
 
 logger = structlog.get_logger()
 
-# Below this, a mastery score rests on too little evidence to act on alone and the UI marks
-# it provisional. Mirrors PROVISIONAL_CONFIDENCE_THRESHOLD in packages/types/src/mastery.ts;
-# the two must move together.
-#
-# WHAT 0.5 ACTUALLY MEANS TODAY. confidence is min(attempt_count / 5, 1), and the history
-# query below is LIMIT 2, so rolling_attempt_count never exceeds 3. The column can therefore
-# only ever hold 0.2, 0.4 or 0.6 — the "5+ attempts = full confidence" comment on
-# upsert_gap_state describes a ramp this writer cannot traverse. 0.5 splits that actual
-# range at "three or more attempts", which is the only meaningful cut available.
-#
-# On the current dev database every gap_states row is 0.2, because every student has taken
-# exactly one diagnostic. Every cell is therefore provisional — which is true, not a bug:
-# one assessment IS thin evidence. Cells become solid as students accumulate attempts.
-#
-# MLH-T3 replaces this ramp with posterior variance, producing a continuous value with a
-# genuine distribution. Re-derive this threshold from that distribution then; do not assume
-# 0.5 still means the same thing.
-PROVISIONAL_CONFIDENCE_THRESHOLD = 0.5
-
 
 class GapService:
     """Service responsible for maintaining student gap states.

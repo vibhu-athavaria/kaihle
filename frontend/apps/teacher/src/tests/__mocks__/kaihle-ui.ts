@@ -81,5 +81,9 @@ export const ScoreRing = ({
   });
 
 // Re-export real implementations — pure React components, no browser APIs needed.
+// Real components, not stubs — these are the ones under test. The legend must be real so
+// the provisional entry it renders is actually asserted, and it must sit beside the table
+// it explains (they ship together from packages/ui).
 export { ClassGapMapTable } from "../../../../../packages/ui/src/components/ClassGapMapTable";
+export { GapMapLegend } from "../../../../../packages/ui/src/components/GapMapLegend";
 export { StudentGapMapTab } from "../../../../../packages/ui/src/components/StudentGapMapTab";

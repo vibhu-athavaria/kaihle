@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { DashboardLayout, ClassGapMapTable } from "@kaihle/ui";
+import { DashboardLayout, ClassGapMapTable, GapMapLegend } from "@kaihle/ui";
 import { getMasteryStyle } from "@kaihle/types";
 import { apiClient, useAuth } from "@kaihle/auth";
 import {
@@ -19,6 +19,13 @@ interface StudentGapScore {
   student_id: string;
   student_name: string;
   mastery_score: number | null;
+  /**
+   * Evidence behind mastery_score. The API has returned this since MLH-T6 and
+   * ClassGapMapTable reads it to decide whether a cell renders provisional — declared here
+   * so the contract is visible rather than only working by structural accident.
+   */
+  confidence?: number | null;
+  total_responses?: number | null;
 }
 
 interface GapMapNode {
@@ -358,29 +365,7 @@ function GapMapTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-5 flex-wrap">
-        {(
-          [
-            [0.8, "Strong"],
-            [0.55, "Developing"],
-            [0.2, "Needs Work"],
-            [null, "Not assessed"],
-          ] as Array<[number | null, string]>
-        ).map(([score, label]) => {
-          const { bgClass, textClass } = getMasteryStyle(score);
-          return (
-            <div key={label} className="flex items-center gap-1.5">
-              <span
-                className={`w-4 h-4 rounded ${bgClass}`}
-                aria-hidden="true"
-              />
-              <span className={`text-xs font-medium ${textClass}`}>
-                {label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      <GapMapLegend />
       <ClassGapMapTable nodes={data.nodes} variant="school-admin" />
     </div>
   );
