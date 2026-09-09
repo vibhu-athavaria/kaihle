@@ -11,6 +11,7 @@ Routes:
 import uuid
 from datetime import UTC, datetime
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,8 @@ from app.services.mini_course_generation_service import (
     fetch_active_subtopic_ids,
 )
 from app.tasks.mini_course_tasks import generate_topic_mini_course as celery_mini_course_task
+
+logger = structlog.get_logger()
 
 router = APIRouter(tags=["topics"])
 
@@ -173,9 +176,42 @@ async def review_topic_variant(
     # school_id. This corrects rows generated before the scope fix (which defaulted
     # to scope="curriculum") and is also correct semantically: teacher approval
     # claims content for their school.
-    if current_user.role == UserRole.TEACHER and current_user.school_id is not None:
-        sc.scope = "school"
-        sc.school_id = current_user.school_id
+    #
+    # Guarded: uq_subtopic_content_school is unique on (subtopic_id, content_type,
+    # school_id, interest_category_id) for scope='school' rows. If this school already
+    # has a school-scope row occupying that exact slot — e.g. a school-specific variant
+    # generated separately from this (still scope='curriculum') row — blindly
+    # reassigning sc onto the same slot violates that constraint and previously crashed
+    # this endpoint with an unhandled 500 on commit. The review itself (status, note,
+    # edited text) is independent of the ownership takeover, so it still applies even
+    # when the takeover has to be skipped.
+    if (
+        current_user.role == UserRole.TEACHER
+        and current_user.school_id is not None
+        and not (sc.scope == "school" and sc.school_id == current_user.school_id)
+    ):
+        conflict_result = await db.execute(
+            select(SubtopicContent.id).where(
+                SubtopicContent.id != sc.id,
+                SubtopicContent.subtopic_id == sc.subtopic_id,
+                SubtopicContent.content_type == sc.content_type,
+                SubtopicContent.interest_category_id == sc.interest_category_id,
+                SubtopicContent.scope == "school",
+                SubtopicContent.school_id == current_user.school_id,
+            )
+        )
+        if conflict_result.first() is not None:
+            logger.warning(
+                "subtopic_content_review_scope_takeover_skipped_duplicate_slot",
+                content_id=str(sc.id),
+                subtopic_id=str(sc.subtopic_id),
+                content_type=sc.content_type,
+                interest_category_id=str(sc.interest_category_id) if sc.interest_category_id else None,
+                school_id=str(current_user.school_id),
+            )
+        else:
+            sc.scope = "school"
+            sc.school_id = current_user.school_id
 
     if body.get("teacher_note"):
         sc.rejection_teacher_note = body["teacher_note"]
