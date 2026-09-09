@@ -135,6 +135,128 @@ test("test_llm_logs_page_when_row_clicked_then_detail_modal_fetches_and_shows_pr
   expect(screen.getByText("4")).toBeInTheDocument();
 });
 
+test("test_llm_logs_page_when_filter_options_loaded_then_dropdowns_populated", async () => {
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes("filter-options")) {
+      return Promise.resolve({
+        data: {
+          tasks: ["lesson_plan", "question_generation"],
+          models: ["test/model-a"],
+        },
+      });
+    }
+    return Promise.resolve({
+      data: { logs: [makeSummary()], total: 1, page: 1, page_size: 50 },
+    });
+  });
+
+  renderPage();
+
+  const taskSelect = await screen.findByLabelText(/^task$/i);
+  await waitFor(() => {
+    expect(
+      Array.from(taskSelect.querySelectorAll("option")).map(
+        (o) => o.textContent,
+      ),
+    ).toEqual(["All tasks", "lesson_plan", "question_generation"]);
+  });
+
+  const modelSelect = screen.getByLabelText(/^model$/i);
+  await waitFor(() => {
+    expect(
+      Array.from(modelSelect.querySelectorAll("option")).map(
+        (o) => o.textContent,
+      ),
+    ).toEqual(["All models", "test/model-a"]);
+  });
+});
+
+test("test_llm_logs_page_when_task_filter_selected_then_list_refetches_with_task_param", async () => {
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes("filter-options")) {
+      return Promise.resolve({
+        data: {
+          tasks: ["lesson_plan", "question_generation"],
+          models: ["test/model-a"],
+        },
+      });
+    }
+    return Promise.resolve({
+      data: { logs: [makeSummary()], total: 1, page: 1, page_size: 50 },
+    });
+  });
+
+  renderPage();
+
+  await screen.findByText("$1.23");
+  const taskSelect = await screen.findByLabelText(/^task$/i);
+  await waitFor(() => {
+    expect(
+      taskSelect.querySelector('option[value="lesson_plan"]'),
+    ).not.toBeNull();
+  });
+  mockGet.mockClear();
+
+  fireEvent.change(taskSelect, { target: { value: "lesson_plan" } });
+
+  await waitFor(() => {
+    const listCall = mockGet.mock.calls.find(
+      (call) => call[0] === "/api/v1/platform/llm-logs",
+    );
+    expect(listCall?.[1]?.params?.task).toBe("lesson_plan");
+  });
+});
+
+test("test_llm_logs_page_when_column_header_clicked_then_sort_params_sent", async () => {
+  mockGet.mockResolvedValue({
+    data: { logs: [makeSummary()], total: 1, page: 1, page_size: 50 },
+  });
+
+  renderPage();
+
+  await screen.findByText("question_generation");
+  mockGet.mockClear();
+
+  fireEvent.click(screen.getByRole("button", { name: /sort by latency/i }));
+
+  await waitFor(() => {
+    const listCall = mockGet.mock.calls.find(
+      (call) => call[0] === "/api/v1/platform/llm-logs",
+    );
+    expect(listCall?.[1]?.params?.sort_by).toBe("latency_ms");
+    expect(listCall?.[1]?.params?.sort_dir).toBe("desc");
+  });
+});
+
+test("test_llm_logs_page_when_same_column_clicked_twice_then_sort_direction_toggles", async () => {
+  mockGet.mockResolvedValue({
+    data: { logs: [makeSummary()], total: 1, page: 1, page_size: 50 },
+  });
+
+  renderPage();
+
+  await screen.findByText("question_generation");
+
+  const latencyHeader = screen.getByRole("button", {
+    name: /sort by latency/i,
+  });
+  fireEvent.click(latencyHeader);
+  await waitFor(() => {
+    const listCall = mockGet.mock.calls
+      .filter((call) => call[0] === "/api/v1/platform/llm-logs")
+      .at(-1);
+    expect(listCall?.[1]?.params?.sort_dir).toBe("desc");
+  });
+
+  fireEvent.click(latencyHeader);
+  await waitFor(() => {
+    const listCall = mockGet.mock.calls
+      .filter((call) => call[0] === "/api/v1/platform/llm-logs")
+      .at(-1);
+    expect(listCall?.[1]?.params?.sort_dir).toBe("asc");
+  });
+});
+
 test("test_llm_logs_page_when_first_page_then_previous_button_disabled", async () => {
   mockGet.mockResolvedValue({
     data: {

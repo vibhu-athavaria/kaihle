@@ -56,9 +56,16 @@ def _bind_llm_component(sender: object, task_id: str | None = None, **kwargs: ob
     in the greenlet running the task, and attribution would silently degrade to NULL. If
     either pool ever enters the deployment matrix, re-bind inside the task body instead —
     the cost report's unattributed percentage is what would surface the regression.
+
+    Trimmed to the task's short name (last dotted segment), not Celery's full registered
+    name (e.g. "app.tasks.mini_course_tasks.generate_topic_mini_course") — the full path
+    is needless noise in the LLM Logs table and every task function name in app/tasks/ is
+    already unique, so no two tasks collide once shortened. This only changes the display
+    string; the actual registered Celery task name (used for routing/queueing) is untouched.
     """
-    name = getattr(sender, "name", None) or "unknown"
-    bind_contextvars(llm_component=f"celery:{name}", request_id=task_id)
+    full_name = getattr(sender, "name", None) or "unknown"
+    short_name = full_name.rsplit(".", 1)[-1]
+    bind_contextvars(llm_component=f"celery:{short_name}", request_id=task_id)
 
 
 @task_postrun.connect

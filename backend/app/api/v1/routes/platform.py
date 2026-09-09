@@ -1,6 +1,7 @@
 """Platform-level endpoints for Kaihle Admin operations."""
 
 import uuid
+from typing import Literal
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,13 +13,25 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models.user import UserRole
 from app.schemas.auth import ImpersonationStartResponse
-from app.schemas.llm_logs import LlmLogDetailResponse, LlmLogsResponse, LlmLogSummaryResponse
+from app.schemas.llm_logs import (
+    LlmLogDetailResponse,
+    LlmLogFilterOptionsResponse,
+    LlmLogsResponse,
+    LlmLogSummaryResponse,
+)
 from app.services.auth_service import (
     AuthService,
     ImpersonationNotAllowedError,
     UserNotFoundError,
 )
-from app.services.llm_log_service import DEFAULT_LOG_PAGE_SIZE, LlmLogSummary, get_llm_log, list_llm_logs
+from app.services.llm_log_service import (
+    DEFAULT_LOG_PAGE_SIZE,
+    InvalidSortError,
+    LlmLogSummary,
+    get_llm_log,
+    list_llm_log_filter_options,
+    list_llm_logs,
+)
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/platform", tags=["platform"])
@@ -173,15 +186,34 @@ def _log_summary_response(log: LlmLogSummary) -> LlmLogSummaryResponse:
 async def get_llm_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(DEFAULT_LOG_PAGE_SIZE, ge=1, le=200),
+    task: str | None = Query(None, description="Exact task filter, e.g. 'question_generation'"),
+    model: str | None = Query(None, description="Exact model filter"),
+    sort_by: Literal["created_at", "task", "model", "latency_ms", "cost", "tokens"] = Query("created_at"),
+    sort_dir: Literal["asc", "desc"] = Query("desc"),
     current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> LlmLogsResponse:
-    """Most-recent-first, paginated list of individual LLM calls. Click a row in the admin
-    UI to fetch its full detail (prompt/response text) via GET /llm-logs/{id}.
+    """Paginated list of individual LLM calls — filterable by exact task/model, sortable
+    by any of the columns above, most-recent-first by default. Click a row in the admin UI
+    to fetch its full detail (prompt/response text) via GET /llm-logs/{id}.
     """
-    logger.info("platform.llm_logs.requested", user_id=str(current_user.id), page=page, page_size=page_size)
+    logger.info(
+        "platform.llm_logs.requested",
+        user_id=str(current_user.id),
+        page=page,
+        page_size=page_size,
+        task=task,
+        model=model,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
 
-    logs, total = await list_llm_logs(db, page=page, page_size=page_size)
+    try:
+        logs, total = await list_llm_logs(
+            db, page=page, page_size=page_size, task=task, model=model, sort_by=sort_by, sort_dir=sort_dir
+        )
+    except InvalidSortError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
 
     return LlmLogsResponse(
         logs=[_log_summary_response(log) for log in logs],
@@ -189,6 +221,21 @@ async def get_llm_logs(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/llm-logs/filter-options")
+async def get_llm_log_filter_options(
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> LlmLogFilterOptionsResponse:
+    """Distinct task/model values that actually have logged calls, for the filter
+    dropdowns. Registered before /llm-logs/{log_id} — a static path must precede a
+    dynamic one, or FastAPI (correctly) tries to parse "filter-options" as a UUID.
+    """
+    logger.info("platform.llm_log_filter_options.requested", user_id=str(current_user.id))
+
+    tasks, models = await list_llm_log_filter_options(db)
+    return LlmLogFilterOptionsResponse(tasks=tasks, models=models)
 
 
 @router.get("/llm-logs/{log_id}")

@@ -6,7 +6,8 @@ calibrated to student mastery level and personalised with student interests.
 Architecture:
 - Subtopic context from subtopic_content.get_display_explanation() (or learning_objective fallback)
 - Student interests filtered via get_compatible_interests() before injection
-- LLM: Gemini 2.5 Flash via complete(task="question_generation")
+- LLM: Gemini 2.5 Flash via complete(task="quiz_generation") — split from question_generation
+  2026-09-09 so practice-quiz spend is trackable separately from question-bank generation
 - No RAG, no curriculum_chunks, no embeddings.
 - Validation: keyword relevance + word-count gate.
 """
@@ -356,7 +357,7 @@ async def _call_llm_with_retry(prompt: str) -> dict[str, Any]:
     for attempt in range(2):
         try:
             response = await complete(
-                task="question_generation",
+                task="quiz_generation",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=2000,

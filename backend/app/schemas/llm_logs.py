@@ -35,6 +35,11 @@ class LlmLogsResponse(BaseModel):
     page_size: int
 
 
+class LlmLogFilterOptionsResponse(BaseModel):
+    tasks: list[str]
+    models: list[str]
+
+
 class LlmLogDetailResponse(LlmLogSummaryResponse):
     prompt_text: str | None
     response_text: str | None

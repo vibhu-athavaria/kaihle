@@ -84,6 +84,13 @@ class Settings(BaseSettings):
     llm_question_generation_model: str = ""
     llm_question_generation_api_base: str | None = None
 
+    # Split from question_generation (2026-09-09) — study-plan/mastery-gap practice
+    # quizzes are a different feature from question-bank generation, and sharing one
+    # task key made them indistinguishable in cost reports and the LLM Logs viewer.
+    # No hardcoded default: must be set explicitly, same as question_generation above.
+    llm_quiz_generation_model: str = ""
+    llm_quiz_generation_api_base: str | None = None
+
     # Adjudicates ambiguous curriculum-remap matches, where embedding similarity is
     # inconclusive and the decision needs the meaning of the objectives, not their
     # vector distance.

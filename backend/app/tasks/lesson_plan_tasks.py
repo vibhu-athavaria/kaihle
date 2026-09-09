@@ -256,13 +256,21 @@ async def _generate(
         school_location=school_location,
     )
 
-    # ── LLM call (streaming for reliability on long outputs) ──────────────────
+    # ── LLM call ────────────────────────────────────────────────────────────
+    # Non-streaming (was stream=True; changed 2026-09-09). Nothing ever consumed the
+    # chunks progressively — the teacher only sees the plan once fully generated, and
+    # this task just accumulated them into one string anyway, identical to what a
+    # non-streaming call returns directly. Streaming also meant the provider never
+    # reported token counts (OpenRouter drops the usage-only final chunk), so cost was
+    # silently NULL for every lesson plan. Empirically verified non-streaming
+    # generation completes in ~105s for a full 4000-token plan — far under litellm's
+    # default 6000s timeout and Celery's unlimited (no task_time_limit configured).
     try:
         response_text = await llm_router.complete(
             task="lesson_plan",
             messages=[{"role": "user", "content": prompt_text}],
             max_tokens=4000,
-            stream=True,
+            stream=False,
         )
     except litellm.AuthenticationError as exc:
         log.error("lesson_plan_llm_auth_failed", error=str(exc), exc_info=True)
@@ -298,7 +306,7 @@ async def _generate(
                     {"role": "user", "content": correction_prompt},
                 ],
                 max_tokens=4000,
-                stream=True,
+                stream=False,
             )
             plan.raw_llm_output = retry_text
             parsed, error = _try_validate(retry_text)
