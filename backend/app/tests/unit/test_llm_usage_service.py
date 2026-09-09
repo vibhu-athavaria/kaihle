@@ -33,6 +33,7 @@ def _totals(
     unattributed: int = 0,
     failures: int = 0,
     p95: int = 0,
+    unpriced_models: list[str] | None = None,
 ) -> dict[str, object]:
     return {
         "calls": calls,
@@ -43,6 +44,7 @@ def _totals(
         "unattributed": unattributed,
         "failures": failures,
         "p95": p95,
+        "unpriced_models": unpriced_models or [],
     }
 
 
@@ -50,10 +52,10 @@ def _mock_db(
     bucket_rows: list[dict[str, object]],
     bucket_count: int,
     totals: dict[str, object],
-    unpriced_models: list[str],
 ) -> MagicMock:
-    """Build a mock AsyncSession whose four sequential `execute` calls match the order
-    `summarise_usage` issues them in: buckets, bucket count, totals, unpriced models.
+    """Build a mock AsyncSession whose three sequential `execute` calls match the order
+    `summarise_usage` issues them in: buckets, bucket count, totals (unpriced models are
+    folded into the totals row via `array_agg`, not a separate query).
     """
     db = MagicMock(spec=AsyncSession)
 
@@ -66,16 +68,13 @@ def _mock_db(
     totals_result = MagicMock()
     totals_result.mappings.return_value.one.return_value = totals
 
-    models_result = MagicMock()
-    models_result.all.return_value = [(m,) for m in unpriced_models]
-
-    db.execute = AsyncMock(side_effect=[bucket_result, count_result, totals_result, models_result])
+    db.execute = AsyncMock(side_effect=[bucket_result, count_result, totals_result])
     return db
 
 
 class TestSummariseUsageEmptyWindow:
     async def test_summarise_usage_when_no_events_then_returns_zeroed_summary_not_error(self) -> None:
-        db = _mock_db(bucket_rows=[], bucket_count=0, totals=_totals(), unpriced_models=[])
+        db = _mock_db(bucket_rows=[], bucket_count=0, totals=_totals())
 
         report = await summarise_usage(db, SINCE, "component")
 
@@ -103,7 +102,6 @@ class TestSummariseUsageGrouping:
             bucket_rows=rows,
             bucket_count=1,
             totals=_totals(calls=5, tokens=1000, cost=Decimal("0.5"), successes=4, failures=1),
-            unpriced_models=[],
         )
 
         report = await summarise_usage(db, SINCE, "model")
@@ -123,13 +121,32 @@ class TestSummariseUsageGrouping:
         assert bucket.p95_ms == 800
 
 
+class TestSummariseUsagePagination:
+    async def test_summarise_usage_when_page_requested_then_correct_limit_and_offset_applied(self) -> None:
+        db = _mock_db(bucket_rows=[], bucket_count=0, totals=_totals())
+
+        await summarise_usage(db, SINCE, "component", page=3, page_size=10)
+
+        bucket_call_params = db.execute.call_args_list[0].args[1]
+        assert bucket_call_params["limit"] == 10
+        assert bucket_call_params["offset"] == 20  # (page - 1) * page_size
+
+    async def test_summarise_usage_when_default_page_then_offset_zero(self) -> None:
+        db = _mock_db(bucket_rows=[], bucket_count=0, totals=_totals())
+
+        await summarise_usage(db, SINCE, "component")
+
+        bucket_call_params = db.execute.call_args_list[0].args[1]
+        assert bucket_call_params["limit"] == 20
+        assert bucket_call_params["offset"] == 0
+
+
 class TestUnpricedPercentage:
     async def test_summarise_usage_when_some_costs_null_then_unpriced_percentage_reported(self) -> None:
         db = _mock_db(
             bucket_rows=[],
             bucket_count=0,
-            totals=_totals(calls=10, successes=10, unpriced=3),
-            unpriced_models=["self-hosted/model-x"],
+            totals=_totals(calls=10, successes=10, unpriced=3, unpriced_models=["self-hosted/model-x"]),
         )
 
         report = await summarise_usage(db, SINCE, "component")
@@ -146,7 +163,6 @@ class TestUnpricedPercentage:
             bucket_rows=[],
             bucket_count=0,
             totals=_totals(calls=10, successes=8, failures=2, unpriced=4),
-            unpriced_models=[],
         )
 
         report = await summarise_usage(db, SINCE, "component")
@@ -160,7 +176,6 @@ class TestUnattributedPercentage:
             bucket_rows=[],
             bucket_count=0,
             totals=_totals(calls=10, unattributed=5),
-            unpriced_models=[],
         )
 
         report = await summarise_usage(db, SINCE, "component")
@@ -171,7 +186,7 @@ class TestUnattributedPercentage:
 
 class TestDateRangeFiltering:
     async def test_summarise_usage_when_date_range_given_then_events_outside_excluded(self) -> None:
-        db = _mock_db(bucket_rows=[], bucket_count=0, totals=_totals(), unpriced_models=[])
+        db = _mock_db(bucket_rows=[], bucket_count=0, totals=_totals())
 
         await summarise_usage(db, SINCE, "component")
 
@@ -195,25 +210,32 @@ class TestGroupByValidation:
 
 def _unit_cost_db(
     diagnostics_completed: int,
-    generation_row: dict[str, object],
-    mini_row: dict[str, object],
+    generation: dict[str, object],
+    mini: dict[str, object],
     run_rows: list[dict[str, object]],
 ) -> MagicMock:
+    """Build a mock AsyncSession whose three sequential `execute` calls match
+    `compute_unit_costs`'s order: diagnostics, generation+mini (merged into one query via
+    FILTER), runs.
+    """
     db = MagicMock(spec=AsyncSession)
 
     diagnostics_result = MagicMock()
     diagnostics_result.scalar_one.return_value = diagnostics_completed
 
-    generation_result = MagicMock()
-    generation_result.mappings.return_value.one.return_value = generation_row
-
-    mini_result = MagicMock()
-    mini_result.mappings.return_value.one.return_value = mini_row
+    generation_and_mini_result = MagicMock()
+    generation_and_mini_result.mappings.return_value.one.return_value = {
+        "generation_calls": generation.get("calls", 0),
+        "generation_cost": generation.get("cost"),
+        "generation_unpriced": generation.get("unpriced", 0),
+        "mini_calls": mini.get("calls", 0),
+        "mini_cost": mini.get("cost"),
+    }
 
     runs_result = MagicMock()
     runs_result.mappings.return_value = run_rows
 
-    db.execute = AsyncMock(side_effect=[diagnostics_result, generation_result, mini_result, runs_result])
+    db.execute = AsyncMock(side_effect=[diagnostics_result, generation_and_mini_result, runs_result])
     return db
 
 
@@ -221,8 +243,8 @@ class TestComputeUnitCosts:
     async def test_compute_unit_costs_when_no_diagnostics_completed_then_reports_structural_zero(self) -> None:
         db = _unit_cost_db(
             diagnostics_completed=0,
-            generation_row={"calls": 0, "cost": None, "unpriced": 0},
-            mini_row={"calls": 0, "cost": None},
+            generation={"calls": 0, "cost": None, "unpriced": 0},
+            mini={"calls": 0, "cost": None},
             run_rows=[],
         )
 
@@ -235,8 +257,8 @@ class TestComputeUnitCosts:
     async def test_compute_unit_costs_when_no_run_id_recorded_then_reports_unavailable_not_approximated(self) -> None:
         db = _unit_cost_db(
             diagnostics_completed=3,
-            generation_row={"calls": 0, "cost": None, "unpriced": 0},
-            mini_row={"calls": 0, "cost": None},
+            generation={"calls": 0, "cost": None, "unpriced": 0},
+            mini={"calls": 0, "cost": None},
             run_rows=[],
         )
 
@@ -246,3 +268,40 @@ class TestComputeUnitCosts:
         assert label == "Batch run costs"
         assert "unavailable" in value
         assert "no run_id recorded" in value
+
+
+class TestUnitCostFalsyZero:
+    """Regression coverage: a real $0.00 total must never be conflated with 'no cost
+    data' — that was exactly the bug in the original `if cost:` / `if row["cost"]:`
+    truthiness checks, which is a distinct failure mode from the missing-price case
+    `format_cost()` documents (Decimal("0") is falsy in Python, same as None)."""
+
+    async def test_compute_unit_costs_when_generation_cost_is_real_zero_then_not_reported_as_unpriced(self) -> None:
+        db = _unit_cost_db(
+            diagnostics_completed=0,
+            generation={"calls": 4, "cost": Decimal("0"), "unpriced": 0},
+            mini={"calls": 0, "cost": None},
+            run_rows=[],
+        )
+
+        results = await compute_unit_costs(db, SINCE)
+
+        label, value = results[1]
+        assert label == "Cost per subtopic of generated questions"
+        assert value == "$0.00 per subtopic over 4 calls"
+
+    async def test_compute_unit_costs_when_mini_course_cost_is_real_zero_then_reported_not_no_priced_calls(
+        self,
+    ) -> None:
+        db = _unit_cost_db(
+            diagnostics_completed=0,
+            generation={"calls": 0, "cost": None, "unpriced": 0},
+            mini={"calls": 3, "cost": Decimal("0")},
+            run_rows=[],
+        )
+
+        results = await compute_unit_costs(db, SINCE)
+
+        label, value = results[2]
+        assert label == "Cost per mini-course explanation"
+        assert value == "$0.00 per call"

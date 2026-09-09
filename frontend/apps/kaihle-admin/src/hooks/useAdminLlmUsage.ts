@@ -42,14 +42,33 @@ export function useAdminLlmUsage(params: {
   groupBy: LlmUsageGroupBy;
   page?: number;
   pageSize?: number;
+  /** The recent-runs table only reads `buckets`/`total_buckets` — skip the unit-cost
+   * queries on that call so the backend doesn't compute a result nothing renders. */
+  includeUnitCosts?: boolean;
 }) {
-  const { since, groupBy, page = 1, pageSize = 20 } = params;
+  const {
+    since,
+    groupBy,
+    page = 1,
+    pageSize = 20,
+    includeUnitCosts = true,
+  } = params;
 
   return useQuery({
-    queryKey: ["admin", "llm-usage", { since, groupBy, page, pageSize }],
+    queryKey: [
+      "admin",
+      "llm-usage",
+      { since, groupBy, page, pageSize, includeUnitCosts },
+    ],
     queryFn: async () => {
       const response = await apiClient.get("/api/v1/platform/llm-usage", {
-        params: { since, group_by: groupBy, page, page_size: pageSize },
+        params: {
+          since,
+          group_by: groupBy,
+          page,
+          page_size: pageSize,
+          include_unit_costs: includeUnitCosts,
+        },
       });
       return response.data as LlmUsageResponse;
     },
