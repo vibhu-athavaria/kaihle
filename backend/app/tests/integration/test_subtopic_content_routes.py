@@ -1002,6 +1002,9 @@ async def test_get_status_when_school_scoped_other_school_then_shows_other_schoo
     assert response.status_code == 200
     data = response.json()
     assert data["quiz"]["status"] == "other_school_pending"
+    # Regression: this endpoint must never disclose which school it is — only that
+    # some other school has content staged here (CONSTITUTION Rule 3).
+    assert data["quiz"]["school_id"] is None
 
 
 @pytest.mark.asyncio

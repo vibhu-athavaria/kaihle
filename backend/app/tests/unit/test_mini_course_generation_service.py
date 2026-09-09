@@ -16,6 +16,8 @@ from app.services.mini_course_generation_service import (
     _QUIZ_QUESTION_TARGET,
     MiniCourseGenerationService,
     _parse_quiz_response,
+    compute_gap_count,
+    compute_video_coverage,
 )
 
 # ---------------------------------------------------------------------------
@@ -234,8 +236,11 @@ async def test_generate_quiz_when_archived_row_exists_then_creates_new_row() -> 
 
 
 @pytest.mark.asyncio
-async def test_generate_quiz_when_row_already_at_target_then_skips_llm_and_returns_zero() -> None:
-    """Self-gating: if the existing row has >= _QUIZ_QUESTION_TARGET questions, the LLM is never called."""
+async def test_generate_quiz_when_row_already_at_target_then_skips_llm_and_returns_none() -> None:
+    """Self-gating: if the existing row has >= _QUIZ_QUESTION_TARGET questions, the LLM is
+    never called. Returns None (not 0) — code review finding: 0 must mean "attempted and
+    failed" (a real gap), distinct from "already sufficient" (not a gap at all), or a
+    race between the caller's batch snapshot and this re-check misreports as a gap."""
     db = _make_db()
     subtopic_id = uuid.uuid4()
 
@@ -265,5 +270,78 @@ async def test_generate_quiz_when_row_already_at_target_then_skips_llm_and_retur
         )
         mock_router.complete.assert_not_called()
 
-    assert count == 0
+    assert count is None
     db.add.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests: compute_gap_count / compute_video_coverage (MCR-T3/T4, code-review fixes)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_compute_gap_count_when_no_subtopic_ids_then_returns_zero_without_querying() -> None:
+    """Empty-subtopics guard — untested edge case flagged in code review."""
+    db = _make_db()
+    result = await compute_gap_count(db, [], school_id=uuid.uuid4())
+    assert result == 0
+    db.execute.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_compute_gap_count_when_school_id_given_then_explanation_query_scopes_to_school() -> None:
+    """Cross-school leak fixed in code review: without a scope filter, School A's
+    approved content could count toward closing School B's gaps."""
+    db = _make_db()
+    school_id = uuid.uuid4()
+    subtopic_id = uuid.uuid4()
+
+    cat_count_result = MagicMock()
+    cat_count_result.scalar_one = MagicMock(return_value=4)
+    actual_result = MagicMock()
+    actual_result.scalar_one = MagicMock(return_value=0)
+    quiz_result = MagicMock()
+    quiz_result.all = MagicMock(return_value=[])
+
+    db.execute = AsyncMock(side_effect=[cat_count_result, actual_result, quiz_result])
+
+    await compute_gap_count(db, [subtopic_id], school_id=school_id)
+
+    explanation_query = db.execute.call_args_list[1].args[0]
+    quiz_query = db.execute.call_args_list[2].args[0]
+    school_id_hex = str(school_id).replace("-", "")
+    for query in (explanation_query, quiz_query):
+        compiled_sql = str(query.compile(compile_kwargs={"literal_binds": True}))
+        assert "subtopic_content.scope" in compiled_sql
+        assert school_id_hex in compiled_sql
+
+
+@pytest.mark.asyncio
+async def test_compute_gap_count_when_school_id_none_then_no_scope_filter_applied() -> None:
+    """None means KAIHLE_ADMIN's explicit Rule-12 bypass — count across all schools."""
+    db = _make_db()
+    subtopic_id = uuid.uuid4()
+
+    cat_count_result = MagicMock()
+    cat_count_result.scalar_one = MagicMock(return_value=4)
+    actual_result = MagicMock()
+    actual_result.scalar_one = MagicMock(return_value=0)
+    quiz_result = MagicMock()
+    quiz_result.all = MagicMock(return_value=[])
+
+    db.execute = AsyncMock(side_effect=[cat_count_result, actual_result, quiz_result])
+
+    await compute_gap_count(db, [subtopic_id], school_id=None)
+
+    explanation_query = db.execute.call_args_list[1].args[0]
+    compiled_sql = str(explanation_query.compile(compile_kwargs={"literal_binds": True}))
+    assert "subtopic_content.scope" not in compiled_sql
+
+
+@pytest.mark.asyncio
+async def test_compute_video_coverage_when_no_subtopic_ids_then_returns_zero_zero_without_querying() -> None:
+    """Empty-subtopics guard — untested edge case flagged in code review."""
+    db = _make_db()
+    covered, total = await compute_video_coverage(db, [])
+    assert (covered, total) == (0, 0)
+    db.execute.assert_not_called()

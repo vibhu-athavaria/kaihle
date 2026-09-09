@@ -13,6 +13,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.services.mini_course_generation_service import (
+    INTEREST_CATEGORIES,
+    MiniCourseGenerationService,
+)
+from app.tasks.mini_course_tasks import GenerateMiniCourseTask, _run_generation
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -86,8 +92,6 @@ class TestGenerateForTopic:
         self,
     ) -> None:
         """Rule 17: log WARNING and return early when topic has no subtopics."""
-        from app.services.mini_course_generation_service import MiniCourseGenerationService
-
         db = _make_db()
         topic_id = str(uuid.uuid4())
         school_id = str(uuid.uuid4())
@@ -114,17 +118,18 @@ class TestGenerateForTopic:
         mock_logger.warning.assert_called_once()
         warning_call_event = mock_logger.warning.call_args[0][0]
         assert "no_subtopics" in warning_call_event
+        # Code-review finding: this early return used to omit these keys entirely,
+        # so callers' result.get("complete") read None/falsy and mismarked a topic
+        # with nothing to generate as "partial" instead of "ready".
+        assert result["complete"] is True
+        assert result["explanation_gaps"] == []
+        assert result["quiz_gaps"] == []
 
     @pytest.mark.asyncio
     async def test_generate_topic_mini_course_when_subtopics_exist_then_calls_llm_for_each_interest_category(
         self,
     ) -> None:
         """One LLM call per (subtopic, interest_category) pair — 4 calls for 1 subtopic."""
-        from app.services.mini_course_generation_service import (
-            INTEREST_CATEGORIES,
-            MiniCourseGenerationService,
-        )
-
         db = _make_db()
         topic_id = str(uuid.uuid4())
         school_id = str(uuid.uuid4())
@@ -190,11 +195,6 @@ class TestGenerateForTopic:
         self,
     ) -> None:
         """MCR-T3: one bad call among several must not block or discard the rest."""
-        from app.services.mini_course_generation_service import (
-            INTEREST_CATEGORIES,
-            MiniCourseGenerationService,
-        )
-
         db = _make_db()
         topic_id = str(uuid.uuid4())
         school_id = str(uuid.uuid4())
@@ -243,15 +243,50 @@ class TestGenerateForTopic:
         db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_generate_topic_mini_course_when_quiz_self_gate_returns_none_then_not_recorded_as_gap(
+        self,
+    ) -> None:
+        """Code-review finding: _generate_quiz_questions returning None (self-gate found
+        the row already sufficient on a fresh re-check — e.g. an overlapping run for
+        this topic finished it between the batch snapshot and this call) must not be
+        recorded as a quiz_gap. Only an actual 0 (LLM/parse failure) is a gap."""
+        db = _make_db()
+        topic_id = str(uuid.uuid4())
+        school_id = str(uuid.uuid4())
+        subtopic = _make_subtopic()
+
+        topic_context_row = MagicMock()
+        topic_context_row.topic_name = "Algebra"
+        topic_context_row.subject_name = "Mathematics"
+        topic_context_row.grade_level = 8
+
+        categories = [_make_interest_category(db_name) for db_name, _, _ in INTEREST_CATEGORIES]
+        # existing_count=0 < target, so generate_for_topic will call
+        # _generate_quiz_questions — mocked below to return None.
+        existing_pair_rows = [MagicMock(subtopic_id=subtopic.id, interest_category_id=cat.id) for cat in categories]
+
+        db.execute.side_effect = [
+            _make_first_result(topic_context_row),
+            _make_scalars_result([subtopic]),
+            _make_scalars_result(categories),
+            _make_all_result(existing_pair_rows),  # _fetch_existing_content_pairs: all 4 pairs already exist
+            _make_all_result([]),  # _fetch_existing_question_counts: none yet
+        ]
+
+        service = MiniCourseGenerationService(db)
+
+        with patch.object(MiniCourseGenerationService, "_generate_quiz_questions", new=AsyncMock(return_value=None)):
+            result = await service.generate_for_topic(topic_id=topic_id, school_id=school_id)
+
+        assert result["quiz_gaps"] == []
+        assert result["questions_written"] == 0
+        assert result["complete"] is True
+
+    @pytest.mark.asyncio
     async def test_generate_topic_mini_course_when_content_already_approved_then_skips_subtopic(
         self,
     ) -> None:
         """Non-rejected content row exists → skip LLM call for that pair."""
-        from app.services.mini_course_generation_service import (
-            INTEREST_CATEGORIES,
-            MiniCourseGenerationService,
-        )
-
         db = _make_db()
         topic_id = str(uuid.uuid4())
         school_id = str(uuid.uuid4())
@@ -314,11 +349,6 @@ class TestGenerateForTopic:
         test_generate_topic_mini_course_when_llm_fails_then_retries, which asserted the
         pre-MCR-T3 fail-fast behavior this task deliberately removed.
         """
-        from app.services.mini_course_generation_service import (
-            INTEREST_CATEGORIES,
-            MiniCourseGenerationService,
-        )
-
         db = _make_db()
         topic_id = str(uuid.uuid4())
         school_id = str(uuid.uuid4())
@@ -392,8 +422,6 @@ class TestRunGeneration:
 
     @pytest.mark.asyncio
     async def test_run_generation_when_result_complete_then_status_set_to_ready(self) -> None:
-        from app.tasks.mini_course_tasks import _run_generation
-
         db = _make_db()
         topic = _make_topic()
         teacher = MagicMock(email="teacher@test.com")
@@ -428,8 +456,6 @@ class TestRunGeneration:
     async def test_run_generation_when_result_incomplete_with_partial_progress_then_status_set_to_partial(
         self,
     ) -> None:
-        from app.tasks.mini_course_tasks import _run_generation
-
         db = _make_db()
         topic = _make_topic()
         teacher = MagicMock(email="teacher@test.com")
@@ -443,6 +469,8 @@ class TestRunGeneration:
         mock_service.generate_for_topic = AsyncMock(
             return_value={
                 "complete": False,
+                "explanations_written": 3,
+                "questions_written": 1,
                 "explanation_gaps": [{"subtopic_name": "Fractions", "interest_category": "Sports & Fitness"}],
                 "quiz_gaps": [],
             }
@@ -465,8 +493,6 @@ class TestRunGeneration:
 
     @pytest.mark.asyncio
     async def test_run_generation_when_result_incomplete_then_warning_logged_with_gap_detail(self) -> None:
-        from app.tasks.mini_course_tasks import _run_generation
-
         db = _make_db()
         topic = _make_topic()
         db.execute.side_effect = [
@@ -478,7 +504,13 @@ class TestRunGeneration:
         gaps = [{"subtopic_name": "Fractions", "interest_category": "Sports & Fitness"}]
         mock_service = MagicMock()
         mock_service.generate_for_topic = AsyncMock(
-            return_value={"complete": False, "explanation_gaps": gaps, "quiz_gaps": []}
+            return_value={
+                "complete": False,
+                "explanations_written": 3,
+                "questions_written": 1,
+                "explanation_gaps": gaps,
+                "quiz_gaps": [],
+            }
         )
 
         with (
@@ -499,9 +531,142 @@ class TestRunGeneration:
         assert warning_calls[0].kwargs["gap_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_run_generation_when_service_raises_unexpectedly_then_status_set_to_failed(self) -> None:
-        from app.tasks.mini_course_tasks import _run_generation
+    async def test_run_generation_when_zero_items_succeed_then_raises_and_marks_failed(self) -> None:
+        """Code-review finding: catching per-item LLM failures internally (MCR-T3) must
+        not silently remove Celery's retry for a TOTAL outage — the case it was built
+        for. A run that attempted work (gaps present) and produced zero successes must
+        still raise, hit the except block, mark 'failed', and let Celery retry / the
+        on_failure CRITICAL alert fire after retries are exhausted — exactly the
+        pre-MCR-T3 behavior for this specific case. A partial success (something
+        landed) must NOT raise — see test_run_generation_when_result_incomplete_with_partial_progress_then_status_set_to_partial.
+        """
+        db = _make_db()
+        topic = _make_topic()
+        db.execute.side_effect = [
+            _make_scalar_one_or_none_result(topic),
+            _make_all_result([]),
+        ]
 
+        mock_service = MagicMock()
+        mock_service.generate_for_topic = AsyncMock(
+            return_value={
+                "complete": False,
+                "explanations_written": 0,
+                "questions_written": 0,
+                "explanation_gaps": [{"subtopic_name": "Fractions", "interest_category": "Sports & Fitness"}],
+                "quiz_gaps": [],
+            }
+        )
+
+        with (
+            patch("app.core.database.CeleryAsyncSessionLocal", return_value=_FakeSessionCM(db)),
+            patch(
+                "app.services.mini_course_generation_service.MiniCourseGenerationService",
+                return_value=mock_service,
+            ),
+            pytest.raises(RuntimeError, match="zero successful items"),
+        ):
+            await _run_generation(
+                task=MagicMock(), topic_id=str(uuid.uuid4()), school_id=str(uuid.uuid4()), teacher_id=""
+            )
+
+        assert topic.mini_course_status == "failed"
+
+    @pytest.mark.asyncio
+    async def test_run_generation_when_no_subtopics_then_marked_ready_not_partial(self) -> None:
+        """Code-review finding: generate_for_topic's Rule-17 'no subtopics' early return
+        used to omit complete/explanation_gaps/quiz_gaps, so result.get('complete') read
+        None/falsy and this case was mismarked 'partial' instead of 'ready' — a topic
+        with nothing to generate isn't a failure of any kind."""
+        db = _make_db()
+        topic = _make_topic()
+        db.execute.side_effect = [
+            _make_scalar_one_or_none_result(topic),
+            _make_all_result([]),
+        ]
+
+        mock_service = MagicMock()
+        mock_service.generate_for_topic = AsyncMock(
+            return_value={
+                "subtopics_found": 0,
+                "subtopics_processed": 0,
+                "explanations_written": 0,
+                "questions_written": 0,
+                "explanation_gaps": [],
+                "quiz_gaps": [],
+                "complete": True,
+            }
+        )
+
+        with (
+            patch("app.core.database.CeleryAsyncSessionLocal", return_value=_FakeSessionCM(db)),
+            patch(
+                "app.services.mini_course_generation_service.MiniCourseGenerationService",
+                return_value=mock_service,
+            ),
+        ):
+            await _run_generation(
+                task=MagicMock(), topic_id=str(uuid.uuid4()), school_id=str(uuid.uuid4()), teacher_id=""
+            )
+
+        assert topic.mini_course_status == "ready"
+
+    @pytest.mark.asyncio
+    async def test_run_generation_when_fast_path_checked_then_query_scopes_to_caller_school(self) -> None:
+        """Code-review finding: the fast-path 'already complete' check counted ALL
+        schools' content for a topic with no scope filter — School A finishing
+        generation for a shared curriculum topic could make this fast path fire for
+        School B too, marking School B's topic 'ready' while School B's own students
+        still see nothing. A mocked db.execute doesn't evaluate WHERE clauses, so this
+        asserts the compiled SQL of the actual_count query references the caller's
+        school_id, rather than trusting the returned (mocked) count alone."""
+        db = _make_db()
+        topic = _make_topic()
+        school_id = uuid.uuid4()
+        subtopic_id = uuid.uuid4()
+
+        subtopic_ids_result = MagicMock()
+        subtopic_ids_result.all = MagicMock(return_value=[(subtopic_id,)])
+        cat_count_result = MagicMock()
+        cat_count_result.scalar_one = MagicMock(return_value=4)
+        actual_count_result = MagicMock()
+        actual_count_result.scalar_one = MagicMock(return_value=0)  # not complete -> slow path
+
+        mock_service = MagicMock()
+        mock_service.generate_for_topic = AsyncMock(
+            return_value={
+                "complete": True,
+                "explanations_written": 4,
+                "questions_written": 5,
+                "explanation_gaps": [],
+                "quiz_gaps": [],
+            }
+        )
+
+        db.execute.side_effect = [
+            _make_scalar_one_or_none_result(topic),
+            subtopic_ids_result,
+            cat_count_result,
+            actual_count_result,
+            _make_scalar_one_or_none_result(None),  # teacher_id == "" -> not queried, placeholder unused
+        ]
+
+        with (
+            patch("app.core.database.CeleryAsyncSessionLocal", return_value=_FakeSessionCM(db)),
+            patch(
+                "app.services.mini_course_generation_service.MiniCourseGenerationService",
+                return_value=mock_service,
+            ),
+        ):
+            await _run_generation(task=MagicMock(), topic_id=str(uuid.uuid4()), school_id=str(school_id), teacher_id="")
+
+        actual_count_query = db.execute.call_args_list[3].args[0]
+        compiled_sql = str(actual_count_query.compile(compile_kwargs={"literal_binds": True}))
+        assert "subtopic_content.scope" in compiled_sql
+        assert str(school_id).replace("-", "") in compiled_sql
+
+    @pytest.mark.asyncio
+    async def test_run_generation_when_service_raises_unexpectedly_then_status_set_to_failed(self) -> None:
         db = _make_db()
         topic = _make_topic()
         db.execute.side_effect = [
@@ -528,8 +693,6 @@ class TestRunGeneration:
 
     @pytest.mark.asyncio
     async def test_run_generation_when_partial_then_email_still_sent_to_teacher(self) -> None:
-        from app.tasks.mini_course_tasks import _run_generation
-
         db = _make_db()
         topic = _make_topic()
         teacher = MagicMock(email="teacher@test.com")
@@ -543,6 +706,8 @@ class TestRunGeneration:
         mock_service.generate_for_topic = AsyncMock(
             return_value={
                 "complete": False,
+                "explanations_written": 3,
+                "questions_written": 1,
                 "explanation_gaps": [{"subtopic_name": "Fractions", "interest_category": "Sports & Fitness"}],
                 "quiz_gaps": [],
             }
@@ -575,8 +740,6 @@ class TestGenerateMiniCourseTask:
 
     def test_generate_topic_mini_course_task_on_failure_logs_critical(self) -> None:
         """GenerateMiniCourseTask.on_failure must emit a CRITICAL log (Rule 18)."""
-        from app.tasks.mini_course_tasks import GenerateMiniCourseTask
-
         task = GenerateMiniCourseTask()
         topic_id = str(uuid.uuid4())
         exc = RuntimeError("Some unrecoverable error")

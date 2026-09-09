@@ -28,6 +28,7 @@ from app.ai.providers import router as llm_router
 from app.models.curriculum import CurriculumTopic, Grade, QuestionBank, Subject, Subtopic, Topic
 from app.models.interest_category import InterestCategory
 from app.models.subtopic_content import SubtopicContent
+from app.services.subtopic_content_visibility import visible_scope_clause
 
 logger = structlog.get_logger(__name__)
 
@@ -84,21 +85,35 @@ class TopicNotFoundError(Exception):
     pass
 
 
-async def compute_gap_count(db: AsyncSession, topic_id: uuid.UUID) -> int:
-    """Live count of remaining explanation + quiz gaps for a topic's mini-course.
+async def fetch_active_subtopic_ids(db: AsyncSession, topic_id: uuid.UUID) -> list[uuid.UUID]:
+    """Active subtopic ids for a topic. Shared by compute_gap_count and
+    compute_video_coverage so a caller needing both fetches this once, not per-function
+    (both used to re-run this identical join query independently)."""
+    result = await db.execute(
+        select(Subtopic.id)
+        .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+        .where(CurriculumTopic.topic_id == topic_id, Subtopic.is_active.is_(True))
+    )
+    return [row[0] for row in result.all()]
+
+
+async def compute_gap_count(db: AsyncSession, subtopic_ids: list[uuid.UUID], school_id: uuid.UUID | None) -> int:
+    """Live count of remaining explanation + quiz gaps across these subtopics, as seen
+    by the given school.
 
     Recomputed from current DB state on every call — never cached, and not read from
     the gap detail logged by the last generation run — so it stays correct even if
     content was rejected or edited after that run (CONSTITUTION: derived data must not
     drift from its source). Used by GET /topics/{topic_id}/course-status to report how
     much is left when status="partial" (MCR-T3).
+
+    school_id scopes both counts to what that school can actually see (curriculum-scope
+    + their own school-scope rows) — Topic is school-agnostic shared curriculum data, so
+    without this, School A's approved content would count toward closing School B's
+    gaps even though School B's own students never see School A's rows
+    (mini_course_service.py's delivery queries apply the identical filter). None means
+    KAIHLE_ADMIN's explicit Rule-12 bypass — count across all schools.
     """
-    subtopic_result = await db.execute(
-        select(Subtopic.id)
-        .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
-        .where(CurriculumTopic.topic_id == topic_id, Subtopic.is_active.is_(True))
-    )
-    subtopic_ids = [row[0] for row in subtopic_result.all()]
     if not subtopic_ids:
         return 0
 
@@ -106,7 +121,7 @@ async def compute_gap_count(db: AsyncSession, topic_id: uuid.UUID) -> int:
     expected_cat_count: int = cat_count_result.scalar_one()
     expected_explanations = len(subtopic_ids) * expected_cat_count
 
-    actual_result = await db.execute(
+    explanation_query = (
         select(func.count())
         .select_from(SubtopicContent)
         .where(
@@ -117,36 +132,34 @@ async def compute_gap_count(db: AsyncSession, topic_id: uuid.UUID) -> int:
             SubtopicContent.is_archived.is_(False),
         )
     )
+    quiz_query = select(SubtopicContent.subtopic_id, SubtopicContent.quiz_questions_count).where(
+        SubtopicContent.subtopic_id.in_(subtopic_ids),
+        SubtopicContent.content_type == "quiz",
+        SubtopicContent.is_archived.is_(False),
+    )
+    if school_id is not None:
+        explanation_query = explanation_query.where(visible_scope_clause(school_id))
+        quiz_query = quiz_query.where(visible_scope_clause(school_id))
+
+    actual_result = await db.execute(explanation_query)
     actual_explanations: int = actual_result.scalar_one()
     explanation_gap_count = max(0, expected_explanations - actual_explanations)
 
-    quiz_result = await db.execute(
-        select(SubtopicContent.subtopic_id, SubtopicContent.quiz_questions_count).where(
-            SubtopicContent.subtopic_id.in_(subtopic_ids),
-            SubtopicContent.content_type == "quiz",
-            SubtopicContent.is_archived.is_(False),
-        )
-    )
+    quiz_result = await db.execute(quiz_query)
     quiz_counts = {row[0]: (row[1] or 0) for row in quiz_result.all()}
     quiz_gap_count = sum(1 for sid in subtopic_ids if quiz_counts.get(sid, 0) < _QUIZ_QUESTION_TARGET)
 
     return explanation_gap_count + quiz_gap_count
 
 
-async def compute_video_coverage(db: AsyncSession, topic_id: uuid.UUID) -> tuple[int, int]:
-    """Return (covered, total) subtopics for a topic's video curation status.
+async def compute_video_coverage(db: AsyncSession, subtopic_ids: list[uuid.UUID]) -> tuple[int, int]:
+    """Return (covered, total) for these subtopics' video curation status.
 
     A subtopic counts as covered only for an approved, curriculum-scope video — video is
     always global (one curated set, not personalised per interest category), curated
     manually by KaihleAdmin, never generated by this service (MCR-T4). This is reported
     as a non-blocking signal alongside course-status; it never affects "ready"/"partial".
     """
-    subtopic_result = await db.execute(
-        select(Subtopic.id)
-        .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
-        .where(CurriculumTopic.topic_id == topic_id, Subtopic.is_active.is_(True))
-    )
-    subtopic_ids = [row[0] for row in subtopic_result.all()]
     if not subtopic_ids:
         return 0, 0
 
@@ -220,6 +233,14 @@ class MiniCourseGenerationService:
                 "subtopics_found": 0,
                 "subtopics_processed": 0,
                 "explanations_written": 0,
+                "questions_written": 0,
+                # A topic with nothing to generate is trivially complete, not "partial" —
+                # without these keys, _run_generation's result.get("complete") reads
+                # None/falsy and mismarks the topic "partial" for a run that had nothing
+                # to do at all (regression caught in code review).
+                "explanation_gaps": [],
+                "quiz_gaps": [],
+                "complete": True,
             }
 
         # 3. Resolve interest category IDs from DB
@@ -323,12 +344,16 @@ class MiniCourseGenerationService:
                     school_id=uuid.UUID(school_id),
                     dry_run=dry_run,
                 )
-                questions_written += written
-                # written==0 here always means a gap: we already know existing_count is
-                # below target, so the only way to write 0 is the LLM call or the parse
-                # step failing (both handled inside _generate_quiz_questions).
-                if written == 0:
-                    quiz_gaps.append({"subtopic_name": subtopic.name, "existing_count": existing_count})
+                # None means the self-gate found the row already sufficient on a fresh
+                # re-check (e.g. an overlapping run for this topic finished it between
+                # our batch fetch and this call) — not a gap. 0 means an LLM call or
+                # parse step genuinely failed — that IS a gap. Conflating the two used
+                # to over-report gaps_count and could leave a fully-complete topic stuck
+                # showing "partial" after a double-click.
+                if written is not None:
+                    questions_written += written
+                    if written == 0:
+                        quiz_gaps.append({"subtopic_name": subtopic.name, "existing_count": existing_count})
 
         if not dry_run:
             await self.db.commit()
@@ -425,12 +450,17 @@ class MiniCourseGenerationService:
         grade_level: int,
         school_id: uuid.UUID,
         dry_run: bool,
-    ) -> int:
-        """Generate and stage quiz questions for one subtopic. Returns count written.
+    ) -> int | None:
+        """Generate and stage quiz questions for one subtopic. Returns count written,
+        or None if the self-gate found the row already sufficient (see below) —
+        the two are not the same outcome and callers must not conflate them.
 
-        Self-gating: fetches the existing active staging row before calling the LLM.
-        Returns 0 immediately if the row already has >= _QUIZ_QUESTION_TARGET questions,
-        so callers do not need to perform their own sufficiency check.
+        Self-gating: fetches the existing active staging row before calling the LLM and
+        re-checks sufficiency here rather than trusting the caller's batch-fetched
+        snapshot. That snapshot can go stale between the batch fetch and this call (e.g.
+        an overlapping "Generate missing" click for the same topic) — re-checking, and
+        returning the distinct None outcome rather than 0, stops that race from being
+        misreported as a quiz_gap when the quiz is actually already complete.
         """
         # Fetch once; reused for both the gate check and the write below.
         # Skipped in dry_run — dry_run never touches the DB.
@@ -445,7 +475,7 @@ class MiniCourseGenerationService:
             )
             quiz_content = existing_result.scalars().first()
             if quiz_content is not None and (quiz_content.quiz_questions_count or 0) >= _QUIZ_QUESTION_TARGET:
-                return 0
+                return None
 
         template = _jinja_env.get_template("mini_course_quiz.jinja2")
         prompt_text = template.render(

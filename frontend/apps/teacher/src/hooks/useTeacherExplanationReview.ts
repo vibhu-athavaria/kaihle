@@ -128,6 +128,10 @@ export function useUpdateExplanation() {
       queryClient.invalidateQueries({
         queryKey: ["teacher", "explanation-review", variables.classId],
       });
+      // Code-review finding: approving/rejecting here never invalidated the sidebar's
+      // pending-count badge (usePendingReviewCount), so it kept showing a stale count
+      // for up to 60s (its staleTime) after a teacher cleared their queue.
+      queryClient.invalidateQueries({ queryKey: ["pending-review-count"] });
     },
   });
 }

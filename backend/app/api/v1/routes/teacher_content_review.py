@@ -185,9 +185,17 @@ async def update_explanation_review(
             detail=f"No explanation content found for subtopic {subtopic_id}",
         )
 
-    # A curriculum-scope row belongs to everyone; a school-scope row must belong to this
-    # teacher's own school. Without this check a teacher could approve/reject/edit another
-    # school's pending content just by knowing its subtopic_id (CONSTITUTION Rule 3).
+    # A school-scope row must belong to this teacher's own school (closes the read/write
+    # leak fixed in MCR-T1). A curriculum-scope row is KaihleAdmin-owned global content —
+    # unlike topics.py's review_topic_variant, this endpoint has no "claim it for my
+    # school" semantics, so a teacher approving/rejecting/editing it here would silently
+    # change status for every school at once with no KaihleAdmin authorization at all.
+    # Block both, rather than inventing new claim behavior as part of a security fix.
+    if sc.scope == "curriculum":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Curriculum-wide content can only be reviewed by Kaihle Admin",
+        )
     if sc.scope == "school" and sc.school_id != class_.school_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

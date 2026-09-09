@@ -39,14 +39,28 @@ export function TopicMiniCourseButton({
 }: TopicMiniCourseButtonProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: courseStatus, isLoading: statusLoading } =
-    useCourseStatus(topicId);
+  const {
+    data: courseStatus,
+    dataUpdatedAt,
+    isLoading: statusLoading,
+  } = useCourseStatus(topicId);
   const mutation = useGenerateMiniCourse();
 
   const [localState, setLocalState] = useState<LocalState>("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // "ready" can only be reached by finishing a real run — a "View Course" button
+  // short-circuits handleClick before "generating" is ever entered, so the old
+  // ready-only check never saw a stale "ready" from before the click. "partial" has no
+  // such guarantee: it's both the button's OWN idle/entry state (shown as "Generate
+  // missing") and a legitimate post-run resting state, so the same cached value can
+  // be sitting there both before and after a click. Capturing dataUpdatedAt at the
+  // moment "generating" starts, and only auto-completing once a FRESH fetch (newer than
+  // that) confirms ready/partial, closes the race where invalidateQueries' refetch
+  // hadn't resolved yet and the effect fired on the pre-click stale "partial" —
+  // instantly reverting the button to idle before the Celery task had done any work.
+  const generatingStartedAtRef = useRef<number>(0);
 
   useEffect(() => {
     return () => {
@@ -54,21 +68,20 @@ export function TopicMiniCourseButton({
     };
   }, []);
 
-  // When real generation completes (status flips from generating → ready),
-  // return local state to idle so the "View Course" button appears.
+  // When real generation completes (status flips from generating → ready/partial),
+  // return local state to idle so the resting-state button appears.
   useEffect(() => {
-    if (
-      (courseStatus?.status === "ready" ||
-        courseStatus?.status === "partial") &&
-      localState === "generating"
-    ) {
+    const settledFresh =
+      dataUpdatedAt > generatingStartedAtRef.current &&
+      (courseStatus?.status === "ready" || courseStatus?.status === "partial");
+    if (settledFresh && localState === "generating") {
       setLocalState("idle");
     }
     if (courseStatus?.status === "failed" && localState === "generating") {
       setLocalState("error");
       setErrorMessage("Generation failed. Our team has been notified.");
     }
-  }, [courseStatus?.status, localState]);
+  }, [courseStatus?.status, dataUpdatedAt, localState]);
 
   function handleClick() {
     if (localState !== "idle") return;
@@ -97,6 +110,7 @@ export function TopicMiniCourseButton({
               });
             }, 35_000);
           } else {
+            generatingStartedAtRef.current = dataUpdatedAt;
             setLocalState("generating");
             // useCourseStatus polls every 5s when status = generating
             queryClient.invalidateQueries({
@@ -160,8 +174,8 @@ export function TopicMiniCourseButton({
 
   // Partial — some content generated, some gaps remain. Amber, not red: most of this
   // topic's content is real and usable, so "Retry" (which reads as "start over") would
-  // be misleading — "Finish generation" reflects that clicking only fills the gaps
-  // (the underlying task is idempotent and skips everything already written).
+  // be misleading. Labeled "Generate missing" to match CourseDetailPage's banner for
+  // the same underlying idempotent action (Kilo Code review finding).
   if (courseStatus?.status === "partial" && localState === "idle") {
     return (
       <div className="space-y-1">
@@ -169,10 +183,10 @@ export function TopicMiniCourseButton({
           type="button"
           onClick={handleClick}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-brand-gold bg-[#fffbeb] border border-brand-gold/30 hover:bg-brand-gold hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
-          aria-label="Some content is still missing — click to finish generation"
+          aria-label="Generate missing content for this topic"
         >
           <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" />
-          Finish generation
+          Generate missing
           {courseStatus.gaps_count > 0
             ? ` (${courseStatus.gaps_count} left)`
             : ""}

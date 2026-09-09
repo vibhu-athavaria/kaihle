@@ -246,6 +246,39 @@ async def test_update_explanation_review_when_content_belongs_to_other_school_th
 
 
 @pytest.mark.asyncio
+async def test_update_explanation_review_when_content_is_curriculum_scope_then_403(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    school: School,
+) -> None:
+    """A teacher must not be able to approve/reject/edit KaihleAdmin-owned global
+    curriculum content via this endpoint — it has no 'claim for my school' semantics
+    (unlike topics.py's review_topic_variant), so doing so would change status for every
+    school at once with no KaihleAdmin authorization. Kilo Code bot finding."""
+    (
+        _,
+        _,
+        _,
+        _,
+        _,
+        teacher,
+        class_,
+        subtopic_content,
+    ) = await _create_full_setup(db_session, school)
+
+    # _create_full_setup's default row has no explicit scope — defaults to 'curriculum'.
+    assert subtopic_content.scope == "curriculum"
+
+    response = await client.patch(
+        f"{TEACHER_ROUTE_PREFIX}/{class_.id}/explanation-review/{subtopic_content.subtopic_id}",
+        headers=make_auth_header(teacher),
+        json={"review_status": "approved"},
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_list_all_teacher_explanation_review_when_has_content(
     client: AsyncClient,
     db_session: AsyncSession,

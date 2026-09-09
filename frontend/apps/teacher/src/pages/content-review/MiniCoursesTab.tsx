@@ -16,6 +16,15 @@ function statusBadge(status: string) {
           Generating
         </span>
       );
+    case "partial":
+      // Amber, not red — most content is real and usable; matches
+      // TopicMiniCourseButton's "partial" treatment for the same status.
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-brand-gold bg-[#fffbeb] border border-brand-gold/30">
+          <AlertCircle className="w-3 h-3" aria-hidden="true" />
+          Mostly ready
+        </span>
+      );
     case "failed":
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-red-600 bg-red-50 border border-red-200">
@@ -72,7 +81,8 @@ function ClassMiniCourses({
             </p>
           </div>
 
-          {topic.mini_course_status === "ready" && (
+          {(topic.mini_course_status === "ready" ||
+            topic.mini_course_status === "partial") && (
             <Link
               to={`/teacher/content-review/mini-courses/${topic.topic_id}?classId=${classId}`}
               className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-brand-primary text-brand-primary hover:bg-brand-primary hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2"
