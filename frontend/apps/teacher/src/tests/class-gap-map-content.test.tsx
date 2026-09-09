@@ -258,7 +258,7 @@ describe("ClassGapMapContent — provisional evidence (MLH-T6)", () => {
     // unexplained visual difference rather than a signal a teacher can act on.
     renderComponent();
     expect(
-      screen.getByText(/Provisional — limited evidence/i),
+      screen.getByText(/Dashed outline — provisional/i),
     ).toBeInTheDocument();
   });
 

@@ -50,14 +50,21 @@ export function GapMapLegend({ hint }: GapMapLegendProps) {
         {/* Uncertainty is carried by border style, never by a washed-out fill
             (DESIGN_SYSTEM §11). Shape survives greyscale printing, a projector and
             colour-blindness, where a tint would not — satisfying §9.1, colour is never
-            the only signal. */}
+            the only signal.
+
+            The swatch is deliberately UNCOLOURED and the label names the encoding
+            explicitly ("Dashed outline"). A real provisional cell keeps its band colour
+            and takes the dash in that band's tone, so a green dashed cell and an amber
+            dashed cell both mean the same thing. Tinting this swatch to any one band
+            would imply provisional belongs to that band; naming the shape instead makes
+            the entry read correctly against all three. */}
         <div className="flex items-center gap-1.5">
           <span
-            className="w-4 h-4 rounded border-2 border-dashed border-brand-muted"
+            className="w-4 h-4 rounded border-2 border-dashed border-brand-body"
             aria-hidden="true"
           />
           <span className="text-xs font-medium text-brand-body">
-            Provisional — limited evidence
+            Dashed outline — provisional, limited evidence
           </span>
         </div>
       </div>

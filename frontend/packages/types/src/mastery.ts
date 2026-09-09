@@ -111,8 +111,15 @@ export function scoreToPercent(score: number | null): string {
 /**
  * Confidence below which a mastery score is shown as provisional.
  *
- * Mirrors PROVISIONAL_CONFIDENCE_THRESHOLD in backend/app/services/gap_service.py — the
- * two must move together, or a cell will disagree with the column count above it.
+ * Owned here. The threshold is a PRESENTATION decision — where to stop trusting a score
+ * enough to act on it alone — so it lives with the rendering, not with the writer. An
+ * earlier copy in backend/app/services/gap_service.py was removed once nothing read it;
+ * a constant duplicated across two languages with no test spanning them is a drift trap,
+ * not a safeguard.
+ *
+ * It is NOT independent of the backend, though: see the ceiling invariant in
+ * __tests__/mastery.test.ts, which asserts this value sits below the highest confidence
+ * the writer path can actually produce.
  *
  * 0.5 is the midpoint of the current confidence ramp (min(attempts / 5, 1)), i.e. fewer
  * than roughly three attempts. MLH-T3 replaces that ramp with posterior variance, at which
