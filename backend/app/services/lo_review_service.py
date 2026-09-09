@@ -191,7 +191,7 @@ class LoReviewService:
                 .where(QuestionBank.id.in_([uuid.UUID(q) for q in item.question_ids]), binding_scope)
                 .values(learning_objective_id=objective_id)
             )
-            bound = result.rowcount or 0
+            bound = cast("CursorResult[Any]", result).rowcount or 0
 
         item.status = STATUS_APPROVED
         item.chosen_objective_id = objective_id
@@ -323,7 +323,7 @@ class LoReviewService:
                 )
                 .values(learning_objective_id=uuid.UUID(by_code[code]))
             )
-            bound += result.rowcount or 0
+            bound += cast("CursorResult[Any]", result).rowcount or 0
 
         # Undecided questions must stay visible as outstanding work. Leaving them
         # only inside a SPLIT card made the Pending count understate the queue by 88
@@ -472,7 +472,7 @@ class LoReviewService:
         result = await self.db.execute(
             update(QuestionBank).where(QuestionBank.id.in_(question_ids)).values(learning_objective_id=objective_id)
         )
-        updated = result.rowcount or 0
+        updated = cast("CursorResult[Any]", result).rowcount or 0
         resolved = await self._resolve_completed_items(question_ids, reviewer_id)
         await self.db.commit()
 
