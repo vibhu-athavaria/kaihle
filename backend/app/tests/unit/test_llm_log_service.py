@@ -7,9 +7,15 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.llm_log_service import get_llm_log, list_llm_logs
+from app.services.llm_log_service import (
+    InvalidSortError,
+    get_llm_log,
+    list_llm_log_filter_options,
+    list_llm_logs,
+)
 
 LOG_ID = uuid.uuid4()
 SCHOOL_ID = uuid.uuid4()
@@ -103,6 +109,94 @@ class TestListLlmLogs:
 
         params = db.execute.call_args_list[0].args[1]
         assert params["offset"] == 0
+
+
+class TestListLlmLogsFilteringAndSorting:
+    async def test_list_llm_logs_when_task_filter_given_then_bound_as_param_not_interpolated(self) -> None:
+        db = _mock_db(rows=[], total=0)
+
+        await list_llm_logs(db, task="lesson_plan")
+
+        rows_call_params = db.execute.call_args_list[0].args[1]
+        assert rows_call_params["task"] == "lesson_plan"
+        rows_call_sql = str(db.execute.call_args_list[0].args[0])
+        assert ":task" in rows_call_sql
+
+    async def test_list_llm_logs_when_model_filter_given_then_applied_to_both_rows_and_count(self) -> None:
+        db = _mock_db(rows=[], total=0)
+
+        await list_llm_logs(db, model="test/model-a")
+
+        for call in db.execute.call_args_list:
+            assert call.args[1].get("model") == "test/model-a"
+
+    async def test_list_llm_logs_when_no_filters_then_no_where_clause(self) -> None:
+        db = _mock_db(rows=[], total=0)
+
+        await list_llm_logs(db)
+
+        rows_call_sql = str(db.execute.call_args_list[0].args[0])
+        assert "WHERE" not in rows_call_sql
+
+    async def test_list_llm_logs_when_sort_by_valid_column_then_used_in_order_by(self) -> None:
+        db = _mock_db(rows=[], total=0)
+
+        await list_llm_logs(db, sort_by="latency_ms", sort_dir="asc")
+
+        rows_call_sql = str(db.execute.call_args_list[0].args[0])
+        assert "ORDER BY latency_ms ASC" in rows_call_sql
+
+    async def test_list_llm_logs_when_sort_by_cost_then_maps_to_estimated_cost_column(self) -> None:
+        db = _mock_db(rows=[], total=0)
+
+        await list_llm_logs(db, sort_by="cost", sort_dir="desc")
+
+        rows_call_sql = str(db.execute.call_args_list[0].args[0])
+        assert "ORDER BY estimated_cost_usd DESC" in rows_call_sql
+
+    async def test_list_llm_logs_when_sort_by_invalid_column_then_rejected_before_query(self) -> None:
+        db = MagicMock(spec=AsyncSession)
+        db.execute = AsyncMock()
+
+        with pytest.raises(InvalidSortError):
+            await list_llm_logs(db, sort_by="prompt_text; DROP TABLE llm_usage_events;--")
+
+        db.execute.assert_not_called()
+
+    async def test_list_llm_logs_when_sort_dir_invalid_then_rejected_before_query(self) -> None:
+        db = MagicMock(spec=AsyncSession)
+        db.execute = AsyncMock()
+
+        with pytest.raises(InvalidSortError):
+            await list_llm_logs(db, sort_dir="descending")
+
+        db.execute.assert_not_called()
+
+
+class TestListLlmLogFilterOptions:
+    async def test_list_llm_log_filter_options_when_events_present_then_distinct_values_returned(self) -> None:
+        db = MagicMock(spec=AsyncSession)
+        tasks_result = MagicMock()
+        tasks_result.all.return_value = [("lesson_plan",), ("question_generation",)]
+        models_result = MagicMock()
+        models_result.all.return_value = [("test/model-a",), ("test/model-b",)]
+        db.execute = AsyncMock(side_effect=[tasks_result, models_result])
+
+        tasks, models = await list_llm_log_filter_options(db)
+
+        assert tasks == ["lesson_plan", "question_generation"]
+        assert models == ["test/model-a", "test/model-b"]
+
+    async def test_list_llm_log_filter_options_when_no_events_then_empty_lists(self) -> None:
+        db = MagicMock(spec=AsyncSession)
+        empty_result = MagicMock()
+        empty_result.all.return_value = []
+        db.execute = AsyncMock(side_effect=[empty_result, empty_result])
+
+        tasks, models = await list_llm_log_filter_options(db)
+
+        assert tasks == []
+        assert models == []
 
 
 class TestGetLlmLog:

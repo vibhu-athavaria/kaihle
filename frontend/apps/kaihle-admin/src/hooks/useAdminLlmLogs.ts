@@ -1,6 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@kaihle/auth";
 
+export type LlmLogSortBy =
+  | "created_at"
+  | "task"
+  | "model"
+  | "latency_ms"
+  | "cost"
+  | "tokens";
+export type LlmLogSortDir = "asc" | "desc";
+
 export interface LlmLogSummary {
   id: string;
   created_at: string;
@@ -33,16 +42,60 @@ export interface LlmLogDetail extends LlmLogSummary {
   streamed: boolean;
 }
 
-export function useAdminLlmLogs(params: { page?: number; pageSize?: number }) {
-  const { page = 1, pageSize = 50 } = params;
+export interface LlmLogFilterOptions {
+  tasks: string[];
+  models: string[];
+}
+
+export function useAdminLlmLogs(params: {
+  page?: number;
+  pageSize?: number;
+  task?: string;
+  model?: string;
+  sortBy?: LlmLogSortBy;
+  sortDir?: LlmLogSortDir;
+}) {
+  const {
+    page = 1,
+    pageSize = 50,
+    task,
+    model,
+    sortBy = "created_at",
+    sortDir = "desc",
+  } = params;
 
   return useQuery({
-    queryKey: ["admin", "llm-logs", { page, pageSize }],
+    queryKey: [
+      "admin",
+      "llm-logs",
+      { page, pageSize, task, model, sortBy, sortDir },
+    ],
     queryFn: async () => {
       const response = await apiClient.get("/api/v1/platform/llm-logs", {
-        params: { page, page_size: pageSize },
+        params: {
+          page,
+          page_size: pageSize,
+          task,
+          model,
+          sort_by: sortBy,
+          sort_dir: sortDir,
+        },
       });
       return response.data as LlmLogsResponse;
+    },
+  });
+}
+
+/** The full set of task/model values that actually have logged calls — for the filter
+ * dropdowns. Fetched once per page mount, not on every list refetch. */
+export function useAdminLlmLogFilterOptions() {
+  return useQuery({
+    queryKey: ["admin", "llm-logs", "filter-options"],
+    queryFn: async () => {
+      const response = await apiClient.get(
+        "/api/v1/platform/llm-logs/filter-options",
+      );
+      return response.data as LlmLogFilterOptions;
     },
   });
 }

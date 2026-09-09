@@ -125,6 +125,134 @@ class TestLlmLogsListBehaviour:
         assert data["total"] == 5
 
 
+class TestLlmLogsFiltering:
+    async def test_llm_logs_when_task_filter_given_then_only_matching_task_returned(
+        self, client: AsyncClient, kaihle_admin: User, db_session: AsyncSession
+    ) -> None:
+        app.dependency_overrides[get_current_user] = lambda: kaihle_admin
+
+        db_session.add(_event(task="lesson_plan"))
+        db_session.add(_event(task="question_generation"))
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/v1/platform/llm-logs",
+            params={"task": "lesson_plan"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        data = response.json()
+        assert data["total"] == 1
+        assert data["logs"][0]["task"] == "lesson_plan"
+
+    async def test_llm_logs_when_model_filter_given_then_only_matching_model_returned(
+        self, client: AsyncClient, kaihle_admin: User, db_session: AsyncSession
+    ) -> None:
+        app.dependency_overrides[get_current_user] = lambda: kaihle_admin
+
+        db_session.add(_event(model="test/model-a"))
+        db_session.add(_event(model="test/model-b"))
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/v1/platform/llm-logs",
+            params={"model": "test/model-b"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        data = response.json()
+        assert data["total"] == 1
+        assert data["logs"][0]["model"] == "test/model-b"
+
+    async def test_llm_logs_when_task_and_model_filters_combined_then_both_applied(
+        self, client: AsyncClient, kaihle_admin: User, db_session: AsyncSession
+    ) -> None:
+        app.dependency_overrides[get_current_user] = lambda: kaihle_admin
+
+        db_session.add(_event(task="lesson_plan", model="test/model-a"))
+        db_session.add(_event(task="lesson_plan", model="test/model-b"))
+        db_session.add(_event(task="question_generation", model="test/model-a"))
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/v1/platform/llm-logs",
+            params={"task": "lesson_plan", "model": "test/model-a"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        data = response.json()
+        assert data["total"] == 1
+
+
+class TestLlmLogsSorting:
+    async def test_llm_logs_when_sorted_by_latency_ascending_then_smallest_first(
+        self, client: AsyncClient, kaihle_admin: User, db_session: AsyncSession
+    ) -> None:
+        app.dependency_overrides[get_current_user] = lambda: kaihle_admin
+
+        db_session.add(_event(latency_ms=900))
+        db_session.add(_event(latency_ms=100))
+        db_session.add(_event(latency_ms=500))
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/v1/platform/llm-logs",
+            params={"sort_by": "latency_ms", "sort_dir": "asc"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        data = response.json()
+        assert [log["latency_ms"] for log in data["logs"]] == [100, 500, 900]
+
+    async def test_llm_logs_when_sort_by_invalid_value_then_422(self, client: AsyncClient, kaihle_admin: User) -> None:
+        app.dependency_overrides[get_current_user] = lambda: kaihle_admin
+
+        response = await client.get(
+            "/api/v1/platform/llm-logs",
+            params={"sort_by": "prompt_text"},
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        assert response.status_code == 422
+
+
+class TestLlmLogFilterOptions:
+    async def test_filter_options_when_events_present_then_distinct_tasks_and_models_returned(
+        self, client: AsyncClient, kaihle_admin: User, db_session: AsyncSession
+    ) -> None:
+        app.dependency_overrides[get_current_user] = lambda: kaihle_admin
+
+        db_session.add(_event(task="lesson_plan", model="test/model-a"))
+        db_session.add(_event(task="lesson_plan", model="test/model-a"))
+        db_session.add(_event(task="question_generation", model="test/model-b"))
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/v1/platform/llm-logs/filter-options", headers={"Authorization": "Bearer fake-token"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["tasks"] == ["lesson_plan", "question_generation"]
+        assert data["models"] == ["test/model-a", "test/model-b"]
+
+    async def test_filter_options_when_route_hit_then_not_misrouted_to_detail_endpoint(
+        self, client: AsyncClient, kaihle_admin: User
+    ) -> None:
+        """Pins the route-ordering requirement: /llm-logs/filter-options must be
+        registered before /llm-logs/{log_id}, or FastAPI tries (and fails) to parse
+        "filter-options" as a UUID."""
+        app.dependency_overrides[get_current_user] = lambda: kaihle_admin
+
+        response = await client.get(
+            "/api/v1/platform/llm-logs/filter-options", headers={"Authorization": "Bearer fake-token"}
+        )
+        assert response.status_code == 200
+        assert "tasks" in response.json()
+
+    async def test_filter_options_when_caller_is_teacher_then_403(self, client: AsyncClient, teacher: User) -> None:
+        app.dependency_overrides[get_current_user] = lambda: teacher
+
+        response = await client.get(
+            "/api/v1/platform/llm-logs/filter-options", headers={"Authorization": "Bearer fake-token"}
+        )
+        assert response.status_code == 403
+
+
 class TestLlmLogDetail:
     async def test_llm_log_detail_when_found_then_includes_prompt_and_response_text(
         self, client: AsyncClient, kaihle_admin: User, db_session: AsyncSession
