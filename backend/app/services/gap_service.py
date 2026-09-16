@@ -13,14 +13,21 @@ import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import structlog
 from fastapi import HTTPException, status
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models.assessment import (
+    Assessment,
+    AssessmentTopicConfig,
+    AttemptStatus,
+    StudentAttempt,
+    StudentResponse,
+)
 from app.models.curriculum import (
     CurriculumTopic,
     Grade,
@@ -45,9 +52,6 @@ from app.services.mastery_model import Observation
 from app.services.mastery_model import estimate as estimate_mastery
 
 logger = structlog.get_logger()
-
-if TYPE_CHECKING:
-    from app.models.assessment import Assessment, StudentAttempt
 
 
 @dataclass(frozen=True)
@@ -84,6 +88,8 @@ class GapService:
         new_mastery: float,
         confidence: float,
         rolling_attempt_count: int,
+        total_correct: int,
+        total_attempted: int,
         last_assessed_at: datetime,
     ) -> None:
         """Atomically upsert a gap_state row using ON CONFLICT DO UPDATE.
@@ -106,12 +112,20 @@ class GapService:
                 caller and its stored confidence can never silently disagree.
             rolling_attempt_count: Total number of attempts for this subtopic. Stored in
                 gap_states.attempt_count for reporting; no longer used to derive confidence.
+            total_correct: Cumulative count of questions answered correctly in this
+                subtopic across every observation folded into new_mastery (this attempt
+                plus all history) — the caller must sum it, this method never increments.
+            total_attempted: Cumulative count of questions actually *answered* (not merely
+                presented — an unanswered question carries no evidence of mastery either
+                way, so it is excluded, matching the answer_given != "" filter upstream) in
+                this subtopic across every observation folded into new_mastery.
             last_assessed_at: Timestamp of the most recent assessment.
         """
         needs_review = new_mastery < 0.4
 
-        # gap_states.last_assessed_at is TIMESTAMP WITHOUT TIME ZONE in the schema.
-        # asyncpg rejects timezone-aware datetimes for non-tz columns — strip tzinfo.
+        # gap_states.last_assessed_at is TIMESTAMPTZ. Stripping tzinfo here is not
+        # required by the column type; kept harmless only because the DB session
+        # timezone is UTC. Not touching this behavior as part of this fix.
         if last_assessed_at.tzinfo is not None:
             last_assessed_at = last_assessed_at.replace(tzinfo=None)
 
@@ -139,8 +153,8 @@ class GapService:
                 :mastery_score,
                 :confidence,
                 :attempt_count,
-                0,
-                0,
+                :total_correct,
+                :total_attempted,
                 :needs_review,
                 :last_assessed_at,
                 NOW()
@@ -149,6 +163,8 @@ class GapService:
                 mastery_score    = EXCLUDED.mastery_score,
                 confidence       = EXCLUDED.confidence,
                 attempt_count    = EXCLUDED.attempt_count,
+                total_correct    = EXCLUDED.total_correct,
+                total_attempted  = EXCLUDED.total_attempted,
                 needs_review     = EXCLUDED.needs_review,
                 last_assessed_at = EXCLUDED.last_assessed_at,
                 updated_at       = NOW()
@@ -164,6 +180,8 @@ class GapService:
                 "mastery_score": new_mastery,
                 "confidence": confidence,
                 "attempt_count": rolling_attempt_count,
+                "total_correct": total_correct,
+                "total_attempted": total_attempted,
                 "needs_review": needs_review,
                 "last_assessed_at": last_assessed_at,
             },
@@ -177,6 +195,8 @@ class GapService:
             mastery_score=new_mastery,
             needs_review=needs_review,
             attempt_count=rolling_attempt_count,
+            total_correct=total_correct,
+            total_attempted=total_attempted,
         )
 
     async def resolve_subtopic_totals_for_attempt(self, attempt_id: uuid.UUID) -> AttemptResolution | None:
@@ -192,13 +212,6 @@ class GapService:
         here, so a caller receiving None does not need to re-derive or re-log which case
         occurred.
         """
-        from app.models.assessment import (
-            Assessment,
-            AttemptStatus,
-            StudentAttempt,
-            StudentResponse,
-        )
-
         attempt_id_str = str(attempt_id)
 
         # Step 1: Load attempt, verify COMPLETED
@@ -247,9 +260,19 @@ class GapService:
         # keying on it drops those responses entirely and no mastery is ever recorded
         # for the affected scope.
         #
-        # An objective can be taught by several subtopics, so the join is scoped to the
-        # class's own curriculum/subject/grade: an attempt must only ever attribute
-        # mastery to subtopics in the curriculum the student is actually enrolled on.
+        # An objective can be taught by several subtopics, so the join must be scoped to
+        # the topics actually in play for this assessment — NOT klass.grade_id alone.
+        # DesignTier1DiagnosticRequest lets a teacher choose topics from the class's
+        # current grade OR the previous grade (grade.level - 1); AssessmentService
+        # validates that choice via _resolve_and_validate_topic_grades. A grade_id-only
+        # filter here silently drops every response to a legitimately-configured
+        # prior-grade topic. AssessmentTopicConfig already records exactly which
+        # curriculum topics (and grades) were configured for this assessment — the same
+        # table AttemptService._load_adaptive_candidates uses to solve the identical
+        # "an objective is taught by several subtopics across grades" problem for
+        # question *selection* — so prefer it here too. Assessments with no config rows
+        # (the deprecated create_class_diagnostic() path, or anything predating this
+        # table) fall back to the previous curriculum/subject/grade predicate.
         question_ids = [r.question_id for r in responses]
 
         class_result = await self.db.execute(select(Class).where(Class.id == assessment.class_id))
@@ -257,6 +280,23 @@ class GapService:
         question_to_subtopic: dict[uuid.UUID, uuid.UUID] = {}
 
         if klass is not None:
+            configured_topics_result = await self.db.execute(
+                select(AssessmentTopicConfig.curriculum_topic_id).where(
+                    AssessmentTopicConfig.assessment_id == assessment.id
+                )
+            )
+            configured_topic_ids = set(configured_topics_result.scalars().all())
+
+            scope_filter = (
+                CurriculumTopic.id.in_(configured_topic_ids)
+                if configured_topic_ids
+                else and_(
+                    CurriculumTopic.curriculum_id == klass.curriculum_id,
+                    CurriculumTopic.subject_id == klass.subject_id,
+                    CurriculumTopic.grade_id == klass.grade_id,
+                )
+            )
+
             scoped_result = await self.db.execute(
                 select(QuestionBank.id, Subtopic.id)
                 .select_from(QuestionBank)
@@ -268,9 +308,7 @@ class GapService:
                 .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
                 .where(
                     QuestionBank.id.in_(question_ids),
-                    CurriculumTopic.curriculum_id == klass.curriculum_id,
-                    CurriculumTopic.subject_id == klass.subject_id,
-                    CurriculumTopic.grade_id == klass.grade_id,
+                    scope_filter,
                     Subtopic.is_active.is_(True),
                 )
                 # Deterministic pick when an objective has several placements in scope,
@@ -426,6 +464,12 @@ class GapService:
                 decay=settings.mastery_recency_decay,
             )
 
+            # Cumulative evidence behind posterior.score/confidence — every observation
+            # folded into this estimate, current attempt plus history. Not incremented in
+            # SQL: upsert_gap_state always receives (and stores) the full total.
+            cumulative_correct = current_correct + sum(obs.correct for obs in observations[1:])
+            cumulative_attempted = total + sum(obs.total for obs in observations[1:])
+
             await self.upsert_gap_state(
                 student_id=attempt.student_id,
                 subtopic_id=sub_id,
@@ -434,6 +478,8 @@ class GapService:
                 new_mastery=posterior.score,
                 confidence=posterior.confidence,
                 rolling_attempt_count=len(historical) + 1,
+                total_correct=cumulative_correct,
+                total_attempted=cumulative_attempted,
                 last_assessed_at=assessed_at,
             )
 

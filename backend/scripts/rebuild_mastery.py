@@ -230,6 +230,9 @@ async def replay_attempt(
             observations, prior_alpha=prior_alpha, prior_beta=prior_beta, decay=settings.mastery_recency_decay
         )
 
+        cumulative_correct = correct + sum(obs.correct for obs in historical)
+        cumulative_attempted = total + sum(obs.total for obs in historical)
+
         await service.upsert_gap_state(
             student_id=attempt.student_id,
             subtopic_id=sub_id,
@@ -238,6 +241,8 @@ async def replay_attempt(
             new_mastery=posterior.score,
             confidence=posterior.confidence,
             rolling_attempt_count=len(historical) + 1,
+            total_correct=cumulative_correct,
+            total_attempted=cumulative_attempted,
             last_assessed_at=assessed_at,
         )
         updated += 1
@@ -245,7 +250,7 @@ async def replay_attempt(
     return updated
 
 
-async def run(apply: bool) -> int:
+async def run(apply: bool, school_slug: str | None = None) -> int:
     print(PG_DUMP_REMINDER)
     if not apply:
         print("  Running in --dry-run mode: no writes will be made.\n")
@@ -254,7 +259,22 @@ async def run(apply: bool) -> int:
     async_session = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with async_session() as db:
+            school_id = None
+            if school_slug is not None:
+                school_id = (
+                    await db.execute(text("SELECT id FROM schools WHERE slug = :slug"), {"slug": school_slug})
+                ).scalar_one_or_none()
+                if school_id is None:
+                    log.error("rebuild_mastery_school_slug_not_found", school_slug=school_slug)
+                    return 1
+                log.info("rebuild_mastery_scoped_to_school", school_slug=school_slug, school_id=str(school_id))
+
             # Step 1: fit priors. Identical logic to calibrate_mastery_prior.py --apply.
+            # Deliberately NOT scoped to school_id even when --school-slug is given:
+            # mastery_priors are calibrated per subtopic across the whole curriculum
+            # (source_level SUBTOPIC|TOPIC|SUBJECT|GLOBAL), not per tenant — narrowing
+            # calibration to one school's response history would make the fitted priors
+            # worse, not more correct, for the exact students this run is trying to fix.
             # Written now so the replay below can read them back (Postgres sees your own
             # uncommitted writes within one transaction), but nothing is DURABLE until the
             # final commit — a dry run rolls this back too, along with the replay, so
@@ -279,18 +299,21 @@ async def run(apply: bool) -> int:
             priors = await _fetch_all_priors(db)
             log.info("rebuild_mastery_priors_fitted", subtopics=len(priors))
 
-            # Step 2: replay every COMPLETED attempt, oldest first.
-            attempts_result = await db.execute(
-                text(
-                    """
-                    SELECT sa.id, sa.student_id, sa.completed_at, a.school_id, a.class_id
-                    FROM student_attempts sa
-                    JOIN assessments a ON a.id = sa.assessment_id
-                    WHERE sa.status = 'COMPLETED' AND sa.completed_at IS NOT NULL
-                    ORDER BY sa.completed_at ASC, sa.id ASC
-                    """
-                )
-            )
+            # Step 2: replay every COMPLETED attempt, oldest first — scoped to one
+            # school's assessments when --school-slug was given, platform-wide otherwise.
+            attempts_query = """
+                SELECT sa.id, sa.student_id, sa.completed_at, a.school_id, a.class_id
+                FROM student_attempts sa
+                JOIN assessments a ON a.id = sa.assessment_id
+                WHERE sa.status = 'COMPLETED' AND sa.completed_at IS NOT NULL
+            """
+            params: dict[str, Any] = {}
+            if school_id is not None:
+                attempts_query += " AND a.school_id = :school_id"
+                params["school_id"] = school_id
+            attempts_query += " ORDER BY sa.completed_at ASC, sa.id ASC"
+
+            attempts_result = await db.execute(text(attempts_query), params)
             attempt_rows = attempts_result.all()
             log.info("rebuild_mastery_replay_starting", attempts=len(attempt_rows))
 
@@ -339,12 +362,18 @@ def _parse_args() -> argparse.Namespace:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--dry-run", action="store_true")
     group.add_argument("--apply", action="store_true")
+    parser.add_argument(
+        "--school-slug",
+        default=None,
+        help="Limit the attempt replay to one school (by schools.slug). Prior calibration "
+        "always stays platform-wide regardless of this flag. Omit to replay every school.",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = _parse_args()
-    return asyncio.run(run(apply=args.apply))
+    return asyncio.run(run(apply=args.apply, school_slug=args.school_slug))
 
 
 if __name__ == "__main__":

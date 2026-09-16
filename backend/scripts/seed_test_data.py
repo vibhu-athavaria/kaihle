@@ -66,7 +66,11 @@ async def seed_test_data() -> None:
         # -------------------------------------------------------------------
         # 1. Create school
         # -------------------------------------------------------------------
-        result = await db.execute(text("SELECT id FROM schools LIMIT 1"))
+        # Look up by this script's own slug, never an unordered LIMIT 1 — an unordered
+        # scan against a DB that already has other schools seeded could silently attach
+        # this generic test fixture (and its ON CONFLICT (user_id) DO UPDATE below) to
+        # the wrong tenant.
+        result = await db.execute(text("SELECT id FROM schools WHERE slug = 'kaihle-test-school'"))
         school_row = result.scalar_one_or_none()
         if not school_row:
             result = await db.execute(

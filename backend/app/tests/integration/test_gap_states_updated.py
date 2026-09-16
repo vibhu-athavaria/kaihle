@@ -19,6 +19,7 @@ from app.ai.similarity import normalise_text
 from app.models.assessment import (
     Assessment,
     AssessmentStatus,
+    AssessmentTopicConfig,
     AssessmentType,
     AttemptStatus,
     StudentAttempt,
@@ -599,6 +600,107 @@ class TestGapStatesUpdated:
         scores = score_result.scalars().all()
         assert len(scores) == 1
 
+    @pytest.mark.asyncio
+    async def test_gap_states_when_attempt_completed_then_total_correct_and_total_attempted_match_responses(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        """3/5 correct on a first attempt: gap_states.total_correct/total_attempted must
+        reflect the real counts, not the pre-fix hardcoded 0/0.
+        """
+        curriculum, grade, subject, ct, subtopic = await _create_curriculum_chain(db_session, school)
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, grade, subject, teacher)
+        questions = [await _create_question(db_session, subtopic) for _ in range(5)]
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-counts-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="Counts",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        assessment = await _create_assessment(db_session, school, class_, teacher)
+        attempt = await _create_attempt(db_session, assessment, student)
+        for i, q in enumerate(questions):
+            await _create_response(db_session, attempt, q, is_correct=i < 3)
+
+        await GapService(db_session).calculate_gap_states_for_attempt(attempt.id)
+
+        gap_state = (
+            await db_session.execute(
+                select(GapState).where(
+                    GapState.student_id == student.id,
+                    GapState.subtopic_id == subtopic.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert gap_state is not None
+        assert gap_state.total_correct == 3
+        assert gap_state.total_attempted == 5
+
+    @pytest.mark.asyncio
+    async def test_gap_states_when_repeat_attempt_then_total_correct_and_total_attempted_accumulate(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        """total_correct/total_attempted sum across attempts, not just the latest one —
+        the pre-fix bug always wrote 0 regardless of history, so a naive fix that only
+        persisted the current attempt's counts (dropping history) would still be wrong.
+        """
+        curriculum, grade, subject, ct, subtopic = await _create_curriculum_chain(db_session, school)
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, grade, subject, teacher)
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-accum-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="Accumulate",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        service = GapService(db_session)
+
+        # First attempt: 1/5 correct.
+        first_questions = [await _create_question(db_session, subtopic) for _ in range(5)]
+        first_assessment = await _create_assessment(db_session, school, class_, teacher)
+        first_attempt = await _create_attempt(db_session, first_assessment, student)
+        for i, q in enumerate(first_questions):
+            await _create_response(db_session, first_attempt, q, is_correct=i == 0)
+        await service.calculate_gap_states_for_attempt(first_attempt.id)
+
+        # Second attempt: 4/4 correct.
+        second_questions = [await _create_question(db_session, subtopic) for _ in range(4)]
+        second_assessment = await _create_assessment(db_session, school, class_, teacher)
+        second_attempt = await _create_attempt(db_session, second_assessment, student)
+        for q in second_questions:
+            await _create_response(db_session, second_attempt, q, is_correct=True)
+        await service.calculate_gap_states_for_attempt(second_attempt.id)
+
+        gap_state = (
+            await db_session.execute(
+                select(GapState).where(
+                    GapState.student_id == student.id,
+                    GapState.subtopic_id == subtopic.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert gap_state is not None
+        assert gap_state.total_correct == 1 + 4
+        assert gap_state.total_attempted == 5 + 4
+
 
 @pytest.mark.asyncio
 class TestGapStatesAfterCurriculumRemap:
@@ -784,3 +886,330 @@ class TestGapStatesAfterCurriculumRemap:
         result = await GapService(db_session).calculate_gap_states_for_attempt(attempt.id)
 
         assert result["subtopics_updated"] == 1
+
+
+async def _add_topic_at_grade(
+    db: AsyncSession,
+    curriculum: Curriculum,
+    subject: Subject,
+    level: int,
+    topic_name: str,
+) -> tuple[Grade, CurriculumTopic, Subtopic]:
+    """Create a Grade + CurriculumTopic + Subtopic within an existing curriculum/subject,
+    at an explicit grade level. Distinct from _create_curriculum_chain, which always
+    creates its own fresh curriculum AND subject — these tests need two topics that
+    share the same curriculum (a real Tier 1 diagnostic's prior-grade topic lives in the
+    same curriculum as the class's own grade), with independently controlled levels.
+    """
+    grade = Grade(id=uuid.uuid4(), name=f"Grade {level}", level=level, is_active=True)
+    db.add(grade)
+    await db.flush()
+
+    topic = Topic(id=uuid.uuid4(), name=topic_name, is_active=True)
+    db.add(topic)
+    await db.flush()
+
+    ct = CurriculumTopic(
+        id=uuid.uuid4(),
+        curriculum_id=curriculum.id,
+        subject_id=subject.id,
+        grade_id=grade.id,
+        topic_id=topic.id,
+        is_active=True,
+        is_required=True,
+    )
+    db.add(ct)
+    await db.flush()
+
+    subtopic = Subtopic(
+        id=uuid.uuid4(),
+        curriculum_topic_id=ct.id,
+        name=f"{topic_name} Subtopic",
+        learning_objective=f"Learn {topic_name}",
+        is_active=True,
+    )
+    db.add(subtopic)
+    await db.flush()
+
+    return grade, ct, subtopic
+
+
+async def _create_objective_question(
+    db: AsyncSession,
+    ct: CurriculumTopic,
+    grade: Grade,
+    subtopic: Subtopic,
+) -> QuestionBank:
+    """Create a question reachable ONLY via the learning-objective bridge (subtopic_id
+    NULL), exactly like a post-remap question. _create_question sets subtopic_id
+    directly, which resolves via the legacy fallback (Step 4b) — a path that has never
+    been grade-scoped and so cannot exercise the scoped-join fix these tests target.
+    """
+    objective = LearningObjective(
+        id=uuid.uuid4(),
+        canonical_code=f"LO-{uuid.uuid4().hex[:10]}",
+        name=f"Objective for {subtopic.name}",
+        learning_objective=f"Learn {subtopic.name}",
+        normalised_objective=normalise_text(f"Learn {subtopic.name}"),
+        topic_id=ct.topic_id,
+        grade_id=grade.id,
+        is_active=True,
+    )
+    db.add(objective)
+    await db.flush()
+    db.add(SubtopicObjective(subtopic_id=subtopic.id, learning_objective_id=objective.id))
+    await db.flush()
+
+    question = QuestionBank(
+        id=uuid.uuid4(),
+        subtopic_id=None,
+        learning_objective_id=objective.id,
+        question_text=f"Question for {subtopic.name}",
+        question_type="MCQ",
+        options=[{"key": "A", "text": "Correct"}],
+        correct_answer="A",
+        canonical_form=f"q-{uuid.uuid4().hex[:8]}",
+        problem_signature={},
+        difficulty_level=2.0,
+        source="bank",
+        is_active=True,
+    )
+    db.add(question)
+    await db.flush()
+    return question
+
+
+@pytest.mark.asyncio
+class TestGapStatesPriorGradeAttribution:
+    """Regression tests for Bug 2: a Tier 1 diagnostic may legitimately include topics
+    from the class's own grade AND the previous grade (grade.level - 1) — a teacher
+    chooses this explicitly via DesignTier1DiagnosticRequest.topic_ids, validated by
+    AssessmentService._resolve_and_validate_topic_grades. Before this fix, attribution
+    filtered strictly on CurriculumTopic.grade_id == klass.grade_id, silently dropping
+    every response to a configured prior-grade (or cross-subject-fallback) topic.
+    """
+
+    async def test_gap_states_when_response_is_for_configured_prior_grade_topic_then_attributed(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        curriculum = Curriculum(
+            id=uuid.uuid4(),
+            name=f"Test Curriculum {uuid.uuid4().hex[:6]}",
+            code=f"TC{uuid.uuid4().hex[:4]}",
+            is_active=True,
+        )
+        db_session.add(curriculum)
+        await db_session.flush()
+
+        subject = Subject(
+            id=uuid.uuid4(),
+            name=f"Mathematics {uuid.uuid4().hex[:4]}",
+            code=f"MATH{uuid.uuid4().hex[:4]}",
+            is_active=True,
+        )
+        db_session.add(subject)
+        await db_session.flush()
+        db_session.add(CurriculumSubject(curriculum_id=curriculum.id, subject_id=subject.id, is_core=True))
+        await db_session.flush()
+
+        class_grade, _class_ct, _class_subtopic = await _add_topic_at_grade(
+            db_session, curriculum, subject, level=6, topic_name="Current Grade Algebra"
+        )
+        prior_grade, prior_ct, prior_subtopic = await _add_topic_at_grade(
+            db_session, curriculum, subject, level=5, topic_name="Prior Grade Algebra"
+        )
+
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, class_grade, subject, teacher)
+        question = await _create_objective_question(db_session, prior_ct, prior_grade, prior_subtopic)
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-priorgrade-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="PriorGrade",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        assessment = await _create_assessment(db_session, school, class_, teacher)
+        db_session.add(
+            AssessmentTopicConfig(assessment_id=assessment.id, curriculum_topic_id=prior_ct.id, grade_id=prior_grade.id)
+        )
+        await db_session.flush()
+
+        attempt = await _create_attempt(db_session, assessment, student)
+        await _create_response(db_session, attempt, question, is_correct=True)
+
+        result = await GapService(db_session).calculate_gap_states_for_attempt(attempt.id)
+
+        assert result["subtopics_updated"] == 1
+        gap_state = (
+            await db_session.execute(
+                select(GapState).where(
+                    GapState.student_id == student.id,
+                    GapState.subtopic_id == prior_subtopic.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert gap_state is not None
+
+    async def test_gap_states_when_response_is_for_prior_grade_topic_with_no_assessment_topic_config_then_not_attributed(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        """Same shape as the previous test, but with no AssessmentTopicConfig row — the
+        fallback to curriculum/subject/grade scoping must still apply, so a prior-grade
+        response is NOT attributed. Proves the fix only widens scope for assessments that
+        actually configured it, rather than attributing every prior-grade topic always.
+        """
+        curriculum = Curriculum(
+            id=uuid.uuid4(),
+            name=f"Test Curriculum {uuid.uuid4().hex[:6]}",
+            code=f"TC{uuid.uuid4().hex[:4]}",
+            is_active=True,
+        )
+        db_session.add(curriculum)
+        await db_session.flush()
+
+        subject = Subject(
+            id=uuid.uuid4(),
+            name=f"Mathematics {uuid.uuid4().hex[:4]}",
+            code=f"MATH{uuid.uuid4().hex[:4]}",
+            is_active=True,
+        )
+        db_session.add(subject)
+        await db_session.flush()
+        db_session.add(CurriculumSubject(curriculum_id=curriculum.id, subject_id=subject.id, is_core=True))
+        await db_session.flush()
+
+        class_grade, _class_ct, _class_subtopic = await _add_topic_at_grade(
+            db_session, curriculum, subject, level=8, topic_name="Current Grade Algebra"
+        )
+        prior_grade, prior_ct, prior_subtopic = await _add_topic_at_grade(
+            db_session, curriculum, subject, level=7, topic_name="Prior Grade Algebra"
+        )
+
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, class_grade, subject, teacher)
+        question = await _create_objective_question(db_session, prior_ct, prior_grade, prior_subtopic)
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-noconfig-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="NoConfig",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        assessment = await _create_assessment(db_session, school, class_, teacher)
+        # No AssessmentTopicConfig row — nothing configured for this assessment.
+        attempt = await _create_attempt(db_session, assessment, student)
+        await _create_response(db_session, attempt, question, is_correct=True)
+
+        result = await GapService(db_session).calculate_gap_states_for_attempt(attempt.id)
+
+        assert result["subtopics_updated"] == 0
+        gap_state = (
+            await db_session.execute(
+                select(GapState).where(
+                    GapState.student_id == student.id,
+                    GapState.subtopic_id == prior_subtopic.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert gap_state is None
+
+    async def test_gap_states_when_response_is_for_configured_cross_subject_fallback_topic_then_attributed(
+        self,
+        db_session: AsyncSession,
+        school: School,
+    ) -> None:
+        """Mirrors the live future-school-bali case: an ENGL class's Tier 1 diagnostic
+        configured a prior-grade topic under a DIFFERENT Subject row (a continuing "ENG"
+        course). A fix that only widened the grade_id filter while still requiring
+        CurriculumTopic.subject_id == klass.subject_id would still miss this — the fix
+        must trust assessment_topic_config's configured topics regardless of subject.
+        """
+        curriculum = Curriculum(
+            id=uuid.uuid4(),
+            name=f"Test Curriculum {uuid.uuid4().hex[:6]}",
+            code=f"TC{uuid.uuid4().hex[:4]}",
+            is_active=True,
+        )
+        db_session.add(curriculum)
+        await db_session.flush()
+
+        class_subject = Subject(
+            id=uuid.uuid4(),
+            name=f"English Language {uuid.uuid4().hex[:4]}",
+            code=f"ENGL{uuid.uuid4().hex[:4]}",
+            is_active=True,
+        )
+        prior_subject = Subject(
+            id=uuid.uuid4(),
+            name=f"General English {uuid.uuid4().hex[:4]}",
+            code=f"ENG{uuid.uuid4().hex[:4]}",
+            is_active=True,
+        )
+        db_session.add(class_subject)
+        db_session.add(prior_subject)
+        await db_session.flush()
+        db_session.add(CurriculumSubject(curriculum_id=curriculum.id, subject_id=class_subject.id, is_core=True))
+        db_session.add(CurriculumSubject(curriculum_id=curriculum.id, subject_id=prior_subject.id, is_core=True))
+        await db_session.flush()
+
+        class_grade, _class_ct, _class_subtopic = await _add_topic_at_grade(
+            db_session, curriculum, class_subject, level=10, topic_name="IGCSE English"
+        )
+        prior_grade, prior_ct, prior_subtopic = await _add_topic_at_grade(
+            db_session, curriculum, prior_subject, level=8, topic_name="General English"
+        )
+
+        teacher = await _create_teacher(db_session, school)
+        class_ = await _create_class(db_session, school, curriculum, class_grade, class_subject, teacher)
+        question = await _create_objective_question(db_session, prior_ct, prior_grade, prior_subtopic)
+
+        student = User(
+            id=uuid.uuid4(),
+            school_id=school.id,
+            email=f"student-crosssubj-{uuid.uuid4().hex[:8]}@test.com",
+            first_name="Student",
+            last_name="CrossSubject",
+            role=UserRole.STUDENT,
+            is_active=True,
+        )
+        db_session.add(student)
+        await db_session.flush()
+
+        assessment = await _create_assessment(db_session, school, class_, teacher)
+        db_session.add(
+            AssessmentTopicConfig(assessment_id=assessment.id, curriculum_topic_id=prior_ct.id, grade_id=prior_grade.id)
+        )
+        await db_session.flush()
+
+        attempt = await _create_attempt(db_session, assessment, student)
+        await _create_response(db_session, attempt, question, is_correct=True)
+
+        result = await GapService(db_session).calculate_gap_states_for_attempt(attempt.id)
+
+        assert result["subtopics_updated"] == 1
+        gap_state = (
+            await db_session.execute(
+                select(GapState).where(
+                    GapState.student_id == student.id,
+                    GapState.subtopic_id == prior_subtopic.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert gap_state is not None

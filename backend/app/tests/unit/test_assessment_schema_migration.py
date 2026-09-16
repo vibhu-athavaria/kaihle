@@ -67,7 +67,9 @@ class TestAssessmentModelNewColumns:
 
         assert arg("minimum_difficulty") == 1
         assert arg("maximum_difficulty") == 5
-        assert arg("questions_per_topic") == 2
+        # 5, not the old 2 — matches DesignTier1DiagnosticRequest's default and the
+        # documented schema default; the Vidhya rule minimum for reliable placement is 3.
+        assert arg("questions_per_topic") == 5
         assert arg("time_limit_minutes") == 0
         # question_types default is a callable (lambda), check it returns correct value
         qt_default = col_defaults.get("question_types")

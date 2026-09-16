@@ -19,10 +19,6 @@ The JSON includes BOTH subtopic_id UUIDs (for preresolved) AND full name hierarc
 (grade_level, subject_name, topic_name, subtopic_name) so it can be imported on prod
 without re-running any LLM calls.
 
-LLM routing follows router.py:
-  LLM_QUESTION_GENERATION_MODEL       — model name (e.g. gemini/gemini-2.5-flash)
-  LLM_QUESTION_GENERATION_API_BASE    — optional custom endpoint (e.g. RunPod vLLM server)
-
 Usage (from project root):
     # Generate for all subjects with zero-question subtopics:
     docker compose exec backend python -m scripts.generate_gap_questions
