@@ -24,6 +24,7 @@ import math
 import random
 import sys
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 import structlog
@@ -139,6 +140,25 @@ async def get_curriculum_topic_ids(
     return []
 
 
+@dataclass(frozen=True)
+class _TargetClass:
+    """Plain snapshot of the Class fields this script needs.
+
+    The per-class loop below rolls back the shared session on failure (to isolate one
+    class's error from the next), and a rollback expires every ORM object in the
+    session regardless of expire_on_commit — so touching a live Class attribute for the
+    class *after* the one that failed raises MissingGreenlet (lazy-load attempted
+    outside an awaited context). Snapshotting scalars up front, before any commit or
+    rollback can happen, avoids that entirely.
+    """
+
+    id: uuid.UUID
+    name: str
+    subject_id: uuid.UUID
+    grade_id: uuid.UUID
+    teacher_id: uuid.UUID
+
+
 async def seed_diagnostics() -> None:
     db_url = get_database_url()
     log.info("connecting_to_database", url=db_url.replace("//", "//***:***@"))
@@ -157,7 +177,7 @@ async def seed_diagnostics() -> None:
         classes_with_diag_subq = (
             select(Assessment.class_id).where(Assessment.assessment_type == AssessmentType.DIAGNOSTIC).scalar_subquery()
         )
-        target_classes = (
+        class_rows = (
             (
                 await db.execute(
                     select(Class).where(
@@ -170,6 +190,12 @@ async def seed_diagnostics() -> None:
             .scalars()
             .all()
         )
+        # Snapshot to plain values now, before any commit/rollback in the loop below
+        # can expire these ORM objects — see _TargetClass docstring.
+        target_classes = [
+            _TargetClass(id=c.id, name=c.name, subject_id=c.subject_id, grade_id=c.grade_id, teacher_id=c.teacher_id)
+            for c in class_rows
+        ]
 
         log.info("classes_needing_diagnostics", count=len(target_classes))
         if not target_classes:
@@ -247,7 +273,8 @@ async def seed_diagnostics() -> None:
                 deadline=None,
             )
 
-            # Capture name before the try block — avoids lazy-load after rollback
+            # cls is a plain _TargetClass snapshot (not a live ORM object), so this
+            # alias is just for readability — not a lazy-load guard.
             class_name = cls.name
 
             try:

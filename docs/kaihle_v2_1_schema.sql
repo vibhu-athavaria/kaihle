@@ -1136,6 +1136,26 @@ CREATE INDEX idx_gap_states_class         ON gap_states (class_id);
 CREATE INDEX idx_gap_states_student_class ON gap_states (student_id, class_id);
 CREATE INDEX idx_gap_states_mastery       ON gap_states (mastery_score);
 
+CREATE TABLE mastery_priors (
+    subtopic_id     UUID           PRIMARY KEY REFERENCES subtopics (id) ON DELETE CASCADE,
+    alpha           NUMERIC(12,6)  NOT NULL,
+    beta            NUMERIC(12,6)  NOT NULL,
+    source_level    VARCHAR(10)    NOT NULL,
+    -- SUBTOPIC | TOPIC | SUBJECT | GLOBAL — backoff level this row's alpha/beta came from.
+    source_n        INT            NOT NULL,
+    fitted_at       TIMESTAMPTZ    NOT NULL,
+    CONSTRAINT chk_mastery_prior_alpha_positive        CHECK (alpha > 0),
+    CONSTRAINT chk_mastery_prior_beta_positive         CHECK (beta > 0),
+    CONSTRAINT chk_mastery_prior_source_level          CHECK (source_level IN ('SUBTOPIC', 'TOPIC', 'SUBJECT', 'GLOBAL')),
+    CONSTRAINT chk_mastery_prior_source_n_non_negative CHECK (source_n >= 0)
+);
+
+COMMENT ON TABLE mastery_priors IS
+    'Hierarchical Bayesian prior per subtopic (Beta(alpha, beta)), fitted offline by
+     scripts/calibrate_mastery_prior.py and read by GapService.calculate_gap_states_for_attempt
+     at write time. Curriculum-wide, not tenant-scoped — no school_id. A subtopic with no row
+     here falls back to the platform bootstrap default (settings.mastery_prior_alpha/beta).';
+
 -- =============================================================================
 -- SECTION: CONTENT LAYER (subtopic_content, interest_categories)
 -- Replaces deprecated curriculum_chunks PDF RAG approach.
@@ -1294,9 +1314,17 @@ CREATE TABLE student_attempt_subtopic_scores (
     attempt_id      UUID        NOT NULL REFERENCES student_attempts (id) ON DELETE CASCADE,
     score           FLOAT       NOT NULL,
     -- Per-subtopic fraction correct for this attempt: correct / total for subtopic
+    correct_count   INT,
+    total_count     INT,
+    -- Nullable: rows written before MLH-T3-3 predate these columns and cannot be
+    -- backfilled from score alone (3/5 and 30/50 are both 0.6) — NULL means "counts
+    -- unknown", not zero. scripts/rebuild_mastery.py backfills them where it can.
     attempted_at    TIMESTAMPTZ NOT NULL,
     CONSTRAINT uq_sats_student_subtopic_attempt UNIQUE (student_id, subtopic_id, attempt_id),
-    CONSTRAINT chk_sats_score CHECK (score BETWEEN 0.0 AND 1.0)
+    CONSTRAINT chk_sats_score CHECK (score BETWEEN 0.0 AND 1.0),
+    CONSTRAINT chk_sats_counts_both_or_neither CHECK ((correct_count IS NULL) = (total_count IS NULL)),
+    CONSTRAINT chk_sats_correct_le_total CHECK (correct_count IS NULL OR correct_count <= total_count),
+    CONSTRAINT chk_sats_correct_non_negative CHECK (correct_count IS NULL OR correct_count >= 0)
 );
 
 CREATE INDEX idx_subtopic_scores_student_sub ON student_attempt_subtopic_scores (student_id, subtopic_id);

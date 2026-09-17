@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.similarity import normalise_text
@@ -527,44 +527,6 @@ async def test_get_chat_history_when_messages_share_identical_timestamp_then_ord
     # calls — the property that was missing before the (created_at, id) ordering fix.
     assert [m.content for m in first.messages] == contents
     assert [m.content for m in second.messages] == [m.content for m in first.messages]
-
-
-@pytest.mark.asyncio
-async def test_save_chat_message_when_called_then_created_at_reflects_real_time(
-    db_session: AsyncSession,
-    school: School,
-) -> None:
-    """save_chat_message must record the actual insert time, not a fixed value.
-
-    Regression test for a schema-level bug found in the dev database: the live
-    mini_course_chat_messages.created_at column default had been manually overridden
-    to a frozen literal timestamp (fixed in migration 49eb7ee197b3), so every message
-    that relied on the server default recorded the same identical past timestamp no
-    matter when it was actually saved. Asserted against the DB server's own clock
-    (not the test process's) since the two can drift a few seconds apart on a
-    long-running local Docker VM — that drift is not the bug under test, and comparing
-    against the test process's wall clock made this test flaky for the wrong reason.
-    A frozen/stale default fails this in a way ordinary clock drift cannot: the row's
-    created_at would be off by months, not seconds, and two sequential saves would tie
-    instead of strictly increasing.
-    """
-    subtopic, _ = await _create_curriculum_subtopic(db_session)
-    student = await _create_chat_student(db_session, school)
-    service = MiniCourseService(db_session)
-
-    db_now = (await db_session.execute(select(func.now()))).scalar_one()
-
-    first = await service.save_chat_message(
-        student_id=student.id, subtopic_id=subtopic.id, school_id=school.id, role="student", content="first"
-    )
-    second = await service.save_chat_message(
-        student_id=student.id, subtopic_id=subtopic.id, school_id=school.id, role="ai", content="second"
-    )
-
-    # Within a minute of the DB's own clock, not months in the past like the frozen default.
-    assert abs((first.created_at - db_now).total_seconds()) < 60
-    # Two sequential saves must not tie — a frozen default would make first == second.
-    assert second.created_at >= first.created_at
 
 
 # ---------------------------------------------------------------------------

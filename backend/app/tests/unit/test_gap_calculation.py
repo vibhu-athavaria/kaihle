@@ -98,6 +98,8 @@ class TestGapServiceUpsertGapState:
             new_mastery=0.8,
             confidence=0.5,
             rolling_attempt_count=1,
+            total_correct=4,
+            total_attempted=5,
             last_assessed_at=ts,
         )
         await service.upsert_gap_state(
@@ -108,6 +110,8 @@ class TestGapServiceUpsertGapState:
             new_mastery=0.8,
             confidence=0.5,
             rolling_attempt_count=1,
+            total_correct=4,
+            total_attempted=5,
             last_assessed_at=ts,
         )
 
@@ -136,6 +140,8 @@ class TestGapServiceUpsertGapState:
             new_mastery=0.3,
             confidence=0.4,
             rolling_attempt_count=1,
+            total_correct=1,
+            total_attempted=5,
             last_assessed_at=ts,
         )
         await service.upsert_gap_state(
@@ -146,6 +152,8 @@ class TestGapServiceUpsertGapState:
             new_mastery=0.8,
             confidence=0.6,
             rolling_attempt_count=2,
+            total_correct=8,
+            total_attempted=10,
             last_assessed_at=ts,
         )
 
@@ -171,6 +179,8 @@ class TestGapServiceUpsertGapState:
             new_mastery=0.39,
             confidence=0.5,
             rolling_attempt_count=1,
+            total_correct=2,
+            total_attempted=5,
             last_assessed_at=datetime.now(UTC),
         )
 
@@ -200,11 +210,78 @@ class TestGapServiceUpsertGapState:
             new_mastery=0.4,
             confidence=0.5,
             rolling_attempt_count=1,
+            total_correct=2,
+            total_attempted=5,
             last_assessed_at=datetime.now(UTC),
         )
 
         assert len(captured_params) == 1
         assert captured_params[0]["needs_review"] is False
+
+    @pytest.mark.asyncio
+    async def test_upsert_gap_state_when_called_then_total_correct_and_total_attempted_persisted(
+        self, service: GapService, mock_db: MagicMock
+    ) -> None:
+        """total_correct/total_attempted are bound to the exact values the caller passed.
+
+        Regression test: upsert_gap_state used to hardcode these two columns to 0 on
+        every write — mastery_score/confidence were computed correctly but the raw
+        evidence counts backing them were silently lost. This asserts the params dict
+        sent to db.execute carries the caller's real cumulative counts through unchanged.
+        """
+        captured_params: list[dict] = []
+
+        async def capture(stmt, params=None):  # type: ignore[no-untyped-def]
+            if params:
+                captured_params.append(params)
+            return MagicMock()
+
+        mock_db.execute = capture  # type: ignore[assignment]
+
+        await service.upsert_gap_state(
+            student_id=uuid.uuid4(),
+            subtopic_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            class_id=uuid.uuid4(),
+            new_mastery=0.6,
+            confidence=0.7,
+            rolling_attempt_count=3,
+            total_correct=27,
+            total_attempted=42,
+            last_assessed_at=datetime.now(UTC),
+        )
+
+        assert len(captured_params) == 1
+        assert captured_params[0]["total_correct"] == 27
+        assert captured_params[0]["total_attempted"] == 42
+
+    @pytest.mark.asyncio
+    async def test_upsert_gap_state_sql_when_built_then_total_correct_and_total_attempted_in_insert_and_conflict_clause(
+        self, service: GapService, mock_db: MagicMock
+    ) -> None:
+        """The SQL text itself binds total_correct/total_attempted on INSERT and updates
+        them on conflict — catches a regression to a literal `0, 0` INSERT with the two
+        columns silently omitted from ON CONFLICT ... DO UPDATE SET.
+        """
+        await service.upsert_gap_state(
+            student_id=uuid.uuid4(),
+            subtopic_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            class_id=uuid.uuid4(),
+            new_mastery=0.6,
+            confidence=0.7,
+            rolling_attempt_count=1,
+            total_correct=3,
+            total_attempted=5,
+            last_assessed_at=datetime.now(UTC),
+        )
+
+        sql = str(mock_db.execute.call_args_list[0][0][0])
+        assert ":total_correct" in sql
+        assert ":total_attempted" in sql
+        set_clause = sql.split("DO UPDATE SET", 1)[1]
+        assert "total_correct" in set_clause
+        assert "total_attempted" in set_clause
 
 
 # TestMasteryWeightingFormulas removed (MLH-T3). It reimplemented the six-coefficient
@@ -322,7 +399,8 @@ class TestCalculateGapStatesTask:
 
         # Upsert for each subtopic
         for subtopic_id, total in subtopic_total.items():
-            score = subtopic_correct[subtopic_id] / total
+            correct = subtopic_correct[subtopic_id]
+            score = correct / total
             await service.upsert_gap_state(
                 student_id=student_id,
                 subtopic_id=subtopic_id,
@@ -331,6 +409,8 @@ class TestCalculateGapStatesTask:
                 new_mastery=score,
                 confidence=0.5,
                 rolling_attempt_count=1,
+                total_correct=correct,
+                total_attempted=total,
                 last_assessed_at=datetime.now(UTC),
             )
 
@@ -441,18 +521,23 @@ def _build_mock_db_for_calculate(
       3. Load responses (scalars().all())
       4. Load class, for scoping attribution to its curriculum/subject/grade
          (scalar_one_or_none)
-      5. Map question → subtopic via the learning objective, within that scope (all())
-      6. Batch-fetch mastery_priors for every resolved subtopic (all()) — MLH-T3. An
+      5. Load AssessmentTopicConfig.curriculum_topic_id rows for this assessment
+         (scalars().all()) — empty here means no topics were explicitly configured, so
+         the service falls back to the curriculum/subject/grade predicate from step 4,
+         which is what these tests exercise. See test_gap_states_updated.py for real-DB
+         tests covering the configured-topics (prior-grade attribution) path.
+      6. Map question → subtopic via the learning objective, within that scope (all())
+      7. Batch-fetch mastery_priors for every resolved subtopic (all()) — MLH-T3. An
          empty result here is a valid, already-handled case: it means no subtopic in
          this attempt has been calibrated yet, and the service falls back to the
          platform bootstrap default (settings.mastery_prior_alpha/beta), not an error.
       Per subtopic:
-        7+. Historical (correct_count, total_count) query (all())
-        8+. Gap state upsert (execute with text)
-        9+. Insert subtopic score row (execute with text)
+        8+. Historical (correct_count, total_count) query (all())
+        9+. Gap state upsert (execute with text)
+        10+. Insert subtopic score row (execute with text)
 
-    Call 5 resolves every question here, so the service's legacy subtopic_id fallback
-    is not reached and issues no query. Call 6 and beyond all return an empty `.all()`
+    Call 6 resolves every question here, so the service's legacy subtopic_id fallback
+    is not reached and issues no query. Call 7 and beyond all return an empty `.all()`
     by default (see the `else` branch below), which is correct for both "no priors
     calibrated yet" and "no history yet" — neither test using this helper asserts an
     exact mastery value, only that the flow completes and updates the right count of
@@ -479,7 +564,9 @@ def _build_mock_db_for_calculate(
                 subject_id=uuid.uuid4(),
                 grade_id=uuid.uuid4(),
             )
-        elif c == 5:  # question → subtopic map, resolved via learning objective
+        elif c == 5:  # AssessmentTopicConfig rows — none configured, fall back to grade scope
+            m.scalars.return_value.all.return_value = []
+        elif c == 6:  # question → subtopic map, resolved via learning objective
             m.all.return_value = list(question_to_subtopic.items())
         else:
             # Historical score queries return empty; upserts return mock
@@ -667,9 +754,12 @@ class TestCalculateGapStatesForAttempt:
                     grade_id=uuid.uuid4(),
                 )
             elif c == 5:
+                # AssessmentTopicConfig rows — none configured, fall back to grade scope
+                m.scalars.return_value.all.return_value = []
+            elif c == 6:
                 # question → subtopic, resolved via the learning objective
                 m.all.return_value = [(q1, sub1)]
-            elif c == 6:
+            elif c == 7:
                 m.all.return_value = []  # no mastery_priors row calibrated yet
             else:
                 m.all.return_value = []  # no history

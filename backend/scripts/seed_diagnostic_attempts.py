@@ -9,9 +9,10 @@ with ±noise so no two students have identical scores):
   - ~33% of students: Developing  (target score band 0.40–0.69)
   - ~33% of students: Strong      (target score band 0.72–0.95)
 
-Writes directly to four tables (bypassing Celery — safe for seeding):
-  student_attempts, student_responses,
-  student_attempt_subtopic_scores, gap_states
+Writes student_attempts and student_responses directly (bypassing Celery — safe for
+seeding), then calls GapService.calculate_gap_states_for_attempt() for each attempt —
+the same attribution and Beta-Binomial mastery math the live submission path uses —
+rather than hand-rolling raw-fraction scores that would drift from production.
 
 Also updates class_enrollments.onboarding_diagnostic_status → COMPLETED.
 
@@ -34,7 +35,6 @@ from pathlib import Path
 
 import structlog
 from sqlalchemy import select, text, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
@@ -49,12 +49,11 @@ from app.models.assessment import (  # noqa: E402
     AttemptStatus,
     ScoredBy,
     StudentAttempt,
-    StudentAttemptSubtopicScore,
     StudentResponse,
 )
 from app.models.curriculum import QuestionBank  # noqa: E402
-from app.models.gap import GapState  # noqa: E402
 from app.models.school import Class, ClassEnrollment  # noqa: E402
+from app.services.gap_service import GapService  # noqa: E402
 
 structlog.configure(
     processors=[
@@ -114,20 +113,19 @@ def _subtopic_score(base: float, rng: random.Random) -> float:
 
 
 def _simulate_responses(
-    questions: list[tuple[uuid.UUID, str, uuid.UUID]],  # (question_id, correct_answer, subtopic_id)
+    questions: list[tuple[uuid.UUID, str]],  # (question_id, correct_answer)
     base_score: float,
     rng: random.Random,
 ) -> list[dict]:
     """Return a list of response dicts, each question answered with realistic correctness."""
     responses = []
-    for q_id, correct_answer, subtopic_id in questions:
+    for q_id, correct_answer in questions:
         # Probability of getting this question right ≈ subtopic score
         s_score = _subtopic_score(base_score, rng)
         is_correct = rng.random() < s_score
         responses.append(
             {
                 "question_id": q_id,
-                "subtopic_id": subtopic_id,
                 "answer_given": correct_answer if is_correct else _wrong_answer(correct_answer, rng),
                 "is_correct": is_correct,
                 "score": 1.0 if is_correct else 0.0,
@@ -182,7 +180,10 @@ async def seed_attempts() -> None:
             log.warning("no_active_diagnostics — run seed_diagnostic_assessments.py first")
             return
 
-        # ── Pre-load all assessment questions (question_id, correct_answer, subtopic_id)
+        # ── Pre-load all assessment questions (question_id, correct_answer) ─
+        # Subtopic attribution is no longer resolved here — GapService.
+        # calculate_gap_states_for_attempt() resolves it via the learning-objective
+        # bridge (plus assessment_topic_config), the same as the live submission path.
         assessment_ids = [a.id for a in diagnostics]
         q_rows = (
             await db.execute(
@@ -190,17 +191,16 @@ async def seed_attempts() -> None:
                     AssessmentSelectedQuestion.assessment_id,
                     AssessmentSelectedQuestion.question_id,
                     QuestionBank.correct_answer,
-                    QuestionBank.subtopic_id,
                 )
                 .join(QuestionBank, QuestionBank.id == AssessmentSelectedQuestion.question_id)
                 .where(AssessmentSelectedQuestion.assessment_id.in_(assessment_ids))
             )
         ).all()
 
-        # Group: assessment_id → list[(question_id, correct_answer, subtopic_id)]
-        questions_by_assessment: dict[uuid.UUID, list[tuple[uuid.UUID, str, uuid.UUID]]] = defaultdict(list)
+        # Group: assessment_id → list[(question_id, correct_answer)]
+        questions_by_assessment: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = defaultdict(list)
         for row in q_rows:
-            questions_by_assessment[row.assessment_id].append((row.question_id, row.correct_answer, row.subtopic_id))
+            questions_by_assessment[row.assessment_id].append((row.question_id, row.correct_answer))
 
         log.info(
             "questions_loaded",
@@ -318,67 +318,13 @@ async def seed_attempts() -> None:
                         )
                     )
 
-                # ── Aggregate per-subtopic ────────────────────────────────
-                subtopic_correct: dict[uuid.UUID, int] = defaultdict(int)
-                subtopic_total: dict[uuid.UUID, int] = defaultdict(int)
-                for resp in responses:
-                    sid = resp["subtopic_id"]
-                    subtopic_total[sid] += 1
-                    if resp["is_correct"]:
-                        subtopic_correct[sid] += 1
+                await db.flush()
 
-                # ── student_attempt_subtopic_scores ───────────────────────
-                for subtopic_id, total in subtopic_total.items():
-                    frac_correct = subtopic_correct[subtopic_id] / total if total else 0.0
-                    db.add(
-                        StudentAttemptSubtopicScore(
-                            id=uuid.uuid4(),
-                            student_id=student_id,
-                            subtopic_id=subtopic_id,
-                            attempt_id=attempt_id,
-                            score=round(frac_correct, 4),
-                            attempted_at=attempt_start,
-                        )
-                    )
-
-                # ── gap_states (upsert) ───────────────────────────────────
-                # gap_states.last_assessed_at is TIMESTAMP WITHOUT TIME ZONE
-                attempt_start_naive = attempt_start.replace(tzinfo=None)
-                for subtopic_id, total in subtopic_total.items():
-                    correct = subtopic_correct[subtopic_id]
-                    frac_correct = correct / total if total else 0.0
-                    confidence = min(1.0, total / 5.0)  # reaches 1.0 after 5 questions
-
-                    stmt = (
-                        pg_insert(GapState)
-                        .values(
-                            id=uuid.uuid4(),
-                            student_id=student_id,
-                            subtopic_id=subtopic_id,
-                            class_id=assessment.class_id,
-                            mastery_score=round(frac_correct, 4),
-                            confidence=round(confidence, 4),
-                            attempt_count=1,
-                            total_correct=correct,
-                            total_attempted=total,
-                            needs_review=(frac_correct < 0.4),
-                            last_assessed_at=attempt_start_naive,
-                        )
-                        .on_conflict_do_update(
-                            constraint="gap_states_unique",
-                            set_={
-                                "mastery_score": round(frac_correct, 4),
-                                "confidence": round(confidence, 4),
-                                "attempt_count": GapState.attempt_count + 1,
-                                "total_correct": GapState.total_correct + correct,
-                                "total_attempted": GapState.total_attempted + total,
-                                "needs_review": frac_correct < 0.4,
-                                "last_assessed_at": attempt_start_naive,
-                                "updated_at": now,
-                            },
-                        )
-                    )
-                    await db.execute(stmt)
+                # ── gap_states + student_attempt_subtopic_scores ──────────
+                # Same attribution (learning-objective bridge, prior-grade aware via
+                # assessment_topic_config) and Beta-Binomial mastery math the live
+                # submission path uses — not a parallel reimplementation.
+                await GapService(db).calculate_gap_states_for_attempt(attempt_id)
 
                 # ── Mark enrollment diagnostic as COMPLETED ───────────────
                 await db.execute(

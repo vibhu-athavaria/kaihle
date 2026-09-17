@@ -377,3 +377,30 @@ class TestRebuildMastery:
             .all()
         )
         assert len(rows) == 1  # no duplicate row from the second pass
+
+    async def test_rebuild_mastery_when_replayed_then_gap_state_total_correct_and_total_attempted_populated(
+        self, db_session, school: School
+    ) -> None:
+        """replay_attempt's own upsert_gap_state call must pass through the same
+        cumulative total_correct/total_attempted the live path does — GapService.
+        upsert_gap_state used to hardcode both to 0 regardless of caller, so a rebuild run
+        over data that predates the fix inherited exactly the same corruption it exists
+        to repair."""
+        student, subtopic = await self._scenario(db_session, school)
+
+        priors = await _fit_and_write_priors(db_session)
+        service = GapService(db_session)
+        await _replay_all_completed_attempts_oldest_first(db_session, service, priors)
+        await db_session.flush()
+
+        gap_state = (
+            await db_session.execute(
+                select(GapState).where(
+                    GapState.student_id == student.id,
+                    GapState.subtopic_id == subtopic.id,
+                )
+            )
+        ).scalar_one_or_none()
+        assert gap_state is not None
+        assert gap_state.total_correct == 3
+        assert gap_state.total_attempted == 5

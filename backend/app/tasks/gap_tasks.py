@@ -232,6 +232,12 @@ def update_gap_state_from_quiz(
                 # calculation is out of scope for that change.
                 confidence = min(rolling_count / 5.0, 1.0)
 
+                # A StudyPlanQuiz has only an overall score, no per-question correct/total
+                # counts to contribute — leave gap_states.total_correct/total_attempted at
+                # whatever they already were rather than fabricate a count.
+                existing_total_correct = existing_gap.total_correct if existing_gap else 0
+                existing_total_attempted = existing_gap.total_attempted if existing_gap else 0
+
                 # Upsert gap state
                 service = GapService(db)
                 await service.upsert_gap_state(
@@ -242,6 +248,8 @@ def update_gap_state_from_quiz(
                     new_mastery=score,
                     confidence=confidence,
                     rolling_attempt_count=rolling_count,
+                    total_correct=existing_total_correct,
+                    total_attempted=existing_total_attempted,
                     last_assessed_at=datetime.now(UTC),
                 )
                 return {

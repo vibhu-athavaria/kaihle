@@ -111,7 +111,11 @@ class Assessment(Base, UUIDMixin, TimestampMixin):
     )
     instructions: Mapped[str | None] = mapped_column(Text)
     question_count: Mapped[int | None] = mapped_column(Integer)
-    questions_per_topic: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    # Default 5, matching DesignTier1DiagnosticRequest and the documented schema default
+    # (docs/kaihle_v2_1_schema.sql) — the Vidhya rule minimum for statistically reliable
+    # placement is 3; this is the fallback used only when a caller omits the field, e.g.
+    # the deprecated create_class_diagnostic() -> _make_system_assessment() path.
+    questions_per_topic: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     minimum_difficulty: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     maximum_difficulty: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     question_types: Mapped[list[str]] = mapped_column(
