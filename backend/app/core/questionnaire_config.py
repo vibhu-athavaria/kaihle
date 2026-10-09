@@ -189,10 +189,12 @@ QUESTIONNAIRE_V2: dict[str, Any] = {
 # Decision rationale: docs/tasks/M0/M0-6-T5_questionnaire_content_review.md
 # Vidhya review: docs/design/QUESTIONNAIRE_DESIGN_RATIONALE.md
 #
-# Note: v2 interest keys (sports_movement, tech_gaming, nature_animals, arts_culture)
-# are canonical category keys, not the fine-grained v1 keys. The map below preserves
-# v1 keys for backward compatibility with existing profiles. v2 category keys return
-# empty lists — callers skip personalisation for now (no crash).
+# Note: this table is keyed by the fine-grained legacy interest keys and is the only
+# curriculum judgement input. The live questionnaire (Q6) stores v2 category keys
+# (sports_movement, tech_gaming, nature_animals, arts_culture); those are handled by
+# SUBJECT_CATEGORY_MAP, which is DERIVED from this table via INTEREST_KEY_TO_CATEGORY
+# (see below). A v2 category is compatible with a subject iff at least one of the
+# subject's legacy keys maps to it. Editing this table updates both vocabularies.
 SUBJECT_INTEREST_MAP: dict[str, list[str]] = {
     "MATH": ["sports", "music", "gaming", "cooking", "art", "technology"],
     "SCI": ["animals", "cooking", "nature", "sports"],
@@ -216,10 +218,15 @@ def get_compatible_interests(
     Returns an empty list if no compatible interests exist — the caller then skips
     personalisation entirely rather than injecting a mismatched interest.
 
+    Accepts both vocabularies: legacy keys ("sports") and v2 category keys
+    ("sports_movement"). A v2 key is compatible when it is in SUBJECT_CATEGORY_MAP
+    for the subject (derived from SUBJECT_INTEREST_MAP).
+
     Args:
         subject_code: Cambridge subject code e.g. "MATH", "BIO", "PHY".
                       Case-insensitive — "math" and "MATH" produce the same result.
-        student_interests: List of interest keys from student_learning_profiles.interests.
+        student_interests: List of interest keys (legacy or v2 category) from
+                           student_learning_profiles.interests.
                            Preserves the student's original preference order.
 
     Returns:
@@ -235,8 +242,12 @@ def get_compatible_interests(
         get_compatible_interests("PHY", ["fashion"])
         → []   # no compatible interests → caller skips personalisation
     """
-    compatible = SUBJECT_INTEREST_MAP.get(subject_code.upper(), [])
-    return [interest for interest in student_interests if interest in compatible]
+    subject = subject_code.upper()
+    compatible_legacy = SUBJECT_INTEREST_MAP.get(subject, [])
+    compatible_categories = SUBJECT_CATEGORY_MAP.get(subject, frozenset())
+    return [
+        interest for interest in student_interests if interest in compatible_legacy or interest in compatible_categories
+    ]
 
 
 def get_questionnaire_definition() -> dict[str, Any]:
@@ -307,6 +318,36 @@ INTEREST_KEY_TO_CATEGORY: dict[str, str] = {
     "nature_animals": "nature_animals",
     "arts_culture": "arts_culture",
 }
+
+
+# Subject -> compatible v2 interest categories. DERIVED from SUBJECT_INTEREST_MAP (no
+# independent curriculum judgement): a category is compatible with a subject iff one of
+# the subject's legacy keys maps to it. Computed once at import. Subjects absent from
+# SUBJECT_INTEREST_MAP (e.g. GEO, HIST, GP) stay absent -> unpersonalised.
+SUBJECT_CATEGORY_MAP: dict[str, frozenset[str]] = {
+    subject: frozenset(INTEREST_KEY_TO_CATEGORY[key] for key in legacy_keys)
+    for subject, legacy_keys in SUBJECT_INTEREST_MAP.items()
+}
+
+
+def interest_prompt_label(interest_key: str) -> str:
+    """Return the human-readable phrase to show an LLM for an interest key.
+
+    v2 category keys return the Q6 questionnaire phrase (single source: QUESTIONNAIRE_V2),
+    legacy keys are already readable and are returned unchanged, and unknown keys have
+    underscores replaced with spaces.
+
+    Example:
+        interest_prompt_label("sports_movement") → "Sports, fitness and movement"
+        interest_prompt_label("sports")          → "sports"
+        interest_prompt_label("deep_sea_diving") → "deep sea diving"
+    """
+    option = get_option_by_key("q6", interest_key)
+    if option is not None:
+        return str(option["text"])
+    if interest_key in INTEREST_KEY_TO_CATEGORY:
+        return interest_key
+    return interest_key.replace("_", " ")
 
 
 def get_interest_category(interest_key: str) -> str | None:
