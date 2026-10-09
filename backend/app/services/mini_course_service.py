@@ -10,6 +10,7 @@ All business logic lives here — route handlers are thin wrappers.
 
 import json
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -84,6 +85,78 @@ logger = structlog.get_logger()
 
 # Maximum check questions served per mini-course page
 _CHECK_QUESTION_LIMIT = 3
+
+# --- grade_open_answer seams -------------------------------------------------
+# Module-level so the offline eval harness (backend/evals) exercises the exact
+# production prompt, sampling parameters and parser instead of a drifting copy.
+
+GRADE_TEMPERATURE = 0.3
+GRADE_MAX_TOKENS = 200
+_VALID_GRADES = ("correct", "partial", "incorrect")
+_GRADE_FALLBACK_FEEDBACK = "We couldn't evaluate your answer. Please try again."
+
+
+@dataclass(frozen=True)
+class GradeParse:
+    """Result of parsing a grading reply. Pure data; the service decides what to log."""
+
+    grade: Literal["correct", "partial", "incorrect"]
+    feedback: str
+    parse_error: bool  # reply could not be decoded as a JSON object
+    grade_recognised: bool  # model returned one of the three valid grades
+
+
+def render_grade_prompt(
+    subtopic_name: str,
+    learning_objective: str | None,
+    question_text: str,
+    student_answer: str,
+) -> str:
+    """Render the grading prompt. Pure: no I/O beyond the cached template."""
+    template = _jinja_env.get_template("grade_open_answer.jinja2")
+    return template.render(
+        subtopic_name=subtopic_name,
+        learning_objective=learning_objective,
+        question_text=question_text,
+        student_answer=student_answer,
+    )
+
+
+def parse_grade_response(raw: str) -> GradeParse:
+    """Parse a grading reply.
+
+    Unparseable replies and non-object JSON become ``incorrect`` with canned feedback
+    (``parse_error=True``). A valid object with an unknown grade becomes ``incorrect``
+    but keeps the model's own feedback (``grade_recognised=False``).
+    """
+    try:
+        parsed = json.loads(raw.strip())
+        raw_grade = str(parsed.get("grade", "incorrect")).lower()
+        feedback = str(parsed.get("feedback", _GRADE_FALLBACK_FEEDBACK))
+    except Exception:
+        # Deliberately broad: any decode/shape failure is reported via parse_error, and the
+        # caller logs it. Matches the pre-extraction behaviour of a single catch-all.
+        return GradeParse(
+            grade="incorrect", feedback=_GRADE_FALLBACK_FEEDBACK, parse_error=True, grade_recognised=False
+        )
+    if raw_grade in _VALID_GRADES:
+        return GradeParse(
+            grade=cast(Literal["correct", "partial", "incorrect"], raw_grade),
+            feedback=feedback,
+            parse_error=False,
+            grade_recognised=True,
+        )
+    return GradeParse(grade="incorrect", feedback=feedback, parse_error=False, grade_recognised=False)
+
+
+async def request_grade_completion(prompt: str) -> str:
+    """Call the LLM (router task ``grade_open_answer``) with the production sampling parameters."""
+    return await llm_router.complete(
+        task="grade_open_answer",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=GRADE_TEMPERATURE,
+        max_tokens=GRADE_MAX_TOKENS,
+    )
 
 
 class MiniCourseService:
@@ -855,35 +928,28 @@ class MiniCourseService:
         if subtopic_row is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Subtopic {subtopic_id} not found")
 
-        template = _jinja_env.get_template("grade_open_answer.jinja2")
-        prompt = template.render(
+        prompt = render_grade_prompt(
             subtopic_name=subtopic_row.name,
             learning_objective=subtopic_row.learning_objective,
             question_text=question_text,
             student_answer=student_answer,
         )
 
-        grade: Literal["correct", "partial", "incorrect"] = "incorrect"
-        feedback = "We couldn't evaluate your answer. Please try again."
-
         try:
-            raw = await llm_router.complete(
-                task="grade_open_answer",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=200,
-            )
-            parsed = json.loads(raw.strip())
-            raw_grade = str(parsed.get("grade", "incorrect")).lower()
-            if raw_grade in ("correct", "partial", "incorrect"):
-                grade = cast(Literal["correct", "partial", "incorrect"], raw_grade)
-            feedback = str(parsed.get("feedback", feedback))
+            raw = await request_grade_completion(prompt)
+            result = parse_grade_response(raw)
         except Exception:
+            result = GradeParse(
+                grade="incorrect", feedback=_GRADE_FALLBACK_FEEDBACK, parse_error=True, grade_recognised=False
+            )
+        if result.parse_error:
             logger.warning(
                 "grade_open_answer_parse_failed",
                 subtopic_id=str(subtopic_id),
                 student_id=str(student_id),
             )
+        grade = result.grade
+        feedback = result.feedback
 
         score_map = {"correct": 1.0, "partial": 0.5, "incorrect": 0.0}
         score = score_map[grade]
