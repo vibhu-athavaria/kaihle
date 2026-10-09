@@ -8,13 +8,20 @@ Run with: pytest app/tests/unit/test_mini_course_service.py -v
 import uuid
 from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from app.schemas.mini_course import MarkProgressRequest
-from app.services.mini_course_service import MiniCourseService
+from app.services.mini_course_service import (
+    GRADE_MAX_TOKENS,
+    GRADE_TEMPERATURE,
+    MiniCourseService,
+    parse_grade_response,
+    render_grade_prompt,
+    request_grade_completion,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1509,3 +1516,215 @@ async def test_get_course_detail_for_teacher_when_called_then_content_query_scop
     compiled_sql = str(content_query.compile(compile_kwargs={"literal_binds": True}))
     assert "subtopic_content.scope" in compiled_sql
     assert str(school_id).replace("-", "") in compiled_sql
+
+
+# ---------------------------------------------------------------------------
+# grade_open_answer — characterization (written against the pre-extraction code, SD-10)
+# ---------------------------------------------------------------------------
+
+_CANNED_GRADE_FEEDBACK = "We couldn't evaluate your answer. Please try again."
+
+
+async def _grade_via_service(
+    llm_mock: AsyncMock, learning_objective: str | None = "Solve for x"
+) -> tuple[Any, AsyncMock, MagicMock]:
+    """Run grade_open_answer with a mocked LLM; return (response, complete mock, captured logs)."""
+    db = _make_db()
+    db.add = MagicMock()
+    db.flush = AsyncMock()
+    subtopic_row = MagicMock()
+    subtopic_row.name = "Linear Equations"
+    subtopic_row.learning_objective = learning_objective
+    subtopic_result = MagicMock()
+    subtopic_result.one_or_none = MagicMock(return_value=subtopic_row)
+    agg_result = MagicMock()
+    agg_result.scalar_one_or_none = MagicMock(return_value=0.5)
+    db.execute = AsyncMock(side_effect=[subtopic_result, agg_result, MagicMock()])
+
+    with (
+        patch("app.services.mini_course_service.llm_router.complete", new=llm_mock),
+        # Patch the module logger rather than structlog.testing.capture_logs: app.core.logging
+        # sets cache_logger_on_first_use, so a previously-used logger bypasses capture_logs.
+        patch("app.services.mini_course_service.logger") as logs,
+    ):
+        response = await MiniCourseService(db).grade_open_answer(
+            subtopic_id=uuid.uuid4(),
+            student_id=uuid.uuid4(),
+            school_id=uuid.uuid4(),
+            question_text="How do you solve 2x = 4?",
+            student_answer="Divide by 2.",
+        )
+    return response, llm_mock, logs
+
+
+def _parse_failed(logs: MagicMock) -> bool:
+    return any(call.args[0] == "grade_open_answer_parse_failed" for call in logs.warning.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_grade_open_answer_when_reply_is_malformed_json_then_canned_feedback_and_warning() -> None:
+    response, _, logs = await _grade_via_service(AsyncMock(return_value="not json"))
+
+    assert response.grade == "incorrect"
+    assert response.feedback == _CANNED_GRADE_FEEDBACK
+    assert _parse_failed(logs)
+
+
+@pytest.mark.asyncio
+async def test_grade_open_answer_when_reply_is_json_array_then_canned_feedback_and_warning() -> None:
+    response, _, logs = await _grade_via_service(AsyncMock(return_value="[1, 2]"))
+
+    assert response.grade == "incorrect"
+    assert response.feedback == _CANNED_GRADE_FEEDBACK
+    assert _parse_failed(logs)
+
+
+@pytest.mark.asyncio
+async def test_grade_open_answer_when_grade_unrecognised_then_incorrect_with_model_feedback_and_no_warning() -> None:
+    response, _, logs = await _grade_via_service(
+        AsyncMock(return_value='{"grade": "excellent", "feedback": "Great job."}')
+    )
+
+    assert response.grade == "incorrect"
+    assert response.feedback == "Great job."
+    assert not _parse_failed(logs)
+
+
+@pytest.mark.asyncio
+async def test_grade_open_answer_when_grade_uppercase_then_normalised() -> None:
+    response, _, _ = await _grade_via_service(AsyncMock(return_value='{"grade": "CORRECT", "feedback": "Yes."}'))
+
+    assert response.grade == "correct"
+    assert response.score == 1.0
+
+
+@pytest.mark.asyncio
+async def test_grade_open_answer_when_feedback_missing_then_canned_feedback_and_no_warning() -> None:
+    response, _, logs = await _grade_via_service(AsyncMock(return_value='{"grade": "correct"}'))
+
+    assert response.grade == "correct"
+    assert response.feedback == _CANNED_GRADE_FEEDBACK
+    assert not _parse_failed(logs)
+
+
+@pytest.mark.asyncio
+async def test_grade_open_answer_when_llm_raises_then_warning_logged() -> None:
+    response, _, logs = await _grade_via_service(AsyncMock(side_effect=RuntimeError("down")))
+
+    assert response.feedback == _CANNED_GRADE_FEEDBACK
+    assert _parse_failed(logs)
+
+
+@pytest.mark.asyncio
+async def test_grade_open_answer_when_called_then_uses_grade_task_with_production_sampling_params() -> None:
+    _, mock, _ = await _grade_via_service(AsyncMock(return_value='{"grade": "partial", "feedback": "Close."}'))
+
+    kwargs = mock.await_args_list[0].kwargs
+    assert kwargs["task"] == "grade_open_answer"
+    assert kwargs["temperature"] == 0.3
+    assert kwargs["max_tokens"] == 200
+
+
+@pytest.mark.asyncio
+async def test_grade_open_answer_when_objective_present_then_prompt_has_objective_section() -> None:
+    _, mock, _ = await _grade_via_service(AsyncMock(return_value='{"grade": "correct", "feedback": "Ok."}'))
+
+    prompt = mock.await_args_list[0].kwargs["messages"][0]["content"]
+    assert "## Learning Objective" in prompt
+    assert "Solve for x" in prompt
+    assert "How do you solve 2x = 4?" in prompt
+    assert "Divide by 2." in prompt
+
+
+@pytest.mark.asyncio
+async def test_grade_open_answer_when_objective_none_then_prompt_omits_objective_section() -> None:
+    _, mock, _ = await _grade_via_service(
+        AsyncMock(return_value='{"grade": "correct", "feedback": "Ok."}'), learning_objective=None
+    )
+
+    assert "## Learning Objective" not in mock.await_args_list[0].kwargs["messages"][0]["content"]
+
+
+# ---------------------------------------------------------------------------
+# grade_open_answer — extracted seams (render / parse / request), used by the eval harness
+# ---------------------------------------------------------------------------
+
+
+def test_render_grade_prompt_when_learning_objective_present_then_prompt_includes_objective_section() -> None:
+    prompt = render_grade_prompt("Fractions", "Explain X", "Q?", "A.")
+
+    assert "## Learning Objective" in prompt
+    assert "Explain X" in prompt
+
+
+def test_render_grade_prompt_when_learning_objective_none_then_objective_section_omitted() -> None:
+    prompt = render_grade_prompt("Fractions", None, "Q?", "A.")
+
+    assert "## Learning Objective" not in prompt
+
+
+def test_render_grade_prompt_when_called_then_student_answer_and_question_are_included() -> None:
+    prompt = render_grade_prompt("Fractions", None, "What is a numerator?", "The top number.")
+
+    assert "What is a numerator?" in prompt
+    assert "The top number." in prompt
+
+
+def test_parse_grade_response_when_valid_json_then_returns_grade_and_feedback() -> None:
+    result = parse_grade_response('{"grade":"partial","feedback":"Nice start."}')
+
+    assert result.grade == "partial"
+    assert result.feedback == "Nice start."
+    assert result.parse_error is False
+    assert result.grade_recognised is True
+
+
+def test_parse_grade_response_when_grade_uppercase_then_normalised_to_lowercase() -> None:
+    assert parse_grade_response('{"grade":"CORRECT","feedback":"Yes."}').grade == "correct"
+
+
+def test_parse_grade_response_when_unrecognised_grade_then_defaults_incorrect_and_keeps_model_feedback() -> None:
+    result = parse_grade_response('{"grade":"excellent","feedback":"Great."}')
+
+    assert result.grade == "incorrect"
+    assert result.grade_recognised is False
+    assert result.feedback == "Great."
+    assert result.parse_error is False
+
+
+def test_parse_grade_response_when_malformed_json_then_defaults_and_flags_parse_error() -> None:
+    result = parse_grade_response("not json")
+
+    assert result.grade == "incorrect"
+    assert result.feedback == _CANNED_GRADE_FEEDBACK
+    assert result.parse_error is True
+
+
+def test_parse_grade_response_when_json_is_not_an_object_then_flags_parse_error() -> None:
+    result = parse_grade_response("[1,2]")
+
+    assert result.parse_error is True
+    assert result.grade == "incorrect"
+
+
+def test_parse_grade_response_when_feedback_missing_then_uses_canned_feedback() -> None:
+    result = parse_grade_response('{"grade":"correct"}')
+
+    assert result.grade == "correct"
+    assert result.feedback == _CANNED_GRADE_FEEDBACK
+    assert result.parse_error is False
+
+
+@pytest.mark.asyncio
+async def test_request_grade_completion_when_called_then_uses_grade_task_with_production_sampling_params() -> None:
+    mock = AsyncMock(return_value="raw reply")
+    with patch("app.services.mini_course_service.llm_router.complete", new=mock):
+        result = await request_grade_completion("the prompt")
+
+    assert result == "raw reply"
+    mock.assert_awaited_once()
+    kwargs = mock.await_args_list[0].kwargs
+    assert kwargs["task"] == "grade_open_answer"
+    assert kwargs["messages"] == [{"role": "user", "content": "the prompt"}]
+    assert kwargs["temperature"] == GRADE_TEMPERATURE
+    assert kwargs["max_tokens"] == GRADE_MAX_TOKENS
