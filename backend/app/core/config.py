@@ -122,6 +122,11 @@ class Settings(BaseSettings):
     llm_grade_open_answer_model: str = "openrouter/google/gemini-2.0-flash-001"
     llm_grade_open_answer_api_base: str | None = None
 
+    # Judge model for the offline DeepEval harness (backend/evals). Harness-only: the app never
+    # calls it, so it is deliberately absent from _validate_llm_models. Empty means evals disabled.
+    llm_eval_judge_model: str = ""
+    llm_eval_judge_api_base: str | None = None
+
     # Notification recipients
     kaihle_admin_email: str = ""
 

@@ -248,6 +248,37 @@ class TestTaskModelMap:
                 f"Task {task} has invalid api_base type: {type(api_base)}"
             )
 
+    def test_task_maps_when_eval_judge_registered_then_both_maps_contain_it(self) -> None:
+        """eval_judge is a harness-only task but must be routable like every other task."""
+        from app.ai.providers.router import TASK_API_BASE_MAP, TASK_MODEL_MAP
+
+        assert "eval_judge" in TASK_MODEL_MAP
+        assert "eval_judge" in TASK_API_BASE_MAP
+
+    @pytest.mark.asyncio
+    async def test_complete_when_eval_judge_task_then_uses_eval_judge_model_from_settings(self) -> None:
+        """The eval_judge map entries are wired to the llm_eval_judge_* settings, and complete() uses them."""
+        from app.ai.providers.router import TASK_API_BASE_MAP, TASK_MODEL_MAP, complete
+        from app.core.config import settings
+
+        assert TASK_MODEL_MAP["eval_judge"] == settings.llm_eval_judge_model
+        assert TASK_API_BASE_MAP["eval_judge"] == settings.llm_eval_judge_api_base
+
+        mock_response = MagicMock()
+        mock_response.usage = MagicMock(total_tokens=10)
+        mock_response.choices = [MagicMock(message=MagicMock(content="ok"))]
+        placeholder_model = "placeholder/judge-model"
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock) as mock_complete,
+            patch.dict(TASK_MODEL_MAP, {"eval_judge": placeholder_model}),
+        ):
+            mock_complete.return_value = mock_response
+            result = await complete("eval_judge", [{"role": "user", "content": "Hello"}])
+
+        assert result == "ok"
+        assert mock_complete.call_args.kwargs["model"] == placeholder_model
+
 
 class TestRouterModuleStructure:
     """Tests for router module structure and exports."""

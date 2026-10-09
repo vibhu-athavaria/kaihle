@@ -49,6 +49,11 @@ exclude = ["alembic*"]
 dev = [
     "psycopg2-binary",
 ]
+# Offline LLM evaluation harness (backend/evals). A dependency group, not an extra, so neither
+# `uv sync --all-extras` (CI) nor `uv pip install "."` (Docker) installs it.
+eval = [
+    "deepeval>=4.2.8",
+]
 
 [project.optional-dependencies]
 dev = [
