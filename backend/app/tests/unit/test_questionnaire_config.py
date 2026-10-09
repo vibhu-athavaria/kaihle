@@ -1,6 +1,10 @@
 """Unit tests for questionnaire_config module."""
 
+import pytest
+
+from app.core import questionnaire_config
 from app.core.questionnaire_config import (
+    INTEREST_KEY_TO_CATEGORY,
     SUBJECT_INTEREST_MAP,
     get_compatible_interests,
     get_option_by_key,
@@ -243,3 +247,94 @@ class TestGetAllInterestCategories:
 
         expected = {"sports_movement", "tech_gaming", "nature_animals", "arts_culture"}
         assert set(get_all_interest_categories()) == expected
+
+
+# ---------------------------------------------------------------------------
+# T15 slice 1: v2 category-key compatibility and prompt labels
+# ---------------------------------------------------------------------------
+
+LEGACY_KEYS = ["travel", "music", "art", "nature", "animals", "cooking", "sports", "technology", "gaming", "fashion"]
+V2_KEYS = ["sports_movement", "tech_gaming", "nature_animals", "arts_culture"]
+
+# The D4 table, written out literally so a change to the derivation is caught.
+DOCUMENTED_SUBJECT_CATEGORIES: dict[str, set[str]] = {
+    "MATH": {"sports_movement", "tech_gaming", "nature_animals", "arts_culture"},
+    "SCI": {"nature_animals", "sports_movement"},
+    "ENG": {"nature_animals", "arts_culture"},
+    "BIO": {"nature_animals", "sports_movement"},
+    "CHEM": {"nature_animals", "tech_gaming"},
+    "PHY": {"sports_movement", "arts_culture", "tech_gaming"},
+    "ENGL": {"nature_animals", "arts_culture"},
+}
+
+
+def test_get_compatible_interests_when_v2_category_compatible_with_subject_then_returned() -> None:
+    assert get_compatible_interests("MATH", ["sports_movement"]) == ["sports_movement"]
+
+
+def test_get_compatible_interests_when_v2_category_incompatible_with_subject_then_excluded() -> None:
+    assert get_compatible_interests("SCI", ["tech_gaming"]) == []
+
+
+def test_get_compatible_interests_when_mixed_legacy_and_v2_then_order_preserved() -> None:
+    result = get_compatible_interests("PHY", ["tech_gaming", "fashion", "sports", "arts_culture", "nature_animals"])
+    assert result == ["tech_gaming", "sports", "arts_culture"]
+
+
+@pytest.mark.parametrize("subject", sorted(SUBJECT_INTEREST_MAP))
+@pytest.mark.parametrize("key", LEGACY_KEYS)
+def test_get_compatible_interests_when_legacy_key_then_result_unchanged_for_every_existing_case(
+    subject: str, key: str
+) -> None:
+    # Independent re-statement of the pre-T15 behaviour: plain membership in the legacy list.
+    expected = [key] if key in SUBJECT_INTEREST_MAP[subject] else []
+    assert get_compatible_interests(subject, [key]) == expected
+
+
+@pytest.mark.parametrize("subject", ["GEO", "HIST", "GP", "ZZZ"])
+def test_get_compatible_interests_when_subject_unknown_then_empty(subject: str) -> None:
+    assert get_compatible_interests(subject, LEGACY_KEYS + V2_KEYS) == []
+
+
+def test_get_compatible_interests_when_subject_code_lowercase_then_case_insensitive() -> None:
+    assert get_compatible_interests("math", ["sports_movement", "sports"]) == ["sports_movement", "sports"]
+
+
+def test_subject_category_map_when_derived_then_every_category_comes_from_a_legacy_key_via_interest_key_to_category() -> (
+    None
+):
+    category_map = questionnaire_config.SUBJECT_CATEGORY_MAP
+    assert set(category_map) == set(SUBJECT_INTEREST_MAP)
+    for subject, legacy_keys in SUBJECT_INTEREST_MAP.items():
+        assert set(category_map[subject]) == {INTEREST_KEY_TO_CATEGORY[k] for k in legacy_keys}
+
+
+def test_subject_category_map_when_derived_then_matches_the_documented_table() -> None:
+    category_map = questionnaire_config.SUBJECT_CATEGORY_MAP
+    assert {subject: set(cats) for subject, cats in category_map.items()} == DOCUMENTED_SUBJECT_CATEGORIES
+
+
+@pytest.mark.parametrize(
+    ("key", "label"),
+    [
+        ("sports_movement", "Sports, fitness and movement"),
+        ("tech_gaming", "Technology, gaming and how things are built"),
+        ("nature_animals", "Nature, animals and the living world"),
+        ("arts_culture", "Art, music, stories and culture"),
+    ],
+)
+def test_interest_prompt_label_when_v2_key_then_returns_questionnaire_phrase_not_the_enum_string(
+    key: str, label: str
+) -> None:
+    result = questionnaire_config.interest_prompt_label(key)
+    assert result == label
+    assert result != key
+
+
+@pytest.mark.parametrize("key", LEGACY_KEYS)
+def test_interest_prompt_label_when_legacy_key_then_returns_key_unchanged(key: str) -> None:
+    assert questionnaire_config.interest_prompt_label(key) == key
+
+
+def test_interest_prompt_label_when_unknown_key_then_underscores_replaced_with_spaces() -> None:
+    assert questionnaire_config.interest_prompt_label("deep_sea_diving") == "deep sea diving"
