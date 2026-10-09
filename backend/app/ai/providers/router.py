@@ -56,6 +56,7 @@ TASK_MODEL_MAP: dict[str, str] = {
     "content_seed": settings.llm_content_seed_model,
     "transfer_question": settings.llm_transfer_question_model,
     "grade_open_answer": settings.llm_grade_open_answer_model,
+    "eval_judge": settings.llm_eval_judge_model,
 }
 
 TASK_API_BASE_MAP: dict[str, str | None] = {
@@ -74,6 +75,7 @@ TASK_API_BASE_MAP: dict[str, str | None] = {
     "content_seed": settings.llm_content_seed_api_base,
     "transfer_question": settings.llm_transfer_question_api_base,
     "grade_open_answer": settings.llm_grade_open_answer_api_base,
+    "eval_judge": settings.llm_eval_judge_api_base,
 }
 
 
