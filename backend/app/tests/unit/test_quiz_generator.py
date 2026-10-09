@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import json as json_lib
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
-from uuid import uuid4
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID, uuid4
 
 import pytest
 
 from app.ai.quiz_generator import (
     GeneratedQuiz,
     QuestionType,
+    QuizContext,
     QuizGenerationError,
     QuizQuestion,
     _build_prompt,
@@ -18,7 +20,9 @@ from app.ai.quiz_generator import (
     _mastery_to_difficulty_label,
     _parse_questions,
     generate_quiz,
+    resolve_quiz_context,
 )
+from app.models import Subtopic
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -26,45 +30,64 @@ from app.ai.quiz_generator import (
 
 
 @pytest.fixture
-def sample_subtopic() -> MagicMock:
-    """Mock Subtopic with a 768-dim embedding (via PropertyMock)."""
-    mock = MagicMock()
-    mock.id = uuid4()
-    mock.name = "Photosynthesis"
-    mock.learning_objective = "Explain the process of photosynthesis"
-    mock.subject_name = "Biology"
-    mock.curriculum_code = "CAMBRIDGE"
-    mock.subject_code = "BIOLOGY"
-    # PropertyMock ensures .embedding returns a real list, not a MagicMock
-    type(mock).embedding = PropertyMock(return_value=[0.1] * 768)
-    return mock
+def sample_subtopic() -> Subtopic:
+    """Real, unpersisted Subtopic carrying only real columns.
+
+    Deliberately NOT a MagicMock: an auto-attribute mock hid the fact that the ORM model
+    has no subject_code / subject_name / curriculum_code (T15 defect A).
+    """
+    return Subtopic(
+        id=uuid4(),
+        name="Photosynthesis",
+        learning_objective="Explain the process of photosynthesis",
+    )
 
 
 @pytest.fixture
-def sample_student_id() -> MagicMock:
+def sample_student_id() -> UUID:
     return uuid4()
 
 
 @pytest.fixture
-def mock_db_session(sample_subtopic: MagicMock) -> AsyncMock:
-    """Async mock DB session that returns fixtures for all queries."""
+def context_row() -> SimpleNamespace:
+    """The single joined row the context query returns (mutable per test)."""
+    return SimpleNamespace(
+        curriculum_code="CAMBRIDGE",
+        subject_name="Mathematics",
+        subject_code="MATH",
+        grade_level=9,
+    )
+
+
+@pytest.fixture
+def mock_db_session(context_row: SimpleNamespace, sample_subtopic: Subtopic) -> AsyncMock:
+    """Async mock session: answers the context query, the content query, the validator's
+    subtopic lookup and the profile get.
+
+    Test-tunable state lives on the session: ``session.interests``.
+    """
     session = AsyncMock()
-    mock_profile = MagicMock()
-    mock_profile.interests = ["sports", "gaming"]
+    session.interests = ["sports", "gaming"]
     mock_content = MagicMock()
     mock_content.approved_explanation = "Approved explanation text."
 
     async def mock_get(model, ident):
         model_name = getattr(model, "__name__", str(model))
-        if model_name == "SubtopicContent":
-            return mock_content
         if model_name == "StudentLearningProfile":
-            return mock_profile
+            profile = MagicMock()
+            profile.interests = session.interests
+            return profile
         return None
 
     async def mock_execute(stmt):
         result = MagicMock()
-        result.scalar_one_or_none.return_value = sample_subtopic
+        sql = str(stmt)
+        if "curricula" in sql:
+            result.one_or_none.return_value = context_row
+        elif "subtopic_content" in sql:
+            result.scalar_one_or_none.return_value = mock_content
+        else:
+            result.scalar_one_or_none.return_value = sample_subtopic  # QuizValidator lookup
         return result
 
     session.get = mock_get
@@ -461,3 +484,208 @@ class TestGenerateQuiz:
             )
 
         assert "foundational" in captured_prompt
+
+
+# ---------------------------------------------------------------------------
+# T15 slice 2: context resolution + personalisation wiring
+# ---------------------------------------------------------------------------
+
+
+def _capture_prompt_complete(sample_questions: list[dict], sink: list[str]):
+    async def _complete(*args, **kwargs):
+        sink.append(kwargs["messages"][0]["content"])
+        return json_lib.dumps({"questions": sample_questions})
+
+    return _complete
+
+
+def _no_row_execute(statements: list | None = None):
+    async def _execute(stmt):
+        if statements is not None:
+            statements.append(stmt)
+        result = MagicMock()
+        result.one_or_none.return_value = None
+        return result
+
+    return _execute
+
+
+class TestResolveQuizContext:
+    @pytest.mark.asyncio
+    async def test_resolve_quiz_context_when_subtopic_linked_then_returns_subject_curriculum_and_grade(
+        self, sample_subtopic, mock_db_session
+    ):
+        ctx = await resolve_quiz_context(sample_subtopic.id, mock_db_session)
+
+        assert ctx == QuizContext(
+            curriculum_code="CAMBRIDGE", subject_name="Mathematics", subject_code="MATH", grade_level=9
+        )
+
+    @pytest.mark.asyncio
+    async def test_resolve_quiz_context_when_subtopic_not_linked_then_raises_quiz_generation_error_naming_the_id(
+        self, sample_subtopic, mock_db_session
+    ):
+        mock_db_session.execute = _no_row_execute()
+
+        with pytest.raises(QuizGenerationError, match=str(sample_subtopic.id)):
+            await resolve_quiz_context(sample_subtopic.id, mock_db_session)
+
+    @pytest.mark.asyncio
+    async def test_resolve_quiz_context_when_subtopic_inactive_then_raises_quiz_generation_error(
+        self, sample_subtopic, mock_db_session
+    ):
+        statements: list = []
+        mock_db_session.execute = _no_row_execute(statements)
+
+        with pytest.raises(QuizGenerationError):
+            await resolve_quiz_context(sample_subtopic.id, mock_db_session)
+
+        assert "is_active" in str(statements[0])
+
+    @pytest.mark.asyncio
+    async def test_resolve_quiz_context_when_resolved_then_logs_context_without_student_data(
+        self, sample_subtopic, mock_db_session
+    ):
+        with patch("app.ai.quiz_generator.logger") as mock_logger:
+            await resolve_quiz_context(sample_subtopic.id, mock_db_session)
+
+        mock_logger.info.assert_called_once()
+        call = mock_logger.info.call_args
+        assert call.args[0] == "quiz_context_resolved"
+        assert call.kwargs["subject_code"] == "MATH"
+        assert call.kwargs["grade_level"] == 9
+        assert "student_id" not in call.kwargs
+
+
+class TestGenerateQuizContextWiring:
+    @pytest.mark.asyncio
+    async def test_generate_quiz_when_called_then_prompt_contains_resolved_subject_name_not_general(
+        self, sample_subtopic, sample_student_id, mock_db_session, sample_questions
+    ):
+        prompts: list[str] = []
+        with patch(
+            "app.ai.quiz_generator.complete",
+            new_callable=AsyncMock,
+            side_effect=_capture_prompt_complete(sample_questions, prompts),
+        ):
+            await generate_quiz(sample_subtopic, 0.5, sample_student_id, mock_db_session)
+
+        assert "Mathematics" in prompts[0]
+        assert "General" not in prompts[0]
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_when_called_then_prompt_contains_resolved_curriculum_code(
+        self, sample_subtopic, sample_student_id, mock_db_session, context_row, sample_questions
+    ):
+        context_row.curriculum_code = "IB_MYP"
+        prompts: list[str] = []
+        with patch(
+            "app.ai.quiz_generator.complete",
+            new_callable=AsyncMock,
+            side_effect=_capture_prompt_complete(sample_questions, prompts),
+        ):
+            await generate_quiz(sample_subtopic, 0.5, sample_student_id, mock_db_session)
+
+        assert "IB_MYP" in prompts[0]
+        assert "CAMBRIDGE" not in prompts[0]
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_when_grade_not_passed_then_validator_receives_resolved_grade(
+        self, sample_subtopic, sample_student_id, mock_db_session, sample_questions
+    ):
+        validator = MagicMock()
+        validator.validate_batch = AsyncMock(return_value=sample_questions)
+        with (
+            patch("app.ai.quiz_generator.QuizValidator", return_value=validator),
+            patch(
+                "app.ai.quiz_generator.complete",
+                new_callable=AsyncMock,
+                return_value=json_lib.dumps({"questions": sample_questions}),
+            ),
+        ):
+            await generate_quiz(sample_subtopic, 0.5, sample_student_id, mock_db_session)
+
+        assert validator.validate_batch.call_args.kwargs["grade_level"] == 9
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_when_grade_passed_explicitly_then_explicit_value_wins(
+        self, sample_subtopic, sample_student_id, mock_db_session, sample_questions
+    ):
+        validator = MagicMock()
+        validator.validate_batch = AsyncMock(return_value=sample_questions)
+        with (
+            patch("app.ai.quiz_generator.QuizValidator", return_value=validator),
+            patch(
+                "app.ai.quiz_generator.complete",
+                new_callable=AsyncMock,
+                return_value=json_lib.dumps({"questions": sample_questions}),
+            ),
+        ):
+            await generate_quiz(sample_subtopic, 0.5, sample_student_id, mock_db_session, grade_level=11)
+
+        assert validator.validate_batch.call_args.kwargs["grade_level"] == 11
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_when_subtopic_not_linked_then_raises_before_calling_llm(
+        self, sample_subtopic, sample_student_id, mock_db_session
+    ):
+        mock_db_session.execute = _no_row_execute()
+        with patch("app.ai.quiz_generator.complete", new_callable=AsyncMock) as llm:
+            with pytest.raises(QuizGenerationError, match=str(sample_subtopic.id)):
+                await generate_quiz(sample_subtopic, 0.5, sample_student_id, mock_db_session)
+
+        llm.assert_not_called()
+
+
+class TestGenerateQuizPersonalisation:
+    @pytest.mark.asyncio
+    async def test_generate_quiz_when_student_has_compatible_v2_interest_then_prompt_has_personalisation_section_with_human_label(
+        self, sample_subtopic, sample_student_id, mock_db_session, sample_questions
+    ):
+        mock_db_session.interests = ["sports_movement"]
+        prompts: list[str] = []
+        with patch(
+            "app.ai.quiz_generator.complete",
+            new_callable=AsyncMock,
+            side_effect=_capture_prompt_complete(sample_questions, prompts),
+        ):
+            quiz = await generate_quiz(sample_subtopic, 0.5, sample_student_id, mock_db_session)
+
+        assert "Personalisation" in prompts[0]
+        assert "Sports, fitness and movement" in prompts[0]
+        assert "sports_movement" not in prompts[0]
+        assert quiz.interests_used == ["sports_movement"]
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_when_student_has_only_incompatible_interest_then_personalisation_section_omitted(
+        self, sample_subtopic, sample_student_id, mock_db_session, context_row, sample_questions
+    ):
+        context_row.subject_code = "SCI"
+        mock_db_session.interests = ["tech_gaming"]
+        prompts: list[str] = []
+        with patch(
+            "app.ai.quiz_generator.complete",
+            new_callable=AsyncMock,
+            side_effect=_capture_prompt_complete(sample_questions, prompts),
+        ):
+            quiz = await generate_quiz(sample_subtopic, 0.5, sample_student_id, mock_db_session)
+
+        assert "Personalisation" not in prompts[0]
+        assert quiz.interests_used == []
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_when_student_has_legacy_interest_then_behaviour_unchanged(
+        self, sample_subtopic, sample_student_id, mock_db_session, sample_questions
+    ):
+        mock_db_session.interests = ["sports"]
+        prompts: list[str] = []
+        with patch(
+            "app.ai.quiz_generator.complete",
+            new_callable=AsyncMock,
+            side_effect=_capture_prompt_complete(sample_questions, prompts),
+        ):
+            quiz = await generate_quiz(sample_subtopic, 0.5, sample_student_id, mock_db_session)
+
+        assert "Personalisation" in prompts[0]
+        assert "sports" in prompts[0]
+        assert quiz.interests_used == ["sports"]

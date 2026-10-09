@@ -5,6 +5,7 @@ calibrated to student mastery level and personalised with student interests.
 
 Architecture:
 - Subtopic context from subtopic_content.get_display_explanation() (or learning_objective fallback)
+- Subject/curriculum/grade resolved via resolve_quiz_context() (no defaults)
 - Student interests filtered via get_compatible_interests() before injection
 - LLM: Gemini 2.5 Flash via complete(task="quiz_generation") — split from question_generation
   2026-09-09 so practice-quiz spend is trackable separately from question-bank generation
@@ -28,8 +29,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.providers.router import complete
-from app.core.questionnaire_config import get_compatible_interests
-from app.models import StudentLearningProfile, Subtopic
+from app.core.questionnaire_config import get_compatible_interests, interest_prompt_label
+from app.models import Curriculum, CurriculumTopic, Grade, StudentLearningProfile, Subject, Subtopic
 from app.models.subtopic_content import ContentType, ReviewStatus, SubtopicContent
 from app.services.quiz_validator import QuizValidator
 
@@ -142,6 +143,64 @@ class QuizGenerationError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class QuizContext:
+    """Curriculum context of a subtopic, resolved from the database (never defaulted)."""
+
+    curriculum_code: str
+    subject_name: str
+    subject_code: str
+    grade_level: int
+
+
+async def resolve_quiz_context(subtopic_id: UUID, db: AsyncSession) -> QuizContext:
+    """Resolve curriculum, subject and grade for a subtopic with one explicit join.
+
+    Subtopic -> CurriculumTopic -> Curriculum / Subject / Grade. Curriculum tables are
+    school-agnostic (Rule 2), so no school_id filter applies. Subtopic.curriculum_topic_id is a
+    single FK, so the join yields at most one row.
+
+    Raises:
+        QuizGenerationError: If the subtopic is missing, inactive, or not linked to a
+            curriculum topic / subject / grade. There is deliberately no default.
+    """
+    result = await db.execute(
+        select(
+            Curriculum.code.label("curriculum_code"),
+            Subject.name.label("subject_name"),
+            Subject.code.label("subject_code"),
+            Grade.level.label("grade_level"),
+        )
+        .select_from(Subtopic)
+        .join(CurriculumTopic, CurriculumTopic.id == Subtopic.curriculum_topic_id)
+        .join(Curriculum, Curriculum.id == CurriculumTopic.curriculum_id)
+        .join(Subject, Subject.id == CurriculumTopic.subject_id)
+        .join(Grade, Grade.id == CurriculumTopic.grade_id)
+        .where(Subtopic.id == subtopic_id)
+        .where(Subtopic.is_active.is_(True))
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise QuizGenerationError(
+            f"Cannot resolve curriculum context for subtopic {subtopic_id}: "
+            "subtopic is missing, inactive, or not linked to a curriculum topic, subject and grade"
+        )
+
+    ctx = QuizContext(
+        curriculum_code=row.curriculum_code,
+        subject_name=row.subject_name,
+        subject_code=row.subject_code,
+        grade_level=row.grade_level,
+    )
+    logger.info(
+        "quiz_context_resolved",
+        subtopic_id=str(subtopic_id),
+        subject_code=ctx.subject_code,
+        grade_level=ctx.grade_level,
+    )
+    return ctx
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -152,7 +211,7 @@ async def generate_quiz(
     student_mastery: float,  # 0.0–1.0
     student_id: UUID,
     db: AsyncSession,
-    grade_level: int = 8,
+    grade_level: int | None = None,
 ) -> GeneratedQuiz:
     """Generate a 5-MCQ practice quiz for a student's subtopic.
 
@@ -161,7 +220,8 @@ async def generate_quiz(
         student_mastery: Current mastery score (0.0–1.0).
         student_id: UUID of the student.
         db: Async SQLAlchemy session.
-        grade_level: Student's grade level (default 8). Used for word-count gate.
+        grade_level: Optional override for the word-count gate. When None, the grade
+            resolved from the subtopic's curriculum topic is used.
 
     Returns:
         GeneratedQuiz with 5 MCQ questions.
@@ -170,11 +230,15 @@ async def generate_quiz(
         QuizGenerationError: If LLM call fails, output is invalid, or insufficient
             valid questions remain after retry.
     """
+    # 0. Resolve curriculum context (fails fast if the subtopic is not linked)
+    ctx = await resolve_quiz_context(subtopic.id, db)
+    effective_grade = grade_level if grade_level is not None else ctx.grade_level
+
     # 1. Load subtopic context
     subtopic_context = await _load_subtopic_context(subtopic, db)
 
     # 2. Load student interests (filtered to subject-compatible only)
-    compatible_interests = await _load_student_interests(subtopic, student_id, db)
+    compatible_interests = await _load_student_interests(ctx.subject_code, student_id, db)
     top_2_interests = compatible_interests[:2]
 
     # 3. Determine difficulty label
@@ -183,17 +247,16 @@ async def generate_quiz(
 
     # 4. Build prompt
     learning_objectives = subtopic.learning_objective or "Not specified"
-    curriculum_code = getattr(subtopic, "curriculum_code", "CAMBRIDGE")
 
     prompt = _build_prompt(
-        curriculum_code=curriculum_code,
-        subject_name=getattr(subtopic, "subject_name", "General"),
+        curriculum_code=ctx.curriculum_code,
+        subject_name=ctx.subject_name,
         subtopic_name=subtopic.name,
         mastery_pct=mastery_pct,
         difficulty_label=difficulty_label,
         learning_objectives=learning_objectives,
         subtopic_context=subtopic_context,
-        top_2_interests=top_2_interests,
+        top_2_interests=[interest_prompt_label(i) for i in top_2_interests],
     )
 
     # 5. Call LLM with retry
@@ -207,7 +270,7 @@ async def generate_quiz(
     valid_question_dicts = await validator.validate_batch(
         questions=[q.to_dict() for q in questions_data],
         subtopic_id=subtopic.id,
-        grade_level=grade_level,
+        grade_level=effective_grade,
     )
 
     # 8. Retry once if fewer than 5 valid
@@ -226,7 +289,7 @@ async def generate_quiz(
         retry_valid = await validator.validate_batch(
             questions=[q.to_dict() for q in retry_data],
             subtopic_id=subtopic.id,
-            grade_level=grade_level,
+            grade_level=effective_grade,
         )
         valid_question_dicts.extend(retry_valid)
 
@@ -286,7 +349,7 @@ async def _load_subtopic_context(
 
 
 async def _load_student_interests(
-    subtopic: Subtopic,
+    subject_code: str,
     student_id: UUID,
     db: AsyncSession,
 ) -> list[str]:
@@ -294,11 +357,6 @@ async def _load_student_interests(
     try:
         profile = await db.get(StudentLearningProfile, student_id)
         if not profile or not profile.interests:
-            return []
-
-        # Get subject_code from subtopic
-        subject_code = getattr(subtopic, "subject_code", "")
-        if not subject_code:
             return []
 
         compatible = get_compatible_interests(
