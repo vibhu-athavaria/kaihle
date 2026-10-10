@@ -68,7 +68,7 @@ from typing import Any
 
 import structlog
 from sqlalchemy import text as sa_text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
@@ -397,7 +397,7 @@ BLOOM_BY_DIFFICULTY: dict[int, list[str]] = {
 
 
 async def fetch_gap_subtopics(
-    db,
+    db: AsyncSession,
     subject_filter: list[str] | None,
     grade_filter: list[int] | None,
 ) -> list[dict[str, Any]]:
@@ -455,7 +455,7 @@ async def fetch_gap_subtopics(
 
 
 async def fetch_thin_subtopics(
-    db,
+    db: AsyncSession,
     subject_filter: list[str] | None,
     grade_filter: list[int] | None,
 ) -> list[dict[str, Any]]:
@@ -963,6 +963,41 @@ def make_canonical_form(question_text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+GENERATION_SYSTEM_PROMPT = (
+    "You are an expert Cambridge curriculum assessment author. "
+    "Output valid JSON only. "
+    "No markdown fences. No text outside the JSON object. "
+    "No HTML tags, no LaTeX, no markdown inside string values. "
+    "DO use Unicode maths characters (x² ½ × ÷ ≤ √ ° π) — the "
+    "student app renders them correctly and they make questions "
+    "readable."
+)
+GENERATION_TEMPERATURE = 0.4
+# 15 fully-specified questions — stem, 4 options, explanation covering
+# every distractor, and 3 hints — runs well past 8000 tokens on a
+# capable model. Truncation lands mid-string, so the whole batch fails
+# JSON parsing and the subtopic yields nothing after three attempts.
+# Measured range on a Sonnet-class model: 11.7k-15.0k tokens, so the
+# headroom here is deliberate — a cap set near the observed maximum
+# fails only on the richest subtopics, which are the ones worth having.
+GENERATION_MAX_TOKENS = 20000
+
+
+def parse_generation_response(text: str) -> Any:
+    """Strip optional markdown fences and decode the model's JSON.
+
+    Pure. Raises json.JSONDecodeError on undecodable text. The decoded value is
+    returned as-is (the caller currently assumes a dict; a bare list is NOT
+    tolerated — see test_generate_gap_questions.py).
+    """
+    # Strip markdown fences if the model added them despite instructions
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```\s*$", "", text.strip())
+    return json.loads(text)
+
+
 async def generate_for_subtopic(
     subtopic: dict[str, Any],
     semaphore: asyncio.Semaphore,
@@ -1032,29 +1067,11 @@ async def generate_for_subtopic(
                 response_text = await complete(
                     task="question_generation",
                     messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are an expert Cambridge curriculum assessment author. "
-                                "Output valid JSON only. "
-                                "No markdown fences. No text outside the JSON object. "
-                                "No HTML tags, no LaTeX, no markdown inside string values. "
-                                "DO use Unicode maths characters (x² ½ × ÷ ≤ √ ° π) — the "
-                                "student app renders them correctly and they make questions "
-                                "readable."
-                            ),
-                        },
+                        {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=0.4,
-                    # 15 fully-specified questions — stem, 4 options, explanation covering
-                    # every distractor, and 3 hints — runs well past 8000 tokens on a
-                    # capable model. Truncation lands mid-string, so the whole batch fails
-                    # JSON parsing and the subtopic yields nothing after three attempts.
-                    # Measured range on a Sonnet-class model: 11.7k-15.0k tokens, so the
-                    # headroom here is deliberate — a cap set near the observed maximum
-                    # fails only on the richest subtopics, which are the ones worth having.
-                    max_tokens=20000,
+                    temperature=GENERATION_TEMPERATURE,
+                    max_tokens=GENERATION_MAX_TOKENS,
                 )
             except Exception as exc:
                 log.error(
@@ -1067,20 +1084,15 @@ async def generate_for_subtopic(
                     await asyncio.sleep(2**attempt)  # 2s, 4s, 8s backoff
                 continue
 
-            # Strip markdown fences if the model added them despite instructions
-            response_text = response_text.strip()
-            if response_text.startswith("```"):
-                response_text = re.sub(r"^```(?:json)?\s*", "", response_text)
-                response_text = re.sub(r"\s*```\s*$", "", response_text.strip())
-
             try:
-                batch = json.loads(response_text)
+                batch = parse_generation_response(response_text)
             except json.JSONDecodeError as exc:
                 log.error(
                     "json_parse_failed",
                     attempt=attempt,
                     error=str(exc),
-                    preview=response_text[:200],
+                    # exc.doc is the fence-stripped text that json.loads rejected
+                    preview=exc.doc[:200],
                     subtopic=subtopic["subtopic_name"],
                 )
                 if attempt < MAX_RETRIES:
