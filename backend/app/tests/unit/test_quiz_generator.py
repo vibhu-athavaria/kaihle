@@ -543,6 +543,20 @@ class TestResolveQuizContext:
         assert "is_active" in str(statements[0])
 
     @pytest.mark.asyncio
+    async def test_resolve_quiz_context_when_curriculum_topic_inactive_then_statement_filters_it_and_error_names_the_id(
+        self, sample_subtopic, mock_db_session
+    ):
+        statements: list = []
+        mock_db_session.execute = _no_row_execute(statements)
+
+        with pytest.raises(QuizGenerationError, match=str(sample_subtopic.id)):
+            await resolve_quiz_context(sample_subtopic.id, mock_db_session)
+
+        sql = str(statements[0])
+        assert "curriculum_topics.is_active IS true" in sql
+        assert "subtopics.is_active IS true" in sql
+
+    @pytest.mark.asyncio
     async def test_resolve_quiz_context_when_resolved_then_logs_context_without_student_data(
         self, sample_subtopic, mock_db_session
     ):

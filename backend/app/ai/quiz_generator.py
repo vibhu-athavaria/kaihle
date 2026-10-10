@@ -158,11 +158,14 @@ async def resolve_quiz_context(subtopic_id: UUID, db: AsyncSession) -> QuizConte
 
     Subtopic -> CurriculumTopic -> Curriculum / Subject / Grade. Curriculum tables are
     school-agnostic (Rule 2), so no school_id filter applies. Subtopic.curriculum_topic_id is a
-    single FK, so the join yields at most one row.
+    single FK, so the join yields at most one row. Both Subtopic.is_active and
+    CurriculumTopic.is_active must be true, matching the other Subtopic -> CurriculumTopic
+    queries (gap_service, question_selection, class_topic_service).
 
     Raises:
-        QuizGenerationError: If the subtopic is missing, inactive, or not linked to a
-            curriculum topic / subject / grade. There is deliberately no default.
+        QuizGenerationError: If the subtopic or its curriculum topic is missing or inactive,
+            or the topic is not linked to a curriculum / subject / grade. There is
+            deliberately no default.
     """
     result = await db.execute(
         select(
@@ -178,12 +181,13 @@ async def resolve_quiz_context(subtopic_id: UUID, db: AsyncSession) -> QuizConte
         .join(Grade, Grade.id == CurriculumTopic.grade_id)
         .where(Subtopic.id == subtopic_id)
         .where(Subtopic.is_active.is_(True))
+        .where(CurriculumTopic.is_active.is_(True))
     )
     row = result.one_or_none()
     if row is None:
         raise QuizGenerationError(
             f"Cannot resolve curriculum context for subtopic {subtopic_id}: "
-            "subtopic is missing, inactive, or not linked to a curriculum topic, subject and grade"
+            "subtopic or curriculum topic is missing or inactive, or not linked to a subject and grade"
         )
 
     ctx = QuizContext(
