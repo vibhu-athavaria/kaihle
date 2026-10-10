@@ -47,28 +47,29 @@ class GradeCase(BaseModel):
 
 
 def _describe(case_id: str, err: ValidationError) -> str:
-    fields = sorted({".".join(str(p) for p in e["loc"]) for e in err.errors()})
-    return f"case {case_id}: invalid field(s) {', '.join(fields)}: {err.errors()[0]['msg']}"
+    entries = sorted(f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in err.errors())
+    return f"case {case_id}: {'; '.join(entries)}"
 
 
 def load_grade_cases(path: Path) -> list[GradeCase]:
     """Load and validate a JSONL file; raise ValueError naming the case id and field on any defect."""
     cases: list[GradeCase] = []
     seen: set[str] = set()
-    for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            raw = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"line {line_no}: invalid JSON: {exc}") from exc
-        case_id = str(raw.get("id", f"<line {line_no}>")) if isinstance(raw, dict) else f"<line {line_no}>"
-        try:
-            case = GradeCase.model_validate(raw)
-        except ValidationError as exc:
-            raise ValueError(_describe(case_id, exc)) from exc
-        if case.id in seen:
-            raise ValueError(f"case {case.id}: duplicate id")
-        seen.add(case.id)
-        cases.append(case)
+    with path.open(encoding="utf-8") as fh:
+        for line_no, line in enumerate(fh, start=1):
+            if not line.strip():
+                continue
+            try:
+                raw = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"line {line_no}: invalid JSON: {exc}") from exc
+            case_id = str(raw.get("id", f"<line {line_no}>")) if isinstance(raw, dict) else f"<line {line_no}>"
+            try:
+                case = GradeCase.model_validate(raw)
+            except ValidationError as exc:
+                raise ValueError(_describe(case_id, exc)) from exc
+            if case.id in seen:
+                raise ValueError(f"case {case.id}: duplicate id")
+            seen.add(case.id)
+            cases.append(case)
     return cases

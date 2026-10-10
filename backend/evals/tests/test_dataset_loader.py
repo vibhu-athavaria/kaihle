@@ -83,6 +83,30 @@ def test_load_grade_cases_when_label_source_missing_then_raises(tmp_path: Path) 
     assert "label_source" in str(exc.value)
 
 
+def test_load_grade_cases_when_multiple_fields_invalid_then_error_lists_each_field_with_its_own_message(
+    tmp_path: Path,
+) -> None:
+    row = _row("T-020", expected_grade="excellent", grade_level="seven")
+    path = _write(tmp_path, [row])
+
+    with pytest.raises(ValueError) as exc:
+        load_grade_cases(path)
+
+    message = str(exc.value)
+    assert message.startswith("case T-020:")
+    entries = dict(part.split(": ", 1) for part in message.removeprefix("case T-020: ").split("; "))
+    assert set(entries) == {"expected_grade", "grade_level"}
+    assert "correct" in entries["expected_grade"]
+    assert "integer" in entries["grade_level"]
+
+
+def test_load_grade_cases_when_blank_lines_and_crlf_then_still_loads(tmp_path: Path) -> None:
+    path = tmp_path / "crlf.jsonl"
+    path.write_bytes((json.dumps(_row("T-030")) + "\r\n\r\n" + json.dumps(_row("T-031")) + "\r\n\r\n").encode())
+
+    assert [c.id for c in load_grade_cases(path)] == ["T-030", "T-031"]
+
+
 def test_grade_case_when_label_source_not_the_literal_then_validation_error() -> None:
     with pytest.raises(ValidationError):
         GradeCase(**_row(label_source="human-validated"))
