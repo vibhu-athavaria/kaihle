@@ -33,6 +33,10 @@ class JudgeNotIndependentError(RuntimeError):
     """The judge would grade its own model's output."""
 
 
+class JudgeConfigError(RuntimeError):
+    """The graded task is unknown or has no model configured, so independence cannot be checked."""
+
+
 class RouterJudge(DeepEvalBaseLLM):
     """DeepEval judge that calls the ``eval_judge`` router task at temperature 0.
 
@@ -48,6 +52,8 @@ class RouterJudge(DeepEvalBaseLLM):
         return self
 
     async def a_generate(self, prompt: str, *args: object, **kwargs: object) -> str:
+        # component and run_id reach llm_usage_events via structlog contextvars (see usage_context.py),
+        # so they are intentionally not complete() arguments.
         with llm_component(JUDGE_COMPONENT, run_id=self.run_id):
             return await complete(
                 task=JUDGE_TASK,
@@ -72,10 +78,45 @@ class RouterJudge(DeepEvalBaseLLM):
         return JUDGE_MODEL_LABEL
 
 
+_JUDGE_UNSET_MESSAGE = "LLM_EVAL_JUDGE_MODEL is not set; the eval harness cannot run without a judge."
+
+
+def _task_problem(task: str) -> tuple[type[RuntimeError], str] | None:
+    """Problem with the graded task alone (unknown, no model, or identical to the judge)."""
+    if task not in TASK_MODEL_MAP:
+        return JudgeConfigError, f"Unknown graded task {task!r}; valid tasks: {sorted(TASK_MODEL_MAP)}."
+    graded_model = TASK_MODEL_MAP[task]
+    if not graded_model:
+        return JudgeConfigError, f"No model is configured for graded task {task!r}; independence cannot be checked."
+    if settings.llm_eval_judge_model == graded_model:
+        return (
+            JudgeNotIndependentError,
+            f"Judge model is identical to the model under test for task {task!r}; "
+            "set LLM_EVAL_JUDGE_MODEL to a different model.",
+        )
+    return None
+
+
+def _config_problem(task: str) -> tuple[type[RuntimeError], str] | None:
+    if not settings.llm_eval_judge_model:
+        return JudgeNotConfiguredError, _JUDGE_UNSET_MESSAGE
+    return _task_problem(task)
+
+
+def judge_config_problem(task: str) -> str | None:
+    """Human-readable reason the harness cannot grade ``task``, or None when config is healthy.
+
+    Single source for every condition the raising guards reject, so pytest skip logic and the
+    guards cannot drift apart.
+    """
+    problem = _config_problem(task)
+    return None if problem is None else problem[1]
+
+
 def require_judge_configured() -> None:
     """Fail fast, naming the env var, when no judge model is configured."""
     if not settings.llm_eval_judge_model:
-        raise JudgeNotConfiguredError("LLM_EVAL_JUDGE_MODEL is not set; the eval harness cannot run without a judge.")
+        raise JudgeNotConfiguredError(_JUDGE_UNSET_MESSAGE)
 
 
 def _vendor_token(model: str) -> str | None:
@@ -89,18 +130,15 @@ def _vendor_token(model: str) -> str | None:
 def check_judge_independence(task: str) -> None:
     """Refuse to judge a task whose model is the judge; warn when the vendor matches.
 
-    Identical model strings raise ``JudgeNotIndependentError`` (self-preference bias). The
-    vendor comparison is a HEURISTIC: it only compares the leading path segment of the model
-    string, so aggregators, self-hosted endpoints and bare model names can hide or fake a
-    shared vendor. A warning is advisory, not proof either way.
+    Identical model strings raise ``JudgeNotIndependentError`` (self-preference bias); an
+    unknown task or one with no model raises ``JudgeConfigError``. The vendor comparison is a
+    HEURISTIC: it only compares the leading path segment of the model string, so aggregators,
+    self-hosted endpoints and bare model names can hide or fake a shared vendor. A warning is
+    advisory, not proof either way.
     """
-    judge_model = settings.llm_eval_judge_model
-    graded_model = TASK_MODEL_MAP[task]
-    if judge_model == graded_model:
-        raise JudgeNotIndependentError(
-            f"Judge model is identical to the model under test for task {task!r}; "
-            "set LLM_EVAL_JUDGE_MODEL to a different model."
-        )
-    judge_vendor = _vendor_token(judge_model)
-    if judge_vendor is not None and judge_vendor == _vendor_token(graded_model):
+    problem = _task_problem(task)
+    if problem is not None:
+        raise problem[0](problem[1])
+    judge_vendor = _vendor_token(settings.llm_eval_judge_model)
+    if judge_vendor is not None and judge_vendor == _vendor_token(TASK_MODEL_MAP[task]):
         logger.warning("eval_judge_same_vendor", task=task, vendor=judge_vendor)

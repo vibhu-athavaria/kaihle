@@ -6,12 +6,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.ai.usage_context import current_component
+from app.ai.usage_context import current_component, current_run_id
+from evals.conftest import live_eval_skip_reason
 from evals.judge import (
+    JudgeConfigError,
     JudgeNotConfiguredError,
     JudgeNotIndependentError,
     RouterJudge,
     check_judge_independence,
+    judge_config_problem,
     require_judge_configured,
 )
 
@@ -120,3 +123,66 @@ def test_conftest_when_loaded_then_deepeval_telemetry_opt_out_is_forced() -> Non
     # evals/conftest.py is imported by pytest before this module, so the forced value
     # must already be in the environment regardless of what the shell exported.
     assert os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] == "YES"
+
+
+async def test_a_generate_when_run_id_given_then_run_id_is_visible_to_the_router_call_and_restored_afterwards() -> None:
+    seen: list[str | None] = []
+
+    async def record(**_: object) -> str:
+        seen.append(current_run_id())
+        return "ok"
+
+    with patch("evals.judge.complete", new=record):
+        await RouterJudge(run_id="run-123").a_generate("p")
+
+    assert seen == ["run-123"]
+    assert current_run_id() is None
+
+
+def test_check_judge_independence_when_task_unknown_then_raises_naming_task_and_valid_tasks() -> None:
+    with (
+        patch("evals.judge.settings", _settings(JUDGE_MODEL)),
+        patch("evals.judge.TASK_MODEL_MAP", {"known_task": "vendor-b/m"}),
+    ):
+        with pytest.raises(JudgeConfigError, match="nope.*known_task"):
+            check_judge_independence("nope")
+
+
+def test_check_judge_independence_when_graded_model_empty_then_raises_descriptive_error() -> None:
+    with (
+        patch("evals.judge.settings", _settings(JUDGE_MODEL)),
+        patch("evals.judge.TASK_MODEL_MAP", {"graded_task": ""}),
+    ):
+        with pytest.raises(JudgeConfigError, match="graded_task"):
+            check_judge_independence("graded_task")
+
+
+@pytest.mark.parametrize(
+    ("judge_model", "task_map", "problem_expected"),
+    [
+        ("", {"graded_task": "vendor-b/m"}, True),
+        (JUDGE_MODEL, {}, True),
+        (JUDGE_MODEL, {"graded_task": ""}, True),
+        (JUDGE_MODEL, {"graded_task": JUDGE_MODEL}, True),
+        (JUDGE_MODEL, {"graded_task": "vendor-b/m"}, False),
+    ],
+    ids=["judge_unset", "unknown_task", "empty_graded", "identical_models", "healthy"],
+)
+def test_live_skip_decision_when_config_varies_then_agrees_with_raising_guards(
+    judge_model: str, task_map: dict[str, str], problem_expected: bool
+) -> None:
+    with (
+        patch("evals.judge.settings", _settings(judge_model)),
+        patch("evals.judge.TASK_MODEL_MAP", task_map),
+    ):
+        reason = live_eval_skip_reason("graded_task")
+        try:
+            require_judge_configured()
+            check_judge_independence("graded_task")
+            guards_raised = False
+        except (JudgeConfigError, JudgeNotConfiguredError, JudgeNotIndependentError):
+            guards_raised = True
+        assert judge_config_problem("graded_task") == (reason and reason.removeprefix("live eval skipped: "))
+
+    assert guards_raised is problem_expected
+    assert (reason is not None) is problem_expected

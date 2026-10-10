@@ -5,10 +5,16 @@ os.environ["DEEPEVAL_TELEMETRY_OPT_OUT"] = "YES"
 
 import pytest  # noqa: E402
 
-from app.ai.providers.router import TASK_MODEL_MAP  # noqa: E402
-from app.core.config import settings  # noqa: E402
+from evals.judge import judge_config_problem  # noqa: E402
 
 LIVE_MARKER = "live_eval"
+GRADED_TASK = "grade_open_answer"
+
+
+def live_eval_skip_reason(task: str = GRADED_TASK) -> str | None:
+    """Skip reason for live tests, derived from the same checks the judge guards enforce."""
+    problem = judge_config_problem(task)
+    return None if problem is None else f"live eval skipped: {problem}"
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -19,11 +25,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skip live tests with an explicit reason when the judge or graded model is unconfigured."""
-    reason = None
-    if not settings.llm_eval_judge_model:
-        reason = "live eval skipped: LLM_EVAL_JUDGE_MODEL is not set"
-    elif not TASK_MODEL_MAP.get("grade_open_answer"):
-        reason = "live eval skipped: LLM_GRADE_OPEN_ANSWER_MODEL is not set"
+    reason = live_eval_skip_reason()
     if reason is None:
         return
     skip = pytest.mark.skip(reason=reason)
