@@ -63,7 +63,7 @@ from typing import Any
 
 import structlog
 from sqlalchemy import text as sa_text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # ---------------------------------------------------------------------------
 # Bootstrap path so we can import app modules
@@ -379,7 +379,7 @@ Here are the questions to review:
 
 
 async def fetch_existing_questions(
-    db,
+    db: AsyncSession,
     subject_filter: list[str] | None,
     grade_filter: list[int] | None,
     limit_subtopics: int | None = None,
@@ -570,6 +570,62 @@ def parse_generated_file(file_path: str) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+QUALITY_SYSTEM_PROMPT = (
+    "You are a strict quality assurance reviewer for Cambridge assessment questions. "
+    "Output valid JSON only. No markdown fences. No text outside the JSON object. "
+    "Be thorough — re-solve every question independently."
+)
+QUALITY_TEMPERATURE = 0.2
+# A verdict per question plus a full rewrite for each failure can
+# exceed the input batch several times over. The largest subtopics
+# (~7.2k tokens of questions) truncated at 12000 and failed to parse,
+# so those questions went unchecked while the run reported success.
+QUALITY_MAX_TOKENS = 20000
+
+
+class ValidationResponseError(ValueError):
+    """The question-quality judge reply could not be decoded as JSON."""
+
+
+def _strip_json_fences(text: str) -> str:
+    """Strip surrounding whitespace and a leading/trailing markdown code fence."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```\s*$", "", text.strip())
+    return text
+
+
+def parse_validation_response(text: str) -> list[dict[str, Any]]:
+    """Parse a question-quality judge reply into its per-question result dicts.
+
+    The model is asked for {"questions": [...]} but intermittently returns the
+    bare list instead. Accept either: a shape variance in one response must not
+    abort a run that has already validated hundreds of subtopics. Non-dict items
+    are dropped; an unexpected shape yields [] (and logs a warning).
+
+    Raises:
+        ValidationResponseError: if the text is not decodable JSON.
+    """
+    try:
+        result = json.loads(_strip_json_fences(text))
+    except json.JSONDecodeError as exc:
+        raise ValidationResponseError(str(exc)) from exc
+
+    if isinstance(result, list):
+        q_results = result
+    elif isinstance(result, dict):
+        q_results = result.get("questions", [])
+    else:
+        q_results = []
+
+    if not isinstance(q_results, list):
+        log.warning("unexpected_validation_shape", got=type(q_results).__name__)
+        q_results = []
+
+    return [qr for qr in q_results if isinstance(qr, dict)]
+
+
 async def validate_subtopic_batch(
     subtopic_group: dict[str, Any],
     semaphore: asyncio.Semaphore,
@@ -642,22 +698,11 @@ async def validate_subtopic_batch(
                 response_text = await complete(
                     task="question_quality",
                     messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a strict quality assurance reviewer for Cambridge assessment questions. "
-                                "Output valid JSON only. No markdown fences. No text outside the JSON object. "
-                                "Be thorough — re-solve every question independently."
-                            ),
-                        },
+                        {"role": "system", "content": QUALITY_SYSTEM_PROMPT},
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=0.2,
-                    # A verdict per question plus a full rewrite for each failure can
-                    # exceed the input batch several times over. The largest subtopics
-                    # (~7.2k tokens of questions) truncated at 12000 and failed to parse,
-                    # so those questions went unchecked while the run reported success.
-                    max_tokens=20000,
+                    temperature=QUALITY_TEMPERATURE,
+                    max_tokens=QUALITY_MAX_TOKENS,
                 )
             except Exception as exc:
                 log.error(
@@ -678,21 +723,15 @@ async def validate_subtopic_batch(
                     for i in range(len(chunk_questions))
                 ]
 
-            # Strip markdown fences
-            response_text = response_text.strip()
-            if response_text.startswith("```"):
-                response_text = re.sub(r"^```(?:json)?\s*", "", response_text)
-                response_text = re.sub(r"\s*```\s*$", "", response_text.strip())
-
             try:
-                result = json.loads(response_text)
-            except json.JSONDecodeError as exc:
+                q_results = parse_validation_response(response_text)
+            except ValidationResponseError as exc:
                 log.error(
                     "validation_response_parse_failed",
                     error=str(exc),
                     subtopic=subtopic_info["subtopic_name"],
                     chunk_start=chunk_start_idx,
-                    preview=response_text[:300],
+                    preview=_strip_json_fences(response_text)[:300],
                 )
                 return [
                     {
@@ -706,28 +745,10 @@ async def validate_subtopic_batch(
                     for i in range(len(chunk_questions))
                 ]
 
-            # The model is asked for {"questions": [...]} but intermittently returns the
-            # bare list instead. Accept either: a shape variance in one response must not
-            # abort a run that has already validated hundreds of subtopics.
-            if isinstance(result, list):
-                q_results = result
-            elif isinstance(result, dict):
-                q_results = result.get("questions", [])
-            else:
-                q_results = []
-
-            if not isinstance(q_results, list):
-                log.warning("unexpected_validation_shape", got=type(q_results).__name__)
-                q_results = []
-
-            # Re-index to global positions, skipping anything that is not a result object.
-            out: list[dict[str, Any]] = []
+            # Re-index to global positions.
             for qr in q_results:
-                if not isinstance(qr, dict):
-                    continue
                 qr["index"] = chunk_start_idx + qr.get("index", 0)
-                out.append(qr)
-            return out
+            return q_results
 
     # Split questions into chunks and validate each
     chunks = [questions[i : i + CHUNK_SIZE] for i in range(0, len(questions), CHUNK_SIZE)]
@@ -1023,7 +1044,7 @@ _MCQ_KEYS_LIST = ["A", "B", "C", "D"]
 
 
 async def apply_fixes_to_db(
-    db,
+    db: AsyncSession,
     fixes: list[dict[str, Any]],
     dry_run: bool,
 ) -> int:
@@ -1391,7 +1412,7 @@ async def run_validate_generated(
         return_exceptions=True,
     )
 
-    validation_results = []
+    validation_results: list[dict[str, Any]] = []
     for group, outcome in zip(subtopic_groups, raw_results, strict=True):
         if isinstance(outcome, BaseException):
             log.error(
