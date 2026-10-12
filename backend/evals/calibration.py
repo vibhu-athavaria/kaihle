@@ -14,21 +14,26 @@ Conventions:
 """
 
 import json
+import os
 import re
+import tempfile
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
+
+import structlog
 
 from app.ai.eval_metrics import Rate, rate
 from evals.thresholds import FALSE_ALARM_UPPER_MAX, MIN_N, RECALL_LOWER_MIN
 
 Subset = Literal["computed", "authored"]
 
-# Default location; gitignored by T9 slice 5. Tests always pass tmp_path.
+# Default location. Ignored via `backend/evals/reports/` in .gitignore, added by T9 slice 5; tests always pass tmp_path.
 DEFAULT_CALIBRATION_DIR = Path(__file__).resolve().parent / "reports" / "calibration"
+logger = structlog.get_logger()
 _SAFE_CRITERION_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
@@ -123,18 +128,57 @@ def _rate_to_dict(r: Rate) -> dict[str, int | float]:
     return {"numerator": r.numerator, "denominator": r.denominator, "point": r.point, "low": r.low, "high": r.high}
 
 
-def _rate_from_dict(data: Mapping[str, int | float]) -> Rate:
+def _int_field(value: object) -> int:
+    """Plain int only: bool and float are rejected, never coerced."""
+    if type(value) is not int:
+        raise TypeError("expected an int")
+    return value
+
+
+def _float_field(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise TypeError("expected a number")
+    return float(value)
+
+
+def _rate_from_dict(data: object) -> Rate:
+    if not isinstance(data, dict):
+        raise TypeError("rate must be an object")
     return Rate(
-        numerator=int(data["numerator"]),
-        denominator=int(data["denominator"]),
-        point=float(data["point"]),
-        low=float(data["low"]),
-        high=float(data["high"]),
+        numerator=_int_field(data["numerator"]),
+        denominator=_int_field(data["denominator"]),
+        point=_float_field(data["point"]),
+        low=_float_field(data["low"]),
+        high=_float_field(data["high"]),
+    )
+
+
+def _result_from_dict(data: dict[str, Any], criterion: str) -> CalibrationResult:
+    """Build a result from stored data; raises KeyError/TypeError/ValueError on any defect."""
+    if data["criterion"] != criterion:
+        raise ValueError("stored criterion does not match the requested one")
+    if data["subset"] not in ("computed", "authored"):
+        raise ValueError("unknown subset")
+    stored_crosstalk = data["crosstalk"]
+    if not isinstance(stored_crosstalk, dict):
+        raise TypeError("crosstalk must be an object")
+    return CalibrationResult(
+        criterion=criterion,
+        subset=data["subset"],
+        rubric_hash=data["rubric_hash"],
+        recall=_rate_from_dict(data["recall"]),
+        false_alarm=_rate_from_dict(data["false_alarm"]),
+        indeterminate=_rate_from_dict(data["indeterminate"]),
+        crosstalk={str(k): _int_field(v) for k, v in stored_crosstalk.items()},
     )
 
 
 def save_calibration(result: CalibrationResult, directory: Path = DEFAULT_CALIBRATION_DIR) -> Path:
-    """Write ``<criterion>.json`` (hash, rates, status, UTC time; no model names). Side effect: file I/O."""
+    """Write ``<criterion>.json`` atomically (hash, rates, status, UTC time; no model names).
+
+    Side effect: file I/O. Writes a temp file in the same directory then ``os.replace``s it, so a
+    crash mid-write cannot leave a partial file; the temp file is removed on failure.
+    """
     path = _path_for(result.criterion, directory)
     payload = {
         "criterion": result.criterion,
@@ -148,26 +192,41 @@ def save_calibration(result: CalibrationResult, directory: Path = DEFAULT_CALIBR
         "saved_at": datetime.now(UTC).isoformat(),
     }
     directory.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    fd, tmp_name = tempfile.mkstemp(dir=directory, prefix=f".{result.criterion}.", suffix=".tmp")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)  # no-op after a successful replace
     return path
 
 
 def load_calibration(
     criterion: str, rubric_hash: str, directory: Path = DEFAULT_CALIBRATION_DIR
 ) -> CalibrationResult | CalibrationStatus:
-    """Stored result, ``STALE`` if computed under a different rubric hash, ``MISSING`` if no file."""
+    """Stored result, ``STALE`` (valid file, different rubric hash) or ``MISSING`` (no usable calibration).
+
+    Never raises for stored-data defects: an unreadable, non-JSON, non-object, incomplete or wrongly
+    typed file (including non-int crosstalk counts) is ``MISSING`` and logs a
+    ``calibration_file_unreadable`` warning with the path and exception class, never the content.
+    The hash is checked first, so a file for another rubric version is ``STALE`` even if the rest of
+    it is damaged. An unsafe ``criterion`` name is a caller error and still raises ``ValueError``.
+    """
     path = _path_for(criterion, directory)
     if not path.is_file():
         return CalibrationStatus.MISSING
-    data = json.loads(path.read_text())
-    if data["rubric_hash"] != rubric_hash:
-        return CalibrationStatus.STALE
-    return CalibrationResult(
-        criterion=data["criterion"],
-        subset=data["subset"],
-        rubric_hash=data["rubric_hash"],
-        recall=_rate_from_dict(data["recall"]),
-        false_alarm=_rate_from_dict(data["false_alarm"]),
-        indeterminate=_rate_from_dict(data["indeterminate"]),
-        crosstalk={str(k): int(v) for k, v in data["crosstalk"].items()},
-    )
+    try:
+        data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            raise TypeError("top level must be an object")
+        stored_hash = data["rubric_hash"]
+        if not isinstance(stored_hash, str):
+            raise TypeError("rubric_hash must be a string")
+        if stored_hash != rubric_hash:
+            return CalibrationStatus.STALE
+        return _result_from_dict(data, criterion)
+    except (OSError, ValueError, KeyError, TypeError) as exc:  # ValueError covers JSON and Unicode decode errors
+        logger.warning("calibration_file_unreadable", path=str(path), reason=type(exc).__name__)
+        return CalibrationStatus.MISSING
