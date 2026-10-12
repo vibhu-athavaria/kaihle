@@ -1,14 +1,27 @@
 repos:
   # ─── Type Checks, Lints and Prettier ────────────────────────────────────────────────────────────────
 
-  # Ruff: lint + import sorting (replaces isort/flake8)
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.4
+  # Ruff: lint + import sorting (replaces isort/flake8).
+  # Runs the ruff version LOCKED in backend/uv.lock — the same one CI installs with
+  # `uv sync --frozen` — instead of a separate `ruff-pre-commit` rev that can drift from it
+  # (it did: the hook pinned v0.9.4 while CI used 0.15.6 and they sorted imports differently).
+  # --frozen: never rewrite uv.lock. --extra dev: ruff lives in the `dev` extra, which a plain
+  # `uv run` does not install (it would silently fall back to a global ruff).
+  # pre-commit passes repo-root paths (backend/app/x.py); the shell strips the `backend/` prefix
+  # because uv runs from inside backend/ (same pattern as the mypy hook below).
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix]           # auto-fixes imports + lint violations locally
+        name: ruff (locked version)
+        entry: bash -c 'cd backend && uv run --frozen --extra dev ruff check --fix "${@#backend/}"' --
+        language: system
+        types: [python]
         files: ^backend/
       - id: ruff-format         # format check (matches CI's `ruff format --check`)
+        name: ruff format (locked version)
+        entry: bash -c 'cd backend && uv run --frozen --extra dev ruff format "${@#backend/}"' --
+        language: system
+        types: [python]
         files: ^backend/
 
   # Mypy: type checks (matches CI's `mypy app/`)
