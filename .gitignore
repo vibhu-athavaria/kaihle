@@ -63,6 +63,8 @@ node_modules/.vite.worktrees/
 .claude/**
 **pyrightconfig.json
 backend/validation_reports/
+# Eval harness reports record resolved model strings — never commit.
+backend/evals/reports/
 # Per-subtopic resume state from generate_gap_questions — tens of MB per run.
 backend/checkpoints/
 
