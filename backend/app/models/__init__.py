@@ -39,6 +39,7 @@ from app.models.mini_course import (
 )
 from app.models.onboarding import StudentLearningProfile
 from app.models.parent import ParentReportSnapshot
+from app.models.platform_settings import PlatformSettings
 from app.models.school import Class, ClassEnrollment, School, SchoolCurriculum
 from app.models.student_lesson_pack import StudentLessonPack
 from app.models.study_plan import StudyPlan, StudyPlanQuiz, StudyPlanResource
@@ -54,6 +55,7 @@ from app.models.user import (
 
 __all__ = [
     "LlmUsageEvent",
+    "PlatformSettings",
     "Base",
     "Curriculum",
     "Subject",

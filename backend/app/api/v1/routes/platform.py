@@ -13,6 +13,11 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models.user import UserRole
 from app.schemas.auth import ImpersonationStartResponse
+from app.schemas.eval_settings import (
+    EvalSettingsResponse,
+    EvalSettingsUpdateRequest,
+    StudentTextAcknowledgement,
+)
 from app.schemas.llm_logs import (
     LlmLogDetailResponse,
     LlmLogFilterOptionsResponse,
@@ -31,6 +36,13 @@ from app.services.llm_log_service import (
     get_llm_log,
     list_llm_log_filter_options,
     list_llm_logs,
+)
+from app.services.platform_settings_service import (
+    TASKS_WITH_STUDENT_TEXT,
+    EvalSettings,
+    EvalSettingsValidationError,
+    PlatformSettingsService,
+    available_tasks,
 )
 from app.services.user_service import UserService
 
@@ -261,3 +273,56 @@ async def get_llm_log_detail(
         school_id=str(log.school_id) if log.school_id else None,
         streamed=log.streamed,
     )
+
+
+def _eval_settings_response(eval_settings: EvalSettings) -> EvalSettingsResponse:
+    return EvalSettingsResponse(
+        eval_monthly_budget_usd=float(eval_settings.monthly_budget_usd),
+        eval_enabled_tasks=eval_settings.enabled_tasks,
+        eval_sample_size_per_task=eval_settings.sample_size_per_task,
+        eval_window_days=eval_settings.window_days,
+        eval_include_indicative=eval_settings.include_indicative,
+        student_text_acknowledgements={
+            task: StudentTextAcknowledgement(**ack) for task, ack in eval_settings.student_text_ack.items()
+        },
+        available_tasks=available_tasks(),
+        tasks_with_student_text=sorted(TASKS_WITH_STUDENT_TEXT),
+        updated_by=str(eval_settings.updated_by) if eval_settings.updated_by else None,
+        updated_at=eval_settings.updated_at,
+    )
+
+
+@router.get("/eval-settings")
+async def get_eval_settings(
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> EvalSettingsResponse:
+    """Production-evaluation settings. Fail-closed defaults (budget 0, nothing enabled) when
+    nothing has been saved yet. KAIHLE_ADMIN only (Rule 12: no school_id filter applies to
+    platform-wide settings)."""
+    logger.info("platform.eval_settings.requested", user_id=str(current_user.id))
+    return _eval_settings_response(await PlatformSettingsService(db).get_eval_settings())
+
+
+@router.put("/eval-settings")
+async def update_eval_settings(
+    body: EvalSettingsUpdateRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> EvalSettingsResponse:
+    """Replace the production-evaluation settings. 422 on any rule violation (negative
+    budget, out-of-range sample/window, unknown task, student-text task without
+    acknowledgement). Idempotent for an identical payload. KAIHLE_ADMIN only."""
+    try:
+        eval_settings = await PlatformSettingsService(db).update_eval_settings(
+            actor_id=current_user.id,
+            monthly_budget_usd=body.eval_monthly_budget_usd,
+            enabled_tasks=body.eval_enabled_tasks,
+            sample_size_per_task=body.eval_sample_size_per_task,
+            window_days=body.eval_window_days,
+            include_indicative=body.eval_include_indicative,
+            acknowledge_student_text_tasks=body.acknowledge_student_text_tasks,
+        )
+    except EvalSettingsValidationError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    return _eval_settings_response(eval_settings)

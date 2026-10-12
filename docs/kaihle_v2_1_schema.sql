@@ -1959,3 +1959,30 @@ CREATE INDEX idx_llm_usage_component_created ON llm_usage_events(component, crea
 CREATE INDEX idx_llm_usage_model_created     ON llm_usage_events(model, created_at);
 CREATE INDEX idx_llm_usage_created           ON llm_usage_events(created_at);
 CREATE INDEX idx_llm_usage_run               ON llm_usage_events(run_id);
+
+-- ============================================================================
+-- platform_settings (MLH-T18)
+-- Platform-wide, admin-editable settings; a SINGLETON row (id = 1), edited only by
+-- KAIHLE_ADMIN. Holds the production-evaluation controls.
+--
+-- NO school_id — a deliberate CONSTITUTION Rule 2 deviation (MLH-T18 D13, approved by
+-- Vibhu 2026-10-11): these are settings of the platform itself, not of any school.
+-- The row is created lazily on the first update; until then the service returns the
+-- fail-closed defaults (budget 0, nothing enabled).
+-- ============================================================================
+CREATE TABLE platform_settings (
+    id                         SMALLINT PRIMARY KEY DEFAULT 1,
+    eval_monthly_budget_usd    NUMERIC(12,2) NOT NULL DEFAULT 0,
+    eval_enabled_tasks         VARCHAR(50)[] NOT NULL DEFAULT '{}',
+    eval_sample_size_per_task  INTEGER       NOT NULL DEFAULT 50,
+    eval_window_days           INTEGER       NOT NULL DEFAULT 7,
+    eval_include_indicative    BOOLEAN       NOT NULL DEFAULT FALSE,
+    eval_student_text_ack      JSONB         NOT NULL DEFAULT '{}',
+    updated_by                 UUID REFERENCES users(id) ON DELETE SET NULL,
+    updated_at                 TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    CONSTRAINT chk_platform_settings_singleton CHECK (id = 1),
+    CONSTRAINT chk_platform_settings_budget_non_negative CHECK (eval_monthly_budget_usd >= 0),
+    CONSTRAINT chk_platform_settings_sample_size_range
+        CHECK (eval_sample_size_per_task BETWEEN 1 AND 200),
+    CONSTRAINT chk_platform_settings_window_range CHECK (eval_window_days BETWEEN 1 AND 90)
+);
