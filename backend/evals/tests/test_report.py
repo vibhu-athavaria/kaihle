@@ -1,11 +1,15 @@
 """Offline tests for the grading report renderer. No network, no LLM, no DB."""
 
+import re
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from app.ai.eval_metrics import rate
 from evals.grade_metrics import GradeOutcome, GradeSummary, summarise_grades
-from evals.report import RubricResult, RunMeta, render_report, write_report
+from evals.report import RubricResult, RunMeta, build_run_meta, render_report, utc_timestamp, write_report
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -91,3 +95,51 @@ def test_write_report_when_custom_dir_then_creates_it_and_names_file_by_timestam
 
     assert path.name == "grade_open_answer_2026-10-10T01-02-03Z.md"
     assert path.parent == tmp_path / "nested"
+
+
+def test_utc_timestamp_when_called_then_is_filename_safe() -> None:
+    assert ":" not in utc_timestamp()
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z", utc_timestamp())
+
+
+def test_build_run_meta_when_called_then_timestamp_is_iso8601_utc(tmp_path: Path) -> None:
+    dataset = tmp_path / "d.jsonl"
+    dataset.write_text("x", encoding="utf-8")
+
+    meta = build_run_meta(dataset)
+
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", meta.timestamp_utc)
+
+
+def test_write_report_when_timestamp_has_colons_then_filename_is_sanitised(tmp_path: Path) -> None:
+    path = write_report("x", out_dir=tmp_path, timestamp_utc="2026-10-10T01:02:03Z")
+
+    assert ":" not in path.name
+    assert path.parent == tmp_path
+
+
+@pytest.mark.parametrize("bad", ["../escape", "a/b", "a\\b", ".."])
+def test_write_report_when_timestamp_has_path_parts_then_stays_inside_dir_or_raises(bad: str, tmp_path: Path) -> None:
+    if ".." in bad:
+        with pytest.raises(ValueError):
+            write_report("x", out_dir=tmp_path, timestamp_utc=bad)
+        return
+    path = write_report("x", out_dir=tmp_path, timestamp_utc=bad)
+    assert path.parent == tmp_path
+
+
+def test_build_run_meta_when_models_unset_then_placeholder_rendered_and_warning_logged(tmp_path: Path) -> None:
+    dataset = tmp_path / "d.jsonl"
+    dataset.write_text("x", encoding="utf-8")
+    with (
+        patch("evals.report.TASK_MODEL_MAP", {}),
+        patch("evals.report.settings") as cfg,
+        patch("evals.report.logger") as log,
+    ):
+        cfg.llm_eval_judge_model = ""
+        meta = build_run_meta(dataset)
+
+    assert meta.judge_model == "(unset)"
+    assert meta.graded_model == "(unset)"
+    assert log.warning.called
+    assert "(unset)" in render_report(_summary(), meta, [])

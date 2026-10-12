@@ -6,6 +6,7 @@ Reports are written to a gitignored directory because they record resolved model
 """
 
 import hashlib
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -24,7 +25,11 @@ logger = structlog.get_logger()
 
 GRADED_TASK = "grade_open_answer"
 DEFAULT_REPORT_DIR = Path(__file__).resolve().parent / "reports"
-TIMESTAMP_FORMAT = "%Y-%m-%dT%H-%M-%SZ"
+# Human-readable ISO-8601 UTC for the report body; the filename variant avoids ':' (invalid on some filesystems).
+REPORT_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+FILENAME_TIMESTAMP_FORMAT = "%Y-%m-%dT%H-%M-%SZ"
+UNSET_MODEL = "(unset)"
+_UNSAFE_FILENAME_CHARS = re.compile(r"[:/\\]")
 
 LABEL_CAVEAT = (
     "Labels in the golden dataset are model-authored and unvalidated by a human. Every figure below "
@@ -69,18 +74,33 @@ def markdown_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> str
 
 
 def utc_timestamp() -> str:
-    return datetime.now(UTC).strftime(TIMESTAMP_FORMAT)
+    return datetime.now(UTC).strftime(FILENAME_TIMESTAMP_FORMAT)
 
 
 def build_run_meta(dataset_path: Path) -> RunMeta:
-    """Resolve model strings from settings AT RUN TIME; they are never cached or hardcoded."""
+    """Resolve model strings from settings AT RUN TIME; they are never cached or hardcoded.
+
+    An unconfigured model renders as ``(unset)`` with a WARNING rather than an empty header, which
+    would read like a measurement of nothing. Offline report tests legitimately have no config.
+    """
+    judge = TASK_MODEL_MAP.get(JUDGE_TASK) or settings.llm_eval_judge_model
+    graded = TASK_MODEL_MAP.get(GRADED_TASK, "")
+    if not judge or not graded:
+        logger.warning("eval_report_model_unset", judge_set=bool(judge), graded_set=bool(graded))
     return RunMeta(
-        timestamp_utc=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        judge_model=TASK_MODEL_MAP.get(JUDGE_TASK) or settings.llm_eval_judge_model,
-        graded_model=TASK_MODEL_MAP.get(GRADED_TASK, ""),
+        timestamp_utc=datetime.now(UTC).strftime(REPORT_TIMESTAMP_FORMAT),
+        judge_model=judge or UNSET_MODEL,
+        graded_model=graded or UNSET_MODEL,
         dataset_sha256=hashlib.sha256(dataset_path.read_bytes()).hexdigest(),
         deepeval_version=version("deepeval"),
     )
+
+
+def _safe_timestamp(timestamp: str) -> str:
+    """Make a caller-supplied timestamp filename-safe; reject traversal."""
+    if ".." in timestamp:
+        raise ValueError(f"timestamp must not contain '..': {timestamp!r}")
+    return _UNSAFE_FILENAME_CHARS.sub("-", timestamp)
 
 
 def _rubric_rows(results: Sequence[RubricResult]) -> list[list[str]]:
@@ -139,7 +159,7 @@ def write_report(content: str, out_dir: Path | None = None, timestamp_utc: str |
     """Write the report; the default directory is gitignored. Returns the path written."""
     directory = out_dir or DEFAULT_REPORT_DIR
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{GRADED_TASK}_{timestamp_utc or utc_timestamp()}.md"
+    path = directory / f"{GRADED_TASK}_{_safe_timestamp(timestamp_utc) if timestamp_utc else utc_timestamp()}.md"
     path.write_text(content, encoding="utf-8")
     logger.info("eval_report_written", path=str(path), bytes=len(content))
     return path

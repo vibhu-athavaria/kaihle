@@ -91,7 +91,7 @@ def test_summarise_grades_when_unrecognised_grades_then_reported_in_own_rate() -
     summary = summarise_grades(outcomes)
 
     assert summary.unrecognised_grade_rate.numerator == 1
-    assert summary.unrecognised_grade_rate.denominator == 3
+    assert summary.unrecognised_grade_rate.denominator == 2
     assert summary.parse_failure_rate.numerator == 1
 
 
@@ -180,3 +180,16 @@ async def test_grade_match_metric_when_measured_async_then_matches_sync_result()
     metric = GradeMatchMetric()
 
     assert await metric.a_measure(grade_test_case(_o("a", "correct", "correct"))) == 1.0
+
+
+def test_summarise_grades_when_parse_errors_present_then_unrecognised_rate_denominator_excludes_them() -> None:
+    outcomes = [
+        _o("a", "correct", "correct"),
+        _o("b", "incorrect", "incorrect", recognised=False),
+        _o("c", "incorrect", "incorrect", parse_error=True, recognised=False),
+        _o("d", "correct", "incorrect", parse_error=True, recognised=False),
+    ]
+
+    summary = summarise_grades(outcomes)
+
+    assert (summary.unrecognised_grade_rate.numerator, summary.unrecognised_grade_rate.denominator) == (1, 2)

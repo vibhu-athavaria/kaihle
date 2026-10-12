@@ -41,7 +41,7 @@ class GradeSummary:
     accuracy: Rate
     # Over ALL cases; deliberately never folded into accuracy.
     parse_failure_rate: Rate
-    # Valid JSON carrying a grade outside correct/partial/incorrect; counted apart from parse failures.
+    # Valid JSON carrying a grade outside correct/partial/incorrect, over parseable replies only.
     unrecognised_grade_rate: Rate
     # expected=incorrect predicted=correct, over all expected=incorrect (inflates mastery).
     false_credit_rate: Rate
@@ -83,8 +83,10 @@ def summarise_grades(outcomes: Sequence[GradeOutcome]) -> GradeSummary:
         total=len(outcomes),
         accuracy=_accuracy(outcomes),
         parse_failure_rate=rate(sum(1 for o in outcomes if o.parse_error), len(outcomes)),
+        # Denominator is parseable replies only: a parse failure cannot be an "unrecognised grade".
         unrecognised_grade_rate=rate(
-            sum(1 for o in outcomes if not o.parse_error and not o.grade_recognised), len(outcomes)
+            sum(1 for o in outcomes if not o.parse_error and not o.grade_recognised),
+            sum(1 for o in outcomes if not o.parse_error),
         ),
         false_credit_rate=_confusion_rate(outcomes, "incorrect", "correct"),
         false_denial_rate=_confusion_rate(outcomes, "correct", "incorrect"),
@@ -107,7 +109,7 @@ class GradeMatchMetric(BaseMetric):
     """Exact-match grade metric: 1.0 when predicted equals expected, else 0.0. Makes no judge call."""
 
     def __init__(self, threshold: float = 1.0) -> None:
-        self._pass_threshold = threshold
+        self._pass_threshold: float = threshold
         self.threshold = threshold
         self.score = None
         self.reason = None

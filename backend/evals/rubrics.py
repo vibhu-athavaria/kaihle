@@ -78,6 +78,10 @@ def reveal_rubric_applies(assigned_grade: str) -> bool:
     return assigned_grade in REVEAL_APPLICABLE_GRADES
 
 
+# RouterJudge.a_generate ignores GEval's ``schema`` kwarg by design (see module docstring and
+# evals/judge.py): GEval falls back to parsing the text reply, so scores are the raw 0-10 / 10.
+# async_mode contract: use ``await metric.a_measure(...)`` from async code. ``measure()`` is for sync
+# callers only; with async_mode=True it calls run_until_complete and fails inside a running loop.
 def _geval(name: str, criteria: str, steps: list[str], judge: RouterJudge) -> GEval:
     return GEval(
         name=name,

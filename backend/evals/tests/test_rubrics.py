@@ -40,12 +40,12 @@ def test_reveal_rubric_applies_when_grade_given_then_only_partial_and_incorrect(
     assert not reveal_rubric_applies("correct")
 
 
-def test_geval_metric_when_judge_replies_with_json_text_then_scores_without_logprobs() -> None:
+async def test_geval_metric_when_judge_replies_with_json_text_then_scores_without_logprobs() -> None:
     case = build_feedback_test_case("Q?", "A", "partial", "Good start, think about the units.")
     with patch("evals.judge.complete", new_callable=AsyncMock) as complete:
         complete.return_value = '{"score": 10, "reason": "Guides without revealing."}'
         metric = build_no_reveal_metric(RouterJudge())
-        score = metric.measure(case, _show_indicator=False)
+        score = await metric.a_measure(case, _show_indicator=False)
 
     assert score == 1.0
     assert metric.is_successful()
@@ -54,12 +54,22 @@ def test_geval_metric_when_judge_replies_with_json_text_then_scores_without_logp
     assert "[STUDENT_ANSWER]" in complete.await_args.kwargs["messages"][0]["content"]
 
 
-def test_geval_metric_when_judge_scores_zero_then_metric_fails() -> None:
+async def test_geval_metric_when_judge_scores_zero_then_metric_fails() -> None:
     case = build_feedback_test_case("Q?", "A", "correct", "Wrong, try again.")
     with patch("evals.judge.complete", new_callable=AsyncMock) as complete:
         complete.return_value = '{"score": 0, "reason": "Discouraging for a correct answer."}'
         metric = build_constructive_metric(RouterJudge())
-        score = metric.measure(case, _show_indicator=False)
+        score = await metric.a_measure(case, _show_indicator=False)
 
     assert score == 0.0
     assert not metric.is_successful()
+
+
+def test_geval_metric_when_measured_sync_outside_a_loop_then_scores() -> None:
+    # Safe only because no event loop is running here: GEval.measure() with async_mode=True drives
+    # a_measure via run_until_complete. Async callers (the slice-6 orchestrator) must use a_measure.
+    case = build_feedback_test_case("Q?", "A", "correct", "Well done.")
+    with patch("evals.judge.complete", new_callable=AsyncMock) as complete:
+        complete.return_value = '{"score": 10, "reason": "ok"}'
+        metric = build_constructive_metric(RouterJudge())
+        assert metric.measure(case, _show_indicator=False) == 1.0
