@@ -6,3 +6,8 @@ ignore = ["E501"]
 
 [lint.per-file-ignores]
 "alembic/versions/*.py" = ["E501"]
+
+[lint.isort]
+# `alembic` is the PyPI package, but a local backend/alembic/ folder also exists, so ruff versions
+# disagree on whether it is first-party (pre-commit pins an older ruff than CI). State it explicitly.
+known-third-party = ["alembic"]
