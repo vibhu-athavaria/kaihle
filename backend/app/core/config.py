@@ -1,6 +1,6 @@
 import json
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -126,6 +126,11 @@ class Settings(BaseSettings):
     # calls it, so it is deliberately absent from _validate_llm_models. Empty means evals disabled.
     llm_eval_judge_model: str = ""
     llm_eval_judge_api_base: str | None = None
+    # Production-output evaluation (MLH-T18): cost, in USD, charged against the monthly eval
+    # budget for a judge call whose real cost is unknown (no price for the model). Unpriced is
+    # never counted as free. The default is deliberately HIGH and conservative — set it from
+    # your real judge cost in LLM Logs. Defined here; the budget guard that reads it lands later.
+    eval_unpriced_call_cost_usd: float = Field(default=1.0, ge=0)
 
     # Notification recipients
     kaihle_admin_email: str = ""
