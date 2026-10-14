@@ -9,6 +9,7 @@ from deepeval.test_case import LLMTestCase
 
 from evals.grade_run import (
     DATASET_PATH,
+    JudgeUnusableError,
     measure_observed_pass,
     run_grade_eval,
     run_grade_rubrics,
@@ -108,7 +109,6 @@ async def test_run_grade_rubrics_when_indeterminate_then_counted_as_error_exclud
         graded = await score_cases([_case("A", "correct"), _case("B", "correct")])
     constructive = _metric()
     constructive.a_measure.side_effect = [1.0, ValueError("bad json")]
-    constructive.is_successful.side_effect = [True]
     no_reveal = _metric()
 
     results = await run_grade_rubrics(graded, constructive, no_reveal)
@@ -165,6 +165,26 @@ async def test_run_grade_eval_when_run_then_report_written_and_judge_guards_call
     text = result.report_path.read_text(encoding="utf-8")
     assert "## Accuracy" in text
     assert "feedback_constructive_and_calibrated" in text
+
+
+async def test_run_grade_eval_when_every_rubric_verdict_indeterminate_then_raises_before_report(
+    tmp_path: Path,
+) -> None:
+    dataset = tmp_path / "cases.jsonl"
+    dataset.write_text(_case("C0", "correct").model_dump_json() + "\n", encoding="utf-8")
+    broken = _metric(error=ValueError("bad json"))
+    with (
+        patch("evals.grade_run.request_grade_completion", new_callable=AsyncMock) as grader,
+        patch("evals.grade_run.require_judge_configured"),
+        patch("evals.grade_run.check_judge_independence"),
+        patch("evals.grade_run.build_constructive_metric", return_value=broken),
+        patch("evals.grade_run.build_no_reveal_metric", return_value=_metric()),
+    ):
+        grader.return_value = _reply("correct")
+        with pytest.raises(JudgeUnusableError, match="feedback_constructive_and_calibrated"):
+            await run_grade_eval(dataset, out_dir=tmp_path / "reports")
+
+    assert not (tmp_path / "reports").exists()
 
 
 def test_dataset_path_when_resolved_then_points_at_shipped_grade_dataset() -> None:

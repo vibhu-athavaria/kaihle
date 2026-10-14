@@ -41,6 +41,10 @@ logger = structlog.get_logger()
 DATASET_PATH = Path(__file__).resolve().parent / "datasets" / "grade_open_answer.jsonl"
 
 
+class JudgeUnusableError(RuntimeError):
+    """Every verdict for a rubric was indeterminate: the judge or its prompt is broken, not the grader."""
+
+
 class FeedbackMetric(Protocol):
     """The slice of a DeepEval metric the orchestrator uses; lets tests pass fakes."""
 
@@ -122,6 +126,13 @@ async def run_grade_rubrics(
     ]
 
 
+def require_some_verdicts(rubric_results: list[RubricResult]) -> None:
+    """Fail loudly when a rubric had inputs but not one usable verdict, instead of reporting all-errors."""
+    unusable = [r.name for r in rubric_results if r.evaluated == 0 and r.errors > 0]
+    if unusable:
+        raise JudgeUnusableError(f"judge returned no usable verdict for: {', '.join(unusable)}")
+
+
 async def run_grade_eval(dataset_path: Path = DATASET_PATH, out_dir: Path | None = None) -> GradeRunResult:
     """Full run: guards, grade, summarise, rubrics, write report. Raises if the judge is unusable."""
     require_judge_configured()
@@ -131,6 +142,7 @@ async def run_grade_eval(dataset_path: Path = DATASET_PATH, out_dir: Path | None
     summary = summarise_grades([g.outcome for g in graded])
     judge = RouterJudge(run_id=str(uuid.uuid4()))
     rubric_results = await run_grade_rubrics(graded, build_constructive_metric(judge), build_no_reveal_metric(judge))
+    require_some_verdicts(rubric_results)
     path = write_report(render_report(summary, build_run_meta(dataset_path), rubric_results), out_dir=out_dir)
     logger.info("eval_grade_run_complete", cases=len(graded), report=str(path))
     return GradeRunResult(graded=graded, summary=summary, rubric_results=rubric_results, report_path=path)
