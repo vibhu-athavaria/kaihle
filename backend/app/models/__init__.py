@@ -26,6 +26,7 @@ from app.models.curriculum import (
     SubtopicPrerequisite,
     Topic,
 )
+from app.models.eval_results import EvalResult, EvalRun
 from app.models.gap import GapState, MasteryPrior
 from app.models.interest_category import InterestCategory
 from app.models.lesson_plan import LessonPlan
@@ -54,6 +55,8 @@ from app.models.user import (
 )
 
 __all__ = [
+    "EvalResult",
+    "EvalRun",
     "LlmUsageEvent",
     "PlatformSettings",
     "Base",

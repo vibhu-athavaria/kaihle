@@ -1986,3 +1986,80 @@ CREATE TABLE platform_settings (
         CHECK (eval_sample_size_per_task BETWEEN 1 AND 200),
     CONSTRAINT chk_platform_settings_window_range CHECK (eval_window_days BETWEEN 1 AND 90)
 );
+
+-- ============================================================================
+-- eval_runs / eval_results (MLH-T18)
+-- Production-evaluation runs and per-check results. METRICS AND IDS ONLY — never a copy
+-- of any prompt/response text (D9); text stays in llm_usage_events.
+--
+-- eval_runs has NO school_id — a deliberate CONSTITUTION Rule 2 deviation (D13, approved by
+-- Vibhu 2026-10-11): a run samples across schools and is platform-admin work.
+--
+-- eval_results.school_id IS NULLABLE and is COPIED from the sampled llm_usage_events row
+-- when the result is written. NULL = platform-level (batch/curriculum) task, exactly as on
+-- llm_usage_events. Point-in-time copy, not re-synced. ON DELETE SET NULL (as on the event).
+-- ============================================================================
+CREATE TABLE eval_runs (
+    id                             UUID PRIMARY KEY,
+    task                           VARCHAR(50)   NOT NULL,   -- a key of router.TASK_MODEL_MAP
+    window_start                   TIMESTAMPTZ   NOT NULL,
+    window_end                     TIMESTAMPTZ   NOT NULL,
+    seed                           VARCHAR(64)   NOT NULL,   -- seeds the reproducible sample order
+    trigger                        VARCHAR(20)   NOT NULL,   -- manual | scheduled
+    status                         VARCHAR(20)   NOT NULL DEFAULT 'pending',
+    include_indicative             BOOLEAN       NOT NULL DEFAULT FALSE,
+    judge_model                    VARCHAR(200),             -- NULL until the run starts
+    sampled_count                  INTEGER       NOT NULL DEFAULT 0,
+    evaluated_count                INTEGER       NOT NULL DEFAULT 0,
+    skipped_not_independent_count  INTEGER       NOT NULL DEFAULT 0,
+    skipped_scrub_failed_count     INTEGER       NOT NULL DEFAULT 0,
+    skipped_unsupported_count      INTEGER       NOT NULL DEFAULT 0,
+    spend_usd                      NUMERIC(12,6) NOT NULL DEFAULT 0,
+    error_type                     VARCHAR(100),             -- set when status = 'failed'
+    requested_by                   UUID REFERENCES users(id) ON DELETE SET NULL,  -- NULL = beat / deleted user
+    created_at                     TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    started_at                     TIMESTAMPTZ,
+    completed_at                   TIMESTAMPTZ,
+    CONSTRAINT uq_eval_runs_task_window_seed UNIQUE (task, window_start, window_end, seed),
+    CONSTRAINT chk_eval_runs_status
+        CHECK (status IN ('pending','running','completed','failed','budget_exhausted','empty')),
+    CONSTRAINT chk_eval_runs_trigger CHECK (trigger IN ('manual','scheduled')),
+    CONSTRAINT chk_eval_runs_seed_not_blank CHECK (length(btrim(seed)) > 0),
+    CONSTRAINT chk_eval_runs_window_ordered CHECK (window_end > window_start),
+    CONSTRAINT chk_eval_runs_counts_non_negative
+        CHECK (sampled_count >= 0 AND evaluated_count >= 0 AND skipped_not_independent_count >= 0
+               AND skipped_scrub_failed_count >= 0 AND skipped_unsupported_count >= 0),
+    CONSTRAINT chk_eval_runs_spend_non_negative CHECK (spend_usd >= 0)
+);
+
+CREATE INDEX idx_eval_runs_created      ON eval_runs(created_at);
+CREATE INDEX idx_eval_runs_task_created ON eval_runs(task, created_at);
+
+CREATE TABLE eval_results (
+    id              UUID PRIMARY KEY,
+    run_id          UUID NOT NULL REFERENCES eval_runs(id) ON DELETE CASCADE,
+    usage_event_id  UUID REFERENCES llm_usage_events(id) ON DELETE SET NULL,  -- NULL = event purged
+    school_id       UUID REFERENCES schools(id) ON DELETE SET NULL,           -- see header
+    check_name      VARCHAR(100) NOT NULL,
+    kind            VARCHAR(20)  NOT NULL,                  -- deterministic | judge
+    passed          BOOLEAN,                                -- NULL iff indeterminate
+    indeterminate   BOOLEAN      NOT NULL DEFAULT FALSE,
+    rubric_hash     VARCHAR(64),                            -- judge results only
+    rubric_status   VARCHAR(20),                            -- judge results only
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT uq_eval_results_run_event_check UNIQUE (run_id, usage_event_id, check_name),
+    CONSTRAINT chk_eval_results_check_name_not_blank CHECK (length(btrim(check_name)) > 0),
+    CONSTRAINT chk_eval_results_kind CHECK (kind IN ('deterministic','judge')),
+    CONSTRAINT chk_eval_results_passed_consistent
+        CHECK ((indeterminate AND passed IS NULL) OR (NOT indeterminate AND passed IS NOT NULL)),
+    CONSTRAINT chk_eval_results_rubric_consistent
+        CHECK ((kind = 'judge' AND rubric_hash IS NOT NULL AND rubric_status IS NOT NULL)
+            OR (kind = 'deterministic' AND rubric_hash IS NULL AND rubric_status IS NULL)),
+    CONSTRAINT chk_eval_results_rubric_status
+        CHECK (rubric_status IS NULL OR rubric_status IN ('CALIBRATED','HUMAN_VALIDATED','INDICATIVE'))
+);
+
+CREATE INDEX idx_eval_results_run            ON eval_results(run_id);
+CREATE INDEX idx_eval_results_usage_event    ON eval_results(usage_event_id);
+CREATE INDEX idx_eval_results_created        ON eval_results(created_at);
+CREATE INDEX idx_eval_results_school_created ON eval_results(school_id, created_at);
