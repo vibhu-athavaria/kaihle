@@ -6,7 +6,7 @@ import pytest
 from deepeval.test_case import LLMTestCase
 
 from evals.judge import RouterJudge
-from evals.rubric_core import BinaryRubricMetric, RubricSpec
+from evals.rubric_core import BinaryRubricMetric, RubricSpec, parse_json_object
 
 SPEC = RubricSpec(
     id="RX_example",
@@ -26,6 +26,16 @@ async def _measure(reply: str) -> BinaryRubricMetric:
         generate.return_value = reply
         await metric.a_measure(_case())
     return metric
+
+
+def test_parse_json_object_when_fenced_or_wrapped_in_prose_then_object_returned() -> None:
+    assert parse_json_object('```json\n{"a": 1}\n```') == ({"a": 1}, "")
+    assert parse_json_object('Sure: {"a": 1} done') == ({"a": 1}, "")
+
+
+def test_parse_json_object_when_not_an_object_then_none_with_reason() -> None:
+    assert parse_json_object("[1]")[0] is None
+    assert parse_json_object("plain text")[0] is None
 
 
 def test_rubric_spec_when_hashed_twice_then_hash_is_identical() -> None:

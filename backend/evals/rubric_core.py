@@ -18,6 +18,7 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from deepeval.metrics import BaseMetric
 from deepeval.test_case import LLMTestCase
@@ -48,8 +49,8 @@ class RubricSpec:
         return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
-def parse_binary_verdict(text: str) -> tuple[bool | None, str]:
-    """Tolerantly parse ``{"pass","evidence"}`` from bare or fenced JSON; ``(None, why)`` if unusable."""
+def parse_json_object(text: str) -> tuple[dict[str, Any] | None, str]:
+    """Tolerantly parse one JSON object from bare, fenced or prose-wrapped text; ``(None, why)`` if unusable."""
     body = text.strip()
     fenced = _FENCE_RE.match(body)
     if fenced:
@@ -67,6 +68,14 @@ def parse_binary_verdict(text: str) -> tuple[bool | None, str]:
             return None, "reply was not valid JSON"
     if not isinstance(data, dict):
         return None, "reply JSON was not an object"
+    return data, ""
+
+
+def parse_binary_verdict(text: str) -> tuple[bool | None, str]:
+    """Tolerantly parse ``{"pass","evidence"}`` from bare or fenced JSON; ``(None, why)`` if unusable."""
+    data, problem = parse_json_object(text)
+    if data is None:
+        return None, problem
     verdict = data.get("pass")
     if not isinstance(verdict, bool):
         return None, "reply lacked a boolean 'pass' field"
