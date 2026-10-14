@@ -8,13 +8,13 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.main import app
