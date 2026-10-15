@@ -75,13 +75,22 @@ async def test_sample_when_seed_differs_then_order_differs(db_session: AsyncSess
     assert {e.id for e in a} == {e.id for e in b}
 
 
-async def test_sample_when_limit_given_then_never_exceeds_limit_or_hard_max(
-    db_session: AsyncSession, kaihle_admin: User, monkeypatch: pytest.MonkeyPatch
+async def test_sample_when_limit_below_available_then_returns_exactly_limit(
+    db_session: AsyncSession, kaihle_admin: User
 ) -> None:
     await _seed(db_session, 8)
     assert len(await _sample(db_session, kaihle_admin, limit_per_task=3)) == 3
-    monkeypatch.setattr(sampler, "HARD_MAX_PER_TASK", 4)
+
+
+async def test_sample_when_limit_exceeds_hard_max_then_clamped_to_hard_max(
+    db_session: AsyncSession, kaihle_admin: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _seed(db_session, 8)
+    monkeypatch.setattr(sampler, "HARD_MAX_PER_TASK", 4)  # small cap so 8 seeded rows can show the clamp
     assert len(await _sample(db_session, kaihle_admin, limit_per_task=1000)) == 4
+
+
+def test_hard_max_per_task_when_imported_then_is_200() -> None:
     assert HARD_MAX_PER_TASK == 200
 
 
