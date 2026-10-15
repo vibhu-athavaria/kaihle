@@ -146,6 +146,23 @@ async def _log_completed(
     )
 
 
+def _log_if_timed_out(task: str, model: str, t0: float, exc: Exception) -> None:
+    """Emit a dedicated llm_call_timed_out event when the provider call hit the timeout.
+
+    Metadata only — never prompt or response text. The exception itself is still re-raised
+    by the caller; this just makes timeouts distinguishable from other provider errors.
+    """
+    if isinstance(exc, litellm.exceptions.Timeout):
+        logger.warning(
+            "llm_call_timed_out",
+            task=task,
+            model=model,
+            timeout_seconds=settings.llm_request_timeout_seconds,
+            latency_ms=int((time.monotonic() - t0) * 1000),
+            component=current_component(),
+        )
+
+
 async def _log_failed(
     task: str,
     model: str,
@@ -159,6 +176,7 @@ async def _log_failed(
     Failures cost money and latency too. A report that counts only successes understates
     spend and hides a provider that is erroring expensively.
     """
+    _log_if_timed_out(task, model, t0, exc)
     latency_ms = int((time.monotonic() - t0) * 1000)
     logger.warning(
         "llm_call_failed",
@@ -204,6 +222,8 @@ async def complete(
     Raises:
         ValueError: If task is not in TASK_MODEL_MAP
         litellm.exceptions.APIError: On provider API errors (caller handles retries)
+        litellm.exceptions.Timeout: If the provider does not respond within
+            settings.llm_request_timeout_seconds. Not retried here; the caller owns retries.
     """
     if task not in TASK_MODEL_MAP:
         raise ValueError(f"Unknown LLM task: {task!r}. Valid tasks: {list(TASK_MODEL_MAP)}")
@@ -220,6 +240,7 @@ async def complete(
             temperature=temperature,
             max_tokens=max_tokens,
             stream=stream,
+            timeout=settings.llm_request_timeout_seconds,
             # Request usage stats in the final streaming chunk where supported
             **({"stream_options": {"include_usage": True}} if stream else {}),
         )
@@ -330,6 +351,7 @@ async def stream_sse(
             temperature=temperature,
             max_tokens=max_tokens,
             stream=True,
+            timeout=settings.llm_request_timeout_seconds,
             stream_options={"include_usage": True},
         )
     except Exception as exc:
@@ -411,7 +433,12 @@ async def embed_batch(texts: list[str]) -> list[list[float]]:
     api_base = TASK_API_BASE_MAP.get("embeddings")
     dimensions = settings.llm_embeddings_dimensions
 
-    kwargs: dict[str, Any] = {"model": model, "api_base": api_base or None, "input": texts}
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "api_base": api_base or None,
+        "input": texts,
+        "timeout": settings.llm_request_timeout_seconds,
+    }
     if dimensions is not None:
         kwargs["dimensions"] = dimensions
 

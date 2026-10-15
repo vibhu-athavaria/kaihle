@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     llm_lesson_plan_model: str = ""
     llm_lesson_plan_api_base: str | None = None
 
+    # Per-request timeout, in seconds, applied to every LiteLLM call in ai/providers/router.py.
+    # LiteLLM's own default is 6000s with no retries, so an unset value lets a hung provider
+    # stall the caller for ~100 minutes. For streaming calls it bounds the wait for the
+    # response, not the total stream duration. On expiry the caller sees litellm.exceptions.Timeout.
+    llm_request_timeout_seconds: float = Field(default=120.0, gt=0)
+
     llm_embeddings_model: str = "text-embedding-004"
     llm_embeddings_api_base: str | None = None
     # Requested output dimensionality. Must match the vector(N) columns on
