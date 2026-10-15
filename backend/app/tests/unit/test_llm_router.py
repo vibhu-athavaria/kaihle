@@ -6,12 +6,17 @@ API base configuration, and error handling correctly.
 Run with: pytest backend/app/tests/unit/test_llm_router.py -v
 """
 
+from collections.abc import AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import litellm
 import pytest
+import structlog.testing
 
 from app.ai.providers import router
 from app.ai.usage_context import current_component, llm_component
+from app.core.config import settings
 
 
 class TestComplete:
@@ -545,3 +550,115 @@ class TestPromptResponseTextCapture:
         record.assert_awaited_once()
         assert record.await_args is not None
         assert record.await_args.kwargs["response_text"] is None
+
+
+class TestRequestTimeout:
+    """MLH-T9. Every provider call carries an explicit, configured timeout.
+
+    LiteLLM's own default is 6000s and it does not retry, so without this a hung provider
+    stalls the caller for the better part of two hours.
+    """
+
+    @staticmethod
+    def _ok_response() -> MagicMock:
+        response = MagicMock()
+        response.choices = [MagicMock(message=MagicMock(content="ok"))]
+        response.usage = MagicMock(prompt_tokens=1, completion_tokens=1, total_tokens=2)
+        return response
+
+    @staticmethod
+    async def _empty_stream() -> AsyncGenerator[Any, None]:
+        return
+        yield
+
+    @pytest.mark.asyncio
+    async def test_complete_when_called_then_configured_timeout_passed_to_litellm(self) -> None:
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=self._ok_response()) as acompletion,
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock),
+            patch("app.ai.providers.router.settings.llm_request_timeout_seconds", 42.5),
+        ):
+            await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        assert acompletion.call_args.kwargs["timeout"] == 42.5
+
+    @pytest.mark.asyncio
+    async def test_complete_when_streaming_then_configured_timeout_passed_to_litellm(self) -> None:
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=self._empty_stream()) as acompletion,
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock),
+            patch("app.ai.providers.router.settings.llm_request_timeout_seconds", 42.5),
+        ):
+            await router.complete("lesson_plan", [{"role": "user", "content": "hi"}], stream=True)
+
+        assert acompletion.call_args.kwargs["timeout"] == 42.5
+
+    @pytest.mark.asyncio
+    async def test_stream_sse_when_called_then_configured_timeout_passed_to_litellm(self) -> None:
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, return_value=self._empty_stream()) as acompletion,
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock),
+            patch("app.ai.providers.router.settings.llm_request_timeout_seconds", 42.5),
+        ):
+            _ = [c async for c in router.stream_sse("lesson_plan", [{"role": "user", "content": "hi"}])]
+
+        assert acompletion.call_args.kwargs["timeout"] == 42.5
+
+    @pytest.mark.asyncio
+    async def test_embed_batch_when_called_then_configured_timeout_passed_to_litellm(self) -> None:
+        response = MagicMock()
+        response.data = [{"index": 0, "embedding": [0.1] * 768}]
+        response.usage = None
+
+        with (
+            patch("litellm.aembedding", new_callable=AsyncMock, return_value=response) as aembedding,
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock),
+            patch("app.ai.providers.router.settings.llm_request_timeout_seconds", 42.5),
+        ):
+            await router.embed_batch(["hello"])
+
+        assert aembedding.call_args.kwargs["timeout"] == 42.5
+
+    @pytest.mark.asyncio
+    async def test_complete_when_provider_times_out_then_timeout_propagates_and_failure_recorded(self) -> None:
+        timeout_exc = litellm.exceptions.Timeout(message="timed out", model="test/model-a", llm_provider="test")
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, side_effect=timeout_exc),
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock) as record,
+            pytest.raises(litellm.exceptions.Timeout),
+        ):
+            await router.complete("lesson_plan", [{"role": "user", "content": "hi"}])
+
+        record.assert_awaited_once()
+        assert record.await_args is not None
+        assert record.await_args.kwargs["succeeded"] is False
+        assert record.await_args.kwargs["error_type"] == "Timeout"
+
+    @pytest.mark.asyncio
+    async def test_complete_when_provider_times_out_then_structured_log_has_timeout_and_no_prompt_text(self) -> None:
+        timeout_exc = litellm.exceptions.Timeout(message="timed out", model="test/model-a", llm_provider="test")
+
+        with (
+            patch("litellm.acompletion", new_callable=AsyncMock, side_effect=timeout_exc),
+            patch("app.ai.providers.router.TASK_MODEL_MAP", {"lesson_plan": "test/model-a"}),
+            patch("app.ai.providers.router.record_usage", new_callable=AsyncMock),
+            patch("app.ai.providers.router.settings.llm_request_timeout_seconds", 42.5),
+            structlog.testing.capture_logs() as logs,
+            pytest.raises(litellm.exceptions.Timeout),
+        ):
+            await router.complete("lesson_plan", [{"role": "user", "content": "SECRET-PROMPT"}])
+
+        events = [e for e in logs if e["event"] == "llm_call_timed_out"]
+        assert len(events) == 1
+        assert events[0]["task"] == "lesson_plan"
+        assert events[0]["model"] == "test/model-a"
+        assert events[0]["timeout_seconds"] == 42.5
+        assert "SECRET-PROMPT" not in repr(logs)
+
+    def test_settings_when_timeout_not_overridden_then_default_is_positive(self) -> None:
+        assert settings.llm_request_timeout_seconds > 0
