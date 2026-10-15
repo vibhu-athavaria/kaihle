@@ -10,31 +10,41 @@ import asyncio
 import structlog
 from deepeval.models import DeepEvalBaseLLM
 
+from app.ai.eval.judge_config import (
+    JUDGE_COMPONENT,
+    JUDGE_MAX_TOKENS,
+    JUDGE_MODEL_LABEL,
+    JUDGE_TASK,
+    JUDGE_TEMPERATURE,
+    JudgeConfigError,
+    JudgeNotConfiguredError,
+    JudgeNotIndependentError,
+)
 from app.ai.providers.router import TASK_MODEL_MAP, complete
 from app.ai.usage_context import llm_component
 from app.core.config import settings
 
 logger = structlog.get_logger()
 
-JUDGE_TASK = "eval_judge"
-JUDGE_COMPONENT = "eval_harness"
-JUDGE_TEMPERATURE = 0.0
-JUDGE_MAX_TOKENS = 1000
-# A label, deliberately not a model string: model names never appear in reports or code (SD-2).
-JUDGE_MODEL_LABEL = "kaihle-router/eval_judge"
+# The constants and error types now live in app.ai.eval.judge_config (DeepEval-free, importable from
+# production); they are re-exported here so every existing import keeps working. The guards below stay
+# in this module: tests patch this module's `settings`, `TASK_MODEL_MAP`, `logger` and `complete`.
+__all__ = [
+    "JUDGE_COMPONENT",
+    "JUDGE_MAX_TOKENS",
+    "JUDGE_MODEL_LABEL",
+    "JUDGE_TASK",
+    "JUDGE_TEMPERATURE",
+    "JudgeConfigError",
+    "JudgeNotConfiguredError",
+    "JudgeNotIndependentError",
+    "RouterJudge",
+    "check_judge_independence",
+    "judge_config_problem",
+    "require_judge_configured",
+]
+
 _OPENROUTER_PREFIX = "openrouter/"
-
-
-class JudgeNotConfiguredError(RuntimeError):
-    """The judge model env var is empty."""
-
-
-class JudgeNotIndependentError(RuntimeError):
-    """The judge would grade its own model's output."""
-
-
-class JudgeConfigError(RuntimeError):
-    """The graded task is unknown or has no model configured, so independence cannot be checked."""
 
 
 class RouterJudge(DeepEvalBaseLLM):
