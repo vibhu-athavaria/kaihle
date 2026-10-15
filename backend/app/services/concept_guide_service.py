@@ -33,6 +33,15 @@ _jinja_env = Environment(loader=FileSystemLoader(str(_PROMPTS_DIR)), autoescape=
 
 _VALID_MCQ_ANSWERS = {"A", "B", "C", "D"}
 
+# Sampling parameters per tutor surface. Public so the eval harness (evals/tutor)
+# drives the exact production values instead of copies that could drift.
+EXPLAIN_THIS_TEMPERATURE = 0.6
+EXPLAIN_THIS_MAX_TOKENS = 400
+CONCEPT_GUIDE_TEMPERATURE = 0.6
+CONCEPT_GUIDE_MAX_TOKENS = 600
+MCQ_FEEDBACK_TEMPERATURE = 0.5
+MCQ_FEEDBACK_MAX_TOKENS = 150
+
 
 def _extract_json_block(text: str) -> tuple[int, int] | None:
     """Return (start, end) indices of the first top-level {...} block, or None."""
@@ -103,6 +112,123 @@ def _parse_mcq(raw: str) -> tuple[str, dict[str, object] | None]:
         return raw.strip(), None
 
 
+def render_explain_this_system_prompt(
+    *,
+    subtopic_name: str,
+    topic_name: str,
+    subject_name: str,
+    grade_level: int,
+    dominant_modality: str,
+    interest_category: str,
+) -> str:
+    """Render the ``explain_this`` system prompt (pure; no I/O)."""
+    template = _jinja_env.get_template("explain_this.jinja2")
+    return template.render(
+        subtopic_name=subtopic_name,
+        topic_name=topic_name,
+        subject_name=subject_name,
+        grade_level=grade_level,
+        dominant_modality=dominant_modality,
+        interest_category=interest_category,
+    )
+
+
+def build_explain_this_messages(
+    *,
+    system_prompt: str,
+    prior_messages: list[dict[str, str]],
+    question: str,
+) -> list[dict[str, str]]:
+    """Assemble system, prior chat turns and the student's message, in that order (pure)."""
+    return [
+        {"role": "system", "content": system_prompt},
+        *prior_messages,
+        {"role": "user", "content": question},
+    ]
+
+
+def render_concept_guide_prompt(
+    *,
+    subtopic_name: str,
+    description: str | None,
+    learning_objective: str | None,
+    keywords: list[str] | None,
+    dominant_modality: str,
+    interests: list[str],
+    work_style: dict[str, object],
+    question: str | None,
+) -> str:
+    """Render the single-message ``concept_guide`` prompt (pure; no I/O).
+
+    ``interests`` is rendered as given; the caller applies the top-2 cut.
+    """
+    template = _jinja_env.get_template("concept_guide.jinja2")
+    return template.render(
+        subtopic_name=subtopic_name,
+        description=description,
+        learning_objective=learning_objective,
+        keywords=keywords,
+        dominant_modality=dominant_modality,
+        interests=interests,
+        work_style=work_style,
+        question=question,
+    )
+
+
+def build_mcq_feedback_prompt(
+    *,
+    subtopic_name: str,
+    question: str,
+    options: list[str],
+    correct: str,
+    student_answer: str,
+    is_correct: bool,
+) -> str:
+    """Build the follow-up prompt for the student's MCQ answer (pure; no I/O).
+
+    ``student_answer`` is interpolated exactly as received (not normalised).
+    """
+    if is_correct:
+        return (
+            f'A student just answered a check question about "{subtopic_name}" correctly.\n'
+            f"Question: {question}\n"
+            f"Their answer: {student_answer} (correct)\n\n"
+            "Write a warm, encouraging 1-2 sentence acknowledgement. "
+            "Then suggest they try an assessment to test their understanding further. "
+            "Keep it brief and positive. No markdown."
+        )
+    options_text = "\n".join(options)
+    return (
+        f'A student answered a check question about "{subtopic_name}" incorrectly.\n'
+        f"Question: {question}\n"
+        f"Options:\n{options_text}\n"
+        f"Their answer: {student_answer} — Correct answer: {correct}\n\n"
+        "Re-explain the concept from a different angle in 2-3 sentences. "
+        "Do NOT say 'wrong', 'incorrect', or 'that's not right'. "
+        "Be encouraging and clarifying. No markdown."
+    )
+
+
+async def request_concept_guide_completion(prompt: str) -> str:
+    """Send the concept-guide prompt through the router (external LLM call)."""
+    return await llm_router.complete(
+        task="concept_guide",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=CONCEPT_GUIDE_TEMPERATURE,
+        max_tokens=CONCEPT_GUIDE_MAX_TOKENS,
+    )
+
+
+async def request_mcq_feedback_completion(prompt: str) -> str:
+    """Send the MCQ-feedback prompt through the router (external LLM call)."""
+    return await llm_router.complete(
+        task="concept_guide",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=MCQ_FEEDBACK_TEMPERATURE,
+        max_tokens=MCQ_FEEDBACK_MAX_TOKENS,
+    )
+
+
 async def generate_concept_explanation(
     *,
     student: User,
@@ -149,8 +275,7 @@ async def generate_concept_explanation(
     dominant_modality = _get_dominant_modality(modality_scores)
 
     # Render prompt
-    template = _jinja_env.get_template("concept_guide.jinja2")
-    prompt = template.render(
+    prompt = render_concept_guide_prompt(
         subtopic_name=subtopic.name,
         description=subtopic.description,
         learning_objective=subtopic.learning_objective,
@@ -170,12 +295,7 @@ async def generate_concept_explanation(
         dominant_modality=dominant_modality,
     )
 
-    raw = await llm_router.complete(
-        task="concept_guide",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.6,
-        max_tokens=600,
-    )
+    raw = await request_concept_guide_completion(prompt)
 
     explanation, check_question = _parse_mcq(raw)
 
@@ -214,26 +334,14 @@ async def evaluate_mcq_answer(
         raise ValueError(f"Invalid answer '{student_answer}' — must be one of A, B, C, D")
     is_correct = normalised == correct.strip().upper()
 
-    if is_correct:
-        prompt = (
-            f'A student just answered a check question about "{subtopic_name}" correctly.\n'
-            f"Question: {question}\n"
-            f"Their answer: {student_answer} (correct)\n\n"
-            "Write a warm, encouraging 1-2 sentence acknowledgement. "
-            "Then suggest they try an assessment to test their understanding further. "
-            "Keep it brief and positive. No markdown."
-        )
-    else:
-        options_text = "\n".join(options)
-        prompt = (
-            f'A student answered a check question about "{subtopic_name}" incorrectly.\n'
-            f"Question: {question}\n"
-            f"Options:\n{options_text}\n"
-            f"Their answer: {student_answer} — Correct answer: {correct}\n\n"
-            "Re-explain the concept from a different angle in 2-3 sentences. "
-            "Do NOT say 'wrong', 'incorrect', or 'that's not right'. "
-            "Be encouraging and clarifying. No markdown."
-        )
+    prompt = build_mcq_feedback_prompt(
+        subtopic_name=subtopic_name,
+        question=question,
+        options=options,
+        correct=correct,
+        student_answer=student_answer,
+        is_correct=is_correct,
+    )
 
     logger.info(
         "concept_guide_mcq_evaluated",
@@ -241,12 +349,7 @@ async def evaluate_mcq_answer(
         is_correct=is_correct,
     )
 
-    response = await llm_router.complete(
-        task="concept_guide",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.5,
-        max_tokens=150,
-    )
+    response = await request_mcq_feedback_completion(prompt)
 
     return {
         "is_correct": str(is_correct).lower(),
@@ -332,8 +435,7 @@ async def explain_subtopic_question(
     )
 
     # Render system prompt
-    template = _jinja_env.get_template("explain_this.jinja2")
-    system_prompt = template.render(
+    system_prompt = render_explain_this_system_prompt(
         subtopic_name=subtopic_name,
         topic_name=topic_name,
         subject_name=subject_name,
@@ -382,12 +484,9 @@ async def _stream_explain_this(
     )
     async for chunk in llm_router.stream_sse(
         task="explain_this",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": question},
-        ],
-        temperature=0.6,
-        max_tokens=400,
+        messages=build_explain_this_messages(system_prompt=system_prompt, prior_messages=[], question=question),
+        temperature=EXPLAIN_THIS_TEMPERATURE,
+        max_tokens=EXPLAIN_THIS_MAX_TOKENS,
     ):
         yield chunk
 
@@ -460,8 +559,7 @@ async def stream_chat_reply(
         INTEREST_KEY_TO_CATEGORY.get(first_interest_key, "general topics") if first_interest_key else "general topics"
     )
 
-    template = _jinja_env.get_template("explain_this.jinja2")
-    system_prompt = template.render(
+    system_prompt = render_explain_this_system_prompt(
         subtopic_name=subtopic_data.subtopic_name,
         topic_name=subtopic_data.topic_name,
         subject_name=subtopic_data.subject_name,
@@ -470,16 +568,14 @@ async def stream_chat_reply(
         interest_category=interest_category,
     )
 
-    messages: list[dict[str, str]] = [
-        {"role": "system", "content": system_prompt},
-        *prior_messages,
-        {"role": "user", "content": question},
-    ]
+    messages = build_explain_this_messages(
+        system_prompt=system_prompt, prior_messages=prior_messages, question=question
+    )
 
     async for chunk in llm_router.stream_sse(
         task="explain_this",
         messages=messages,
-        temperature=0.6,
-        max_tokens=400,
+        temperature=EXPLAIN_THIS_TEMPERATURE,
+        max_tokens=EXPLAIN_THIS_MAX_TOKENS,
     ):
         yield chunk
