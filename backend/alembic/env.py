@@ -1,6 +1,7 @@
 import os
 from logging.config import fileConfig
 
+from alembic.operations import ops as alembic_ops
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -53,16 +54,29 @@ def process_revision_directives(context, revision, directives):  # type: ignore[
     Alembic has no ORM-side comment declarations, so every autogenerate
     run would emit drop_table_comment noise for every table. We suppress
     all of them here before the migration file is written.
-    """
-    from alembic.operations import ops as alembic_ops
 
+    Comment ops are NOT top-level entries in ``upgrade_ops.ops``: Alembic nests
+    them inside a per-table ``ModifyTableOps``. A flat filter on the top-level
+    list matches nothing, so we strip them from inside each ``ModifyTableOps``
+    and then discard any ``ModifyTableOps`` left empty.
+    """
     for directive in directives:
-        directive.upgrade_ops.ops = [
-            op for op in directive.upgrade_ops.ops if not isinstance(op, alembic_ops.DropTableCommentOp)
-        ]
-        directive.downgrade_ops.ops = [
-            op for op in directive.downgrade_ops.ops if not isinstance(op, alembic_ops.CreateTableCommentOp)
-        ]
+        _strip_table_comment_ops(directive.upgrade_ops, alembic_ops.DropTableCommentOp)
+        _strip_table_comment_ops(directive.downgrade_ops, alembic_ops.CreateTableCommentOp)
+
+
+def _strip_table_comment_ops(container: alembic_ops.OpContainer, comment_op: type) -> None:
+    """Remove ``comment_op`` instances from the per-table ops nested in ``container``."""
+    kept: list[alembic_ops.MigrateOperation] = []
+    for op in container.ops:
+        if isinstance(op, alembic_ops.ModifyTableOps):
+            op.ops = [nested for nested in op.ops if not isinstance(nested, comment_op)]
+            if not op.ops:
+                continue
+        elif isinstance(op, comment_op):
+            continue
+        kept.append(op)
+    container.ops = kept
 
 
 def run_migrations_offline() -> None:
