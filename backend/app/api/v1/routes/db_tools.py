@@ -210,7 +210,7 @@ class ImportResultResponse(BaseModel):
 
 @router.post("/export")
 async def export_database(
-    _: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Export all table data as SQL INSERT statements using SQLAlchemy reflection.
@@ -224,7 +224,15 @@ async def export_database(
       1. TRUNCATE all tables (CASCADE handles FK order automatically).
       2. INSERT all rows in FK-dependency order (parents before children).
     """
-    logger.info("db_export_started", method="python_reflection")
+    if settings.environment == "production" and not settings.db_export_allowed_in_production:
+        # Fail closed: a full dump includes every student's data. Refuse before any query runs.
+        logger.warning("db_export_refused", reason="disabled_in_production", actor_id=str(current_user.id))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Database export is disabled in production.",
+        )
+
+    logger.info("db_export_started", method="python_reflection", actor_id=str(current_user.id))
 
     async def _generate() -> AsyncGenerator[bytes, None]:
         yield b"-- Kaihle data export (data-only; schema managed by Alembic)\n"

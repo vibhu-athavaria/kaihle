@@ -191,6 +191,84 @@ async def test_export_when_not_kaihle_admin_then_returns_403() -> None:
         _clear_overrides()
 
 
+async def _post_export_with_settings(
+    environment: str, allowed_in_production: bool, mock_db: AsyncMock
+) -> tuple[int, str]:
+    fake_table = _make_mock_table("users", ["id"])
+    fake_rows = MagicMock()
+    fake_rows.fetchall = MagicMock(return_value=[("abc123",)])
+    mock_db.execute = AsyncMock(return_value=fake_rows)
+    with (
+        patch("app.api.v1.routes.db_tools.settings") as mock_settings,
+        patch("app.api.v1.routes.db_tools.SAMetaData") as mock_meta_cls,
+    ):
+        mock_settings.environment = environment
+        mock_settings.db_export_allowed_in_production = allowed_in_production
+        mock_meta = MagicMock()
+        mock_meta.sorted_tables = [fake_table]
+        mock_meta_cls.return_value = mock_meta
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post("/api/v1/db-tools/export")
+    return response.status_code, response.text
+
+
+@pytest.mark.asyncio
+async def test_export_when_production_and_flag_off_then_returns_403_without_data() -> None:
+    """Export fails closed in production unless explicitly enabled; no data is read."""
+    mock_db = _make_mock_db()
+    _override_as_kaihle_admin(mock_db=mock_db)
+    try:
+        status_code, body = await _post_export_with_settings("production", False, mock_db)
+
+        assert status_code == 403
+        assert "disabled in production" in body.lower()
+        assert "abc123" not in body
+        mock_db.execute.assert_not_called()
+    finally:
+        _clear_overrides()
+
+
+@pytest.mark.asyncio
+async def test_export_when_production_and_flag_on_then_returns_sql_file() -> None:
+    """The explicit opt-in flag re-enables export in production."""
+    mock_db = _make_mock_db()
+    _override_as_kaihle_admin(mock_db=mock_db)
+    try:
+        status_code, body = await _post_export_with_settings("production", True, mock_db)
+
+        assert status_code == 200
+        assert 'INSERT INTO "users"' in body
+    finally:
+        _clear_overrides()
+
+
+@pytest.mark.asyncio
+async def test_export_when_non_production_and_flag_off_then_returns_sql_file() -> None:
+    """Non-production behaviour is unchanged by the production guard."""
+    mock_db = _make_mock_db()
+    _override_as_kaihle_admin(mock_db=mock_db)
+    try:
+        status_code, body = await _post_export_with_settings("development", False, mock_db)
+
+        assert status_code == 200
+        assert 'INSERT INTO "users"' in body
+    finally:
+        _clear_overrides()
+
+
+@pytest.mark.asyncio
+async def test_export_when_production_flag_on_and_not_kaihle_admin_then_returns_403() -> None:
+    """The flag never weakens the role check: non-admins stay forbidden."""
+    _override_as_school_admin()
+    try:
+        status_code, body = await _post_export_with_settings("production", True, _make_mock_db())
+
+        assert status_code == 403
+        assert "abc123" not in body
+    finally:
+        _clear_overrides()
+
+
 @pytest.mark.asyncio
 async def test_export_excludes_celery_and_alembic_tables() -> None:
     """POST /db-tools/export skips celery_* and alembic_version tables."""

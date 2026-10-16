@@ -138,6 +138,10 @@ class Settings(BaseSettings):
     # your real judge cost in LLM Logs. Defined here; the budget guard that reads it lands later.
     eval_unpriced_call_cost_usd: float = Field(default=1.0, ge=0)
 
+    # Full-database export (POST /db-tools/export) dumps every table, including students' data.
+    # Refused when ENVIRONMENT=production unless this is explicitly set true. Default OFF.
+    db_export_allowed_in_production: bool = False
+
     # Notification recipients
     kaihle_admin_email: str = ""
 
