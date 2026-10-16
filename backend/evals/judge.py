@@ -20,6 +20,8 @@ from app.ai.eval.judge_config import (
     JudgeNotConfiguredError,
     JudgeNotIndependentError,
 )
+from app.ai.eval.judge_guards import config_problem, task_problem, vendor_token
+from app.ai.eval.judge_guards import require_judge_configured as require_guard
 from app.ai.providers.router import TASK_MODEL_MAP, complete
 from app.ai.usage_context import llm_component
 from app.core.config import settings
@@ -43,8 +45,6 @@ __all__ = [
     "judge_config_problem",
     "require_judge_configured",
 ]
-
-_OPENROUTER_PREFIX = "openrouter/"
 
 
 class RouterJudge(DeepEvalBaseLLM):
@@ -88,29 +88,10 @@ class RouterJudge(DeepEvalBaseLLM):
         return JUDGE_MODEL_LABEL
 
 
-_JUDGE_UNSET_MESSAGE = "LLM_EVAL_JUDGE_MODEL is not set; the eval harness cannot run without a judge."
-
-
-def _task_problem(task: str) -> tuple[type[RuntimeError], str] | None:
-    """Problem with the graded task alone (unknown, no model, or identical to the judge)."""
-    if task not in TASK_MODEL_MAP:
-        return JudgeConfigError, f"Unknown graded task {task!r}; valid tasks: {sorted(TASK_MODEL_MAP)}."
-    graded_model = TASK_MODEL_MAP[task]
-    if not graded_model:
-        return JudgeConfigError, f"No model is configured for graded task {task!r}; independence cannot be checked."
-    if settings.llm_eval_judge_model == graded_model:
-        return (
-            JudgeNotIndependentError,
-            f"Judge model is identical to the model under test for task {task!r}; "
-            "set LLM_EVAL_JUDGE_MODEL to a different model.",
-        )
-    return None
-
-
 def _config_problem(task: str) -> tuple[type[RuntimeError], str] | None:
-    if not settings.llm_eval_judge_model:
-        return JudgeNotConfiguredError, _JUDGE_UNSET_MESSAGE
-    return _task_problem(task)
+    # Delegates to the DeepEval-free guards; settings and TASK_MODEL_MAP are read here, at call time,
+    # so tests that patch this module's names keep working.
+    return config_problem(task, judge_model=settings.llm_eval_judge_model, task_model_map=TASK_MODEL_MAP)
 
 
 def judge_config_problem(task: str) -> str | None:
@@ -125,16 +106,7 @@ def judge_config_problem(task: str) -> str | None:
 
 def require_judge_configured() -> None:
     """Fail fast, naming the env var, when no judge model is configured."""
-    if not settings.llm_eval_judge_model:
-        raise JudgeNotConfiguredError(_JUDGE_UNSET_MESSAGE)
-
-
-def _vendor_token(model: str) -> str | None:
-    """First path segment after an optional ``openrouter/`` prefix, or None if there is no slash."""
-    stripped = model.removeprefix(_OPENROUTER_PREFIX)
-    if "/" not in stripped:
-        return None
-    return stripped.split("/", 1)[0].lower()
+    require_guard(settings.llm_eval_judge_model)
 
 
 def check_judge_independence(task: str) -> None:
@@ -146,9 +118,9 @@ def check_judge_independence(task: str) -> None:
     self-hosted endpoints and bare model names can hide or fake a shared vendor. A warning is
     advisory, not proof either way.
     """
-    problem = _task_problem(task)
+    problem = task_problem(task, judge_model=settings.llm_eval_judge_model, task_model_map=TASK_MODEL_MAP)
     if problem is not None:
         raise problem[0](problem[1])
-    judge_vendor = _vendor_token(settings.llm_eval_judge_model)
-    if judge_vendor is not None and judge_vendor == _vendor_token(TASK_MODEL_MAP[task]):
+    judge_vendor = vendor_token(settings.llm_eval_judge_model)
+    if judge_vendor is not None and judge_vendor == vendor_token(TASK_MODEL_MAP[task]):
         logger.warning("eval_judge_same_vendor", task=task, vendor=judge_vendor)
