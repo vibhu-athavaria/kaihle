@@ -80,7 +80,7 @@ class TestSend:
 
         mock_resend_send.assert_called_once()
         mock_logger.info.assert_called_once_with(
-            "email_sent", to="test@example.com", subject="Hello", template="password_reset.html.jinja2"
+            "email_sent", to="t***@example.com", subject="Hello", template="password_reset.html.jinja2"
         )
 
     @pytest.mark.asyncio
@@ -101,5 +101,5 @@ class TestSend:
 
         mock_logger.error.assert_called_once()
         call_kwargs = mock_logger.error.call_args[1]
-        assert call_kwargs["to"] == "test@example.com"
+        assert call_kwargs["to"] == "t***@example.com"
         assert call_kwargs["error_type"] == "Exception"

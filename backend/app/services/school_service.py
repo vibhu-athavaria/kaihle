@@ -6,6 +6,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import mask_email
 from app.core.security import hash_password
 from app.models.curriculum import Curriculum
 from app.models.school import Class, School, SchoolCurriculum
@@ -72,7 +73,7 @@ class SchoolService:
         logger.info(
             "create_school",
             school_id=str(school.id),
-            admin_email=data.admin_email,
+            admin_email=mask_email(data.admin_email),
             password_set=data.admin_password is not None,
         )
 

@@ -28,6 +28,7 @@ if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
 from app.core.config import settings  # noqa: E402
+from app.core.logging import mask_email  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 
 structlog.configure(
@@ -298,7 +299,7 @@ async def seed() -> None:
                     "hire_date": datetime.date(2023, 8, 1),
                 },
             )
-            log.info("teacher_ready", name=f"{t['first_name']} {t['last_name']}", email=t["email"])
+            log.info("teacher_ready", name=f"{t['first_name']} {t['last_name']}", email=mask_email(t["email"]))
 
         await db.commit()
 

@@ -27,3 +27,22 @@ def configure_logging(log_level: str = "INFO") -> None:
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
+
+
+_MASKED = "***"
+
+
+def mask_email(email: str | None) -> str:
+    """Return a deterministic, non-reversible form of an email address for log output.
+
+    ``alice@school.edu`` -> ``a***@school.edu``. Missing, empty or malformed input
+    (non-string, no ``@``, empty local part or domain) becomes ``***``. Never raises.
+    """
+    # A log helper must never break the request it is logging for, so anything that is not a
+    # non-empty str (bytes, an enum, an ORM/Pydantic proxy) is masked instead of raising.
+    if not isinstance(email, str) or not email or "@" not in email:
+        return _MASKED
+    local, _, domain = email.rpartition("@")
+    if not local or not domain:
+        return _MASKED
+    return f"{local[0]}{_MASKED}@{domain}"

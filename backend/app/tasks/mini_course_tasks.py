@@ -28,6 +28,7 @@ import structlog
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.core.logging import mask_email
 from app.models.interest_category import InterestCategory
 from app.tasks.celery_app import celery_app
 
@@ -56,7 +57,7 @@ def send_mini_course_ready_email(teacher_email: str, topic_name: str) -> None:
                 ),
             }
         )
-        logger.info("mini_course_ready_email_sent", teacher_email=teacher_email, topic_name=topic_name)
+        logger.info("mini_course_ready_email_sent", teacher_email=mask_email(teacher_email), topic_name=topic_name)
     except Exception as exc:
         logger.warning("mini_course_ready_email_failed", topic_name=topic_name, error=str(exc))
 
