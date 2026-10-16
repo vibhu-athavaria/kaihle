@@ -27,3 +27,20 @@ def configure_logging(log_level: str = "INFO") -> None:
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
+
+
+_MASKED = "***"
+
+
+def mask_email(email: str | None) -> str:
+    """Return a deterministic, non-reversible form of an email address for log output.
+
+    ``alice@school.edu`` -> ``a***@school.edu``. Missing, empty or malformed input
+    (no ``@``, empty local part or domain) becomes ``***``. Never raises.
+    """
+    if not email or "@" not in email:
+        return _MASKED
+    local, _, domain = email.rpartition("@")
+    if not local or not domain:
+        return _MASKED
+    return f"{local[0]}{_MASKED}@{domain}"

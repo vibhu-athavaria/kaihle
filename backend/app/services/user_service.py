@@ -9,6 +9,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.logging import mask_email
 from app.core.security import (
     create_magic_link_token,
     hash_password,
@@ -152,7 +153,7 @@ class UserService:
             user_id=str(user.id),
             school_id=str(school_id),
             role=user.role,
-            email=user.email,
+            email=mask_email(user.email),
             direct_password=direct_password,
         )
 

@@ -10,6 +10,7 @@ import celery
 import structlog
 from sqlalchemy import select
 
+from app.core.logging import mask_email
 from app.tasks.celery_app import celery_app
 
 logger = structlog.get_logger()
@@ -132,7 +133,7 @@ async def _send_review_notification_async(
             if isinstance(result, Exception):
                 logger.error(
                     "review_notification_email_failed",
-                    to=admin.email,
+                    to=mask_email(admin.email),
                     review_item_id=review_item_id,
                     exc_info=result,
                 )

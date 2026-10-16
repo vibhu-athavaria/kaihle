@@ -5,6 +5,8 @@ from pathlib import Path
 import structlog
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
+from app.core.logging import mask_email
+
 logger = structlog.get_logger()
 
 _TEMPLATES_DIR = Path(__file__).parent.parent / "emails"
@@ -45,11 +47,11 @@ class EmailService:
                     "html": html,
                 }
             )
-            logger.info("email_sent", to=to, subject=subject, template=template)
+            logger.info("email_sent", to=mask_email(to), subject=subject, template=template)
         except Exception as e:
             logger.error(
                 "email_send_failed",
-                to=to,
+                to=mask_email(to),
                 subject=subject,
                 template=template,
                 error_type=type(e).__name__,
