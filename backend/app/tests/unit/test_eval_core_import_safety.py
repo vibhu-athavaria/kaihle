@@ -16,12 +16,15 @@ _MODULES = [
     "app.ai.eval.calibration",
     "app.ai.eval.judge_config",
     "app.ai.eval.rubric_core",
+    "app.ai.eval.judge_guards",
+    "app.services.eval_prod.budget",
+    "app.services.eval_prod.registry",
 ]
 
 
 @pytest.mark.parametrize("module", _MODULES)
 def test_eval_core_module_when_imported_then_deepeval_is_not_loaded(module: str) -> None:
-    code = f"import sys, {module}; sys.exit(1 if 'deepeval' in sys.modules else 0)"
+    code = f"import sys, {module}; sys.exit(1 if 'deepeval' in sys.modules or 'evals' in sys.modules else 0)"
     result = subprocess.run([sys.executable, "-c", code], cwd=_BACKEND, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stderr
 
