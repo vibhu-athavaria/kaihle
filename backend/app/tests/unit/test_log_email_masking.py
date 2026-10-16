@@ -30,6 +30,10 @@ class TestMaskEmail:
     def test_mask_email_when_normal_address_then_keeps_first_char_and_domain(self) -> None:
         assert mask_email("alice@school.edu") == "a***@school.edu"
 
+    def test_mask_email_when_value_is_not_a_string_then_masked_without_raising(self) -> None:
+        not_strings: list[Any] = [b"alice@school.edu", 12345, object()]
+        assert [mask_email(value) for value in not_strings] == ["***", "***", "***"]
+
     def test_mask_email_when_single_char_local_part_then_still_masked(self) -> None:
         assert mask_email("a@x.com") == "a***@x.com"
 
@@ -127,7 +131,7 @@ class TestSchoolServiceLogsMasked:
             await SchoolService(db).create_school(data)
 
         assert RAW not in _logged_text(mock_logger)
-        assert mock_logger.info.call_args[1]["admin_email"] == mask_email(RAW)
+        assert mock_logger.info.call_args.kwargs["admin_email"] == mask_email(RAW)
 
 
 class TestMiniCourseTaskLogsMasked:
