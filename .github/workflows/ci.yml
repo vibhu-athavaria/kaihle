@@ -37,6 +37,7 @@ jobs:
               - 'frontend/**'
             llm_evals:
               - 'backend/evals/**'
+              - 'backend/app/ai/eval/**'
               - 'backend/pyproject.toml'
               - 'backend/uv.lock'
               - 'backend/mypy.ini'
