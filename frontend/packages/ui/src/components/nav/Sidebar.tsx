@@ -17,6 +17,7 @@ import {
   GraduationCap,
   Terminal,
   Coins,
+  Gauge,
   CreditCard,
   ArrowUpCircle,
   MessageSquare,
@@ -127,6 +128,7 @@ const adminSections: NavSection[] = [
       { label: "Users", href: "/kaihle-admin/users", icon: Users },
       { label: "Billing", href: "/kaihle-admin/billing", icon: Settings },
       { label: "LLM Logs", href: "/kaihle-admin/llm-logs", icon: Coins },
+      { label: "Quality", href: "/kaihle-admin/quality", icon: Gauge },
     ],
   },
   {
