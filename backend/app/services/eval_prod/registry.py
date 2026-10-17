@@ -10,10 +10,9 @@ student text, and which rubrics are trustworthy enough to run on real output.
     INSUFFICIENT_N never run.
   * Independence is enforced per sampled row against that row's own model (`filter_independent`).
 
-THE REGISTRY STARTS EMPTY (D14). A suite registers its evaluators when it lands. The existing
-rubrics and checks live in the offline `evals/` package, which production code cannot import
-(DeepEval); moving the DeepEval-free `RubricSpec` definitions into `app/ai/eval/` is a
-prerequisite for registering them and belongs to the slice that wires the runner.
+A new `EvaluatorRegistry` starts EMPTY (D14); a suite registers its evaluators when it lands.
+`question_evaluators.default_registry()` registers the question-quality suite (the `RubricSpec`s
+live in DeepEval-free `app/ai/eval/`, so production can import them).
 
 Calibration status is resolved through an injectable callable. HUMAN_VALIDATED (T16) is trusted
 here already, but the default file-backed resolver cannot produce it until T16 lands.
