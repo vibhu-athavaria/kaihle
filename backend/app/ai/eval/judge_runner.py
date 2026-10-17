@@ -51,12 +51,16 @@ def build_code_scored_prompt(rubric: CodeScoredRubric, case: Mapping[str, str]) 
     )
 
 
-def router_completion(run_id: str | None = None) -> Completion:
-    """Production completion: the ``eval_judge`` router task at temperature 0."""
+def router_completion(run_id: str | None = None, component: str = JUDGE_COMPONENT) -> Completion:
+    """Production completion: the ``eval_judge`` router task at temperature 0.
+
+    ``component`` tags the usage events: the offline harness keeps the default, production sampling
+    passes ``eval_prod_sample`` so the budget guard can count that spend.
+    """
 
     async def completion(prompt: str) -> str:
         # component and run_id reach llm_usage_events via structlog contextvars (see usage_context.py).
-        with llm_component(JUDGE_COMPONENT, run_id=run_id):
+        with llm_component(component, run_id=run_id):
             return await complete(
                 task=JUDGE_TASK,
                 messages=[{"role": "user", "content": prompt}],

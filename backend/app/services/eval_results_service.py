@@ -136,7 +136,11 @@ class EvalResultsService:
         return run, created
 
     async def get_run(self, run_id: uuid.UUID) -> EvalRun | None:
-        result = await self._db.execute(select(EvalRun).where(EvalRun.id == run_id))
+        # populate_existing: a run finished through UPDATE statements must not be served stale
+        # from the session's identity map.
+        result = await self._db.execute(
+            select(EvalRun).where(EvalRun.id == run_id).execution_options(populate_existing=True)
+        )
         return result.scalar_one_or_none()
 
     async def mark_started(self, run_id: uuid.UUID, *, judge_model: str) -> None:

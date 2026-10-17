@@ -24,6 +24,9 @@ _MODULES = [
     "app.ai.eval.judge_runner",
     "app.ai.eval.question_rubrics",
     "app.services.eval_prod.question_evaluators",
+    "app.services.eval_prod.sampler",
+    "app.services.eval_prod.question_adapter",
+    "app.services.eval_run_service",
 ]
 
 
