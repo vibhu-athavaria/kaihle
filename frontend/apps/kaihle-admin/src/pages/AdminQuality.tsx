@@ -3,18 +3,22 @@ import { AdminLayout } from "@kaihle/ui";
 import { useAuth } from "@kaihle/auth";
 import { ShieldAlert } from "lucide-react";
 import {
+  useEvalRuns,
   useEvalSettings,
   useQualityFailures,
   useQualitySummary,
   type QualityBucket,
 } from "../hooks/useAdminQuality";
 import { BudgetPanel } from "../components/quality/BudgetPanel";
+import { EvalRunsTable } from "../components/quality/EvalRunsTable";
 import { EvalSettingsPanel } from "../components/quality/EvalSettingsPanel";
+import { RunNowPanel } from "../components/quality/RunNowPanel";
 import { QualityRatesTable } from "../components/quality/QualityRatesTable";
 import { QualityFailuresTable } from "../components/quality/QualityFailuresTable";
 import { LlmLogDetailModal } from "../components/llm-logs/LlmLogDetailModal";
 
 const FAILURES_PAGE_SIZE = 20;
+const RUNS_PAGE_SIZE = 10;
 const SELECT =
   "font-['Inter'] text-sm border border-gray-200 rounded-lg px-3 py-1.5 min-h-[44px] text-gray-700 focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2";
 const FILTER_LABEL =
@@ -25,6 +29,7 @@ export function AdminQuality() {
   const [task, setTask] = useState("");
   const [bucket, setBucket] = useState<QualityBucket>("none");
   const [failuresPage, setFailuresPage] = useState(1);
+  const [runsPage, setRunsPage] = useState(1);
   const [openLogId, setOpenLogId] = useState<string | null>(null);
 
   const { data: settings } = useEvalSettings();
@@ -34,6 +39,12 @@ export function AdminQuality() {
     page: failuresPage,
     pageSize: FAILURES_PAGE_SIZE,
   });
+
+  const runs = useEvalRuns({ page: runsPage, pageSize: RUNS_PAGE_SIZE });
+  const runsTotalPages = Math.max(
+    1,
+    Math.ceil((runs.data?.total ?? 0) / RUNS_PAGE_SIZE),
+  );
 
   const failuresTotalPages = Math.max(
     1,
@@ -67,6 +78,22 @@ export function AdminQuality() {
           <BudgetPanel settings={settings} />
           <EvalSettingsPanel settings={settings} />
         </div>
+
+        <RunNowPanel settings={settings} />
+
+        <section aria-label="Evaluation runs" className="space-y-3">
+          <h2 className="font-['Inter'] text-base font-bold text-brand-ink">
+            Evaluation runs
+          </h2>
+          <EvalRunsTable
+            runs={runs.data?.runs ?? []}
+            loading={runs.isLoading}
+            error={runs.isError}
+            page={runsPage}
+            totalPages={runsTotalPages}
+            onPageChange={setRunsPage}
+          />
+        </section>
 
         <section aria-label="Pass rates" className="space-y-3">
           <div className="flex items-center gap-4 flex-wrap">

@@ -98,6 +98,41 @@ function setupApi(f: Partial<Fixture> = {}) {
         },
       });
     }
+    if (url.endsWith("/eval-runs")) {
+      return Promise.resolve({
+        // One settled run: the shared EmptyState heading uses font-display, so the Inter check
+        // below needs every table non-empty.
+        data: {
+          runs: [
+            {
+              id: "run-1",
+              task: "question_generation",
+              window_start: "2026-10-10T00:00:00Z",
+              window_end: "2026-10-17T00:00:00Z",
+              seed: "s",
+              trigger: "manual",
+              status: "completed",
+              include_indicative: false,
+              judge_model: null,
+              sampled_count: 1,
+              evaluated_count: 1,
+              skipped_not_independent_count: 0,
+              skipped_scrub_failed_count: 0,
+              skipped_unsupported_count: 0,
+              spend_usd: "0",
+              error_type: null,
+              requested_by: null,
+              created_at: "2026-10-17T08:00:00Z",
+              started_at: null,
+              completed_at: null,
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 10,
+        },
+      });
+    }
     if (url.endsWith("/eval-settings")) {
       return Promise.resolve({ data: fx.settings });
     }
