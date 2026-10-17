@@ -19,6 +19,11 @@ _MODULES = [
     "app.ai.eval.judge_guards",
     "app.services.eval_prod.budget",
     "app.services.eval_prod.registry",
+    "app.ai.eval.question_model",
+    "app.ai.eval.question_checks",
+    "app.ai.eval.judge_runner",
+    "app.ai.eval.question_rubrics",
+    "app.services.eval_prod.question_evaluators",
 ]
 
 
