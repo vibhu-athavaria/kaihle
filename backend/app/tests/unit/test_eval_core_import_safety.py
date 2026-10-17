@@ -26,6 +26,9 @@ _MODULES = [
     "app.ai.eval.grade_rubrics",
     "app.services.eval_prod.grade_evaluators",
     "app.services.eval_prod.question_evaluators",
+    "app.services.eval_prod.sampler",
+    "app.services.eval_prod.question_adapter",
+    "app.services.eval_run_service",
 ]
 
 

@@ -9,12 +9,18 @@ TENANCY (CONSTITUTION Rules 3 and 12). `llm_usage_events.school_id` is nullable 
 platform-level work) and this sample deliberately spans every school, so there is no
 `school_id` filter. That is only acceptable for a Kaihle Admin, and the bypass is explicit:
 both public functions require the actor to be `KAIHLE_ADMIN` and raise otherwise.
+
+ACTOR. A user-triggered run passes the signed-in `User`; a scheduled (Celery beat) run has no
+user, so it passes `SYSTEM_EVAL_ACTOR`. Both satisfy `SamplingActor` (anything with a `role`) and
+face the same strict guard: the bypass is by ROLE, so a `SystemActor` built with any other role is
+refused exactly like a non-admin user.
 """
 
 import uuid
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
 
 from sqlalchemy import Select, String, cast, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +34,23 @@ HARD_MAX_PER_TASK = 200
 
 class SamplerAccessError(PermissionError):
     """The caller is not a Kaihle Admin; the cross-school read is refused."""
+
+
+class SamplingActor(Protocol):
+    """Whoever asks for a cross-school sample: a `User`, or the scheduler's `SystemActor`."""
+
+    @property
+    def role(self) -> UserRole: ...
+
+
+@dataclass(frozen=True)
+class SystemActor:
+    """Non-user actor for scheduled runs. Defaults to KAIHLE_ADMIN; carries no id (runs store NULL)."""
+
+    role: UserRole = UserRole.KAIHLE_ADMIN
+
+
+SYSTEM_EVAL_ACTOR = SystemActor()
 
 
 @dataclass(frozen=True)
@@ -52,7 +75,7 @@ class ScrubNames:
     school_name: str | None
 
 
-def _require_kaihle_admin(actor: User) -> None:
+def _require_kaihle_admin(actor: SamplingActor) -> None:
     if actor.role == UserRole.KAIHLE_ADMIN:
         return  # explicit bypass (Rule 12)
     raise SamplerAccessError("Cross-school sampling is restricted to Kaihle Admin")
@@ -104,7 +127,7 @@ def build_sample_statement(
 async def sample_usage_events(
     db: AsyncSession,
     *,
-    actor: User,
+    actor: SamplingActor,
     tasks: Sequence[str],
     window_start: datetime,
     window_end: datetime,
@@ -137,7 +160,7 @@ async def sample_usage_events(
 
 
 async def load_scrub_names(
-    db: AsyncSession, actor: User, school_ids: Collection[uuid.UUID]
+    db: AsyncSession, actor: SamplingActor, school_ids: Collection[uuid.UUID]
 ) -> dict[uuid.UUID, ScrubNames]:
     """Read-only: display names of every user, plus the name, of each requested school.
 
