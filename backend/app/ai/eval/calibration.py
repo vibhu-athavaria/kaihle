@@ -35,6 +35,10 @@ Subset = Literal["computed", "authored"]
 # `backend/` being four levels up from this file. Ignored via `backend/evals/reports/` in .gitignore, added
 # by T9 slice 5; tests always pass tmp_path. Production callers pass an explicit directory.
 DEFAULT_CALIBRATION_DIR = Path(__file__).resolve().parents[3] / "evals" / "reports" / "calibration"
+# Tracked directory shipped inside the app package (so it is in the Docker image). Production reads
+# calibration status from here (setting EVAL_CALIBRATION_DIR, default this path); files get here only via
+# `python -m app.services.eval_prod.promote_calibration`. Metrics and hashes only, never text.
+PRODUCTION_CALIBRATION_DIR = Path(__file__).resolve().parent / "calibration_data"
 logger = structlog.get_logger()
 _SAFE_CRITERION_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 

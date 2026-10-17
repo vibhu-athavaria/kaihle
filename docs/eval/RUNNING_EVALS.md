@@ -127,6 +127,7 @@ uv run --group eval pytest evals/test_question_calibration_eval.py -v -rs
 
 - **Report:** `evals/reports/question_calibration_<timestamp>.md`.
 - **Also writes** `evals/reports/calibration/*.json`, one per rubric. Do not delete these before run 3.
+- **To make production use them** (the reports folder is git-ignored, so a deployed server sees every rubric as `MISSING`): from `backend/` run `uv run python -m app.services.eval_prod.promote_calibration --dry-run`, then without `--dry-run`, and commit the files it copies into `backend/app/ai/eval/calibration_data/`. It refuses stale, malformed or unexpected-field files and prints why. Production reads that folder via `EVAL_CALIBRATION_DIR`. See that folder's README.
 - **Read first:** the *Rubric calibration* table. For each rubric: recall (does it catch the planted defect?), false-alarm rate (does it wrongly fail clean questions?), indeterminate count, **n**, and **status**. Then *Cross-talk* (does a defect trip the wrong rubric?) and *Production question_quality judge* (how well the judge that already runs in production does on the same questions).
 - **Remember the caveat printed in the report:** defects were planted synthetically and are *easier* than real ones, so recall here is an **upper bound**.
 - Status meanings: `CALIBRATED` (enough samples, recall lower bound ≥ 0.70, false-alarm upper bound ≤ 0.15), `INDICATIVE` (measured only on model-authored, unvalidated labels), `INSUFFICIENT_N`, `NOT_CALIBRATED` (failed the thresholds), `STALE` (rubric text changed since calibration), `MISSING`.

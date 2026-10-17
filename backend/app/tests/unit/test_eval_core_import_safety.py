@@ -27,6 +27,7 @@ _MODULES = [
     "app.services.eval_prod.grade_evaluators",
     "app.services.eval_prod.question_evaluators",
     "app.services.eval_prod.sampler",
+    "app.services.eval_prod.promote_calibration",
     "app.services.eval_prod.question_adapter",
     "app.services.eval_prod.task_suite",
     "app.services.eval_prod.grade_suite",
