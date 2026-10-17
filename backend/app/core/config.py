@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -137,6 +138,12 @@ class Settings(BaseSettings):
     # never counted as free. The default is deliberately HIGH and conservative — set it from
     # your real judge cost in LLM Logs. Defined here; the budget guard that reads it lands later.
     eval_unpriced_call_cost_usd: float = Field(default=1.0, ge=0)
+    # Directory holding the stored judge-rubric calibration results that production evaluation reads
+    # (one <rubric_id>.json each). Default is the tracked app/ai/eval/calibration_data/ so it ships in the
+    # image; the offline harness writes elsewhere (backend/evals/reports/calibration) and results reach
+    # this directory only through the promotion command. A missing or empty directory means every rubric
+    # is MISSING, so only deterministic checks run.
+    eval_calibration_dir: Path = Path(__file__).resolve().parents[1] / "ai" / "eval" / "calibration_data"
 
     # Full-database export (POST /db-tools/export) dumps every table, including students' data.
     # Refused when ENVIRONMENT=production unless this is explicitly set true. Default OFF.

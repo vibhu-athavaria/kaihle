@@ -71,7 +71,7 @@ from app.services.eval_prod.registry import (
     EvaluatorRegistry,
     SelectedEvaluator,
     StatusResolver,
-    calibration_status_from_files,
+    calibration_status_resolver,
     filter_independent,
     task_enablement_problem,
 )
@@ -204,7 +204,7 @@ class EvalRunService:
         *,
         config: Settings = settings,
         registry: EvaluatorRegistry | None = None,
-        status_of: StatusResolver = calibration_status_from_files,
+        status_of: StatusResolver | None = None,
         completion_factory: CompletionFactory | None = None,
         price_estimator: PriceEstimator = estimate_cost,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -214,7 +214,7 @@ class EvalRunService:
         self._db = db
         self._config = config
         self._registry = registry or default_registry()
-        self._status_of = status_of
+        self._status_of = status_of or calibration_status_resolver(config.eval_calibration_dir)
         self._completion_factory = completion_factory or _production_completion
         self._price_estimator = price_estimator
         self._clock = clock

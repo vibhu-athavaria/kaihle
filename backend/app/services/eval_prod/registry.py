@@ -92,6 +92,15 @@ def calibration_status_from_files(spec: RubricSpec, directory: Path = DEFAULT_CA
     return calibration_status(stored, stored.subset).value
 
 
+def calibration_status_resolver(directory: Path) -> StatusResolver:
+    """A `StatusResolver` bound to ``directory`` (an absent or empty directory resolves everything MISSING)."""
+
+    def resolve(spec: RubricSpec) -> str:
+        return calibration_status_from_files(spec, directory)
+
+    return resolve
+
+
 class EvaluatorRegistry:
     def __init__(self) -> None:
         self._by_task: dict[str, list[Evaluator]] = defaultdict(list)
