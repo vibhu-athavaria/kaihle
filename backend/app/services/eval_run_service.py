@@ -8,11 +8,12 @@ ORDER OF A RUN (each step can end it early)
   1. Refuse to start: task not enabled / student-text acknowledgement missing, or the budget guard
      refuses (budget 0, usage tracking off, no judge, judge unpriced). -> run `failed`.
   2. Sample (seeded, read-only). Nothing sampled -> `empty` plus a WARNING (Rule 17).
-  3. Task has no registered evaluators -> every row counted `skipped_unsupported`.
+  3. Task has no registered evaluators or no `TaskSuite` -> every row counted `skipped_unsupported`.
   4. Drop rows the judge may not grade (own model or vendor) and count them.
-  5. Per row: adapt the stored response to a question (else `skipped_unsupported`); run the
-     deterministic checks on it; SCRUB it and run the judge rubrics on the scrubbed copy only. If
-     scrubbing fails the whole row is skipped and counted: nothing unscrubbed ever reaches the judge.
+  5. Per row, through the task's `TaskSuite` (eval_prod/task_suite.py): prepare the row (else
+     `skipped_unsupported`); run the deterministic checks on its STORED form; run the judge rubrics on
+     its SCRUBBED form only (the suite scrubs, and only when a rubric will run). If scrubbing fails the
+     whole row is skipped and counted: nothing unscrubbed ever reaches the judge.
   6. Each judge call is authorised by the BudgetGuard first. When the next call would exceed the
      budget the run stops as `budget_exhausted` and keeps what it has.
 
@@ -31,11 +32,12 @@ ids, counts and class names.
 """
 
 import uuid
+from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,6 +60,8 @@ from app.services.eval_prod.budget import (
     month_spend_usd,
     unpriced_call_cost,
 )
+from app.services.eval_prod.grade_evaluators import GRADE_TASK
+from app.services.eval_prod.grade_suite import GRADE_SUITE
 from app.services.eval_prod.question_adapter import QUESTION_GENERATION_TASK, adapt_event, scrub_question
 from app.services.eval_prod.question_evaluators import default_registry
 from app.services.eval_prod.registry import (
@@ -79,6 +83,7 @@ from app.services.eval_prod.sampler import (
     sample_usage_events,
 )
 from app.services.eval_prod.scrub import ScrubFailedError
+from app.services.eval_prod.task_suite import PreparedRow, ScrubContext, TaskSuite, UnsupportedRow
 from app.services.eval_results_service import CheckOutcome, EvalResultsService, RunCounts
 from app.services.platform_settings_service import EvalSettings, PlatformSettingsService
 
@@ -89,10 +94,7 @@ _CHARS_PER_TOKEN = 4  # rough prompt-size estimate used only for the pre-call co
 _R6_PREFIX = "R6_"
 
 CompletionFactory = Callable[[str], Completion]
-# Per-task adapters from a stored event to a question. A task without one has no runnable suite.
-_ADAPTERS: dict[str, Callable[[SampledEvent, str], EvalQuestion | None]] = {
-    QUESTION_GENERATION_TASK: lambda event, seed: adapt_event(event, seed=seed)
-}
+_REASON_NOT_ADAPTABLE = "event_not_adaptable"
 
 
 class RunNotAllowedError(ValueError):
@@ -138,6 +140,11 @@ class _Tally:
     not_independent: int = 0
     scrub_failed: int = 0
     unsupported: int = 0
+    unsupported_reasons: Counter[str] = field(default_factory=Counter)
+
+    def count_unsupported(self, reason: str) -> None:
+        self.unsupported += 1
+        self.unsupported_reasons[reason] += 1
 
     def counts(self) -> RunCounts:
         return RunCounts(
@@ -162,6 +169,32 @@ def scheduled_window_and_seed(now: datetime, *, window_days: int) -> tuple[datet
 def _rubric_applies(spec: RubricSpec, question: EvalQuestion) -> bool:
     """R6 has two registered variants; only the one for the question's difficulty band runs."""
     return not spec.id.startswith(_R6_PREFIX) or spec.id == understanding_spec(question.difficulty_band).id
+
+
+def _prepare_question(
+    event: SampledEvent, seed: str, scrub: ScrubContext | None
+) -> PreparedRow[EvalQuestion, EvalQuestion] | UnsupportedRow:
+    question = adapt_event(event, seed=seed)
+    if question is None:
+        return UnsupportedRow(_REASON_NOT_ADAPTABLE)
+    if scrub is None:
+        return PreparedRow(stored=question, scrubbed=None)
+    scrubbed = scrub_question(question, person_names=scrub.person_names, school_name=scrub.school_name)
+    return PreparedRow(stored=question, scrubbed=scrubbed)
+
+
+async def _run_question_rubric(spec: RubricSpec, question: EvalQuestion, completion: Completion) -> bool | None:
+    return (await run_question_rubric(spec, question, completion)).verdict
+
+
+_QUESTION_SUITE: TaskSuite[EvalQuestion, EvalQuestion] = TaskSuite(
+    prepare=_prepare_question,
+    deterministic=lambda name, question: PER_QUESTION_CHECKS[name](question).passed,
+    rubric_applies=_rubric_applies,
+    run_rubric=_run_question_rubric,
+)
+# Router task -> its suite. A task without one has no runnable suite (its rows count as unsupported).
+_SUITES: dict[str, TaskSuite[Any, Any]] = {QUESTION_GENERATION_TASK: _QUESTION_SUITE, GRADE_TASK: GRADE_SUITE}
 
 
 class EvalRunService:
@@ -296,7 +329,8 @@ class EvalRunService:
             logger.warning("eval_run.empty_sample", run_id=str(run.id), task=run.task)
             return "empty"
         plan = self._registry.plan_for(run.task, include_indicative=run.include_indicative, status_of=self._status_of)
-        if not plan.supported or run.task not in _ADAPTERS:
+        suite = _SUITES.get(run.task)
+        if not plan.supported or suite is None:
             tally.unsupported = len(events)
             return "completed"
         split = filter_independent(events, judge_model)
@@ -305,7 +339,9 @@ class EvalRunService:
         names = await load_scrub_names(self._db, actor, school_ids)
         completion = self._metered(self._completion_factory(str(run.id)), guard, judge_model, unpriced)
         for event in split.kept:
-            await self._evaluate_event(run, event, plan, names, completion, tally)
+            await self._evaluate_event(run, event, suite, plan, names, completion, tally)
+        if tally.unsupported_reasons:
+            logger.info("eval_run.rows_unsupported", run_id=str(run.id), reasons=dict(tally.unsupported_reasons))
         return "completed"
 
     def _metered(self, inner: Completion, guard: BudgetGuard, judge_model: str, unpriced: Decimal) -> Completion:
@@ -328,31 +364,31 @@ class EvalRunService:
         self,
         run: EvalRun,
         event: SampledEvent,
+        suite: TaskSuite[Any, Any],
         plan: EvaluatorPlan,
         names: dict[uuid.UUID, ScrubNames],
         completion: Completion,
         tally: _Tally,
     ) -> None:
-        question = _ADAPTERS[run.task](event, run.seed)
-        if question is None:
-            tally.unsupported += 1
-            return
-        scrubbed = question
+        scrub: ScrubContext | None = None
         if any(selected.evaluator.kind == KIND_JUDGE for selected in plan.selected):
             school_names = names.get(event.school_id) if event.school_id is not None else None
-            try:
-                scrubbed = scrub_question(
-                    question,
-                    person_names=school_names.person_names if school_names else (),
-                    school_name=school_names.school_name if school_names else None,
-                )
-            except ScrubFailedError:
-                tally.scrub_failed += 1
-                return
+            scrub = ScrubContext(
+                person_names=school_names.person_names if school_names else (),
+                school_name=school_names.school_name if school_names else None,
+            )
+        try:
+            row = suite.prepare(event, run.seed, scrub)
+        except ScrubFailedError:
+            tally.scrub_failed += 1
+            return
+        if isinstance(row, UnsupportedRow):
+            tally.count_unsupported(row.reason)
+            return
         outcomes: list[CheckOutcome] = []
         try:
             for selected in plan.selected:
-                outcome = await self._check(selected, question, scrubbed, completion)
+                outcome = await self._check(selected, suite, row, completion)
                 if outcome is not None:
                     outcomes.append(outcome)
             tally.evaluated += 1
@@ -363,16 +399,15 @@ class EvalRunService:
 
     @staticmethod
     async def _check(
-        selected: SelectedEvaluator, question: EvalQuestion, scrubbed: EvalQuestion, completion: Completion
+        selected: SelectedEvaluator, suite: TaskSuite[Any, Any], row: PreparedRow[Any, Any], completion: Completion
     ) -> CheckOutcome | None:
         evaluator = selected.evaluator
         if evaluator.kind == KIND_DETERMINISTIC:
-            # Runs locally on the stored text, so it needs no scrubbing (and scrub tokens would distort it).
-            return CheckOutcome(
-                evaluator.name, KIND_DETERMINISTIC, PER_QUESTION_CHECKS[evaluator.name](question).passed
-            )
-        if evaluator.rubric is None or not _rubric_applies(evaluator.rubric, question):
+            # Runs locally on the stored form, so it needs no scrubbing (and scrub tokens would distort it).
+            passed = suite.deterministic(evaluator.name, row.stored)
+            return None if passed is None else CheckOutcome(evaluator.name, KIND_DETERMINISTIC, passed)
+        if evaluator.rubric is None or row.scrubbed is None or not suite.rubric_applies(evaluator.rubric, row.scrubbed):
             return None
-        verdict = await run_question_rubric(evaluator.rubric, scrubbed, completion)
+        verdict = await suite.run_rubric(evaluator.rubric, row.scrubbed, completion)
         # verdict None = unusable judge reply: stored as indeterminate, never a pass.
-        return CheckOutcome(evaluator.name, KIND_JUDGE, verdict.verdict, selected.rubric_hash, selected.rubric_status)
+        return CheckOutcome(evaluator.name, KIND_JUDGE, verdict, selected.rubric_hash, selected.rubric_status)
