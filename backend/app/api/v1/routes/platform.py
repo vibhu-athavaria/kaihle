@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser, require_role
 from app.models.user import UserRole
 from app.schemas.auth import ImpersonationStartResponse
+from app.schemas.eval_runs import EvalRunCreateRequest, EvalRunListResponse, EvalRunResponse
 from app.schemas.eval_settings import (
     EvalSettingsResponse,
     EvalSettingsUpdateRequest,
@@ -35,6 +36,13 @@ from app.services.auth_service import (
     AuthService,
     ImpersonationNotAllowedError,
     UserNotFoundError,
+)
+from app.services.eval_run_admin_service import (
+    DEFAULT_RUNS_PAGE_SIZE,
+    MAX_RUNS_PAGE_SIZE,
+    EnqueueFailedError,
+    EvalRunAdminService,
+    EvalRunRequestError,
 )
 from app.services.llm_log_service import (
     DEFAULT_LOG_PAGE_SIZE,
@@ -59,6 +67,7 @@ from app.services.quality_summary_service import (
     resolve_window,
 )
 from app.services.user_service import UserService
+from app.tasks.eval_run_tasks import enqueue_eval_run
 
 router = APIRouter(prefix="/platform", tags=["platform"])
 logger = structlog.get_logger()
@@ -395,3 +404,68 @@ async def get_quality_budget(
     and remaining budget. KAIHLE_ADMIN only."""
     logger.info("platform.quality_budget.requested", user_id=str(current_user.id))
     return await QualitySummaryService(db).budget_status(settings, datetime.now(UTC))
+
+
+@router.post("/eval-runs", status_code=status.HTTP_201_CREATED)
+async def create_eval_run(
+    body: EvalRunCreateRequest,
+    response: Response,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> EvalRunResponse:
+    """Start ("Run now") a production evaluation of one task. 201 with the new pending run, which is
+    enqueued for the worker. Idempotent per (task, window, seed): a repeat returns the existing run
+    with 200 and enqueues nothing. 422 when the task is not enabled / lacks its student-text
+    acknowledgement or the window is invalid; 503 when the run could not be handed to the worker.
+    KAIHLE_ADMIN only (Rule 12: runs are platform-wide)."""
+    logger.info("platform.eval_run.requested", user_id=str(current_user.id), task=body.task)
+    try:
+        run, created = await EvalRunAdminService(db, enqueue=enqueue_eval_run).request_manual_run(
+            task=body.task,
+            window_start=body.window_start,
+            window_end=body.window_end,
+            seed=body.seed,
+            requested_by=current_user.id,
+        )
+    except EvalRunRequestError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except EnqueueFailedError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="The evaluation worker is unavailable; try again."
+        ) from e
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return EvalRunResponse.model_validate(run)
+
+
+@router.get("/eval-runs")
+async def list_eval_runs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(DEFAULT_RUNS_PAGE_SIZE, ge=1, le=MAX_RUNS_PAGE_SIZE),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> EvalRunListResponse:
+    """Evaluation runs, newest first, paginated. Metadata, counts and spend only, never any text.
+    KAIHLE_ADMIN only."""
+    logger.info("platform.eval_runs.listed", user_id=str(current_user.id), page=page)
+    try:
+        runs, total = await EvalRunAdminService(db, enqueue=enqueue_eval_run).list_runs(page=page, page_size=page_size)
+    except EvalRunRequestError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    return EvalRunListResponse(
+        runs=[EvalRunResponse.model_validate(run) for run in runs], total=total, page=page, page_size=page_size
+    )
+
+
+@router.get("/eval-runs/{run_id}")
+async def get_eval_run(
+    run_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> EvalRunResponse:
+    """One evaluation run (poll it for status). 404 when unknown. KAIHLE_ADMIN only."""
+    logger.info("platform.eval_run.requested_detail", user_id=str(current_user.id), run_id=str(run_id))
+    run = await EvalRunAdminService(db, enqueue=enqueue_eval_run).get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation run not found")
+    return EvalRunResponse.model_validate(run)
