@@ -217,9 +217,7 @@ def test_default_registry_when_rubric_not_calibrated_then_it_is_excluded_but_che
     assert len(plan.excluded) == len(QUESTION_RUBRIC_SPECS)
 
 
-@pytest.mark.parametrize(
-    "task", ["quiz_generation", "question_quality", "grade_open_answer", "tutor_chat", "lesson_plan", "explain_this"]
-)
+@pytest.mark.parametrize("task", ["quiz_generation", "question_quality", "tutor_chat", "lesson_plan", "explain_this"])
 def test_default_registry_when_task_has_no_suite_then_unsupported(task: str) -> None:
     registry = default_registry()
     assert not registry.supports(task)

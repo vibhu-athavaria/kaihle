@@ -23,6 +23,8 @@ _MODULES = [
     "app.ai.eval.question_checks",
     "app.ai.eval.judge_runner",
     "app.ai.eval.question_rubrics",
+    "app.ai.eval.grade_rubrics",
+    "app.services.eval_prod.grade_evaluators",
     "app.services.eval_prod.question_evaluators",
 ]
 

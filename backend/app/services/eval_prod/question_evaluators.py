@@ -8,10 +8,12 @@ R6 has two registered variants (foundational / applied) and the runner applies t
 question's difficulty band: ``understanding_spec(band).id`` names it, and ``developing`` and
 ``advanced`` share the applied spec. R7 is the ``bank`` variant, the path this task generates.
 
+``grade_open_answer`` is registered by ``grade_evaluators``.
+
 NOT supported (no suite exists, so nothing is registered; the registry reports them unsupported):
 ``quiz_generation`` (single practice-quiz questions, out of scope here: the R7 quiz variant exists
 but is deliberately unregistered), ``question_quality`` (it is itself a judge: auditing it is the
-prod-judge meta-evaluation, not these rubrics), ``grade_open_answer``, ``tutor_chat``, ``lesson_plan``,
+prod-judge meta-evaluation, not these rubrics), ``tutor_chat``, ``lesson_plan``,
 ``explain_this``, ``concept_guide`` and every other task: no suite exists for them yet (T11-T14).
 """
 
@@ -26,6 +28,7 @@ from app.ai.eval.question_rubrics import (
     understanding_spec,
 )
 from app.ai.eval.rubric_core import RubricSpec
+from app.services.eval_prod.grade_evaluators import register_grade_open_answer
 from app.services.eval_prod.registry import KIND_DETERMINISTIC, KIND_JUDGE, Evaluator, EvaluatorRegistry
 
 QUESTION_GENERATION_TASK = "question_generation"
@@ -53,4 +56,5 @@ def default_registry() -> EvaluatorRegistry:
     """The production registry: every suite that exists, registered."""
     registry = EvaluatorRegistry()
     register_question_generation(registry)
+    register_grade_open_answer(registry)
     return registry
