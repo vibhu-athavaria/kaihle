@@ -29,6 +29,8 @@ _MODULES = [
     "app.services.eval_prod.sampler",
     "app.services.eval_prod.question_adapter",
     "app.services.eval_run_service",
+    "app.services.eval_run_admin_service",
+    "app.tasks.eval_run_tasks",
 ]
 
 

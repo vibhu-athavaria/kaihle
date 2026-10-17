@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -142,6 +142,17 @@ class EvalResultsService:
             select(EvalRun).where(EvalRun.id == run_id).execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
+
+    async def list_runs(self, *, page: int, page_size: int) -> tuple[list[EvalRun], int]:
+        """One page of runs, newest first, and the total count. Read-only; callers bound `page_size`."""
+        total = (await self._db.execute(select(func.count()).select_from(EvalRun))).scalar_one()
+        rows = await self._db.execute(
+            select(EvalRun)
+            .order_by(EvalRun.created_at.desc(), EvalRun.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return list(rows.scalars().all()), total
 
     async def mark_started(self, run_id: uuid.UUID, *, judge_model: str) -> None:
         """pending -> running, recording the resolved judge model. LookupError if not pending."""

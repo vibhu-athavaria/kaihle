@@ -29,6 +29,7 @@ celery_app = Celery(
         "app.tasks.content_tasks",
         "app.tasks.teacher_content_tasks",
         "app.tasks.mastery_tasks",
+        "app.tasks.eval_run_tasks",
     ],
 )
 
@@ -136,5 +137,12 @@ celery_app.conf.beat_schedule = {
     "recalibrate-mastery-priors": {
         "task": "tasks.recalibrate_mastery_priors",
         "schedule": crontab(hour=3, minute=0, day_of_week=0),  # weekly, Sunday 03:00 UTC
+    },
+    # MLH-T18 slice 5b-ii. Weekly production-quality evaluation of every enabled task. The task
+    # itself starts nothing when the admin-set monthly budget is 0, no task is enabled, or no
+    # judge model is configured, so this entry is inert until an admin opts in.
+    "schedule-weekly-eval-runs": {
+        "task": "tasks.schedule_weekly_eval_runs",
+        "schedule": crontab(hour=4, minute=0, day_of_week=1),  # weekly, Monday 04:00 UTC
     },
 }
