@@ -1,6 +1,7 @@
 """Platform-level endpoints for Kaihle Admin operations."""
 
 import uuid
+from datetime import UTC, datetime
 from typing import Literal
 
 import structlog
@@ -24,6 +25,12 @@ from app.schemas.llm_logs import (
     LlmLogsResponse,
     LlmLogSummaryResponse,
 )
+from app.schemas.quality import (
+    QualityBucket,
+    QualityBudgetResponse,
+    QualityFailuresResponse,
+    QualitySummaryResponse,
+)
 from app.services.auth_service import (
     AuthService,
     ImpersonationNotAllowedError,
@@ -43,6 +50,13 @@ from app.services.platform_settings_service import (
     EvalSettingsValidationError,
     PlatformSettingsService,
     available_tasks,
+)
+from app.services.quality_summary_service import (
+    DEFAULT_FAILURES_PAGE_SIZE,
+    MAX_FAILURES_PAGE_SIZE,
+    QualityQueryError,
+    QualitySummaryService,
+    resolve_window,
 )
 from app.services.user_service import UserService
 
@@ -326,3 +340,58 @@ async def update_eval_settings(
     except EvalSettingsValidationError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
     return _eval_settings_response(eval_settings)
+
+
+@router.get("/quality/summary")
+async def get_quality_summary(
+    window_start: datetime | None = Query(None, description="Inclusive start (tz-aware). Default: 28 days before end"),
+    window_end: datetime | None = Query(None, description="Exclusive end (tz-aware). Default: now"),
+    task: str | None = Query(None, description="Exact task filter"),
+    bucket: QualityBucket = Query("week", description="'week' = UTC ISO-week buckets, 'none' = whole window"),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> QualitySummaryResponse:
+    """Production-evaluation pass rates per task and check, with n and Wilson interval.
+    Indeterminate results are reported separately and excluded from n. Each row carries its
+    rubric status (INDICATIVE rows are flagged). Empty list when nothing has been evaluated.
+    Read-only, ids and numbers only. KAIHLE_ADMIN only (Rule 12: platform-wide)."""
+    logger.info("platform.quality_summary.requested", user_id=str(current_user.id), task=task, bucket=bucket)
+    start, end = resolve_window(window_start, window_end, datetime.now(UTC))
+    try:
+        return await QualitySummaryService(db).summary(window_start=start, window_end=end, task=task, bucket=bucket)
+    except QualityQueryError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+
+@router.get("/quality/failures")
+async def get_quality_failures(
+    window_start: datetime | None = Query(None),
+    window_end: datetime | None = Query(None),
+    task: str | None = Query(None),
+    check_name: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(DEFAULT_FAILURES_PAGE_SIZE, ge=1, le=MAX_FAILURES_PAGE_SIZE),
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> QualityFailuresResponse:
+    """Failed checks, newest first: usage_event_id + check name (+ task, time) only, never any
+    text. Open the entry via GET /llm-logs/{usage_event_id}. KAIHLE_ADMIN only."""
+    logger.info("platform.quality_failures.requested", user_id=str(current_user.id), task=task, page=page)
+    start, end = resolve_window(window_start, window_end, datetime.now(UTC))
+    try:
+        return await QualitySummaryService(db).failures(
+            window_start=start, window_end=end, task=task, check_name=check_name, page=page, page_size=page_size
+        )
+    except QualityQueryError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+
+@router.get("/quality/budget")
+async def get_quality_budget(
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> QualityBudgetResponse:
+    """Monthly evaluation budget, month-to-date spend (UTC month, unpriced calls at worst case)
+    and remaining budget. KAIHLE_ADMIN only."""
+    logger.info("platform.quality_budget.requested", user_id=str(current_user.id))
+    return await QualitySummaryService(db).budget_status(settings, datetime.now(UTC))
