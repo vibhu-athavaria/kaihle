@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, _check_school_access, require_role
+from app.core.deps import CurrentUser, _check_school_access, require_role, require_school_operator
 from app.models.school import Class
 from app.models.user import UserRole
 from app.schemas.class_enrollment import (
@@ -120,7 +120,7 @@ async def _class_to_summary_response(
 async def create_class(
     school_id: uuid.UUID,
     body: ClassCreate,
-    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    current_user: CurrentUser = Depends(require_school_operator),
     db: AsyncSession = Depends(get_db),
 ) -> ClassResponse:
     """Create a class for a school. SchoolAdmin or KaihleAdmin only.
@@ -194,7 +194,7 @@ async def get_class(
 async def update_class(
     class_id: uuid.UUID,
     body: ClassUpdate,
-    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    current_user: CurrentUser = Depends(require_school_operator),
     db: AsyncSession = Depends(get_db),
 ) -> ClassResponse:
     """Update a class. SCHOOL_ADMIN and KAIHLE_ADMIN only.
@@ -299,7 +299,7 @@ async def list_teacher_students(
 async def unenroll_students(
     class_id: uuid.UUID,
     body: UnenrollRequest,
-    current_user: CurrentUser = Depends(require_role(UserRole.SCHOOL_ADMIN, UserRole.KAIHLE_ADMIN)),
+    current_user: CurrentUser = Depends(require_school_operator),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Soft-delete enrollments. SCHOOL_ADMIN and KAIHLE_ADMIN only.

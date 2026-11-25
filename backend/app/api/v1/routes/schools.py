@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, _check_school_access, require_role
+from app.core.deps import CurrentUser, _check_school_access, require_role, require_school_operator
 from app.models.user import UserRole
 from app.schemas.school import (
     SchoolCreate,
@@ -76,7 +76,7 @@ async def list_schools(
 @router.get("/{school_id}", response_model=SchoolResponse)
 async def get_school(
     school_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
+    current_user: CurrentUser = Depends(require_school_operator),
     db: AsyncSession = Depends(get_db),
 ) -> SchoolResponse:
     """Get a single school. KaihleAdmin sees any school. SchoolAdmin sees own only."""
@@ -145,7 +145,7 @@ def _sc_to_response(sc: Any, curriculum: Any) -> SchoolCurriculumResponse:
 @router.get("/{school_id}/curricula", response_model=list[SchoolCurriculumResponse])
 async def list_school_curricula(
     school_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
+    current_user: CurrentUser = Depends(require_school_operator),
     db: AsyncSession = Depends(get_db),
 ) -> list[SchoolCurriculumResponse]:
     """List curricula a school is subscribed to. KaihleAdmin sees any school; SchoolAdmin sees own only."""
