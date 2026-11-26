@@ -5,6 +5,7 @@ These tests cover the model constraints and the S2 authorization changes (CONSTI
 """
 
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -13,8 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.assessment import Assessment
 from app.models.curriculum import Curriculum, Grade, Subject
-from app.models.school import Class, School, SchoolCurriculum, SchoolType
+from app.models.lesson_plan import LessonPlan, LessonPlanStatus
+from app.models.school import Class, ClassEnrollment, School, SchoolCurriculum, SchoolType
 from app.models.user import StudentProfile, User, UserRole
 from app.tests.integration.conftest import make_auth_header
 
@@ -171,7 +174,7 @@ async def test_create_user_direct_when_workspace_owner_and_role_student_then_cre
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", ["TEACHER", "PARENT", "SCHOOL_ADMIN"])
+@pytest.mark.parametrize("role", ["TEACHER", "PARENT"])
 async def test_create_user_direct_when_workspace_owner_and_non_student_role_then_403(
     client: AsyncClient, workspace_a: tuple[School, User], role: str
 ) -> None:
@@ -190,6 +193,28 @@ async def test_create_user_direct_when_workspace_owner_and_non_student_role_then
     )
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_user_direct_when_workspace_owner_and_role_school_admin_then_422(
+    client: AsyncClient, workspace_a: tuple[School, User]
+) -> None:
+    # UserDirectCreate never accepts SCHOOL_ADMIN, so the body is rejected before the workspace rule runs.
+    workspace, owner = workspace_a
+
+    response = await client.post(
+        f"/api/v1/schools/{workspace.id}/users/create",
+        json={
+            "first_name": "Extra",
+            "last_name": "Admin",
+            "email": f"extra-{uuid.uuid4().hex[:8]}@test.com",
+            "password": "a-long-enough-pass",
+            "role": "SCHOOL_ADMIN",
+        },
+        headers=make_auth_header(owner),
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -456,3 +481,141 @@ async def test_get_me_when_teacher_in_real_school_then_no_workspace(
     assert response.status_code == 200
     assert response.json()["workspace_type"] is None
     assert response.json()["is_workspace_owner"] is False
+
+
+# ── Cross-tenant sweep ───────────────────────────────────────────────────────
+#
+# Owner A must not read or change anything in workspace B. 404 is accepted next to 403 because
+# routes that look a resource up inside the caller's own school cannot tell "missing" from
+# "someone else's". What must never happen is a 2xx.
+
+
+@pytest_asyncio.fixture
+async def workspace_b_content(
+    db_session: AsyncSession,
+    workspace_b: tuple[School, User],
+    test_grade: Grade,
+    test_subject: Subject,
+    test_curriculum: Curriculum,
+) -> dict[str, uuid.UUID]:
+    """Workspace B with one class, one enrolled student, one assessment and one lesson plan."""
+    workspace, owner = workspace_b
+    student = await _make_student(db_session, workspace)
+    class_ = Class(
+        id=uuid.uuid4(),
+        school_id=workspace.id,
+        grade_id=test_grade.id,
+        subject_id=test_subject.id,
+        curriculum_id=test_curriculum.id,
+        teacher_id=owner.id,
+        name="B Maths",
+        academic_year="2026-2027",
+        is_active=True,
+    )
+    db_session.add(class_)
+    await db_session.flush()
+    db_session.add(ClassEnrollment(class_id=class_.id, student_id=student.id))
+    assessment = Assessment(
+        id=uuid.uuid4(),
+        school_id=workspace.id,
+        class_id=class_.id,
+        created_by=owner.id,
+        title="B Assessment",
+        assessment_type="DIAGNOSTIC",
+        status="DRAFT",
+    )
+    plan = LessonPlan(
+        id=uuid.uuid4(),
+        class_id=class_.id,
+        teacher_id=owner.id,
+        status=LessonPlanStatus.GENERATED,
+        generated_at=datetime.now(UTC),
+    )
+    db_session.add_all([assessment, plan])
+    await db_session.commit()
+    return {
+        "class": class_.id,
+        "student": student.id,
+        "assessment": assessment.id,
+        "plan": plan.id,
+        "subject": test_subject.id,
+    }
+
+
+CROSS_TENANT_ROUTES: list[tuple[str, str]] = [
+    ("GET", "/api/v1/classes/{class}"),
+    ("GET", "/api/v1/classes/{class}/assessments"),
+    ("GET", "/api/v1/assessments/{assessment}"),
+    ("GET", "/api/v1/assessments/{assessment}/results"),
+    ("GET", "/api/v1/assessments/{assessment}/preview"),
+    ("PATCH", "/api/v1/assessments/{assessment}"),
+    ("POST", "/api/v1/assessments/{assessment}/publish"),
+    ("POST", "/api/v1/assessments/{assessment}/close"),
+    ("DELETE", "/api/v1/assessments/{assessment}"),
+    ("GET", "/api/v1/classes/{class}/gap-map?subject_id={subject}"),
+    ("GET", "/api/v1/classes/{class}/summary"),
+    ("GET", "/api/v1/students/{student}/gap-map?subject_id={subject}"),
+    ("GET", "/api/v1/students/{student}/info"),
+    ("GET", "/api/v1/classes/{class}/lesson-plans"),
+    ("GET", "/api/v1/lesson-plans/{plan}"),
+    ("PATCH", "/api/v1/lesson-plans/{plan}"),
+    ("POST", "/api/v1/lesson-plans/{plan}/regenerate"),
+    ("PATCH", "/api/v1/lesson-plans/{plan}/status"),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("method", "path"), CROSS_TENANT_ROUTES)
+async def test_cross_tenant_when_owner_a_targets_workspace_b_resource_then_403_or_404(
+    client: AsyncClient,
+    workspace_a: tuple[School, User],
+    workspace_b_content: dict[str, uuid.UUID],
+    method: str,
+    path: str,
+) -> None:
+    _, owner_a = workspace_a
+    url = path.format(**{key: str(value) for key, value in workspace_b_content.items()})
+    body = {"status": "ARCHIVED", "title": "hijacked"} if method in ("PATCH", "POST") else None
+
+    response = await client.request(method, url, json=body, headers=make_auth_header(owner_a))
+
+    assert response.status_code in (403, 404), f"{method} {url} returned {response.status_code}"
+
+
+@pytest.mark.asyncio
+async def test_update_class_when_owner_assigns_teacher_from_another_workspace_then_rejected(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    workspace_a: tuple[School, User],
+    workspace_b: tuple[School, User],
+    test_grade: Grade,
+    test_subject: Subject,
+    test_curriculum: Curriculum,
+) -> None:
+    # update_class used to copy teacher_id from the body unchecked, so a class could point at
+    # a teacher in another tenant. The teacher must now be an active TEACHER in the same school.
+    workspace, owner_a = workspace_a
+    _, owner_b = workspace_b
+    class_ = Class(
+        id=uuid.uuid4(),
+        school_id=workspace.id,
+        grade_id=test_grade.id,
+        subject_id=test_subject.id,
+        curriculum_id=test_curriculum.id,
+        teacher_id=owner_a.id,
+        name="A Maths",
+        academic_year="2026-2027",
+        is_active=True,
+    )
+    db_session.add(class_)
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/v1/classes/{class_.id}",
+        json={"teacher_id": str(owner_b.id)},
+        headers=make_auth_header(owner_a),
+    )
+
+    assert response.status_code == 404
+    await db_session.refresh(class_)
+    assert class_.teacher_id == owner_a.id

@@ -67,6 +67,15 @@ async def assert_role_allowed_in_school(db: AsyncSession, school_id: uuid.UUID, 
         raise WorkspaceRestrictionError("A workspace can only contain its owner and students.")
 
 
+async def assert_class_teacher_allowed(db: AsyncSession, school_id: uuid.UUID, teacher_id: uuid.UUID) -> None:
+    """In a workspace, every class is taught by the owner. A real school accepts any of its teachers."""
+    school = await db.scalar(select(School).where(School.id == school_id))
+    if school is None or school.type == SchoolType.SCHOOL:
+        return
+    if school.owner_user_id != teacher_id:
+        raise WorkspaceRestrictionError("A workspace class must be taught by the workspace owner.")
+
+
 async def assert_operator_may_manage_user(
     db: AsyncSession,
     actor_role: str,

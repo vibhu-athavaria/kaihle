@@ -1,6 +1,6 @@
 # Kaihle Workspaces: implementation plan
 
-Status: v3, updated 2026-11-25. D1, D3 and D7 confirmed by Vibhu. S1 and S2 built, draft PR #313 open (tests unrun). Based on a read of the `kaihle` backend and frontend (main, last commit 2026-10-17, unchanged on 2026-11-25). Confidence tags: [Certain] seen in code, [Likely] strong inference, [Guessing] estimate.
+Status: v4, updated 2026-11-26. D1, D3 and D7 confirmed by Vibhu. S1 and S2 done and verified, draft PR #313 open. Based on a read of the `kaihle` backend and frontend (main, last commit 2026-10-17, unchanged on 2026-11-25). Confidence tags: [Certain] seen in code, [Likely] strong inference, [Guessing] estimate.
 
 A copy of this plan also lives in the Kaihle Claude Project (`claude/kaihle-workspaces-implementation-plan.md`). This repo copy is the one the coding agent should follow; update both when decisions change.
 
@@ -8,8 +8,8 @@ A copy of this plan also lives in the Kaihle Claude Project (`claude/kaihle-work
 
 | Slice | State |
 |---|---|
-| S1 data model | Built on branch `M7-1-T1_feature/workspace-school-type`, draft PR https://github.com/vibhu-athavaria/kaihle/pull/313. Migration `a3f5c1d2b7e4` was hand-written (breaks Rule 9): must be replaced or verified with autogenerate. |
-| S2 authorization | Built in the same PR. Integration tests in `backend/app/tests/integration/test_workspace_authorization.py`. pytest and mypy were NOT run (no dependencies in the authoring sandbox). Cross-tenant sweep partial: covers touched routes and `GET /classes/{id}`; assessments, gap maps, lesson plans still open. |
+| S1 data model | Built on branch `M7-1-T1_feature/workspace-school-type`, draft PR https://github.com/vibhu-athavaria/kaihle/pull/313. Migration `a3f5c1d2b7e4` was hand-written; verified 2026-11-26: `alembic check` reports no drift against the models, and downgrade then upgrade round-trips cleanly. |
+| S2 authorization | Done on the same branch. Unit tests in `backend/app/tests/unit/test_workspace_service.py` (100% coverage of `workspace_service.py`); integration tests in `backend/app/tests/integration/test_workspace_authorization.py`, including the cross-tenant sweep over classes, assessments, gap maps, lesson plans and student info. `ClassService` now checks the class teacher on create, `update_teacher` and `update_class` (the last one previously accepted any `teacher_id`). Full unit and integration suites pass. |
 | S3 to S8 | Not started. |
 
 Branch id `M7-1-T1` was invented and may need renaming.
@@ -71,11 +71,11 @@ Work on a feature branch per slice, each slice small enough to review alone, all
 
 ## 6. Phases (task detail)
 
-### Phase 1: data model and authorization (S1, S2) - BUILT, UNVERIFIED
+### Phase 1: data model and authorization (S1, S2) - DONE
 
 1. Migration (autogenerate, Rule 9): `schools.type` VARCHAR(20) NOT NULL DEFAULT `SCHOOL` with CHECK in the three values; `schools.owner_user_id` UUID NULL FK to `users` ON DELETE SET NULL; unique partial index on `owner_user_id` where not null. Existing rows become `SCHOOL`. Update `kaihle_v2_1_schema.sql` (Rule 8). A DB CHECK requiring an owner for workspaces would fail at insert (school and user are created in one transaction), so enforce it in the service.
 2. `School` model: add `type`, `owner_user_id`, and `SchoolType` constants.
-3. Invariant: a non-`SCHOOL` workspace cannot get a second TEACHER or any SCHOOL_ADMIN. Enforce in `UserService.invite_user`, `create_user_direct`, `AuthService.register`, `ClassService.update_teacher`. (Built in the first three; `ClassService.update_teacher` not yet checked.)
+3. Invariant: a non-`SCHOOL` workspace cannot get a second TEACHER or any SCHOOL_ADMIN. Enforce in `UserService.invite_user`, `create_user_direct`, `AuthService.register`, and in `ClassService` wherever a class teacher is set (`create_class`, `update_teacher`, `update_class`). Done.
 4. `core/deps.py`: add `require_school_operator` (SCHOOL_ADMIN, KAIHLE_ADMIN, or the owner of a workspace-type school). Apply to the routes in finding 4. Keep `_check_school_access` after it (Rule 12). In a workspace the owner may create only STUDENT users.
 5. `GET /users/me`: add `workspace_type` (null for real schools) and `is_workspace_owner`.
 6. Optional hardening: restrict `GET /students/{id}` for teachers to students in their own classes (finding 12). Not done.
@@ -89,7 +89,7 @@ Tests (Rule 7 naming)
 - `test_list_users_when_workspace_owner_then_only_own_workspace_users`
 - `test_require_school_operator_when_plain_teacher_in_real_school_then_403`
 - `test_get_me_when_workspace_owner_then_returns_workspace_type`
-- Cross-tenant isolation test: two workspaces, assert owner A gets 403 or 404 on every route touching B's class, student, assessment, gap map, lesson plan. (Partial in PR #313.)
+- Cross-tenant isolation test: two workspaces, assert owner A gets 403 or 404 on every route touching B's class, student, assessment, gap map, lesson plan. (Done: `test_cross_tenant_when_owner_a_targets_workspace_b_resource_then_403_or_404`, 18 routes.)
 
 ### Phase 2: signup and onboarding (S3)
 

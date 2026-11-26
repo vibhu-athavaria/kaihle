@@ -13,6 +13,13 @@ from app.schemas.user import UserDirectCreate, UserInvite, UserSelfUpdate, UserU
 from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
 
 
+@pytest.fixture(autouse=True)
+def allow_any_role_in_school() -> Generator[AsyncMock, None, None]:
+    """Treat every school as a real school. Workspace rules are tested in test_workspace_service.py."""
+    with patch("app.services.user_service.assert_role_allowed_in_school", new=AsyncMock()) as guard:
+        yield guard
+
+
 @pytest.fixture
 def mock_db() -> Generator[MagicMock, None, None]:
     """Create a mock database session."""

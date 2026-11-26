@@ -32,6 +32,7 @@ from app.schemas.class_enrollment import (
 )
 from app.services.class_service import ClassService
 from app.services.gap_service import GapService
+from app.services.workspace_service import WorkspaceRestrictionError
 
 router = APIRouter(tags=["classes"])
 
@@ -132,6 +133,8 @@ async def create_class(
     service = ClassService(db)
     try:
         class_ = await service.create_class(school_id, body)
+    except WorkspaceRestrictionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
         msg = str(e)
         if "not subscribed" in msg:
@@ -210,6 +213,8 @@ async def update_class(
     service = ClassService(db)
     try:
         class_ = await service.update_class(class_id, current_user.school_id, body)
+    except WorkspaceRestrictionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     await db.commit()
