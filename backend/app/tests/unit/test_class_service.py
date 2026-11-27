@@ -1,6 +1,7 @@
 """Unit tests for ClassService."""
 
 import uuid
+from collections.abc import Generator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,6 +12,13 @@ from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
 from app.schemas.class_enrollment import ClassCreate
 from app.services.class_service import ClassService
+
+
+@pytest.fixture(autouse=True)
+def allow_any_class_teacher() -> Generator[AsyncMock, None, None]:
+    """Treat every school as a real school. Workspace rules are tested in test_workspace_service.py."""
+    with patch("app.services.class_service.assert_class_teacher_allowed", new=AsyncMock()) as guard:
+        yield guard
 
 
 @pytest.fixture

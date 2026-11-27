@@ -53,7 +53,8 @@ After dashboard access, per-class diagnostics (Tier 1) are **not required** to a
 ### 3.1 Auth and user creation
 
 - Routes: `backend/app/api/v1/routes/auth.py`
-  - `POST /auth/register` – register new user (inactive).
+  - `POST /auth/register` – KAIHLE_ADMIN only: create a user with any role in any school (inactive, no tokens).
+  - `POST /auth/signup/workspace` – public self-serve signup for a teacher or family workspace, behind `WORKSPACE_SIGNUP_ENABLED` (404 when off). Always 202 with the same body; emails a `password_setup` magic link.
   - `POST /auth/login` – email/password login.
   - `POST /auth/magic-link` – send magic link.
   - `GET /auth/magic-link/verify?token={token}` – validate magic link, return scoped JWT.

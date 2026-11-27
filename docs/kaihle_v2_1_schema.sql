@@ -625,10 +625,16 @@ CREATE TABLE schools (
     logo_url        VARCHAR(500),
     status          VARCHAR(20)  NOT NULL DEFAULT 'pending',
     -- pending | active | suspended
+    type            VARCHAR(20)  NOT NULL DEFAULT 'SCHOOL',
+    -- SCHOOL | TEACHER_WORKSPACE | FAMILY. A workspace has exactly one operator, its owner (role TEACHER).
+    owner_user_id   UUID,
+    -- NULL for type SCHOOL, and for a workspace only inside the transaction that creates it.
+    -- FK to users is added after the users table (circular reference), see below.
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ,
     CONSTRAINT schools_slug_key UNIQUE (slug),
-    CONSTRAINT chk_school_status CHECK (status IN ('pending', 'active', 'suspended'))
+    CONSTRAINT chk_school_status CHECK (status IN ('pending', 'active', 'suspended')),
+    CONSTRAINT chk_school_type CHECK (type IN ('SCHOOL', 'TEACHER_WORKSPACE', 'FAMILY'))
 );
 
 COMMENT ON TABLE schools IS
@@ -638,6 +644,8 @@ COMMENT ON TABLE schools IS
      timezone: critical for Celery beat scheduling of weekly AI jobs.';
 
 CREATE INDEX idx_schools_status ON schools (status);
+CREATE INDEX idx_schools_type ON schools (type);
+CREATE UNIQUE INDEX uq_schools_owner_user_id ON schools (owner_user_id) WHERE owner_user_id IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- school_curricula: which curricula a school has adopted.
@@ -702,6 +710,11 @@ COMMENT ON TABLE users IS
 CREATE INDEX idx_users_school_role ON users (school_id, role);
 CREATE INDEX idx_users_email       ON users (email);
 CREATE INDEX idx_users_username    ON users (username);
+
+-- schools.owner_user_id references users, which is defined after schools.
+ALTER TABLE schools
+    ADD CONSTRAINT fk_schools_owner_user_id
+    FOREIGN KEY (owner_user_id) REFERENCES users (id) ON DELETE SET NULL;
 
 -- ---------------------------------------------------------------------------
 

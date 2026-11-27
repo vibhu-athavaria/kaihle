@@ -158,6 +158,8 @@ if current_user.school_id != school_id:
 
 Single database. `school_id` on every non-curriculum table. Enforced at the service layer (not PostgreSQL RLS). `KAIHLE_ADMIN` bypasses `school_id` filters with explicit bypass (Rule 12). All other roles must filter by `school_id`. Cross-school access returns **403**, not 404.
 
+**Workspaces (v2.2).** `schools.type` is `SCHOOL`, `TEACHER_WORKSPACE` or `FAMILY`. A workspace is a school row owned by exactly one user (`schools.owner_user_id`, role TEACHER) and may contain only its owner and students. The owner passes `require_school_operator` on school-operation routes (classes, student creation) inside their own workspace only. Every workspace is its own tenant: never share one `school_id` across unrelated users. Workspaces are created only by `POST /auth/signup/workspace` (behind `WORKSPACE_SIGNUP_ENABLED`, off until the children's-data and billing tasks ship); `POST /auth/register` is KAIHLE_ADMIN only. Plan: `docs/plans/2026-11-25-workspaces-implementation-plan.md`.
+
 ---
 
 ## 8. LLM Provider Routing

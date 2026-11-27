@@ -33,6 +33,7 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.services.email_service import EmailService
+from app.services.workspace_service import assert_role_allowed_in_school
 
 logger = structlog.get_logger()
 
@@ -117,6 +118,8 @@ class AuthService:
             school = await self.db.get(School, school_id)
             if not school:
                 raise SchoolNotFoundError(f"School with id {school_id} not found")
+            # A workspace holds only its owner and students (raises WorkspaceRestrictionError).
+            await assert_role_allowed_in_school(self.db, school_id, role)
 
         hashed = hash_password(password)
         user = User(

@@ -24,6 +24,7 @@ from app.core.security import (
 from app.main import app
 from app.models.school import School
 from app.models.user import AuthToken, User, UserRole
+from app.tests.integration.conftest import make_auth_header
 
 # Set test JWT secret
 settings.jwt_secret_key = "test-secret-key-for-testing"
@@ -53,7 +54,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.mark.asyncio
-async def test_register_creates_user_returns_user_id_email_role(client: AsyncClient, school: School) -> None:
+async def test_register_creates_user_returns_user_id_email_role(
+    client: AsyncClient, school: School, kaihle_admin: User
+) -> None:
     """Test that POST /auth/register creates user and returns user_id, email, role."""
     response = await client.post(
         "/api/v1/auth/register",
@@ -65,6 +68,7 @@ async def test_register_creates_user_returns_user_id_email_role(client: AsyncCli
             "first_name": "New",
             "last_name": "User",
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 201
@@ -76,7 +80,7 @@ async def test_register_creates_user_returns_user_id_email_role(client: AsyncCli
 
 
 @pytest.mark.asyncio
-async def test_register_duplicate_email_returns_409(client: AsyncClient, user: User) -> None:
+async def test_register_duplicate_email_returns_409(client: AsyncClient, user: User, kaihle_admin: User) -> None:
     """Test that registering with duplicate email returns 409."""
     response = await client.post(
         "/api/v1/auth/register",
@@ -88,6 +92,7 @@ async def test_register_duplicate_email_returns_409(client: AsyncClient, user: U
             "first_name": "Duplicate",
             "last_name": "User",
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 409
@@ -450,7 +455,7 @@ async def test_logout_invalid_token_still_returns_200(client: AsyncClient) -> No
 
 
 @pytest.mark.asyncio
-async def test_sql_injection_in_email_returns_422(client: AsyncClient, school: School) -> None:
+async def test_sql_injection_in_email_returns_422(client: AsyncClient, school: School, kaihle_admin: User) -> None:
     """Test that SQL injection in email field returns 422 (Pydantic rejects)."""
     response = await client.post(
         "/api/v1/auth/register",
@@ -462,6 +467,7 @@ async def test_sql_injection_in_email_returns_422(client: AsyncClient, school: S
             "first_name": "Test",
             "last_name": "User",
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 422

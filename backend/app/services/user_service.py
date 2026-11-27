@@ -34,6 +34,7 @@ from app.schemas.user_detail import (
 )
 from app.services.class_service import ClassService
 from app.services.email_service import EmailService
+from app.services.workspace_service import assert_role_allowed_in_school
 
 logger = structlog.get_logger()
 
@@ -77,6 +78,9 @@ class UserService:
         User is created with is_active=True and a random unusable password.
         They activate via the magic link.
         """
+        # A workspace holds only its owner and students (raises WorkspaceRestrictionError).
+        await assert_role_allowed_in_school(self.db, school_id, data.role)
+
         # Validate role is allowed for invitation
         allowed_roles = {UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.PARENT}
         if data.role not in allowed_roles:
@@ -176,6 +180,8 @@ class UserService:
         Students will NOT be asked to change password on first login.
         Teachers/parents will be asked to change password on first login.
         """
+        # A workspace holds only its owner and students (raises WorkspaceRestrictionError).
+        await assert_role_allowed_in_school(self.db, school_id, data.role)
 
         # Check email uniqueness within school
         if data.email:

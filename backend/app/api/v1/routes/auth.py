@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
-from app.core.deps import CurrentUser, get_token_payload, require_full_access
+from app.core.deps import CurrentUser, get_token_payload, require_full_access, require_role
 from app.core.security import InvalidTokenError
+from app.models.user import UserRole
 from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
@@ -25,14 +27,26 @@ from app.schemas.auth import (
     SetPasswordRequest,
     TokenResponse,
 )
+from app.schemas.workspace import WorkspaceSignupRequest, WorkspaceSignupResponse
 from app.services.auth_service import AuthService, SchoolNotFoundError
+from app.services.workspace_service import WorkspaceRestrictionError, WorkspaceSignupError, sign_up_workspace
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+WORKSPACE_SIGNUP_MESSAGE = "If this email can be used, we have sent a link to set up your account."
+
+
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> RegisterResponse:
-    """Register a new user."""
+async def register(
+    body: RegisterRequest,
+    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> RegisterResponse:
+    """Create a user with any role in any school. KAIHLE_ADMIN only (plan decision D7).
+
+    Public self-serve signup is POST /auth/signup/workspace.
+    """
     service = AuthService(db)
     try:
         return await service.register(
@@ -46,10 +60,39 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
         )
     except SchoolNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except WorkspaceRestrictionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except IntegrityError:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email or username already registered")
+
+
+@router.post(
+    "/signup/workspace",
+    response_model=WorkspaceSignupResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def signup_workspace(
+    body: WorkspaceSignupRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> WorkspaceSignupResponse:
+    """Self-serve signup for an independent teacher or a family. Public, behind WORKSPACE_SIGNUP_ENABLED.
+
+    Returns the same 202 body whether or not the email is new, so it cannot be used to probe accounts.
+    """
+    if not settings.workspace_signup_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    base_url = str(request.base_url).rstrip("/")
+    try:
+        await sign_up_workspace(db, body, base_url)
+    except WorkspaceSignupError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except IntegrityError:
+        # A concurrent signup took this email between the check and the insert.
+        await db.rollback()
+    return WorkspaceSignupResponse(message=WORKSPACE_SIGNUP_MESSAGE)
 
 
 @router.post("/login", response_model=LoginResponse)
