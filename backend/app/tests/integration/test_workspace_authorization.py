@@ -258,7 +258,9 @@ async def test_invite_user_when_school_is_workspace_then_403(
 
 @pytest.mark.asyncio
 async def test_register_when_school_is_workspace_and_role_teacher_then_403(
-    client: AsyncClient, workspace_a: tuple[School, User]
+    client: AsyncClient,
+    workspace_a: tuple[School, User],
+    kaihle_admin: User,
 ) -> None:
     workspace, _ = workspace_a
 
@@ -272,9 +274,12 @@ async def test_register_when_school_is_workspace_and_role_teacher_then_403(
             "first_name": "Sneaky",
             "last_name": "Teacher",
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 403
+    # Called as KAIHLE_ADMIN, so the 403 comes from the workspace rule, not the route guard.
+    assert "workspace" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

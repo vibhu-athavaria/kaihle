@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     # LLM usage accounting (MLH-T2). Off by default so unit tests and offline scripts can
     # make LLM calls without a database.
     llm_usage_tracking_enabled: bool = False
+
+    # Self-serve signup for teacher and family workspaces (POST /auth/signup/workspace).
+    # Off by default: public signup must not go live before the children's-data (D2) and
+    # billing (D8) tasks are done. When off, the endpoint returns 404.
+    workspace_signup_enabled: bool = False
     # Path to a JSON file mapping model string -> {"input_per_1k": float, "output_per_1k": float}.
     # The ONLY way a self-hosted endpoint gets a cost; LiteLLM has no prices for one. Empty by
     # default and never committed with contents — no model names live in this repo.

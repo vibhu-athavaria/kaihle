@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.school import School
 from app.models.user import User, UserRole
+from app.tests.integration.conftest import make_auth_header
 
 # =============================================================================
 # Registration Tests - Happy Path
@@ -21,6 +22,7 @@ from app.models.user import User, UserRole
 async def test_register_valid_email_password_role_student_school_returns_201(
     client: AsyncClient,
     db_session: AsyncSession,
+    kaihle_admin: User,
 ) -> None:
     """REG-01: Register with valid email, password, role=STUDENT, valid school_id."""
     school = School(
@@ -42,6 +44,7 @@ async def test_register_valid_email_password_role_student_school_returns_201(
             "first_name": "John",
             "last_name": "Doe",
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 201
@@ -55,6 +58,7 @@ async def test_register_valid_email_password_role_student_school_returns_201(
 async def test_register_student_with_first_name_last_name_returns_201(
     client: AsyncClient,
     db_session: AsyncSession,
+    kaihle_admin: User,
 ) -> None:
     """REG-02: Register student with first_name, last_name."""
     school = School(
@@ -77,6 +81,7 @@ async def test_register_student_with_first_name_last_name_returns_201(
             "first_name": "John",
             "last_name": "Doe",
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 201
@@ -89,6 +94,7 @@ async def test_register_student_with_first_name_last_name_returns_201(
 async def test_register_multiple_students_same_school_returns_201_each(
     client: AsyncClient,
     db_session: AsyncSession,
+    kaihle_admin: User,
 ) -> None:
     """REG-03: Register multiple students to same school."""
     school = School(
@@ -111,6 +117,7 @@ async def test_register_multiple_students_same_school_returns_201_each(
                 "first_name": f"Student{i}",
                 "last_name": "Test",
             },
+            headers=make_auth_header(kaihle_admin),
         )
         assert response.status_code == 201
         data = response.json()
@@ -126,6 +133,7 @@ async def test_register_multiple_students_same_school_returns_201_each(
 async def test_register_duplicate_email_returns_409(
     client: AsyncClient,
     db_session: AsyncSession,
+    kaihle_admin: User,
 ) -> None:
     """REG-04: Duplicate email returns 409 Conflict."""
     school = School(
@@ -149,6 +157,7 @@ async def test_register_duplicate_email_returns_409(
             "first_name": "John",
             "last_name": "Doe",
         },
+        headers=make_auth_header(kaihle_admin),
     )
     assert response1.status_code == 201
 
@@ -162,6 +171,7 @@ async def test_register_duplicate_email_returns_409(
             "first_name": "John",
             "last_name": "Doe",
         },
+        headers=make_auth_header(kaihle_admin),
     )
     assert response2.status_code == 409
 
@@ -170,6 +180,7 @@ async def test_register_duplicate_email_returns_409(
 async def test_register_invalid_email_format_returns_422(
     client: AsyncClient,
     db_session: AsyncSession,
+    kaihle_admin: User,
 ) -> None:
     """REG-05: Invalid email format returns 422."""
     school = School(
@@ -189,6 +200,7 @@ async def test_register_invalid_email_format_returns_422(
             "role": "STUDENT",
             "school_id": str(school.id),
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 422
@@ -198,6 +210,7 @@ async def test_register_invalid_email_format_returns_422(
 async def test_register_weak_password_returns_422(
     client: AsyncClient,
     db_session: AsyncSession,
+    kaihle_admin: User,
 ) -> None:
     """REG-06: Weak password (<8 chars) returns 422."""
     school = School(
@@ -217,6 +230,7 @@ async def test_register_weak_password_returns_422(
             "role": "STUDENT",
             "school_id": str(school.id),
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 422
@@ -225,11 +239,13 @@ async def test_register_weak_password_returns_422(
 @pytest.mark.asyncio
 async def test_register_missing_required_fields_returns_422(
     client: AsyncClient,
+    kaihle_admin: User,
 ) -> None:
     """REG-07: Missing required fields returns 422."""
     response = await client.post(
         "/api/v1/auth/register",
         json={},
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 422
@@ -239,6 +255,7 @@ async def test_register_missing_required_fields_returns_422(
 async def test_register_invalid_role_returns_422(
     client: AsyncClient,
     db_session: AsyncSession,
+    kaihle_admin: User,
 ) -> None:
     """REG-08: Invalid role returns 422."""
     school = School(
@@ -258,6 +275,7 @@ async def test_register_invalid_role_returns_422(
             "role": "INVALID_ROLE",
             "school_id": str(school.id),
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 422
@@ -266,6 +284,7 @@ async def test_register_invalid_role_returns_422(
 @pytest.mark.asyncio
 async def test_register_nonexistent_school_id_returns_404(
     client: AsyncClient,
+    kaihle_admin: User,
 ) -> None:
     """REG-09: Non-existent school_id returns 404."""
     response = await client.post(
@@ -278,6 +297,7 @@ async def test_register_nonexistent_school_id_returns_404(
             "first_name": "John",
             "last_name": "Doe",
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 404
@@ -286,6 +306,7 @@ async def test_register_nonexistent_school_id_returns_404(
 @pytest.mark.asyncio
 async def test_register_student_without_school_id_returns_422(
     client: AsyncClient,
+    kaihle_admin: User,
 ) -> None:
     """REG-10: STUDENT without school_id returns 422."""
     response = await client.post(
@@ -295,6 +316,7 @@ async def test_register_student_without_school_id_returns_422(
             "password": "SecurePass123!",
             "role": "STUDENT",
         },
+        headers=make_auth_header(kaihle_admin),
     )
 
     assert response.status_code == 422
@@ -357,6 +379,7 @@ async def test_login_valid_credentials_returns_200_with_tokens(
 async def test_login_after_registration_returns_200(
     client: AsyncClient,
     db_session: AsyncSession,
+    kaihle_admin: User,
 ) -> None:
     """LOGIN-02: Login after registration returns 200."""
     school = School(
@@ -381,6 +404,7 @@ async def test_login_after_registration_returns_200(
             "first_name": "John",
             "last_name": "Doe",
         },
+        headers=make_auth_header(kaihle_admin),
     )
     assert register_response.status_code == 201
     user_id = register_response.json()["user_id"]

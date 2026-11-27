@@ -1,6 +1,6 @@
 # Kaihle Workspaces: implementation plan
 
-Status: v4, updated 2026-11-26. D1, D3 and D7 confirmed by Vibhu. S1 and S2 done and verified, draft PR #313 open. Based on a read of the `kaihle` backend and frontend (main, last commit 2026-10-17, unchanged on 2026-11-25). Confidence tags: [Certain] seen in code, [Likely] strong inference, [Guessing] estimate.
+Status: v5, updated 2026-11-27. D1, D3 and D7 confirmed by Vibhu. S1, S2 and S3a done. Based on a read of the `kaihle` backend and frontend (main, last commit 2026-10-17, unchanged on 2026-11-25). Confidence tags: [Certain] seen in code, [Likely] strong inference, [Guessing] estimate.
 
 A copy of this plan also lives in the Kaihle Claude Project (`claude/kaihle-workspaces-implementation-plan.md`). This repo copy is the one the coding agent should follow; update both when decisions change.
 
@@ -10,7 +10,10 @@ A copy of this plan also lives in the Kaihle Claude Project (`claude/kaihle-work
 |---|---|
 | S1 data model | Built on branch `M7-1-T1_feature/workspace-school-type`, draft PR https://github.com/vibhu-athavaria/kaihle/pull/313. Migration `a3f5c1d2b7e4` was hand-written; verified 2026-11-26: `alembic check` reports no drift against the models, and downgrade then upgrade round-trips cleanly. |
 | S2 authorization | Done on the same branch. Unit tests in `backend/app/tests/unit/test_workspace_service.py` (100% coverage of `workspace_service.py`); integration tests in `backend/app/tests/integration/test_workspace_authorization.py`, including the cross-tenant sweep over classes, assessments, gap maps, lesson plans and student info. `ClassService` now checks the class teacher on create, `update_teacher` and `update_class` (the last one previously accepted any `teacher_id`). Full unit and integration suites pass. |
-| S3 to S8 | Not started. |
+| S3a signup | Done on branch `M7-1-T2_feature/workspace-signup`: `workspace_service.create_workspace` and `sign_up_workspace`, `POST /auth/signup/workspace` (flag `WORKSPACE_SIGNUP_ENABLED`, default false, 404 when off), welcome email `workspace_welcome.html.jinja2`, `POST /auth/register` restricted to KAIHLE_ADMIN. Signup always returns the same 202 body, including for an email already registered, so it cannot enumerate accounts. Tests: `backend/app/tests/integration/test_workspace_signup.py`, unit tests in `test_workspace_service.py`. |
+| S3b handle generator | Not started. |
+| S3c rate limit and CAPTCHA | Not started. CAPTCHA provider proposed: Cloudflare Turnstile (privacy-friendly, matters for D2). |
+| S4 to S8 | Not started. |
 
 Branch id `M7-1-T1` was invented and may need renaming.
 

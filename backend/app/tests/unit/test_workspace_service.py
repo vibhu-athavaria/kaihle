@@ -14,15 +14,19 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import require_school_operator
-from app.models.school import SchoolType
-from app.models.user import UserRole
+from app.models.school import School, SchoolCurriculum, SchoolType
+from app.models.user import TeacherProfile, User, UserRole
+from app.schemas.workspace import WorkspaceSignupRequest
 from app.services.workspace_service import (
     WorkspaceRestrictionError,
+    WorkspaceSignupError,
     assert_class_teacher_allowed,
     assert_operator_may_manage_user,
     assert_role_allowed_in_school,
+    create_workspace,
     get_workspace_context,
     is_workspace_owner,
+    sign_up_workspace,
 )
 
 
@@ -31,7 +35,39 @@ def mock_db() -> MagicMock:
     session = MagicMock(spec=AsyncSession)
     session.scalar = AsyncMock()
     session.get = AsyncMock()
+    session.add = MagicMock()
+    session.flush = AsyncMock(side_effect=_assign_ids(session))
     return session
+
+
+def _assign_ids(session: MagicMock) -> Any:
+    """Make flush() give every added School or User an id, as the database would."""
+
+    async def flush() -> None:
+        for call in session.add.call_args_list:
+            obj = call.args[0]
+            if isinstance(obj, (School, User)) and obj.id is None:
+                obj.id = uuid.uuid4()
+
+    return flush
+
+
+def _signup(**overrides: Any) -> WorkspaceSignupRequest:
+    data: dict[str, Any] = {
+        "kind": "teacher",
+        "first_name": "Ana",
+        "last_name": "Lim",
+        "email": "ana@example.com",
+        "country": "Singapore",
+        "timezone": "Asia/Singapore",
+        "curriculum_id": uuid.uuid4(),
+    }
+    data.update(overrides)
+    return WorkspaceSignupRequest(**data)
+
+
+def _added(session: MagicMock, kind: type) -> list[Any]:
+    return [call.args[0] for call in session.add.call_args_list if isinstance(call.args[0], kind)]
 
 
 def _school(kind: str, owner_id: uuid.UUID | None = None) -> SimpleNamespace:
@@ -286,3 +322,137 @@ async def test_require_school_operator_when_student_or_parent_then_403(mock_db: 
         await require_school_operator(_user(role, uuid.uuid4()), mock_db)
 
     assert exc.value.status_code == 403
+
+
+# ── create_workspace ─────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("curriculum_active", [None, False])
+async def test_create_workspace_when_curriculum_missing_or_inactive_then_raises_and_adds_nothing(
+    mock_db: MagicMock, curriculum_active: bool | None
+) -> None:
+    mock_db.scalar.return_value = curriculum_active
+
+    with pytest.raises(WorkspaceSignupError):
+        await create_workspace(mock_db, _signup())
+
+    mock_db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("kind", "school_type", "name"),
+    [
+        ("teacher", SchoolType.TEACHER_WORKSPACE, "Ana Lim's classroom"),
+        ("family", SchoolType.FAMILY, "Lim family"),
+    ],
+)
+async def test_create_workspace_when_valid_then_school_owner_profile_and_curriculum_added(
+    mock_db: MagicMock, kind: str, school_type: str, name: str
+) -> None:
+    mock_db.scalar.return_value = True
+    data = _signup(kind=kind, city="Singapore")
+
+    school, owner = await create_workspace(mock_db, data)
+
+    assert school.type == school_type
+    assert school.name == name
+    assert school.slug.startswith("ws-")
+    assert school.status == "active"
+    assert (school.country, school.city, school.timezone) == ("Singapore", "Singapore", "Asia/Singapore")
+    assert school.owner_user_id == owner.id
+    assert owner.role == UserRole.TEACHER
+    assert owner.school_id == school.id
+    assert owner.is_active is True
+    assert owner.hashed_password  # unusable random password until set via the magic link
+    (profile,) = _added(mock_db, TeacherProfile)
+    assert profile.user_id == owner.id
+    (subscription,) = _added(mock_db, SchoolCurriculum)
+    assert subscription.curriculum_id == data.curriculum_id
+    assert subscription.is_primary is True
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_when_name_given_then_used_verbatim(mock_db: MagicMock) -> None:
+    mock_db.scalar.return_value = True
+
+    school, _ = await create_workspace(mock_db, _signup(workspace_name="Maths with Ana"))
+
+    assert school.name == "Maths with Ana"
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_when_called_twice_then_slugs_differ(mock_db: MagicMock) -> None:
+    mock_db.scalar.return_value = True
+
+    first, _ = await create_workspace(mock_db, _signup())
+    second, _ = await create_workspace(mock_db, _signup(email="other@example.com"))
+
+    assert first.slug != second.slug
+
+
+# ── sign_up_workspace ────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_sign_up_workspace_when_email_taken_then_creates_and_sends_nothing(mock_db: MagicMock) -> None:
+    mock_db.scalar.return_value = uuid.uuid4()  # an existing user id
+
+    with (
+        patch("app.services.workspace_service.create_workspace", new=AsyncMock()) as create,
+        patch("app.services.workspace_service.EmailService.send", new=AsyncMock()) as send,
+    ):
+        await sign_up_workspace(mock_db, _signup(), "http://api")
+
+    create.assert_not_awaited()
+    send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sign_up_workspace_when_new_email_then_stores_token_and_sends_welcome(mock_db: MagicMock) -> None:
+    mock_db.scalar.return_value = None
+    owner = SimpleNamespace(id=uuid.uuid4(), first_name="Ana")
+
+    with (
+        patch("app.services.workspace_service.create_workspace", new=AsyncMock(return_value=(None, owner))),
+        patch("app.services.workspace_service.store_magic_link_token", new=AsyncMock()) as store,
+        patch("app.services.workspace_service.EmailService.send", new=AsyncMock()) as send,
+    ):
+        await sign_up_workspace(mock_db, _signup(kind="family"), "http://api")
+
+    store.assert_awaited_once()
+    assert store.await_args is not None
+    assert store.await_args.args[1] == owner.id
+    send.assert_awaited_once()
+    assert send.await_args is not None
+    kwargs = send.await_args.kwargs
+    assert kwargs["to"] == "ana@example.com"
+    assert kwargs["template"] == "workspace_welcome.html.jinja2"
+    assert kwargs["ctx"]["kind"] == "family"
+    assert str(kwargs["ctx"]["verify_url"]).startswith("http://api/api/v1/auth/magic-link/verify?token=")
+
+
+@pytest.mark.asyncio
+async def test_sign_up_workspace_when_email_send_fails_then_no_error_raised(mock_db: MagicMock) -> None:
+    mock_db.scalar.return_value = None
+    owner = SimpleNamespace(id=uuid.uuid4(), first_name="Ana")
+
+    with (
+        patch("app.services.workspace_service.create_workspace", new=AsyncMock(return_value=(None, owner))),
+        patch("app.services.workspace_service.store_magic_link_token", new=AsyncMock()),
+        patch("app.services.workspace_service.EmailService.send", new=AsyncMock(side_effect=RuntimeError("down"))),
+    ):
+        await sign_up_workspace(mock_db, _signup(), "http://api")
+
+
+@pytest.mark.asyncio
+async def test_sign_up_workspace_when_curriculum_invalid_then_error_propagates(mock_db: MagicMock) -> None:
+    mock_db.scalar.return_value = None
+
+    with patch(
+        "app.services.workspace_service.create_workspace",
+        new=AsyncMock(side_effect=WorkspaceSignupError("Curriculum not available")),
+    ):
+        with pytest.raises(WorkspaceSignupError):
+            await sign_up_workspace(mock_db, _signup(), "http://api")
