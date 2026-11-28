@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserRole
 from app.schemas.user import UserDirectCreate, UserInvite, UserSelfUpdate, UserUpdate
 from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
+from app.services.workspace_service import WorkspaceRestrictionError
 
 
 @pytest.fixture(autouse=True)
@@ -54,6 +55,49 @@ def user_invite_data() -> UserInvite:
         last_name="Doe",
         subjects=["Mathematics", "Science"],
     )
+
+
+class TestWorkspaceRoleRule:
+    """Both user-creating paths apply the workspace role rule before writing anything.
+
+    The rule itself is tested in test_workspace_service.py.
+    """
+
+    @pytest.mark.asyncio
+    async def test_invite_user_when_workspace_rejects_role_then_raises_and_adds_nothing(
+        self,
+        user_service: UserService,
+        mock_db: MagicMock,
+        school_id: uuid.UUID,
+        user_invite_data: UserInvite,
+        allow_any_role_in_school: AsyncMock,
+    ) -> None:
+        allow_any_role_in_school.side_effect = WorkspaceRestrictionError("owner and students only")
+
+        with pytest.raises(WorkspaceRestrictionError):
+            await user_service.invite_user(school_id=school_id, data=user_invite_data, base_url="http://api")
+
+        allow_any_role_in_school.assert_awaited_once_with(mock_db, school_id, UserRole.TEACHER)
+        mock_db.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_when_workspace_rejects_role_then_raises_and_adds_nothing(
+        self,
+        user_service: UserService,
+        mock_db: MagicMock,
+        school_id: uuid.UUID,
+        allow_any_role_in_school: AsyncMock,
+    ) -> None:
+        allow_any_role_in_school.side_effect = WorkspaceRestrictionError("owner and students only")
+        data = UserDirectCreate(
+            first_name="P", last_name="Q", email="p@example.com", password="Secure123!", role=UserRole.PARENT
+        )
+
+        with pytest.raises(WorkspaceRestrictionError):
+            await user_service.create_user_direct(school_id=school_id, data=data)
+
+        allow_any_role_in_school.assert_awaited_once_with(mock_db, school_id, UserRole.PARENT)
+        mock_db.add.assert_not_called()
 
 
 class TestInviteUser:

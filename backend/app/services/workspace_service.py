@@ -61,6 +61,8 @@ async def assert_role_allowed_in_school(db: AsyncSession, school_id: uuid.UUID, 
     the owner, created by workspace signup, never through the user-creation paths.
     """
     school_type = await db.scalar(select(School.type).where(School.id == school_id))
+    # A missing school is not this rule's concern: every caller looks the school up itself
+    # and reports it (404 or ValueError). Returning here keeps one owner for that error.
     if school_type is None or school_type == SchoolType.SCHOOL:
         return
     if role != UserRole.STUDENT:
@@ -70,6 +72,9 @@ async def assert_role_allowed_in_school(db: AsyncSession, school_id: uuid.UUID, 
 async def assert_class_teacher_allowed(db: AsyncSession, school_id: uuid.UUID, teacher_id: uuid.UUID) -> None:
     """In a workspace, every class is taught by the owner. A real school accepts any of its teachers."""
     school = await db.scalar(select(School).where(School.id == school_id))
+    # Same as assert_role_allowed_in_school: a missing school is reported by the caller.
+    # ClassService only reaches this after finding the teacher in `school_id`, so the school
+    # exists on that path.
     if school is None or school.type == SchoolType.SCHOOL:
         return
     if school.owner_user_id != teacher_id:
@@ -93,5 +98,9 @@ async def assert_operator_may_manage_user(
     if not await is_workspace_owner(db, actor_id, school_id):
         raise WorkspaceRestrictionError("Only a workspace owner may manage users here.")
     target_role = await db.scalar(select(User.role).where(User.id == target_user_id, User.school_id == school_id))
+    # No such user in this workspace: possibly another tenant's user. Stays 403, not 404, so
+    # the response does not reveal whether the id exists elsewhere (CONSTITUTION section 7).
+    if target_role is None:
+        raise WorkspaceRestrictionError("No such student in this workspace.")
     if target_role != UserRole.STUDENT:
         raise WorkspaceRestrictionError("A workspace owner may only manage students.")

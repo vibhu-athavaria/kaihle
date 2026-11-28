@@ -237,15 +237,25 @@ async def test_assert_operator_may_manage_user_when_owner_targets_student_then_a
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("target_role", [UserRole.TEACHER, None])
 async def test_assert_operator_may_manage_user_when_owner_targets_non_student_then_raises(
-    mock_db: MagicMock, target_role: str | None
+    mock_db: MagicMock,
 ) -> None:
-    # TEACHER is the owner themselves; None is a user outside this workspace.
-    mock_db.scalar.return_value = target_role
+    # The only non-student in a workspace is the owner themselves.
+    mock_db.scalar.return_value = UserRole.TEACHER
 
     with patch("app.services.workspace_service.is_workspace_owner", new=AsyncMock(return_value=True)):
-        with pytest.raises(WorkspaceRestrictionError):
+        with pytest.raises(WorkspaceRestrictionError, match="only manage students"):
+            await assert_operator_may_manage_user(mock_db, UserRole.TEACHER, uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
+
+
+@pytest.mark.asyncio
+async def test_assert_operator_may_manage_user_when_target_not_in_workspace_then_raises_not_found_message(
+    mock_db: MagicMock,
+) -> None:
+    mock_db.scalar.return_value = None  # no such user in this workspace, maybe in another tenant
+
+    with patch("app.services.workspace_service.is_workspace_owner", new=AsyncMock(return_value=True)):
+        with pytest.raises(WorkspaceRestrictionError, match="No such student in this workspace"):
             await assert_operator_may_manage_user(mock_db, UserRole.TEACHER, uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
 
 

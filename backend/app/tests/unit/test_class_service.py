@@ -12,6 +12,7 @@ from app.models.school import Class, ClassEnrollment
 from app.models.user import User, UserRole
 from app.schemas.class_enrollment import ClassCreate
 from app.services.class_service import ClassService
+from app.services.workspace_service import WorkspaceRestrictionError
 
 
 @pytest.fixture(autouse=True)
@@ -91,6 +92,31 @@ class TestCreateClass:
         assert class_.name == "Math 7A"
         assert class_.teacher_id == teacher_id
         mock_db.add.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_create_class_when_workspace_rejects_teacher_then_raises_restriction_and_adds_nothing(
+        self, class_service: ClassService, mock_db: MagicMock, allow_any_class_teacher: AsyncMock
+    ) -> None:
+        """The workspace rule itself is tested in test_workspace_service.py; here, that create_class applies it."""
+        school_id = uuid.uuid4()
+        teacher_id = uuid.uuid4()
+        data = ClassCreate(
+            name="Math 7A",
+            grade_id=uuid.uuid4(),
+            subject_id=uuid.uuid4(),
+            curriculum_id=uuid.uuid4(),
+            teacher_id=teacher_id,
+            academic_year="2025-2026",
+        )
+        teacher = User(id=teacher_id, school_id=school_id, role=UserRole.TEACHER)
+        mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=teacher)))
+        allow_any_class_teacher.side_effect = WorkspaceRestrictionError("not the owner")
+
+        with pytest.raises(WorkspaceRestrictionError):
+            await class_service.create_class(school_id, data)
+
+        allow_any_class_teacher.assert_awaited_once_with(mock_db, school_id, teacher_id)
+        mock_db.add.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_create_class_when_teacher_not_in_school_then_raises(
