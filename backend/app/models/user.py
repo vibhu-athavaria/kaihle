@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
@@ -59,6 +60,10 @@ class User(Base, TimestampMixin):
             "role = 'KAIHLE_ADMIN' OR school_id IS NOT NULL",
             name="chk_user_school_id_required",
         ),
+        # Named as in kaihle_v2_1_schema.sql and migration 8a1b2c3d4e5f, so a schema built
+        # from the models (the test database) matches production. workspace_service relies
+        # on this name to recognise a student-handle collision.
+        UniqueConstraint("username", name="users_username_unique"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -67,7 +72,7 @@ class User(Base, TimestampMixin):
         ForeignKey("schools.id", ondelete="SET NULL"),
         nullable=True,
     )
-    username: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True)
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     hashed_password: Mapped[str | None] = mapped_column(String(255))
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)

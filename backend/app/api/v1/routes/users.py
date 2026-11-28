@@ -8,7 +8,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import CurrentUser, _check_school_access, require_full_access, require_role
+from app.core.deps import (
+    CurrentUser,
+    _check_school_access,
+    require_full_access,
+    require_role,
+    require_school_operator,
+)
 from app.core.permissions import Permission, has_permission
 from app.models.curriculum import Grade
 from app.models.user import StudentProfile, UserRole
@@ -25,7 +31,12 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.services.analytics_service import AnalyticsService
-from app.services.user_service import UserService
+from app.services.user_service import MissingLoginIdentifierError, UserService
+from app.services.workspace_service import (
+    WorkspaceRestrictionError,
+    assert_operator_may_manage_user,
+    get_workspace_context,
+)
 
 router = APIRouter(prefix="/schools/{school_id}/users", tags=["users"])
 
@@ -40,7 +51,11 @@ async def get_me(
     _check_school_access(school_id, current_user)
     service = UserService(db)
     user = await service.get_me(current_user.id)
-    return MeResponse.model_validate(user)
+    me = MeResponse.model_validate(user)
+    context = await get_workspace_context(db, user)
+    me.workspace_type = context.workspace_type
+    me.is_workspace_owner = context.is_owner
+    return me
 
 
 @router.patch("/me", response_model=MeResponse)
@@ -69,7 +84,7 @@ async def create_user_direct(
     school_id: uuid.UUID,
     body: UserDirectCreate,
     request: Request,
-    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
+    current_user: CurrentUser = Depends(require_school_operator),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     """Create a user with an admin-supplied password. No magic link is sent.
@@ -83,6 +98,12 @@ async def create_user_direct(
         user = await service.create_user_direct(school_id=school_id, data=body)
         await db.commit()
         return UserResponse.model_validate(user)
+    except WorkspaceRestrictionError as e:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except MissingLoginIdentifierError as e:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except ValueError as e:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
@@ -125,6 +146,8 @@ async def invite_user(
             base_url=str(request.base_url).rstrip("/"),
         )
         return UserResponse.model_validate(user)
+    except WorkspaceRestrictionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
@@ -138,9 +161,9 @@ async def list_users(
     page_size: int = Query(20, ge=1, le=500),
     is_active: bool | None = Query(None, description="Filter by active status. None defaults to active users only."),
     # require_full_access guards against password_setup-scoped tokens (security gap fix).
-    # require_role enforces that only SCHOOL_ADMIN or KAIHLE_ADMIN may list users.
+    # require_school_operator allows SCHOOL_ADMIN, KAIHLE_ADMIN, or the owner of a workspace.
     _full: CurrentUser = Depends(require_full_access),
-    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
+    current_user: CurrentUser = Depends(require_school_operator),
     db: AsyncSession = Depends(get_db),
 ) -> UserListResponse | StudentListResponse:
     """List users in a school with optional role filter and pagination.
@@ -211,19 +234,26 @@ async def update_user(
     school_id: uuid.UUID,
     user_id: uuid.UUID,
     body: UserUpdate,
-    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
+    current_user: CurrentUser = Depends(require_school_operator),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     """Update user information."""
     # KAIHLE_ADMIN may set passwords for any user in any school.
     # SCHOOL_ADMIN may set passwords for users in their own school only
     # (enforced by _check_school_access above — no additional guard needed).
-    # TEACHER and PARENT cannot reach this route (blocked by require_role).
+    # A TEACHER reaches this route only as a workspace owner, and then only for students
+    # (assert_operator_may_manage_user). PARENT cannot reach it.
     _check_school_access(school_id, current_user)
+    try:
+        await assert_operator_may_manage_user(db, current_user.role, current_user.id, school_id, user_id)
+    except WorkspaceRestrictionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     service = UserService(db)
     try:
         user = await service.update_user(school_id, user_id, body)
         return UserResponse.model_validate(user)
+    except WorkspaceRestrictionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
@@ -232,7 +262,7 @@ async def update_user(
 async def deactivate_user(
     school_id: uuid.UUID,
     user_id: uuid.UUID,
-    current_user: CurrentUser = Depends(require_role(UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN)),
+    current_user: CurrentUser = Depends(require_school_operator),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Deactivate a user (soft delete)."""
@@ -242,6 +272,10 @@ async def deactivate_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to deactivate users",
         )
+    try:
+        await assert_operator_may_manage_user(db, current_user.role, current_user.id, school_id, user_id)
+    except WorkspaceRestrictionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     service = UserService(db)
     try:
         await service.deactivate_user(school_id, user_id)

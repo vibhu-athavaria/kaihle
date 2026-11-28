@@ -34,6 +34,12 @@ from app.schemas.user_detail import (
 )
 from app.services.class_service import ClassService
 from app.services.email_service import EmailService
+from app.services.workspace_service import (
+    WorkspaceRestrictionError,
+    add_user_with_generated_handle,
+    assert_role_allowed_in_school,
+    is_workspace_school,
+)
 
 logger = structlog.get_logger()
 
@@ -44,6 +50,10 @@ class UserNotFoundError(ValueError):
 
 class CrossSchoolAccessError(PermissionError):
     """Raised when a school-scoped caller accesses a user from another school."""
+
+
+class MissingLoginIdentifierError(ValueError):
+    """Raised when a real-school user has neither email nor username. Routes map this to 422."""
 
 
 @dataclass
@@ -77,6 +87,9 @@ class UserService:
         User is created with is_active=True and a random unusable password.
         They activate via the magic link.
         """
+        # A workspace holds only its owner and students (raises WorkspaceRestrictionError).
+        await assert_role_allowed_in_school(self.db, school_id, data.role)
+
         # Validate role is allowed for invitation
         allowed_roles = {UserRole.TEACHER, UserRole.SCHOOL_ADMIN, UserRole.PARENT}
         if data.role not in allowed_roles:
@@ -176,6 +189,15 @@ class UserService:
         Students will NOT be asked to change password on first login.
         Teachers/parents will be asked to change password on first login.
         """
+        # A workspace holds only its owner and students (raises WorkspaceRestrictionError).
+        await assert_role_allowed_in_school(self.db, school_id, data.role)
+
+        # Workspace students get a generated handle (decision D3); real schools choose one.
+        in_workspace = await is_workspace_school(self.db, school_id)
+        if in_workspace and data.username:
+            raise WorkspaceRestrictionError("In a workspace, student usernames are generated automatically.")
+        if not in_workspace and not data.email and not data.username:
+            raise MissingLoginIdentifierError("Either email or username must be provided")
 
         # Check email uniqueness within school
         if data.email:
@@ -205,19 +227,27 @@ class UserService:
         # Teachers/parents are asked to change password on first login
         must_change = data.role != UserRole.STUDENT
 
-        user = User(
-            school_id=school_id,
-            email=data.email,
-            username=data.username,
-            first_name=data.first_name,
-            last_name=data.last_name,
-            role=data.role,
-            hashed_password=hash_password(raw_password),
-            is_active=True,
-            must_change_password=must_change,
-        )
-        self.db.add(user)
-        await self.db.flush()  # get user.id before creating related rows
+        hashed_password = hash_password(raw_password)
+
+        def build_user(username: str | None) -> User:
+            return User(
+                school_id=school_id,
+                email=data.email,
+                username=username,
+                first_name=data.first_name,
+                last_name=data.last_name,
+                role=data.role,
+                hashed_password=hashed_password,
+                is_active=True,
+                must_change_password=must_change,
+            )
+
+        if in_workspace:
+            user = await add_user_with_generated_handle(self.db, build_user, data.first_name)
+        else:
+            user = build_user(data.username)
+            self.db.add(user)
+            await self.db.flush()  # get user.id before creating related rows
 
         if data.role == UserRole.STUDENT:
             profile = StudentProfile(
@@ -323,6 +353,9 @@ class UserService:
         # Username uniqueness check — only when username is actually changing
         new_username = update_data.get("username")
         if new_username is not None and new_username != user.username:
+            # A workspace handle is generated once and never chosen (decision D3).
+            if await is_workspace_school(self.db, school_id):
+                raise WorkspaceRestrictionError("In a workspace, student usernames are generated automatically.")
             conflict = await self.db.scalar(
                 select(User).where(
                     User.school_id == school_id,

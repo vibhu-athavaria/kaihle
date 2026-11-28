@@ -135,6 +135,9 @@ class MeResponse(BaseModel):
     school_id: uuid.UUID | None
     is_active: bool
     permissions: dict[str, bool] | None = None
+    # None for a real school; TEACHER_WORKSPACE or FAMILY for a self-serve workspace.
+    workspace_type: str | None = None
+    is_workspace_owner: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -172,6 +175,8 @@ class UserDirectCreate(BaseModel):
                 raise ValueError("age is required for students")
         if self.role not in (UserRole.STUDENT, UserRole.TEACHER, UserRole.PARENT):
             raise ValueError("role must be STUDENT, TEACHER, or PARENT")
-        if not self.email and not self.username:
+        # A student may arrive with neither: in a workspace the username is generated. The
+        # service rejects a real-school student without one (MissingLoginIdentifierError).
+        if self.role != UserRole.STUDENT and not self.email and not self.username:
             raise ValueError("Either email or username must be provided")
         return self

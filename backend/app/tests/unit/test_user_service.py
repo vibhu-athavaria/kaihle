@@ -1,7 +1,7 @@
 """Unit tests for UserService."""
 
 import uuid
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,7 +10,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User, UserRole
 from app.schemas.user import UserDirectCreate, UserInvite, UserSelfUpdate, UserUpdate
-from app.services.user_service import CrossSchoolAccessError, UserNotFoundError, UserService
+from app.services.user_service import (
+    CrossSchoolAccessError,
+    MissingLoginIdentifierError,
+    UserNotFoundError,
+    UserService,
+)
+from app.services.workspace_service import WorkspaceRestrictionError
+
+
+@pytest.fixture(autouse=True)
+def allow_any_role_in_school() -> Generator[AsyncMock, None, None]:
+    """Treat every school as a real school. Workspace rules are tested in test_workspace_service.py."""
+    with patch("app.services.user_service.assert_role_allowed_in_school", new=AsyncMock()) as guard:
+        yield guard
+
+
+@pytest.fixture(autouse=True)
+def school_is_not_workspace() -> Generator[AsyncMock, None, None]:
+    """Default every school to a real school. Tests of the workspace path set return_value=True."""
+    with patch("app.services.user_service.is_workspace_school", new=AsyncMock(return_value=False)) as check:
+        yield check
 
 
 @pytest.fixture
@@ -401,6 +421,27 @@ class TestUpdateUser:
     """Tests for UserService.update_user method."""
 
     @pytest.mark.asyncio
+    async def test_update_user_when_workspace_username_changed_then_raises_restriction(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID, school_is_not_workspace: AsyncMock
+    ) -> None:
+        school_is_not_workspace.return_value = True
+        student = User(
+            id=uuid.uuid4(),
+            username="emma-abcd",
+            first_name="Emma",
+            last_name="Lim",
+            role=UserRole.STUDENT,
+            school_id=school_id,
+            is_active=True,
+        )
+        mock_db.scalar = AsyncMock(return_value=student)
+
+        with pytest.raises(WorkspaceRestrictionError, match="generated automatically"):
+            await user_service.update_user(school_id, student.id, UserUpdate(username="emma"))
+
+        assert student.username == "emma-abcd"
+
+    @pytest.mark.asyncio
     async def test_update_user_when_valid_data_then_updates_user(
         self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
     ) -> None:
@@ -699,6 +740,76 @@ class TestCreateUserDirect:
 
         # db.add called twice: User + ParentStudent
         assert mock_db.add.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_when_workspace_student_then_username_is_generated(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID, school_is_not_workspace: AsyncMock
+    ) -> None:
+        school_is_not_workspace.return_value = True
+        data = UserDirectCreate(
+            first_name="Emma",
+            last_name="Lim",
+            password="Secure123!",
+            role=UserRole.STUDENT,
+            age=9,
+            grade_id=uuid.uuid4(),
+        )
+
+        async def insert(db: Any, build_user: Callable[[str], User], first_name: str) -> User:
+            user = build_user("emma-abcd")
+            user.id = uuid.uuid4()
+            return user
+
+        with (
+            patch("app.services.user_service.hash_password", return_value="hashed"),
+            patch("app.services.user_service.add_user_with_generated_handle", new=AsyncMock(side_effect=insert)) as add,
+        ):
+            user = await user_service.create_user_direct(school_id=school_id, data=data)
+
+        add.assert_awaited_once()
+        assert user.username == "emma-abcd"
+        assert user.school_id == school_id
+        assert user.hashed_password == "hashed"
+        # Only the StudentProfile goes through db.add here; the user was inserted by the helper.
+        assert mock_db.add.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_when_workspace_and_username_given_then_raises_restriction(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID, school_is_not_workspace: AsyncMock
+    ) -> None:
+        school_is_not_workspace.return_value = True
+        data = UserDirectCreate(
+            first_name="Emma",
+            last_name="Lim",
+            username="emma",
+            password="Secure123!",
+            role=UserRole.STUDENT,
+            age=9,
+            grade_id=uuid.uuid4(),
+        )
+
+        with pytest.raises(WorkspaceRestrictionError, match="generated automatically"):
+            await user_service.create_user_direct(school_id=school_id, data=data)
+
+        mock_db.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_user_direct_when_real_school_student_has_no_email_or_username_then_raises(
+        self, user_service: UserService, mock_db: MagicMock, school_id: uuid.UUID
+    ) -> None:
+        data = UserDirectCreate(
+            first_name="Emma",
+            last_name="Lim",
+            password="Secure123!",
+            role=UserRole.STUDENT,
+            age=9,
+            grade_id=uuid.uuid4(),
+        )
+
+        with pytest.raises(MissingLoginIdentifierError):
+            await user_service.create_user_direct(school_id=school_id, data=data)
+
+        mock_db.add.assert_not_called()
 
 
 class TestGetMe:
