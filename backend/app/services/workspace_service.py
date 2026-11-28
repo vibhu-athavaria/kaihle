@@ -9,13 +9,17 @@ nothing else. No second teacher, no SCHOOL_ADMIN, no PARENT. `assert_role_allowe
 is the single place that rule lives, and every user-creating service path calls it.
 """
 
+import re
 import secrets
+import unicodedata
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import mask_email
@@ -36,6 +40,17 @@ _KIND_TO_TYPE: dict[str, SchoolType] = {
     "family": SchoolType.FAMILY,
 }
 
+# Student handles (decision D3): usernames stay globally unique, so a workspace student gets
+# a generated `firstname-xxxx` instead of a name the owner picks. The suffix alphabet leaves
+# out 0, o, 1 and l, which children misread when typing their login.
+HANDLE_NAME_MAX_LENGTH = 12
+HANDLE_SUFFIX_LENGTH = 4
+HANDLE_SUFFIX_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"
+HANDLE_FALLBACK_NAME = "student"
+HANDLE_MAX_ATTEMPTS = 5
+# Name of the unique constraint on users.username (migration 8a1b2c3d4e5f).
+USERNAME_UNIQUE_CONSTRAINT = "users_username_unique"
+
 
 class WorkspaceRestrictionError(Exception):
     """Raised when an action is not allowed inside a workspace. Routes map this to HTTP 403."""
@@ -43,6 +58,10 @@ class WorkspaceRestrictionError(Exception):
 
 class WorkspaceSignupError(Exception):
     """Raised when a signup request cannot be fulfilled (e.g. unknown curriculum). Routes map this to 400."""
+
+
+class StudentHandleUnavailableError(ValueError):
+    """Raised when every generated handle collided. Routes map ValueError to 409; the message is generic."""
 
 
 @dataclass(frozen=True)
@@ -74,6 +93,48 @@ async def get_workspace_context(db: AsyncSession, user: User) -> WorkspaceContex
     if school is None or school.type == SchoolType.SCHOOL:
         return WorkspaceContext(workspace_type=None, is_owner=False)
     return WorkspaceContext(workspace_type=school.type, is_owner=school.owner_user_id == user.id)
+
+
+async def is_workspace_school(db: AsyncSession, school_id: uuid.UUID) -> bool:
+    """True if `school_id` is a workspace (TEACHER_WORKSPACE or FAMILY), False for a real or unknown school."""
+    school_type = await db.scalar(select(School.type).where(School.id == school_id))
+    return school_type is not None and school_type != SchoolType.SCHOOL
+
+
+def generate_student_handle(first_name: str) -> str:
+    """Return `slug(first_name)[:12]-xxxx` with a random suffix from HANDLE_SUFFIX_ALPHABET.
+
+    Accents are folded to ASCII and everything but letters and digits is dropped. A name
+    with nothing left (e.g. written only in a non-Latin script) uses HANDLE_FALLBACK_NAME.
+    """
+    folded = unicodedata.normalize("NFKD", first_name).encode("ascii", "ignore").decode("ascii")
+    name = re.sub(r"[^a-z0-9]", "", folded.lower())[:HANDLE_NAME_MAX_LENGTH] or HANDLE_FALLBACK_NAME
+    suffix = "".join(secrets.choice(HANDLE_SUFFIX_ALPHABET) for _ in range(HANDLE_SUFFIX_LENGTH))
+    return f"{name}-{suffix}"
+
+
+async def add_user_with_generated_handle(db: AsyncSession, build_user: Callable[[str], User], first_name: str) -> User:
+    """Insert the user returned by `build_user(handle)`, retrying with a new handle on collision.
+
+    Writes to the database. Each attempt runs in a savepoint, so a collision on
+    users_username_unique rolls back only that insert and the caller's transaction stays
+    usable. Any other integrity error (e.g. a taken email) is re-raised unchanged.
+    """
+    for attempt in range(1, HANDLE_MAX_ATTEMPTS + 1):
+        user = build_user(generate_student_handle(first_name))
+        try:
+            async with db.begin_nested():
+                db.add(user)
+                await db.flush()
+        except IntegrityError as exc:
+            if USERNAME_UNIQUE_CONSTRAINT not in str(exc.orig):
+                raise
+            logger.info("student_handle_collision", school_id=str(user.school_id), attempt=attempt)
+            continue
+        logger.info("student_handle_generated", user_id=str(user.id), school_id=str(user.school_id), attempt=attempt)
+        return user
+    logger.error("student_handle_exhausted", school_id=str(user.school_id), attempts=HANDLE_MAX_ATTEMPTS)
+    raise StudentHandleUnavailableError("Could not create the student. Please try again.")
 
 
 async def assert_role_allowed_in_school(db: AsyncSession, school_id: uuid.UUID, role: str) -> None:

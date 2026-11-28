@@ -23,6 +23,7 @@ Supported roles: STUDENT, TEACHER, SCHOOL_ADMIN, PARENT, KAIHLE_ADMIN.
 - User is created with `is_active = TRUE`, `must_change_password = TRUE`, and the admin-set password.
 - A welcome email is sent with login credentials.
 - On first login, user must change password (enforced by `must_change_password` flag).
+- Login ids: `users.username` is globally unique (`users_username_unique`). In a real school the admin chooses it; a student needs an email or a username (422 otherwise). In a workspace (TEACHER_WORKSPACE or FAMILY) the owner may not send one: the service generates `firstname-xxxx` (first name folded to ASCII, max 12 characters, plus 4 characters without 0, o, 1 or l), retries on collision, and returns it once in the 201 response. A workspace student's username cannot be changed afterwards (403).
 
 ### 2.3 Password setup (from magic link)
 

@@ -4,8 +4,10 @@ A workspace is a `schools` row of type TEACHER_WORKSPACE or FAMILY, owned by one
 These tests cover the model constraints and the S2 authorization changes (CONSTITUTION Rule 20).
 """
 
+import re
 import uuid
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -78,7 +80,6 @@ def _student_body(grade: Grade) -> dict[str, object]:
     return {
         "first_name": "New",
         "last_name": "Student",
-        "username": f"new-{uuid.uuid4().hex[:8]}",
         "password": "a-long-enough-pass",
         "role": "STUDENT",
         "age": 12,
@@ -165,7 +166,7 @@ async def test_create_user_direct_when_workspace_owner_and_role_student_then_cre
     )
 
     assert response.status_code == 201
-    created = await db_session.scalar(select(User).where(User.username == body["username"]))
+    created = await db_session.get(User, uuid.UUID(response.json()["id"]))
     assert created is not None
     assert created.school_id == workspace.id
     assert created.role == UserRole.STUDENT
@@ -624,3 +625,151 @@ async def test_update_class_when_owner_assigns_teacher_from_another_workspace_th
     assert response.status_code == 404
     await db_session.refresh(class_)
     assert class_.teacher_id == owner_a.id
+
+
+# ── Student handles (decision D3) ────────────────────────────────────────────
+
+GENERATE_HANDLE = "app.services.workspace_service.generate_student_handle"
+
+
+@pytest.mark.asyncio
+async def test_create_user_direct_when_workspace_student_then_username_generated_and_returned(
+    client: AsyncClient, workspace_a: tuple[School, User], test_grade: Grade
+) -> None:
+    workspace, owner = workspace_a
+
+    response = await client.post(
+        f"/api/v1/schools/{workspace.id}/users/create",
+        json=_student_body(test_grade),
+        headers=make_auth_header(owner),
+    )
+
+    assert response.status_code == 201
+    # Shown to the owner once, with the password they chose.
+    assert re.fullmatch(r"new-[a-km-np-z2-9]{4}", response.json()["username"])
+
+
+@pytest.mark.asyncio
+async def test_create_user_direct_when_workspace_owner_sends_username_then_403(
+    client: AsyncClient, db_session: AsyncSession, workspace_a: tuple[School, User], test_grade: Grade
+) -> None:
+    workspace, owner = workspace_a
+
+    response = await client.post(
+        f"/api/v1/schools/{workspace.id}/users/create",
+        json={**_student_body(test_grade), "username": "emma"},
+        headers=make_auth_header(owner),
+    )
+
+    assert response.status_code == 403
+    assert await db_session.scalar(select(User).where(User.username == "emma")) is None
+
+
+@pytest.mark.asyncio
+async def test_create_user_direct_when_handle_taken_in_other_workspace_then_retries_with_new_handle(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    workspace_a: tuple[School, User],
+    workspace_b: tuple[School, User],
+    test_grade: Grade,
+) -> None:
+    workspace, owner = workspace_a
+    other_workspace, _ = workspace_b
+    taken = await _make_student(db_session, other_workspace)
+
+    with patch(GENERATE_HANDLE, side_effect=[taken.username, "new-bcde"]):
+        response = await client.post(
+            f"/api/v1/schools/{workspace.id}/users/create",
+            json=_student_body(test_grade),
+            headers=make_auth_header(owner),
+        )
+
+    assert response.status_code == 201
+    assert response.json()["username"] == "new-bcde"
+    created = await db_session.get(User, uuid.UUID(response.json()["id"]))
+    assert created is not None
+    assert created.school_id == workspace.id
+    # The student in the other workspace keeps its handle.
+    await db_session.refresh(taken)
+    assert taken.school_id == other_workspace.id
+
+
+@pytest.mark.asyncio
+async def test_create_user_direct_when_every_handle_collides_then_409_generic_and_nothing_created(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    workspace_a: tuple[School, User],
+    workspace_b: tuple[School, User],
+    test_grade: Grade,
+) -> None:
+    workspace, owner = workspace_a
+    taken = await _make_student(db_session, workspace_b[0])
+    # Read plain values before the request: the route's rollback expires every loaded object
+    # in the shared session, and reloading an expired attribute outside an await raises
+    # MissingGreenlet.
+    workspace_id = workspace.id
+    handle = taken.username
+    assert handle is not None
+
+    with patch(GENERATE_HANDLE, return_value=handle):
+        response = await client.post(
+            f"/api/v1/schools/{workspace_id}/users/create",
+            json=_student_body(test_grade),
+            headers=make_auth_header(owner),
+        )
+
+    assert response.status_code == 409
+    # Generic: does not reveal the colliding handle, so it cannot be used to probe for students.
+    assert handle not in response.json()["detail"]
+    students = await db_session.scalars(
+        select(User).where(User.school_id == workspace_id, User.role == UserRole.STUDENT)
+    )
+    assert students.all() == []
+
+
+@pytest.mark.asyncio
+async def test_update_user_when_owner_changes_student_username_then_403(
+    client: AsyncClient, db_session: AsyncSession, workspace_a: tuple[School, User]
+) -> None:
+    workspace, owner = workspace_a
+    student = await _make_student(db_session, workspace)
+    original = student.username
+
+    response = await client.patch(
+        f"/api/v1/schools/{workspace.id}/users/{student.id}",
+        json={"username": "emma"},
+        headers=make_auth_header(owner),
+    )
+
+    assert response.status_code == 403
+    await db_session.refresh(student)
+    assert student.username == original
+
+
+@pytest.mark.asyncio
+async def test_create_user_direct_when_real_school_student_has_no_email_or_username_then_422(
+    client: AsyncClient, school: School, school_admin: User, test_grade: Grade
+) -> None:
+    response = await client.post(
+        f"/api/v1/schools/{school.id}/users/create",
+        json=_student_body(test_grade),
+        headers=make_auth_header(school_admin),
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_user_direct_when_real_school_student_has_username_then_username_kept(
+    client: AsyncClient, school: School, school_admin: User, test_grade: Grade
+) -> None:
+    username = f"chosen-{uuid.uuid4().hex[:6]}"
+
+    response = await client.post(
+        f"/api/v1/schools/{school.id}/users/create",
+        json={**_student_body(test_grade), "username": username},
+        headers=make_auth_header(school_admin),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["username"] == username

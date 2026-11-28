@@ -1,6 +1,6 @@
 # Kaihle Workspaces: implementation plan
 
-Status: v5, updated 2026-11-27. D1, D3 and D7 confirmed by Vibhu. S1, S2 and S3a done. Based on a read of the `kaihle` backend and frontend (main, last commit 2026-10-17, unchanged on 2026-11-25). Confidence tags: [Certain] seen in code, [Likely] strong inference, [Guessing] estimate.
+Status: v5, updated 2026-11-27. D1, D3 and D7 confirmed by Vibhu. S1, S2, S3a and S3b done. Based on a read of the `kaihle` backend and frontend (main, last commit 2026-10-17, unchanged on 2026-11-25). Confidence tags: [Certain] seen in code, [Likely] strong inference, [Guessing] estimate.
 
 A copy of this plan also lives in the Kaihle Claude Project (`claude/kaihle-workspaces-implementation-plan.md`). This repo copy is the one the coding agent should follow; update both when decisions change.
 
@@ -11,7 +11,7 @@ A copy of this plan also lives in the Kaihle Claude Project (`claude/kaihle-work
 | S1 data model | Built on branch `M7-1-T1_feature/workspace-school-type`, draft PR https://github.com/vibhu-athavaria/kaihle/pull/313. Migration `a3f5c1d2b7e4` was hand-written; verified 2026-11-26: `alembic check` reports no drift against the models, and downgrade then upgrade round-trips cleanly. |
 | S2 authorization | Done on the same branch. Unit tests in `backend/app/tests/unit/test_workspace_service.py` (100% coverage of `workspace_service.py`); integration tests in `backend/app/tests/integration/test_workspace_authorization.py`, including the cross-tenant sweep over classes, assessments, gap maps, lesson plans and student info. `ClassService` now checks the class teacher on create, `update_teacher` and `update_class` (the last one previously accepted any `teacher_id`). Full unit and integration suites pass. |
 | S3a signup | Done on branch `M7-1-T2_feature/workspace-signup`: `workspace_service.create_workspace` and `sign_up_workspace`, `POST /auth/signup/workspace` (flag `WORKSPACE_SIGNUP_ENABLED`, default false, 404 when off), welcome email `workspace_welcome.html.jinja2`, `POST /auth/register` restricted to KAIHLE_ADMIN. Signup always returns the same 202 body, including for an email already registered, so it cannot enumerate accounts. Tests: `backend/app/tests/integration/test_workspace_signup.py`, unit tests in `test_workspace_service.py`. |
-| S3b handle generator | Not started. |
+| S3b handle generator | Done on branch `M7-1-T3_feature/workspace-student-handles`: `workspace_service.generate_student_handle` and `add_user_with_generated_handle` (savepoint per attempt, retries only on `users_username_unique`, 5 attempts, generic 409 when exhausted). `create_user_direct` generates the handle in a workspace and rejects an owner-chosen one (403); `update_user` rejects a username change in a workspace (403). A real-school student without email or username is now rejected by the service (422) instead of the schema, so a workspace student can be sent without either. The `User` model now names `users_username_unique` as the schema file does, so the test database matches production. Tests: `test_workspace_service.py`, `test_user_service.py`, `test_workspace_authorization.py` (student handles section). |
 | S3c rate limit and CAPTCHA | Not started. CAPTCHA provider proposed: Cloudflare Turnstile (privacy-friendly, matters for D2). |
 | S4 to S8 | Not started. |
 

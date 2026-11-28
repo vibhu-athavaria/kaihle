@@ -25,6 +25,7 @@ After dashboard access, per-class diagnostics (Tier 1) are **not required** to a
 2. User is created with `must_change_password = TRUE`.
 3. Welcome email is sent with credentials.
 4. User logs in with provided password → forced to change password on first login.
+5. Workspace students (decision D3): the owner sends no username; one is generated as `firstname-xxxx` and returned once in the response. See `auth.md` §2.2.
 
 ### 2.2 Global onboarding gate (learning profile)
 

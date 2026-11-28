@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import require_school_operator
@@ -18,14 +19,20 @@ from app.models.school import School, SchoolCurriculum, SchoolType
 from app.models.user import TeacherProfile, User, UserRole
 from app.schemas.workspace import WorkspaceSignupRequest
 from app.services.workspace_service import (
+    HANDLE_MAX_ATTEMPTS,
+    HANDLE_SUFFIX_ALPHABET,
+    StudentHandleUnavailableError,
     WorkspaceRestrictionError,
     WorkspaceSignupError,
+    add_user_with_generated_handle,
     assert_class_teacher_allowed,
     assert_operator_may_manage_user,
     assert_role_allowed_in_school,
     create_workspace,
+    generate_student_handle,
     get_workspace_context,
     is_workspace_owner,
+    is_workspace_school,
     sign_up_workspace,
 )
 
@@ -456,3 +463,123 @@ async def test_sign_up_workspace_when_curriculum_invalid_then_error_propagates(m
     ):
         with pytest.raises(WorkspaceSignupError):
             await sign_up_workspace(mock_db, _signup(), "http://api")
+
+
+# ── Student handles (decision D3) ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("school_type", "expected"),
+    [(SchoolType.TEACHER_WORKSPACE, True), (SchoolType.FAMILY, True), (SchoolType.SCHOOL, False), (None, False)],
+)
+async def test_is_workspace_school_when_type_given_then_true_only_for_workspaces(
+    mock_db: MagicMock, school_type: str | None, expected: bool
+) -> None:
+    mock_db.scalar.return_value = school_type
+
+    assert await is_workspace_school(mock_db, uuid.uuid4()) is expected
+
+
+@pytest.mark.parametrize(
+    ("first_name", "expected_name"),
+    [
+        ("Emma", "emma"),
+        ("José-María", "josemaria"),
+        ("Mary Ann", "maryann"),
+        ("Bartholomew-Alexander", "bartholomewa"),
+        ("李明", "student"),
+        ("  ", "student"),
+    ],
+)
+def test_generate_student_handle_when_name_given_then_slug_plus_four_character_suffix(
+    first_name: str, expected_name: str
+) -> None:
+    handle = generate_student_handle(first_name)
+
+    name, suffix = handle.rsplit("-", 1)
+    assert name == expected_name
+    assert len(suffix) == 4
+    assert set(suffix) <= set(HANDLE_SUFFIX_ALPHABET)
+
+
+def test_generate_student_handle_when_generated_then_suffix_never_uses_ambiguous_characters() -> None:
+    suffixes = "".join(generate_student_handle("Emma").rsplit("-", 1)[1] for _ in range(500))
+
+    assert not set(suffixes) & set("0o1l")
+
+
+def _username_collision() -> IntegrityError:
+    return IntegrityError(
+        "INSERT INTO users", {}, Exception('duplicate key value violates unique constraint "users_username_unique"')
+    )
+
+
+def _savepoints(mock_db: MagicMock) -> None:
+    """Make db.begin_nested() an async context manager that lets exceptions through."""
+    savepoint = MagicMock()
+    savepoint.__aenter__ = AsyncMock()
+    savepoint.__aexit__ = AsyncMock(return_value=False)
+    mock_db.begin_nested = MagicMock(return_value=savepoint)
+
+
+def _build_student(school_id: uuid.UUID) -> Any:
+    def build(username: str) -> User:
+        return User(school_id=school_id, username=username, first_name="Emma", last_name="Lim", role=UserRole.STUDENT)
+
+    return build
+
+
+@pytest.mark.asyncio
+async def test_add_user_with_generated_handle_when_no_collision_then_inserts_once(mock_db: MagicMock) -> None:
+    _savepoints(mock_db)
+
+    user = await add_user_with_generated_handle(mock_db, _build_student(uuid.uuid4()), "Emma")
+
+    assert user.username is not None
+    assert user.username.startswith("emma-")
+    mock_db.add.assert_called_once_with(user)
+    assert mock_db.begin_nested.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_add_user_with_generated_handle_when_handle_collides_then_retries_with_new_handle(
+    mock_db: MagicMock,
+) -> None:
+    _savepoints(mock_db)
+    mock_db.flush = AsyncMock(side_effect=[_username_collision(), None])
+
+    user = await add_user_with_generated_handle(mock_db, _build_student(uuid.uuid4()), "Emma")
+
+    assert mock_db.add.call_count == 2
+    first, second = (call.args[0] for call in mock_db.add.call_args_list)
+    assert second is user
+    assert first is not second
+
+
+@pytest.mark.asyncio
+async def test_add_user_with_generated_handle_when_every_attempt_collides_then_raises_generic_error(
+    mock_db: MagicMock,
+) -> None:
+    _savepoints(mock_db)
+    mock_db.flush = AsyncMock(side_effect=[_username_collision() for _ in range(HANDLE_MAX_ATTEMPTS)])
+
+    with pytest.raises(StudentHandleUnavailableError, match="Please try again") as raised:
+        await add_user_with_generated_handle(mock_db, _build_student(uuid.uuid4()), "Emma")
+
+    assert "emma" not in str(raised.value)
+    assert mock_db.add.call_count == HANDLE_MAX_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_add_user_with_generated_handle_when_other_integrity_error_then_reraises_without_retry(
+    mock_db: MagicMock,
+) -> None:
+    _savepoints(mock_db)
+    email_taken = IntegrityError("INSERT INTO users", {}, Exception('unique constraint "users_email_unique"'))
+    mock_db.flush = AsyncMock(side_effect=email_taken)
+
+    with pytest.raises(IntegrityError):
+        await add_user_with_generated_handle(mock_db, _build_student(uuid.uuid4()), "Emma")
+
+    mock_db.add.assert_called_once()

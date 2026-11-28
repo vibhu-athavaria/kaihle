@@ -31,7 +31,7 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.services.analytics_service import AnalyticsService
-from app.services.user_service import UserService
+from app.services.user_service import MissingLoginIdentifierError, UserService
 from app.services.workspace_service import (
     WorkspaceRestrictionError,
     assert_operator_may_manage_user,
@@ -101,6 +101,9 @@ async def create_user_direct(
     except WorkspaceRestrictionError as e:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except MissingLoginIdentifierError as e:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except ValueError as e:
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
@@ -249,6 +252,8 @@ async def update_user(
     try:
         user = await service.update_user(school_id, user_id, body)
         return UserResponse.model_validate(user)
+    except WorkspaceRestrictionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
