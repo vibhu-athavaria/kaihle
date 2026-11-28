@@ -15,6 +15,7 @@ from app.core.database import get_db
 from app.core.security import InvalidTokenError, decode_token, get_token_scope
 from app.models.school import ClassEnrollment
 from app.models.user import StudentProfile, User, UserRole
+from app.services.workspace_service import is_workspace_owner
 
 # HTTPBearer for extracting Bearer token
 security = HTTPBearer()
@@ -186,6 +187,27 @@ def require_role(*allowed_roles: UserRole) -> Callable[..., Any]:
         return current_user
 
     return role_checker
+
+
+async def require_school_operator(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> CurrentUser:
+    """Allow KAIHLE_ADMIN, SCHOOL_ADMIN, or the owner of a workspace.
+
+    Replaces `require_role(SCHOOL_ADMIN, KAIHLE_ADMIN)` on school-operation routes (classes,
+    user creation) that a solo teacher or family must be able to use inside their own
+    workspace. A TEACHER in a real school is still refused. The caller's own school is
+    checked by the route with `_check_school_access`, as before (CONSTITUTION Rule 12).
+    """
+    if current_user.role in (UserRole.KAIHLE_ADMIN, UserRole.SCHOOL_ADMIN):
+        return current_user
+    if current_user.role == UserRole.TEACHER and await is_workspace_owner(db, current_user.id, current_user.school_id):
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Access denied. Required: school administrator or workspace owner.",
+    )
 
 
 def require_school_match(

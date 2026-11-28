@@ -26,6 +26,7 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.services.auth_service import AuthService, SchoolNotFoundError
+from app.services.workspace_service import WorkspaceRestrictionError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -46,6 +47,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
         )
     except SchoolNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except WorkspaceRestrictionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except IntegrityError:

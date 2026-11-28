@@ -135,6 +135,9 @@ class MeResponse(BaseModel):
     school_id: uuid.UUID | None
     is_active: bool
     permissions: dict[str, bool] | None = None
+    # None for a real school; TEACHER_WORKSPACE or FAMILY for a self-serve workspace.
+    workspace_type: str | None = None
+    is_workspace_owner: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

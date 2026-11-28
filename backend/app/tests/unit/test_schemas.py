@@ -4,6 +4,7 @@ import uuid
 from datetime import date, datetime
 
 import pytest
+from pydantic import ValidationError
 
 from app.models.user import UserRole
 from app.schemas.analytics import (
@@ -26,6 +27,7 @@ from app.schemas.attempts import (
     AttemptResultResponse,
     AttemptSubmitRequest,
 )
+from app.schemas.auth import RegisterRequest
 from app.schemas.common import ErrorDetail, Page
 from app.schemas.curriculum import (
     CurriculumResponse,
@@ -607,3 +609,16 @@ def test_user_direct_create_parent_valid():
         student_ids=[uuid.uuid4()],
     )
     assert len(data.student_ids) == 1
+
+
+@pytest.mark.parametrize("role", ["TEACHER", "STUDENT", "PARENT", "SCHOOL_ADMIN"])
+def test_register_request_when_school_scoped_role_without_school_id_then_validation_error(role: str) -> None:
+    with pytest.raises(ValidationError, match="school_id is required"):
+        RegisterRequest(email="a@example.com", password="Secure123!", role=role, first_name="A", last_name="B")
+
+
+def test_register_request_when_kaihle_admin_without_school_id_then_valid() -> None:
+    data = RegisterRequest(
+        email="admin@example.com", password="Secure123!", role="KAIHLE_ADMIN", first_name="A", last_name="B"
+    )
+    assert data.school_id is None

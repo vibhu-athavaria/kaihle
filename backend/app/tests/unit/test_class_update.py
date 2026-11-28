@@ -1,6 +1,7 @@
 """Unit tests for ClassService.update_class."""
 
 import uuid
+from collections.abc import Generator
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,6 +14,14 @@ from app.main import app
 from app.models.user import UserRole
 from app.schemas.class_enrollment import ClassUpdate
 from app.services.class_service import ClassService
+from app.services.workspace_service import WorkspaceRestrictionError
+
+
+@pytest.fixture(autouse=True)
+def allow_any_class_teacher() -> Generator[AsyncMock, None, None]:
+    """Treat every school as a real school. Workspace rules are tested in test_workspace_service.py."""
+    with patch("app.services.class_service.assert_class_teacher_allowed", new=AsyncMock()) as guard:
+        yield guard
 
 
 @pytest.fixture
@@ -54,6 +63,10 @@ async def test_update_class_when_valid_data_then_updates_fields_and_returns_clas
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=fake_class)
+    # The new teacher is an active TEACHER in the same school.
+    mock_db.execute = AsyncMock(
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=SimpleNamespace(id=teacher_id)))
+    )
 
     service = ClassService(db=mock_db)
     data = ClassUpdate(name="New Name", teacher_id=teacher_id)
@@ -178,3 +191,56 @@ async def test_patch_class_route_when_valid_then_returns_200(
     assert resp.status_code == 200
     assert resp.json()["name"] == "New Name"
     mock_update.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_update_class_when_teacher_not_in_school_then_raises_value_error(
+    class_id: uuid.UUID,
+    school_id: uuid.UUID,
+    teacher_id: uuid.UUID,
+) -> None:
+    """update_class must refuse a teacher_id that is not an active TEACHER in the class's school.
+
+    Arrange: class in school_id; the teacher lookup finds nothing (teacher from another school).
+    Act:     call update_class with that teacher_id.
+    Assert:  ValueError, teacher_id unchanged, no flush.
+    """
+    original_teacher = uuid.uuid4()
+    fake_class = SimpleNamespace(id=class_id, school_id=school_id, name="Maths", teacher_id=original_teacher)
+    mock_db = AsyncMock()
+    mock_db.get = AsyncMock(return_value=fake_class)
+    mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+
+    service = ClassService(db=mock_db)
+
+    with pytest.raises(ValueError, match="Teacher not found"):
+        await service.update_class(class_id, school_id, ClassUpdate(teacher_id=teacher_id))
+
+    assert fake_class.teacher_id == original_teacher
+    mock_db.flush.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_class_when_workspace_rejects_teacher_then_raises_restriction_and_keeps_teacher(
+    class_id: uuid.UUID,
+    school_id: uuid.UUID,
+    teacher_id: uuid.UUID,
+    allow_any_class_teacher: AsyncMock,
+) -> None:
+    """update_class applies the workspace class-teacher rule (rule tested in test_workspace_service.py)."""
+    original_teacher = uuid.uuid4()
+    fake_class = SimpleNamespace(id=class_id, school_id=school_id, name="Maths", teacher_id=original_teacher)
+    teacher = SimpleNamespace(id=teacher_id, school_id=school_id, role=UserRole.TEACHER)
+    mock_db = AsyncMock()
+    mock_db.get = AsyncMock(return_value=fake_class)
+    mock_db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=teacher)))
+    allow_any_class_teacher.side_effect = WorkspaceRestrictionError("not the owner")
+
+    service = ClassService(db=mock_db)
+
+    with pytest.raises(WorkspaceRestrictionError):
+        await service.update_class(class_id, school_id, ClassUpdate(teacher_id=teacher_id))
+
+    allow_any_class_teacher.assert_awaited_once_with(mock_db, school_id, teacher_id)
+    assert fake_class.teacher_id == original_teacher
+    mock_db.flush.assert_not_called()

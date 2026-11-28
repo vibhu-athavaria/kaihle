@@ -21,6 +21,14 @@ class RegisterRequest(BaseModel):
             raise ValueError("Either email or username must be provided")
         return self
 
+    @model_validator(mode="after")
+    def validate_school_id_for_role(self) -> "RegisterRequest":
+        # Mirrors the CHECK constraint chk_user_school_id_required, so a missing school is a
+        # 422 here rather than an IntegrityError at commit.
+        if self.role != "KAIHLE_ADMIN" and self.school_id is None:
+            raise ValueError("school_id is required for every role except KAIHLE_ADMIN")
+        return self
+
 
 class RegisterResponse(BaseModel):
     user_id: uuid.UUID

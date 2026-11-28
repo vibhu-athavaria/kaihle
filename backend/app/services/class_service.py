@@ -20,6 +20,7 @@ from app.schemas.class_enrollment import (
     StudentSummary,
     TeacherStudentItem,
 )
+from app.services.workspace_service import assert_class_teacher_allowed
 from app.tasks.onboarding_tasks import trigger_onboarding_diagnostics
 
 if TYPE_CHECKING:
@@ -38,6 +39,27 @@ class ClassService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def _require_class_teacher(self, school_id: uuid.UUID, teacher_id: uuid.UUID) -> None:
+        """Check that a class may be assigned to this teacher.
+
+        The teacher must be an active TEACHER in the same school, and in a workspace must be its owner.
+
+        Raises:
+            ValueError: If the teacher is not an active teacher in this school.
+            WorkspaceRestrictionError: If the school is a workspace and the teacher is not its owner.
+        """
+        result = await self.db.execute(
+            select(User).where(
+                User.id == teacher_id,
+                User.school_id == school_id,
+                User.role == UserRole.TEACHER,
+                User.is_active.is_(True),
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise ValueError("Teacher not found in this school")
+        await assert_class_teacher_allowed(self.db, school_id, teacher_id)
+
     async def create_class(
         self,
         school_id: uuid.UUID,
@@ -55,18 +77,7 @@ class ClassService:
         Raises:
             ValueError: If the teacher doesn't belong to this school
         """
-        # Verify teacher belongs to this school and is active
-        result = await self.db.execute(
-            select(User).where(
-                User.id == data.teacher_id,
-                User.school_id == school_id,
-                User.role == UserRole.TEACHER,
-                User.is_active.is_(True),
-            )
-        )
-        teacher = result.scalar_one_or_none()
-        if not teacher:
-            raise ValueError("Teacher not found in this school")
+        await self._require_class_teacher(school_id, data.teacher_id)
 
         # Verify the school is subscribed to the requested curriculum
         sub_result = await self.db.execute(
@@ -201,13 +212,17 @@ class ClassService:
         Only fields explicitly set in data are applied.
 
         Raises:
-            ValueError: If class not found or belongs to a different school.
+            ValueError: If class not found or belongs to a different school, or the new
+                teacher_id is not an active teacher in this school.
+            WorkspaceRestrictionError: If the school is a workspace and teacher_id is not its owner.
         """
         class_ = await self.db.get(Class, class_id)
         if not class_ or class_.school_id != school_id:
             raise ValueError("Class not found")
 
         update_data = data.model_dump(exclude_unset=True)
+        if update_data.get("teacher_id") is not None:
+            await self._require_class_teacher(school_id, update_data["teacher_id"])
         for field, value in update_data.items():
             setattr(class_, field, value)
 
@@ -489,19 +504,7 @@ class ClassService:
             ValueError: If the class or teacher is not found in this school
         """
         class_ = await self.verify_class_school(class_id, school_id)
-
-        # Verify teacher belongs to this school and is active
-        result = await self.db.execute(
-            select(User).where(
-                User.id == teacher_id,
-                User.school_id == school_id,
-                User.role == UserRole.TEACHER,
-                User.is_active.is_(True),
-            )
-        )
-        teacher = result.scalar_one_or_none()
-        if not teacher:
-            raise ValueError("Teacher not found in this school")
+        await self._require_class_teacher(school_id, teacher_id)
 
         class_.teacher_id = teacher_id
         await self.db.flush()
